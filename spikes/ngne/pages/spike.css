@@ -1,0 +1,27 @@
+html,
+body {
+    margin: 0;
+    background: #ffffff;
+    color: #111111;
+    font: 12px/1.4 monospace;
+}
+
+#stage {
+    position: relative;
+}
+
+canvas {
+    display: block;
+}
+
+#log,
+#result {
+    margin: 8px;
+    white-space: pre-wrap;
+}
+
+/* Pages whose stage is the whole window keep their text out of the way. */
+body.fullscreen #log,
+body.fullscreen #result {
+    display: none;
+}
