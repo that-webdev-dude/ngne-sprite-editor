@@ -10,7 +10,7 @@ core model the rest depends on. Exit: gate G0 ([README](README.md#gates)).
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | Ready                                                    |
+| Status       | Done                                                     |
 | Depends on   | —                                                        |
 | Blocks       | SE-002, SE-003, SE-005, SE-006                           |
 | Blocked until | Owner acknowledgement of A1, A4, A5, A6, A8 recorded in REVIEW.md |
