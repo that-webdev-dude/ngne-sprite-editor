@@ -104,7 +104,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Ready                                                    |
+| Status       | Done                                                     |
 | Depends on   | SE-001                                                   |
 | Blocks       | SE-004, SE-007, SE-010, SE-040, SE-043, SE-051           |
 | Blocked until | Owner acknowledgement of A7 recorded in REVIEW.md       |
@@ -174,7 +174,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Ready                                                    |
+| Status       | Done                                                     |
 | Depends on   | SE-001                                                   |
 | Blocks       | SE-032, SE-040, SE-043, SE-050                           |
 | Blocked until | —                                                       |
@@ -206,7 +206,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | Ready                                                    |
+| Status       | Done                                                     |
 | Depends on   | SE-001                                                   |
 | Blocks       | SE-007, SE-008, SE-011, SE-016, SE-034, SE-044, SE-052, SE-054 |
 | Blocked until | —                                                       |

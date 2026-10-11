@@ -44,10 +44,10 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | **M0** | **[Foundation](M0-foundation.md)**                |      |                                    |               |        |
 | SE-001 | Repository, scaffold, toolchain and CI            | L    | —                                  | A1, A4, A5, A6, A8 | Done  |
 | SE-002 | Spike: NGNE integration feasibility (gate G0)     | L    | 001                                | A9            | Ready  |
-| SE-003 | Document model and session                        | M    | 001                                | A7            | Ready  |
+| SE-003 | Document model and session                        | M    | 001                                | A7            | Done   |
 | SE-004 | Commands, transactions and undo history           | L    | 003                                | —             | Ready  |
-| SE-005 | Pixel buffers and lossless PNG codec              | M    | 001                                | —             | Ready  |
-| SE-006 | Design tokens, UI primitives and app shell        | L    | 001                                | —             | Ready  |
+| SE-005 | Pixel buffers and lossless PNG codec              | M    | 001                                | —             | Done   |
+| SE-006 | Design tokens, UI primitives and app shell        | L    | 001                                | —             | Done   |
 | SE-007 | Editor state, command registry, keymap, menus and preference store | L | 003, 004, 006         | —             | Ready  |
 | SE-008 | New sprite, sprite properties and empty state     | M    | 006, 007                           | —             | Ready  |
 | **M1** | **[Viewport and drawing](M1-viewport-and-drawing.md)** |  |                                  |               |        |
