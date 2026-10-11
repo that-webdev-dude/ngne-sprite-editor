@@ -10,17 +10,21 @@ images (C3).
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Draft                                                    |
-| Depends on   | SE-003, SE-005                                           |
+| Status       | Ready                                                    |
+| Depends on   | SE-003, SE-005, SE-010                                   |
 | Blocks       | SE-041, SE-045                                           |
 | Blocked until | —                                                       |
-| Spec         | SPEC §10                                                 |
+| Spec         | SPEC §10, §5.1                                           |
 
 Scope
 - `core/project`: `serialize(doc, referenceSources) → Uint8Array` and
-  `deserialize(bytes) → { doc, referenceSources }` using `fflate`.
-- Container per SPEC §10: `manifest.json`, `doc.json`, `images/*.png`, `refs/*.png`, `thumb.png`.
-- `doc.json` schema version 1 documented in `docs/FORMAT.md` (written under this ticket).
+  `deserialize(bytes) → { doc, referenceSources }` using `fflate`, with fixed entry timestamps
+  and PNG entries stored uncompressed.
+- Container per SPEC §10: `manifest.json`, `doc.json`, `images/*.png`, `refs/*.png`, `thumb.png`
+  (from `compositeFrame` of the first frame, nearest-scaled to at most 128 px).
+- `doc.json` covers every `SpriteDoc` field of SPEC §5.1, including `settings` and
+  `exportSettings`. Session state (selection, active layer/frame) is not written.
+- Schema version 1 documented in `docs/FORMAT.md` (file created here if absent).
 - Migration scaffold: ordered `vN → vN+1` functions; v1 has none.
 - Validation: manifest format/version, JSON shape, every referenced image present and of the
   document size, then `assertInvariants`.
@@ -28,46 +32,49 @@ Scope
 
 Acceptance
 - Round trip of a fixture (3 layers, 5 frames, linked cels, 2 tags, reference layer, palette,
-  export settings) yields a deep-equal document with byte-identical pixels.
-- Serialization is deterministic: same document → identical bytes.
+  non-default settings and export settings) yields a deep-equal document with identical pixels.
+- Serializing the same document twice yields identical bytes, also across two runs one second
+  apart (fixed timestamps).
+- Golden test compares decoded pixels and parsed JSON of a committed `.ngsprite` fixture, not
+  raw zip bytes.
+- A session with a selection serializes to the same bytes as one without.
 - Typed, descriptive errors for: not a zip, missing manifest, newer version, missing image,
   wrong image size, invariant violation. No partial document is returned.
 - Runs under Vitest in Node.
-- Once merged, the v1 schema is frozen (gate G3).
 
 ---
 
-## SE-041 · File workflows and document tabs
+## SE-041 · File workflows
 
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | Draft                                                    |
-| Depends on   | SE-007, SE-040                                           |
-| Blocks       | SE-042, SE-044, SE-052, SE-072                           |
-| Blocked until | —                                                       |
-| Spec         | SPEC §10; DESIGN §2, §7 (New sprite)                     |
+| Status       | Ready                                                    |
+| Depends on   | SE-007, SE-008, SE-040                                   |
+| Blocks       | SE-042, SE-044, SE-047, SE-052                           |
+| Blocked until | Gate G1 passed                                          |
+| Spec         | SPEC §10, §7.8; DESIGN §6 (empty state)                  |
 
 Scope
-- New (dialog), Open, Save, Save As, Close, Revert. File System Access API when available
-  (handle kept per document, permission re-requested when needed); otherwise file input and
-  download.
-- Drag-and-drop of `.ngsprite` opens it.
-- Dirty tracking from history position; unsaved marker in the tab and title; confirm on close;
-  `beforeunload` guard while any document is dirty.
-- Document tabs in the menu bar: switch, close, middle-click close, reorder; each tab has its
-  own history, view and selection.
-- Recent files list (handles in IndexedDB) on the empty state and in File → Open Recent.
-- Empty state when no document is open: New, Open, Import PNG, recent files.
+- Open, Save, Save As, Close, Revert. File System Access API when available (handle kept per
+  document, permission re-requested when needed); otherwise file input and download.
+- Drag-and-drop of `.ngsprite` opens it; Open on the empty state.
+- Save applies a floating selection first (`applyFloating()` hook; a no-op until SE-032).
+- Save records the saved history position and clears the dirty flag (SE-007 store, rule of
+  SPEC §5.2); unsaved marker next to the document name; confirm on close; `beforeunload` guard
+  while any document is dirty.
+- The document's reference source bytes (SE-007 store) are passed to `serialize` and restored
+  from `deserialize`.
+- Results and failures reported by toast.
 
 Acceptance
-- E2E: draw, save, close, reopen — composite of every frame byte-identical; undo history is
-  empty after reopen.
+- E2E: draw with the pencil, save, close, reopen — composite of every frame byte-identical;
+  undo history is empty after reopen.
 - Saving twice without changes writes identical bytes and clears the dirty marker each time.
-- In a browser profile without File System Access, Save downloads a file and Open uses a file
-  input (tested by stubbing the API away).
-- Closing a dirty tab asks once; cancelling keeps the document.
-- Two open documents never share state: drawing in one leaves the other's composite unchanged.
+- With the File System Access API stubbed away, Save downloads a file and Open uses a file input.
+- Closing a dirty document asks once; cancelling keeps the document.
+- Opening a corrupt file shows an error toast naming the problem and leaves the current
+  document untouched.
 
 ---
 
@@ -76,62 +83,74 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Draft                                                    |
+| Status       | Ready                                                    |
 | Depends on   | SE-041                                                   |
-| Blocks       | —                                                        |
+| Blocks       | SE-072                                                   |
 | Blocked until | —                                                       |
-| Spec         | SPEC §10                                                 |
+| Spec         | SPEC §10; DESIGN §7 (Recovery)                           |
 
 Scope
-- Snapshot each dirty document to IndexedDB 2 s after its last change (serialized with SE-040),
-  off the main interaction path (chunked or in a worker if serialization exceeds 16 ms).
+- Snapshot each dirty document to IndexedDB 2 s after its last change: `doc.json` plus raw image
+  buffers keyed by image ID; only images changed since the last snapshot are rewritten;
+  reference sources written once.
 - Snapshot removed on successful save or explicit close-without-saving.
-- On launch, list recoverable snapshots (name, time, thumbnail) with Recover / Discard.
-- Storage quota errors are reported once and disable autosave for the session.
+- On launch, the recovery dialog lists snapshots (name, time, thumbnail) with Recover / Discard.
+- Storage quota errors are reported once by toast and disable autosave for the session.
+- Honours the autosave preference (SE-007 store).
 
 Acceptance
 - E2E: draw, wait 3 s, reload without saving → recovery prompt → recovered composite is
   byte-identical to the pre-reload composite.
 - After a normal save and reload, no recovery prompt appears.
-- Autosave during a continuous 10 s stroke causes no dropped pointer samples (stroke has no
-  gaps) on reference hardware.
+- Editing one cel of a 16-frame, 256×256 document writes exactly one image record (IndexedDB
+  write spy).
+- No long task over 50 ms is attributed to autosave for that document (PerformanceObserver in
+  the E2E run on reference hardware, recorded).
 - Discard removes the snapshot permanently.
 
 ---
 
-## SE-043 · Import pipeline core (slice, resample, quantize)
+## SE-043 · Import pipeline core and preset palettes
 
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | Draft                                                    |
+| Status       | Ready                                                    |
 | Depends on   | SE-003, SE-005                                           |
-| Blocks       | SE-044, SE-060                                           |
-| Blocked until | Assumption A3 not overridden by the owner               |
+| Blocks       | SE-044, SE-060, SE-063                                   |
+| Blocked until | Owner acknowledgement of A3 recorded in REVIEW.md       |
 | Spec         | SPEC §8                                                  |
 
 Scope: pure functions in `core/import`, each step independently testable.
-- `crop`, `sliceGrid` (cell size or columns×rows, offset, spacing, skip empty cells).
+- `crop`, `sliceGrid` (cell size or columns×rows, offset, spacing, skip empty cells), and
+  `cellsFromFiles` (one cell per decoded file, natural filename order).
 - `resample(buffer, w, h, { method, fit })`: nearest, area average (alpha-weighted), dominant
-  colour per block; fit stretch / contain / cover.
+  colour per block; fit stretch / contain / cover; identity when the size already matches.
 - `applyAlpha`: threshold to binary; colour key with tolerance.
 - `core/color/oklab`: sRGB8 ↔ OKLab.
 - `buildPalette(buffers[], n)`: median cut over all buffers, then 8 k-means iterations seeded
   from the median-cut result; deterministic; ignores fully transparent pixels.
 - `mapToPalette(buffer, palette, { dither })`: nearest in OKLab; none, Bayer 4×4,
-  Floyd–Steinberg (serpentine off, fixed order).
-- `runImport(source, settings) → { frames: PixelBuffer[], palette }` composing the steps with
+  Floyd–Steinberg (fixed left-to-right, top-to-bottom order).
+- `smartDefaults(cells, targetSize)` implementing the default rules of SPEC §8.
+- `runImport(sources, settings) → { frames: PixelBuffer[], palette }` composing the steps with
   the limits of SPEC §8.
+- `core/palettes`: preset palettes as data — DawnBringer 16 and 32, PICO-8, Sweetie 16,
+  Endesga 32, AAP-64, Game Boy (4), 1-bit — each with name and source attribution.
 
 Acceptance
-- Golden tests per step on small fixtures (including a 4×4 → 2×2 area average with mixed alpha
-  and a grid slice with offset and spacing).
+- Golden tests per step on small fixtures (including a 4×4 → 2×2 area average with mixed alpha,
+  a grid slice with offset and spacing, and three files in natural order `a2, a10, a1` →
+  `a1, a2, a10`).
 - `buildPalette` returns exactly n colours when the input has ≥ n distinct colours, and the
   input's own colours when it has fewer.
 - Determinism: `runImport` twice with the same input and settings gives byte-identical output.
+- `smartDefaults`: binary-alpha, 12-colour, same-size input → Keep/Keep; a photo → threshold
+  128 / Reduce to 16.
 - A 2048×2048 source reduced to 16 colours at 64×64 completes in ≤ 500 ms (recorded, Node).
 - Mapping an image already using only palette colours is the identity.
 - Limit violations throw typed errors naming the limit.
+- Each preset palette has the documented number of colours and no duplicates.
 
 ---
 
@@ -140,30 +159,37 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | Draft                                                    |
+| Status       | Ready                                                    |
 | Depends on   | SE-006, SE-021, SE-041, SE-043, SE-045                   |
 | Blocks       | SE-070                                                   |
 | Blocked until | —                                                       |
-| Spec         | SPEC §8; DESIGN §7 (Import PNG)                          |
+| Spec         | SPEC §8; DESIGN §7 (Import PNG, Drop chooser)            |
 
 Scope
-- Entry points: File → Import PNG, drop a PNG on the window, paste an image with no document
-  focus target. Dropping/pasting asks: sprite, reference, or both.
-- Dialog per DESIGN §7: source pane with draggable crop rectangle and grid overlay; result pane
-  showing the frames at target size with zoom; the nine steps as form controls; summary line.
-- Live preview recomputed off the main thread (worker) with cancellation; controls stay
-  responsive.
+- Entry points: File → Import PNG (multi-select), dropping PNG files on the window, the empty
+  state, and pasting an image while no document is open (with a document open, paste belongs to
+  SE-032). Dropping one image shows the drop chooser (sprite, reference, both).
+- Large dialog per DESIGN §7: source pane with draggable crop rectangle and grid overlay; result
+  pane showing the frames at target size with zoom; the steps as form controls initialized from
+  `smartDefaults`; summary line.
+- Live preview recomputed in a worker with cancellation; controls stay responsive.
 - Destinations: new document; append as frames to the current document; new layer in the
   current document (frames aligned from the active frame, adding frames if needed).
-- "Keep source as reference" creates a reference layer aligned to the cropped region.
+- "Keep source as reference" (single-sprite imports only; disabled otherwise) creates a
+  reference layer aligned to the cropped region.
 - Palette handling choice: replace document palette, append new colours, leave unchanged.
-- Settings remembered per session.
+- Settings remembered per session; defaults from the preference store.
 
 Acceptance
 - E2E: import a 256×64 sheet as 4 frames of 32×32 with 8 colours → document has 4 frames, each
   32×32, using ≤ 8 colours, equal to `runImport` output for the same settings.
-- E2E: import with "keep source as reference" → reference layer exists, sits behind, and its
-  on-screen bounds coincide with the canvas bounds (±1 device pixel).
+- E2E: selecting three PNG files yields three frames in natural filename order.
+- E2E: single-sprite import with "keep source as reference" → reference layer exists, sits
+  behind, and its on-screen bounds coincide with the canvas bounds (±1 device pixel).
+- With grid slicing producing more than one cell, "keep source as reference" is disabled.
+- E2E: dropping one PNG shows the chooser; "Add as reference" adds only a reference layer.
+- "New layer" into a 2-frame document from a 4-cell import yields 4 frames and one new layer.
+- Palette choice "append" adds only colours not already present.
 - Appending to a document of a different size is blocked with an inline message.
 - Import into an existing document is one undo step.
 - Changing a setting updates the preview within 300 ms for a 1024×1024 source (recorded).
@@ -176,30 +202,89 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | Draft                                                    |
+| Status       | Ready                                                    |
 | Depends on   | SE-011, SE-022, SE-040                                   |
-| Blocks       | SE-044                                                   |
-| Blocked until | Assumption A7 not overridden by the owner               |
+| Blocks       | SE-044, SE-046                                           |
+| Blocked until | —                                                       |
 | Spec         | SPEC §7.6, §6.4                                          |
 
 Scope
 - Commands: add reference layer from PNG bytes, delete, set position, scale, opacity,
-  visibility, lock, placement (behind / front), reset to fit.
-- Rendering through slots `ed:ref:0..3`: CPU resample of the source to on-screen device size
-  (`resizeQuality: "high"`), capped per SPEC §7.6, re-run 100 ms after zoom settles; drawn by
-  NGNE with `alpha`, at `layer` 2 (behind) or 6 (front).
-- Timeline: "Reference" group at the bottom of the layer column with visibility, lock, opacity.
-- Move tool on an unlocked reference layer drags it; corner handles scale uniformly.
-- Paint tools refuse reference layers (SE-014 guard).
-- Menu: Layer → New Reference Layer from File; limit of four with a clear message.
-- Reference sources kept in a per-document blob store and saved by SE-040.
+  visibility, lock, placement (behind / front), reset to fit. All undoable.
+- Display pipeline per SPEC §7.6: decode with SE-005, display source limited to 4096 px per
+  side, CPU resample to on-screen size 100 ms after zoom settles, 16 MP total texel budget,
+  slots `ed:ref:0..3`, 1×1 placeholder for removed layers; drawn by NGNE with `alpha` at
+  `layer` 2 (behind) or 6 (front).
+- Timeline: "Reference" group at the bottom of the layer column with visibility, lock, opacity;
+  layer properties popover with X, Y, scale and placement fields.
+- Menu: Layer → New Reference Layer from File; limit of four with a toast when exceeded.
+- Reference sources kept in the per-document store of SE-007 and round-tripped by SE-040.
+
+Out of scope: dragging and scaling on the canvas (SE-046).
 
 Acceptance
 - E2E: add a reference image → it renders behind pixel layers at 50% opacity, fitted and
-  centred; drawing on a pixel layer appears above it.
-- At scale 4 a 2000×2000 reference fitted to a 64×64 canvas is displayed without nearest
-  minification artefacts (screenshot compared to a high-quality downscale, mean error ≤ 2/255).
-- Save and reopen restores position, scale, opacity, placement and the identical source bytes.
-- No export (any format) and no preview-panel frame contains reference pixels.
-- Zooming rapidly never shows a "texture not ready" diagnostic and never blanks the frame.
-- Every property change is undoable.
+  centred; pixels committed to a pixel layer through a patch command appear above it.
+- Readback at scale 4 of a 2048×2048 smooth two-axis gradient fitted to a 64×64 canvas: mean
+  absolute error against a box-filter downscale of the same gradient ≤ 4/255 per channel.
+- Readback of a 50%-alpha flat-colour reference over the checkerboard is within ±2 per channel
+  of the expected blend.
+- `compositeFrame` output is identical with and without the reference layer.
+- `serialize`/`deserialize` restores position, scale, opacity, placement and identical source
+  bytes.
+- A fifth reference layer is refused with the toast; the document is unchanged.
+- Zooming through all steps within 1 s logs no "texture not ready" diagnostic and never shows a
+  frame without the document.
+- After deleting all reference layers, `renderer.inspect()` texture bytes return to within 1 MB
+  of the pre-reference baseline.
+- Every property change is one undo step.
+
+---
+
+## SE-046 · Reference layer move and scale on the canvas
+
+| Field        | Value                                                    |
+| ------------ | -------------------------------------------------------- |
+| Size         | M                                                        |
+| Status       | Ready                                                    |
+| Depends on   | SE-032, SE-045                                           |
+| Blocks       | —                                                        |
+| Blocked until | —                                                       |
+| Spec         | SPEC §7.6                                                |
+
+Scope
+- With an unlocked reference layer active, the Move tool drags it; corner handles on the
+  overlay scale it uniformly about the opposite corner.
+- One undo step per drag.
+
+Acceptance
+- E2E: drag by (10, 4) document pixels changes `x`, `y` by exactly that; undo restores.
+- Corner drag changes `scale` and keeps the opposite corner fixed within 0.01 document pixels.
+- A locked reference layer does not move and the status bar says so.
+
+---
+
+## SE-047 · Document tabs and recent files
+
+| Field        | Value                                                    |
+| ------------ | -------------------------------------------------------- |
+| Size         | M                                                        |
+| Status       | Ready                                                    |
+| Depends on   | SE-041                                                   |
+| Blocks       | —                                                        |
+| Blocked until | —                                                       |
+| Spec         | SPEC §2.3 (Document); DESIGN §2 (tabs), §6 (empty state) |
+
+Scope
+- Several open documents: tab strip in the menu bar (switch, close, middle-click close, reorder,
+  overflow per DESIGN §2); New and Open add a tab instead of replacing.
+- Each tab has its own session, history, view and reference blob store.
+- Recent files (File System Access handles in IndexedDB) on the empty state and in
+  File → Open Recent; entries whose permission is gone prompt once, then are removed on denial.
+
+Acceptance
+- E2E: open two documents; drawing in one leaves the other's composite unchanged; undo acts on
+  the active tab only.
+- Closing a dirty tab asks once; closing the last tab shows the empty state.
+- With 12 open tabs at 1280 px width, every tab is reachable (scroll or overflow menu).
+- A saved file appears first in the recent list after reload and reopens from it.

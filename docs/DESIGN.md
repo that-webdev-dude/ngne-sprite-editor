@@ -1,8 +1,10 @@
 # NGNE Sprite Editor — Interface design
 
-Status: **Draft — pending independent review** · 2026-10-11
+Status: **Ready for implementation — owner acknowledgements A1–A9 pending** ([REVIEW.md](REVIEW.md)) · 2026-10-11
 
-Related: [SPEC.md](SPEC.md) · static mockup: [design/mockup.html](design/mockup.html) (open in a browser)
+Related: [SPEC.md](SPEC.md) · static mockup: [design/mockup.html](design/mockup.html) (open in a
+browser). The mockup illustrates layout, tokens and density; where it omits a control described
+here, this document governs.
 
 ## 1. Principles
 
@@ -24,14 +26,14 @@ Related: [SPEC.md](SPEC.md) · static mockup: [design/mockup.html](design/mockup
 +----+------------------------------------------------------+------------+
 |    | Pencil   Size [ 1 ]  Shape [o]  Pixel-perfect [x]    |  Colour    | 36  context bar
 | T  +------------------------------------------------------+  picker    |
-| o  |                                                      |  FG / BG   |
+| o  |                                                      |            |
 | o  |                                                      +------------+
 | l  |                 viewport (NGNE canvas                |  Palette   |
 | s  |                 + Canvas2D overlay)                  |            |
 |    |                                                      +------------+
 | 44 |                                                      |  Preview   | 264 right dock
 +----+------------------------------------------------------+------------+
-| |< < > >|  12 fps   [ walk ============ ][ jump ==== ]                  |
+| |< < > >| (onion) [100 ms]  [ walk ============ ][ jump ==== ]          |
 | Layers            1    2    3    4    5    6    7    8                  | 200 timeline
 | (o)(a) Outline    #    #    #    #    -    -    #    #                  |
 | (o)(a) Body       #    #====#    #    #    #    #    #                  |
@@ -47,10 +49,19 @@ Related: [SPEC.md](SPEC.md) · static mockup: [design/mockup.html](design/mockup
 | Context bar | 36 px                        | Options for the active tool only                              |
 | Viewport    | flexible                     | Workspace colour around the document; no scrollbars           |
 | Right dock  | 264 px, resizable 220–360    | Colour, Palette, Preview; each section collapsible            |
-| Timeline    | 200 px, resizable 120–50%    | Transport, tag bar, layer rows × frame columns; Tab toggles   |
+| Timeline    | default min(200 px, 28% of window height), resizable 120 px–50% | Transport, tag bar, layer rows × frame columns; Tab toggles (canvas focus) |
 | Status bar  | 24 px                        | Cursor, size, zoom, frame, duration; right side: contextual hint |
 
-Below 1024×640 the app shows a "window too small" notice instead of a broken layout.
+Overflow rules (the layout must hold at the minimum window, 1280×720):
+
+- **Tool rail**: when its content does not fit its height in one column it switches to two
+  columns (72 px wide); it never scrolls and never clips a tool.
+- **Right dock**: scrolls vertically as one column; section headers stay clickable to collapse.
+  Default at window heights under 800 px: Palette collapsed.
+- **Context bar**: options that do not fit move into a trailing overflow menu.
+- **Document tabs**: shrink to 96 px, then scroll horizontally with an overflow menu.
+- **Tag bar**: grows by one 18 px row per overlap level, up to three rows, then scrolls.
+- Below 1280×720 the app shows a "window too small" notice instead of a broken layout.
 
 ## 3. Tokens
 
@@ -65,20 +76,26 @@ tokens only. Dark is the default; light is a full second set under `[data-theme=
 | `--bg-panel`       | `#18181a` | `#f4f4f5` | Panels, bars                                |
 | `--bg-raised`      | `#222225` | `#ffffff` | Inputs, hovered rows, popovers              |
 | `--bg-active`      | `#2c2c30` | `#e6e6e9` | Pressed, selected row                       |
-| `--border`         | `#2a2a2e` | `#d0d0d4` | Hairlines between regions                   |
-| `--border-strong`  | `#3a3a40` | `#b4b4ba` | Input outlines                              |
+| `--border`         | `#2a2a2e` | `#d0d0d4` | Hairlines between regions (decorative)      |
+| `--border-strong`  | `#3a3a40` | `#b4b4ba` | Document outline, dividers inside controls  |
+| `--border-input`   | `#70707a` | `#8a8a94` | Outline of inputs, selects, segmented controls (≥ 3:1 against their fill) |
 | `--text`           | `#e7e7ea` | `#18181a` | Primary text                                |
-| `--text-muted`     | `#9a9aa2` | `#5c5c66` | Labels, secondary                           |
-| `--text-faint`     | `#6b6b74` | `#8a8a94` | Disabled, placeholders                      |
-| `--accent`         | `#83e8e1` | `#0b8f87` | Active tool, selection, focus ring          |
+| `--text-muted`     | `#9a9aa2` | `#5c5c66` | Labels, secondary content, hints, placeholders |
+| `--text-faint`     | `#6b6b74` | `#8a8a94` | Disabled controls only                      |
+| `--accent`         | `#83e8e1` | `#087f78` | Active tool, selection, focus ring, primary button |
 | `--accent-contrast`| `#0f0f10` | `#ffffff` | Text on accent                              |
 | `--danger`         | `#ff6b6b` | `#c92a2a` | Destructive confirm, errors                 |
-| `--warn`           | `#f2c14e` | `#9a6700` | Unsaved marker, warnings                    |
+| `--warn`           | `#f2c14e` | `#8a5a00` | Unsaved marker, warnings                    |
 
-- The accent is NGNE's brand cyan. It appears on at most a few elements per screen.
-- Text on panel backgrounds meets WCAG AA (≥ 4.5:1); `--text-muted` is ≥ 4.5:1 on `--bg-panel`.
+- The dark accent is NGNE's brand cyan. Accent appears on at most a few elements per screen.
+- Contrast (WCAG 2.1 AA): `--text` and `--text-muted` on every background ≥ 4.5:1;
+  `--accent-contrast` on `--accent` ≥ 4.5:1; `--warn` and `--danger` on `--bg-panel` ≥ 4.5:1;
+  `--border-input` against `--bg-raised` ≥ 3:1. `--text-faint` is exempt because it is used
+  only for disabled controls.
+- Text placed on user colours (tag spans) is black or white, whichever has the higher contrast.
 - Tag colours and palette swatches are user data and are the only other hues on screen.
-- Transparency checkerboard: `#3a3a3a` / `#4a4a4a` (dark), `#c8c8c8` / `#ffffff` (light); user-configurable.
+- Transparency checkerboard: `#3a3a3a` / `#4a4a4a` (dark), `#c8c8c8` / `#ffffff` (light);
+  user-configurable.
 
 ### 3.2 Type
 
@@ -94,10 +111,10 @@ tokens only. Dark is the default; light is a full second set under `[data-theme=
 | Spacing scale  | 2, 4, 8, 12, 16, 24 px                  |
 | Control height | 24 px (inputs, buttons), 28 px (tool buttons, rows) |
 | Radius         | 4 px controls, 6 px popovers and dialogs, 0 for regions |
-| Border         | 1 px, `--border`                        |
+| Border         | 1 px                                    |
 | Focus ring     | 2 px `--accent`, 1 px offset, keyboard focus only |
 | Elevation      | Popovers and dialogs only: `0 8px 24px rgb(0 0 0 / 0.4)` |
-| Motion         | 100 ms ease-out for hover/press; popovers 120 ms fade; none on the canvas |
+| Motion         | 100 ms ease-out for hover/press; popovers 120 ms fade. The only animation over the canvas is the marching ants |
 | Icons          | 16 px, 1.5 px stroke, `currentColor`    |
 
 `prefers-reduced-motion`: transitions off, marching ants static (dashed, not animated).
@@ -111,14 +128,20 @@ tokens only. Dark is the default; light is a full second set under `[data-theme=
 | Tool button      | 28 px; active = accent icon on `--bg-active`; tooltip with name and key after 400 ms    |
 | Icon button      | 24 px; hover `--bg-raised`; `aria-label` required                                       |
 | Number field     | Scrub by dragging the label; arrow keys ±1, Shift ±10; unit suffix muted                |
-| Slider           | 2 px track, 10 px thumb; value shown in an adjacent number field                        |
+| Slider           | 2 px track, 10 px thumb inside a 24 px hit area; value in an adjacent number field      |
 | Toggle           | Icon button with `aria-pressed`; no switches                                            |
 | Select           | Radix Select; same metrics as number field                                              |
-| Dialog           | Centre, max 560 px; title, body, right-aligned actions; primary action is accent-filled |
-| Popover          | Colour picker, tag editor, layer properties; closes on Escape and outside click         |
-| Context menu     | Right-click on layers, frames, cels, tags, swatches, canvas                             |
-| Toast            | Bottom-centre, one line, 4 s; used for export results and non-blocking errors           |
-| Splitter         | 4 px hit area, 1 px visible line; double-click resets                                   |
+| Dialog           | Centred. Standard: max 560 px. Large (Import PNG, Export): max 960 px, max 86% of window height, body scrolls. Title, body, right-aligned actions; primary action accent-filled |
+| Popover          | Colour picker, layer properties, onion-skin settings; closes on Escape and outside click |
+| Context menu     | Right-click on layers, frames, cels and tags. Not on the canvas or on swatches, where the right button means background colour; swatch actions live in the palette's overflow menu and on the Menu key |
+| Toast            | Bottom-centre, one line, 4 s (errors stay until dismissed)                              |
+| Splitter         | 8 px hit area, 1 px visible line; double-click resets                                   |
+
+Message channels: a **toast** reports the result of an explicit command (saved, exported,
+import failed) and asynchronous failures; the **status bar** shows transient tool feedback
+(layer locked, selection size) and hints; a **dialog** is used only when a decision is needed.
+An error boundary around each region replaces a crashed panel with a one-line message and a
+Reload action, leaving the rest of the app usable.
 
 ## 5. Panels
 
@@ -127,7 +150,8 @@ tokens only. Dark is the default; light is a full second set under `[data-theme=
 Groups, top to bottom: draw (pencil, eraser, bucket, eyedropper) · shapes (line, rectangle,
 ellipse) · select (marquee, lasso, wand, move) · navigate (hand, zoom). Tools with variants
 (rectangle/ellipse marquee, lasso/polygon lasso) show a corner mark; press-and-hold or repeat
-the key to switch. Foreground/background swatches sit at the bottom with swap (X) and reset (D).
+the key to switch. Foreground/background chips sit at the bottom with swap (X) and a reset
+button; these are the only FG/BG chips in the interface.
 
 ### 5.2 Context bar
 
@@ -137,40 +161,43 @@ With a floating selection it switches to transform fields (X, Y, W, H, angle) an
 
 ### 5.3 Colour
 
-Square saturation/value field with a hue strip and alpha strip; hex field; H S V / R G B fields
-toggled by a small segmented control. Foreground and background chips above. No colour-wheel
-variants, no harmony tools.
+Square saturation/value field with a hue strip and alpha strip (each 10 px tall inside a 24 px
+hit area); hex field; H S V / R G B fields toggled by a small segmented control. The panel edits
+the foreground colour; holding the right button or pressing X first edits the background. No
+colour-wheel variants, no harmony tools.
 
 ### 5.4 Palette
 
-Grid of 16 px swatches, no gaps, 1 px `--border` around the grid. Left-click sets foreground,
-right-click background. The swatch matching the foreground colour has a 2 px accent outline.
-Header: palette name (menu of presets), add current colour, and an overflow menu (import,
-export, from sprite, sort).
+Grid of 16 px swatches, no gaps, 1 px `--border` around the grid; vertical scroll when it
+exceeds eight rows. Left-click sets foreground, right-click background. The swatch matching the
+foreground colour has a 2 px accent outline. Header: palette name (menu of presets), add current
+colour, and an overflow menu (remove, edit, import, export, from sprite, sort, replace colour).
+Before SE-060 lands the panel is a read-only grid of the document palette.
 
 ### 5.5 Preview
 
-The NGNE preview canvas, centred, integer-scaled to fit. Under it: animation select, play/pause,
-speed. The header reads "Preview · NGNE" to signal that this is the engine drawing the export.
-Background chip cycles dark / light / mid grey.
+The NGNE preview canvas, centred, scaled by a whole number of device pixels to fit. Under it:
+animation select, play/pause, speed. The header reads "Preview · NGNE" to signal that this is the
+engine drawing the export. A background chip cycles dark / light / mid grey. When the document is
+too large to preview, the canvas area shows that message instead.
 
 ### 5.6 Timeline
 
 - Left column (200 px): per layer — visibility, lock, name (double-click renames), opacity on
   hover. Reference layers sit in a separate bottom group labelled "Reference".
 - Header row: frame numbers; the tag bar sits above it with coloured spans and tag names.
-- Cells: 24×24 px. Empty cel = small hollow dot; filled cel = solid dot; linked cels are joined
-  by a line. Active cell has an accent outline; the active frame column and layer row are
-  tinted with `--bg-raised`.
+- Cells: 24 px wide in 28 px rows. Empty cel = small hollow dot; filled cel = solid dot; linked
+  cels are joined by a line. Active cell has an accent outline; the active frame column and
+  layer row are tinted with `--bg-raised`.
 - Transport on the left of the tag bar: first, previous, play/pause, next, last, onion-skin
-  toggle, frame duration field.
+  toggle (its popover holds the settings), frame duration field.
 - Drag frames or layers to reorder; drag cels to move, Ctrl-drag to copy.
 
 ### 5.7 Status bar
 
 Left to right: cursor `x, y` · document size · zoom · frame `n/total` · frame duration ·
-selection size when one exists. Right: one-line hint for the active tool's modifiers. Errors
-that do not need a dialog also appear here in `--warn`.
+selection size when one exists. Right: one-line hint for the active tool's modifiers, or
+transient tool feedback in `--warn`.
 
 ## 6. Viewport
 
@@ -181,27 +208,44 @@ that do not need a dialog also appear here in `--warn`.
 - Brush cursor: 1 px outline of the brush footprint snapped to pixels, inverted against content;
   the system cursor is hidden over the canvas while a paint tool is active.
 - Zoom readout and "fit" live in the status bar, not as floating buttons over the canvas.
+- Empty state (no document open): centred in the workspace — New sprite, Open, Import PNG and
+  the recent files list, as plain text buttons; no illustration.
 
-## 7. Dialogs
+## 7. Dialogs and other surfaces
 
-| Dialog          | Content                                                                                  |
-| --------------- | ---------------------------------------------------------------------------------------- |
-| New sprite      | Width, height, presets (16, 32, 48, 64, 128), name                                       |
-| Import PNG      | Left: source with crop/grid overlay. Right: result at target size, zoomable. Below: the nine steps of SPEC §8 as one compact form; a result line "8 frames · 32×32 · 16 colours" |
-| Export          | Bundle options (SPEC §9.4), resulting file list with sizes, final frame/animation IDs, destination folder, "Export on save" |
-| Canvas / Sprite size | Numeric fields, anchor grid, resample method                                        |
-| Tag             | Name, colour, range, direction, repeat                                                   |
-| Preferences     | Theme, checkerboard, grid, onion skin defaults, shortcut sheet                           |
-| WebGPU required | Full-window notice: what is missing, supported browsers, how to enable acceleration      |
+| Surface         | Kind     | Content                                                                         |
+| --------------- | -------- | ------------------------------------------------------------------------------- |
+| New sprite      | Dialog   | Width, height, presets (16, 32, 48, 64, 128), name                              |
+| Sprite properties | Dialog | Name, pivot (3×3 presets and numeric X/Y), grid size and offset                 |
+| Import PNG      | Large dialog | Left: source with crop/grid overlay. Right: result at target size, zoomable. Below: the steps of SPEC §8 as one compact form; a result line "8 frames · 32×32 · 16 colours" |
+| Drop chooser    | Popover at the drop point | "Import as sprite", "Add as reference", "Both" (single image only) |
+| Export          | Large dialog | Bundle options (SPEC §9.4), file toggles, frames (all / one tag), pivot (edits the same value as Sprite properties), atlas thumbnail with rectangles, resulting file list with sizes, final frame/animation IDs, destination folder, "Export on save" |
+| Overwrite confirm | Dialog | Lists existing files in the chosen folder once per folder                       |
+| Canvas / Sprite size | Dialog | Numeric fields, anchor grid, resample method                                |
+| Tag             | Dialog   | Name, colour, range, direction, repeat                                          |
+| Layer properties | Popover | Name, opacity, blend mode; for reference layers: X, Y, scale, placement         |
+| Cel properties  | Popover  | Cel opacity; linked state with Unlink                                           |
+| Onion skin      | Popover  | Frames before/after, opacity, falloff, tint, placement, within tag              |
+| Replace colour  | Dialog   | From, to, tolerance, scope (selection, cel, frame, sprite)                      |
+| Recovery        | Dialog on launch | Recoverable documents with name, time, thumbnail; Recover / Discard     |
+| Preferences     | Dialog   | Theme, checkerboard, grid, onion skin defaults, import defaults, autosave       |
+| Shortcut sheet  | Dialog   | Generated from the command registry, grouped by menu                            |
+| WebGPU required | Full window | What is missing, supported browsers, how to enable acceleration              |
 
-Destructive actions (delete layer with content, close unsaved document) confirm once; everything
-else relies on undo.
+Only actions that undo cannot reverse confirm once: closing or replacing an unsaved document,
+discarding a recovery snapshot, overwriting files in an export folder. Everything else,
+including deleting layers and frames, relies on undo.
 
 ## 8. Accessibility
 
 - Every command is reachable by keyboard via menu or palette; visible focus on all controls.
+  F6 / Shift+F6 cycle regions; Tab toggles the timeline only while the canvas has focus.
 - Radix primitives supply roles, focus trapping and typeahead for menus and dialogs.
 - Icon-only controls carry `aria-label` and a tooltip.
-- Text contrast AA in both themes; hit targets ≥ 24×24 px.
+- Text contrast per §3.1 in both themes.
+- Pointer targets are at least 24×24 px. Exceptions, each also operable from the keyboard:
+  palette swatches (16 px, arrow-key navigation), timeline cells (24×28), splitters (8 px,
+  keyboard resize with arrow keys when focused).
+- Layout is verified at 1280×720 and at 125% browser zoom on a 1920×1080 display.
 - The canvas itself is a pointer surface and is not screen-reader operable; this is stated in
   the README rather than faked.
