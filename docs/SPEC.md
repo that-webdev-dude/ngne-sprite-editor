@@ -131,6 +131,14 @@ TypeScript settings follow the NGNE guide for Vite consumers: `moduleResolution:
 DOM libs, `types: []`, `skipLibCheck: false`, `build.target: "es2022"`. NGNE itself is built
 with TypeScript 5.9; if its declarations fail under TypeScript 7, SE-001 pins 5.9.x.
 
+Recorded by SE-001 (2026-10-11): TypeScript is pinned to **5.9.3**, not 7.0.2. The cause is the
+lint toolchain, not NGNE: `typescript-eslint` 8.71.1 accepts TypeScript below 6.1 only, and
+TypeScript 7 does not ship the JavaScript compiler API it parses with. NGNE's declarations pass
+under 5.9.3 with `skipLibCheck: false`. That DOM library has no WebGPU types, so code reading
+`navigator.gpu` declares the fields it uses. Other versions are as listed above, plus
+lucide-react 1.55.0, eslint 10.12.0, prettier 3.9.10, fast-check 4.10.2 and
+@axe-core/playwright 4.13.0.
+
 ## 5. Architecture
 
 ```text

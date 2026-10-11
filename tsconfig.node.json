@@ -1,0 +1,8 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "types": ["node"]
+    },
+    "include": ["*.config.ts", "tests", "src/raw.d.ts"],
+    "exclude": ["tests/e2e/harness", "tests/fixtures"]
+}
