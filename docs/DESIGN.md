@@ -1,6 +1,6 @@
 # NGNE Sprite Editor — Interface design
 
-Status: **Ready for implementation — owner acknowledgements A1–A9 pending** ([REVIEW.md](REVIEW.md)) · 2026-10-11
+Status: **Ready for implementation — owner acknowledgements A1–A9 recorded** ([REVIEW.md](REVIEW.md)) · 2026-10-11
 
 Related: [SPEC.md](SPEC.md) · static mockup: [design/mockup.html](design/mockup.html) (open in a
 browser). The mockup illustrates layout, tokens and density; where it omits a control described

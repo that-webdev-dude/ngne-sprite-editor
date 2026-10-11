@@ -1,6 +1,6 @@
 # NGNE Sprite Editor — Specification
 
-Status: **Ready for implementation — owner acknowledgements A1–A9 pending** ([REVIEW.md](REVIEW.md)) · Spec version 1.0 · 2026-10-11
+Status: **Ready for implementation — owner acknowledgements A1–A9 recorded** ([REVIEW.md](REVIEW.md)) · Spec version 1.0 · 2026-10-11
 
 Related: [DESIGN.md](DESIGN.md) (interface) · [tickets/README.md](tickets/README.md) (implementation
 breakdown) · [REVIEW.md](REVIEW.md) (review record, owner acknowledgements)

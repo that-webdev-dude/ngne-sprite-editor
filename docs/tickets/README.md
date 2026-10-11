@@ -1,6 +1,6 @@
 # Implementation tickets
 
-Status: **Ready for implementation — owner acknowledgements A1–A9 pending** ([REVIEW.md](../REVIEW.md)) · 2026-10-11
+Status: **Ready for implementation — owner acknowledgements A1–A9 recorded** ([REVIEW.md](../REVIEW.md)) · 2026-10-11
 
 Source documents: [SPEC.md](../SPEC.md) · [DESIGN.md](../DESIGN.md) · review record and owner
 acknowledgements: [REVIEW.md](../REVIEW.md)
@@ -120,6 +120,9 @@ one developer. Tickets outside SE-073's dependency closure (026, 034, 046, 047, 
 | Aseprite parity tiers (SPEC §2.3)            | all M1–M6 tickets                               | Gate G3                        |
 
 ## Parallel work
+
+Wave order, runs and rules for implementing with several agents at once:
+[EXECUTION.md](EXECUTION.md).
 
 After SE-001 three people can start at once; the tracks merge early.
 
