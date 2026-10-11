@@ -1,6 +1,6 @@
 # NGNE Sprite Editor — Specification
 
-Status: **Ready for implementation — owner acknowledgements A1–A8 recorded, A9 pending (SE-002 only)** ([REVIEW.md](REVIEW.md)) · Spec version 1.0.1 · 2026-10-11
+Status: **Ready for implementation — owner acknowledgements A1–A9 recorded** ([REVIEW.md](REVIEW.md)) · Spec version 1.0.2 · 2026-10-11
 
 Related: [DESIGN.md](DESIGN.md) (interface) · [tickets/README.md](tickets/README.md) (implementation
 breakdown) · [REVIEW.md](REVIEW.md) (review record, owner acknowledgements)
@@ -101,8 +101,12 @@ Known deviation: Aseprite keeps cel pixels moved off-canvas; v1 clips them when 
   Pointer Events, `ResizeObserver` (`devicePixelContentBoxSize`), IndexedDB, Web Workers.
 - Progressive: File System Access API (direct save, export to a folder). Fallback is download.
 - Minimum window: 1280×720 CSS px (DESIGN §2 defines the layout at that size).
-- Reference hardware for budgets and manual checks is NGNE's own validation envelope: Windows 11,
-  Chrome, Intel UHD (gen-12) and an NVIDIA RTX 4060 laptop GPU (A9).
+- Reference hardware for budgets and manual checks (A9): the owner's available machines running
+  desktop Chrome stable with hardware WebGPU. The weakest GPU available (integrated preferred) is
+  the **budget machine**; every budget and go threshold applies to it. A discrete GPU, if
+  available, is measured too and recorded. Every record names GPU, driver, OS and browser
+  version. NGNE's own validation envelope (Windows 11, Intel UHD gen-12, RTX 4060) is preferred
+  where available but not required.
 
 ## 4. Stack
 
@@ -125,7 +129,9 @@ new headless mode), ESLint, Prettier, axe, a property-testing library, a PWA bui
 
 Versions observed on npm on 2026-10-11 (pin exact at scaffold; verify compatibility in SE-001):
 react 19.3.0, vite 8.3.4, typescript 7.0.2, vitest 5.0.3, @playwright/test 1.64.0,
-zustand 5.0.15, radix-ui 1.7.0, fflate 0.8.3, fast-png 8.0.0, gifenc 1.0.3. Node ≥ 24.
+zustand 5.0.15, radix-ui 1.7.0, fflate 0.8.3, fast-png 8.0.0, gifenc 1.0.3. Node 24 (latest
+24.x LTS; 24.21.0 on 2026-10-11), declared in `.nvmrc` and `engines` and used by CI and cloud
+sessions alike (SE-001).
 
 TypeScript settings follow the NGNE guide for Vite consumers: `moduleResolution: "Bundler"`,
 DOM libs, `types: []`, `skipLibCheck: false`, `build.target: "es2022"`. NGNE itself is built
@@ -883,7 +889,7 @@ that point is a change request.
 | A6 | Desktop Chrome/Edge only; no fallback renderer; minimum window 1280×720                               | SE-001        |
 | A7 | Reference images render behind or in front of all pixel layers, not at arbitrary stack positions      | SE-003        |
 | A8 | Repository on GitHub, CI on GitHub Actions, deploy to GitHub Pages, MIT licence (as NGNE)             | SE-001        |
-| A9 | Reference hardware of §3 is available for SE-002 and performance records                              | SE-002        |
+| A9 | Reference hardware is the owner's available machines, weakest GPU as budget machine (§3)            | SE-002        |
 
 ## 13. Risks
 
@@ -893,6 +899,7 @@ that point is a change request.
 | Pixel misalignment at fractional DPR or odd sizes           | Medium     | Integer device-pixel zoom, snap off, even export rects, readback tests |
 | NGNE 0.x API changes                                        | Medium     | Exact pin; all engine use isolated in `engine/`          |
 | Two WebGPU devices (viewport + preview) on weak GPUs        | Low        | SE-002 verifies; preview stops when hidden               |
+| Budget machine differs from NGNE's validated envelope (A9)  | Medium     | Record exact GPU/driver/OS; SwiftShader for exactness questions; re-measure if a target device is named later |
 | Slot memory (NGNE keeps a bitmap per slot)                  | Medium     | Reference texel budget, 1×1 placeholders, `renderer.inspect()` checks |
 | Scope creep toward full Aseprite parity                     | High       | §2.3 tiers; Later items need a new spec revision         |
 | Browser-reserved shortcuts break Aseprite muscle memory     | Certain    | §7.8 alternates, command palette, PWA window (SE-072)    |

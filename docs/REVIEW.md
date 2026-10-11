@@ -15,14 +15,14 @@ Covers [SPEC.md](SPEC.md), [DESIGN.md](DESIGN.md), [design/mockup.html](design/m
 | Revision after round 2       | Applied 2026-10-11 (tables below)                 |
 | Round 3 — plan review (confirmation) | **READY**: Q1 and Q2 resolved, dependency audit (a)–(g) passed; 5 Minor/Nit, since applied |
 | Marked ready                 | **Yes, 2026-10-11** |
-| Owner acknowledgements       | A1–A8 recorded 2026-10-11; A9 pending (blocks SE-002 only) |
-| Revision after acknowledgements | SPEC §8 "Output" rule and one SE-043 acceptance item (A3 reading); SE-001 repository scope updated (A8). Clarifications, not re-reviewed |
+| Owner acknowledgements       | A1–A9 recorded 2026-10-11; decisions D1–D2 recorded |
+| Revision after acknowledgements | SPEC §8 "Output" rule and SE-043 acceptance item (A3); SE-001 repository scope (A8); reference hardware in SPEC §3, §13 and SE-002 (A9); Node 24 setup in SPEC §4 and SE-001 (D2). Not re-reviewed |
 
 What "Ready" means here: every document and ticket is specified and has passed independent
 review with no open Blocker or Major finding. It does not waive start conditions: no ticket can
 start until the owner acknowledgements below are recorded (SE-001 needs A1, A4, A5, A6, A8 and
 every other ticket depends on SE-001). A different owner decision on A1 or A2 returns the
-affected tickets to Draft. With A1–A8 recorded, SE-001 can start; SE-002 waits on A9.
+affected tickets to Draft. All acknowledgements are recorded; SE-001 can start.
 
 Limits of the review, stated plainly:
 
@@ -185,7 +185,16 @@ only when the row below is filled in.
 | A6 | Desktop Chrome/Edge, WebGPU only, minimum window 1280×720             | SE-001        | Confirmed      | 2026-10-11 |
 | A7 | Reference images behind or in front of all pixel layers only          | SE-003        | Confirmed      | 2026-10-11 |
 | A8 | GitHub repository, GitHub Actions, GitHub Pages, MIT licence          | SE-001        | Confirmed. Repository `that-webdev-dude/ngne-sprite-editor` exists, public by owner decision, default branch `main` | 2026-10-11 |
-| A9 | Reference hardware (Intel UHD gen-12, RTX 4060) available             | SE-002        | Pending — owner to confirm the hardware is available, or name substitutes | |
+| A9 | Reference hardware for SE-002 and performance records                 | SE-002        | Decided (delegated by owner): the owner's available machines on desktop Chrome with hardware WebGPU; weakest GPU is the budget machine; NGNE's envelope preferred, not required (SPEC §3, SE-002) | 2026-10-11 |
+
+## Other owner decisions
+
+Decided under the owner's delegation, 2026-10-11.
+
+| ID | Decision | Where |
+| -- | -------- | ----- |
+| D1 | Import "Keep" for alpha or colours stays allowed as an explicit user choice; defaults always give a true pixel image (A3) | SPEC §8 "Output" |
+| D2 | Node 24 for development, CI and cloud sessions: `.nvmrc`, `engines`, `setup-node`, and a `SessionStart` hook that installs Node 24 when the session image is older (no environment-settings change) | SPEC §4, SE-001 |
 
 ## Descoped tickets
 

@@ -1,6 +1,6 @@
 # Implementation tickets
 
-Status: **Ready for implementation — owner acknowledgements A1–A8 recorded, A9 pending (SE-002 only)** ([REVIEW.md](../REVIEW.md)) · 2026-10-11
+Status: **Ready for implementation — owner acknowledgements A1–A9 recorded** ([REVIEW.md](../REVIEW.md)) · 2026-10-11
 
 Source documents: [SPEC.md](../SPEC.md) · [DESIGN.md](../DESIGN.md) · review record and owner
 acknowledgements: [REVIEW.md](../REVIEW.md)

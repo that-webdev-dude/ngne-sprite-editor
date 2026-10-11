@@ -17,6 +17,11 @@ core model the rest depends on. Exit: gate G0 ([README](README.md#gates)).
 | Spec         | SPEC §3, §4, §5, §6.7, §11                               |
 
 Scope
+- Node 24: `.nvmrc` (`24`) and `"engines": { "node": ">=24 <25" }`; CI uses
+  `actions/setup-node` with `node-version-file: .nvmrc`. A Claude Code `SessionStart` hook
+  (`.claude/settings.json` + script) installs Node 24 from nodejs.org into a cache directory and
+  puts it first on `PATH` when the active Node is older, so cloud sessions need no environment
+  change.
 - Repository: already exists per A8 (`that-webdev-dude/ngne-sprite-editor`, public, default
   branch `main`, docs committed). SE-001 adds `.gitignore` and the MIT `LICENSE` file.
 - Vite + React + TypeScript (strict) app; `@ngne/core` pinned exactly to 0.2.1 from npm.
@@ -43,7 +48,9 @@ Scope
 Out of scope: any feature code, deployment.
 
 Acceptance
-- `npm ci && npm run check` passes on a fresh clone with Node ≥ 24, locally and in CI.
+- `npm ci && npm run check` passes on a fresh clone with Node 24, locally and in CI.
+- In a fresh cloud session whose image ships an older Node, the `SessionStart` hook leaves
+  `node -v` reporting 24.x before `npm ci`.
 - An E2E smoke test opens the dev build, creates a `WebGPURenderer` on a canvas, draws one
   `frame.rect`, and `readCanvas` returns the expected colour at the expected pixel — under
   hardware locally and SwiftShader in CI.
@@ -65,12 +72,13 @@ Acceptance
 | Spec         | SPEC §6.2, §6.4, §6.5, §6.6, §6.7, §9.2, §13             |
 
 Scope: throwaway pages under `spikes/ngne/` that measure each assumption `engine/` relies on.
-No production code is kept. Each question has a go threshold; all are measured on both reference
-GPUs (Intel UHD, RTX 4060) and, where marked S, also under SwiftShader.
+No production code is kept. Each question has a go threshold; all are measured on the reference
+hardware of SPEC §3 (thresholds apply to the budget machine; any other available GPU is
+recorded) and, where marked S, also under SwiftShader.
 
 | # | Question | Method | Go threshold |
 | - | -------- | ------ | ------------ |
-| 1 | Upload latency and sustained rate | From a CPU `Uint8ClampedArray`: build bitmap, `texture("ed:f:0")`, `render()`; time to `texture()` resolution and to the next `render()` submitted. 64², 256², 512², 1024²; 200 samples each; then 5 s of replacements requested every animation frame | 256²: p95 ≤ 25 ms to submitted on Intel UHD and ≥ 30 completed replacements/s sustained. Other sizes recorded |
+| 1 | Upload latency and sustained rate | From a CPU `Uint8ClampedArray`: build bitmap, `texture("ed:f:0")`, `render()`; time to `texture()` resolution and to the next `render()` submitted. 64², 256², 512², 1024²; 200 samples each; then 5 s of replacements requested every animation frame | 256²: p95 ≤ 25 ms to submitted on the budget machine and ≥ 30 completed replacements/s sustained. Other sizes recorded |
 | 2 | Single-flight queue | Overlapping `texture()` calls; latest-wins queue during a 5 s continuous stream | Earlier call rejects "superseded"; final content always shown; no starvation (≥ 1 publish per 100 ms) |
 | 3 | Pixel-exact placement, viewport path (S) | `pixelSnap = false`, integer top-left and size; DPR 1, 1.25, 1.5, 2; odd and even document sizes; scales 1, 3, 8 | In-page readback: zero device pixels differ from the expected pattern |
 | 4 | Renderer replacement vs fixed oversized canvas | (a) Dispose and create on a new canvas 50 times, including overlapping requests serialized by the caller. (b) One canvas with backing = logical = screen size in device pixels, CSS-clipped, window resized 50 times | (a) No errors, one live device after each swap completes, never a blank viewport, median ≤ 250 ms. (b) Correct image, no recreation. Record which is adopted for SPEC §6.4 |
