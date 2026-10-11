@@ -1,0 +1,87 @@
+/* Labelled field, number field and select trigger: one set of metrics (DESIGN §4). */
+.ui-field {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-8);
+    min-width: 0;
+}
+
+.ui-field__label {
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.ui-field__label--scrub {
+    cursor: ew-resize;
+    touch-action: none;
+}
+
+.ui-number,
+.ui-select {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-4);
+    height: var(--control-height);
+    padding: 0 var(--space-8);
+    border: var(--border-width) solid var(--border-input);
+    border-radius: var(--radius-control);
+    background: var(--bg-raised);
+    color: var(--text);
+    transition: border-color var(--motion-fast) var(--motion-ease);
+}
+
+.ui-number {
+    width: 64px;
+}
+
+.ui-number__input {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-variant-numeric: tabular-nums;
+    user-select: text;
+}
+
+.ui-number__unit {
+    color: var(--text-muted);
+}
+
+.ui-number[aria-disabled="true"],
+.ui-select:disabled {
+    border-color: var(--border);
+    background: transparent;
+    color: var(--text-faint);
+}
+
+.ui-number[aria-disabled="true"] .ui-number__unit {
+    color: var(--text-faint);
+}
+
+/* The ring belongs to the bordered box, not to the borderless input inside it. */
+:root[data-modality="keyboard"] .ui-number__input:focus-visible {
+    outline: none;
+}
+
+:root[data-modality="keyboard"] .ui-number:has(.ui-number__input:focus-visible) {
+    outline: var(--focus-ring-width) solid var(--accent);
+    outline-offset: var(--focus-ring-offset);
+}
+
+.ui-select {
+    justify-content: space-between;
+    min-width: 64px;
+    white-space: nowrap;
+}
+
+.ui-select__icon {
+    display: inline-grid;
+    color: var(--text-muted);
+}
+
+.ui-select:disabled .ui-select__icon {
+    color: var(--text-faint);
+}

@@ -1,0 +1,42 @@
+/* Each item carries its own part of the outline, so it is a full 24 px pointer target. */
+.ui-segmented {
+    display: inline-flex;
+    flex: none;
+    height: var(--control-height);
+}
+
+.ui-segmented__item {
+    height: 100%;
+    padding: 0 var(--space-8);
+    border: var(--border-width) solid var(--border-input);
+    border-right-color: var(--border-strong);
+    border-left-width: 0;
+    color: var(--text-muted);
+    white-space: nowrap;
+    transition:
+        background-color var(--motion-fast) var(--motion-ease),
+        color var(--motion-fast) var(--motion-ease);
+}
+
+.ui-segmented__item:first-child {
+    border-left-width: var(--border-width);
+    border-radius: var(--radius-control) 0 0 var(--radius-control);
+}
+
+.ui-segmented__item:last-child {
+    border-right-color: var(--border-input);
+    border-radius: 0 var(--radius-control) var(--radius-control) 0;
+}
+
+.ui-segmented__item:hover:not(:disabled) {
+    color: var(--text);
+}
+
+.ui-segmented__item[data-state="checked"] {
+    background: var(--bg-active);
+    color: var(--text);
+}
+
+.ui-segmented__item:disabled {
+    color: var(--text-faint);
+}

@@ -1,0 +1,202 @@
+/*
+ * App shell (DESIGN §2): seven regions on one grid. Fixed sizes: menu bar 36, context bar 36,
+ * status bar 24, tool rail 44 (72 in two columns). The dock width and the timeline height come
+ * from AppShell as custom properties. Borders are inside the region sizes, as in the mockup.
+ */
+.shell {
+    display: grid;
+    grid-template-rows: 36px 36px minmax(0, 1fr) var(--shell-timeline-height) 24px;
+    grid-template-columns: auto minmax(0, 1fr) var(--shell-dock-width);
+    height: 100%;
+    background: var(--bg-panel);
+}
+
+.shell[hidden] {
+    display: none;
+}
+
+.shell-menubar {
+    display: flex;
+    grid-row: 1;
+    grid-column: 1 / -1;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    padding: 0 var(--space-8);
+    border-bottom: var(--border-width) solid var(--border);
+}
+
+/* Rail metrics are mirrored by RAIL in layout.ts, which decides the column count. */
+.shell-rail {
+    display: flex;
+    flex-direction: column;
+    grid-row: 2 / 4;
+    grid-column: 1;
+    align-items: center;
+    gap: var(--space-2);
+    width: 44px;
+    min-height: 0;
+    padding: var(--space-8) 0;
+    border-right: var(--border-width) solid var(--border);
+}
+
+.shell-rail[data-columns="2"] {
+    width: 72px;
+}
+
+.shell-rail__group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.shell-rail[data-columns="2"] .shell-rail__group {
+    display: grid;
+    grid-template-columns: repeat(2, var(--row-height));
+}
+
+.shell-rail__group + .shell-rail__group::before {
+    content: "";
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: 20px;
+    height: var(--border-width);
+    margin: var(--space-4) 0;
+    background: var(--border);
+}
+
+.shell-rail__footer {
+    margin-top: auto;
+}
+
+.shell-context {
+    display: flex;
+    grid-row: 2;
+    grid-column: 2;
+    align-items: center;
+    gap: var(--space-12);
+    min-width: 0;
+    padding: 0 var(--space-12);
+    border-bottom: var(--border-width) solid var(--border);
+}
+
+.shell-viewport {
+    position: relative;
+    display: grid;
+    grid-row: 3;
+    grid-column: 2;
+    place-items: center;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--bg-workspace);
+}
+
+.shell-dock {
+    position: relative;
+    grid-row: 2 / 4;
+    grid-column: 3;
+    min-height: 0;
+    border-left: var(--border-width) solid var(--border);
+}
+
+/* The splitter's line lies on the region border: 4 px of hit area on either side. */
+.shell-dock__splitter {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(-1 * (var(--space-4) + var(--border-width)));
+}
+
+.shell-dock__scroll {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.shell-timeline {
+    position: relative;
+    grid-row: 4;
+    grid-column: 1 / -1;
+    min-height: 0;
+    border-top: var(--border-width) solid var(--border);
+}
+
+.shell-timeline__splitter {
+    position: absolute;
+    top: calc(-1 * (var(--space-4) + var(--border-width)));
+    right: 0;
+    left: 0;
+}
+
+.shell-timeline__content {
+    height: 100%;
+    overflow: hidden;
+}
+
+.shell-status {
+    display: flex;
+    grid-row: 5;
+    grid-column: 1 / -1;
+    align-items: center;
+    gap: var(--space-16);
+    min-width: 0;
+    padding: 0 var(--space-12);
+    border-top: var(--border-width) solid var(--border);
+    color: var(--text-muted);
+    font-size: var(--font-size-label);
+}
+
+.shell-placeholder {
+    color: var(--text-muted);
+}
+
+/* Dock sections (DESIGN §2, §5): header always visible and clickable, body collapsible. */
+.dock-section {
+    flex: none;
+    border-bottom: var(--border-width) solid var(--border);
+}
+
+.dock-section__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-8);
+    height: 32px;
+    padding: 0 var(--space-12) 0 var(--space-4);
+    color: var(--text-muted);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-strong);
+}
+
+.dock-section__toggle {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: var(--space-4);
+    min-width: 0;
+    height: var(--control-height);
+    padding: 0 var(--space-4);
+    border-radius: var(--radius-control);
+    font-weight: inherit;
+    text-align: left;
+    white-space: nowrap;
+    transition: color var(--motion-fast) var(--motion-ease);
+}
+
+.dock-section__toggle:hover {
+    color: var(--text);
+}
+
+.dock-section__extra {
+    display: flex;
+    flex: none;
+    align-items: center;
+    font-weight: var(--font-weight);
+}
+
+.dock-section__body {
+    padding: 0 var(--space-12) var(--space-12);
+}

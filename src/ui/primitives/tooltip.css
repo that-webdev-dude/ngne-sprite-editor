@@ -1,0 +1,18 @@
+.ui-tooltip {
+    z-index: 60;
+    display: flex;
+    gap: var(--space-8);
+    padding: var(--space-4) var(--space-8);
+    border: var(--border-width) solid var(--border-strong);
+    border-radius: var(--radius-control);
+    background: var(--bg-raised);
+    color: var(--text);
+    font-size: var(--font-size-label);
+    white-space: nowrap;
+    pointer-events: none;
+    animation: var(--surface-fade);
+}
+
+.ui-tooltip__key {
+    color: var(--text-muted);
+}

@@ -1,0 +1,61 @@
+/* Menu surface shared by the select list and the context menu (and menus built later). */
+.ui-menu {
+    z-index: 50;
+    min-width: 160px;
+    max-height: var(--radix-popper-available-height, 80vh);
+    padding: var(--space-4);
+    overflow-y: auto;
+    border: var(--border-width) solid var(--border-strong);
+    border-radius: var(--radius-surface);
+    background: var(--bg-raised);
+    box-shadow: var(--elevation);
+    color: var(--text);
+    animation: var(--surface-fade);
+}
+
+.ui-menu--select {
+    min-width: var(--radix-select-trigger-width);
+}
+
+.ui-menu__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-16);
+    height: var(--control-height);
+    padding: 0 var(--space-8);
+    border-radius: var(--radius-control);
+    white-space: nowrap;
+}
+
+/* Radix moves DOM focus to the highlighted item; the highlight is its focus indicator. */
+.ui-menu__item[data-highlighted] {
+    background: var(--bg-active);
+}
+
+:root[data-modality="keyboard"] .ui-menu__item:focus-visible {
+    outline: none;
+}
+
+.ui-menu__item[data-disabled] {
+    color: var(--text-faint);
+}
+
+.ui-menu__shortcut {
+    color: var(--text-muted);
+}
+
+.ui-menu__item[data-disabled] .ui-menu__shortcut {
+    color: var(--text-faint);
+}
+
+.ui-menu__indicator {
+    display: inline-grid;
+    color: var(--text-muted);
+}
+
+.ui-menu__separator {
+    height: var(--border-width);
+    margin: var(--space-4) 0;
+    background: var(--border-strong);
+}

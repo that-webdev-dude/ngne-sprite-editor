@@ -1,0 +1,101 @@
+/* Development route /gallery. */
+.gallery {
+    height: 100%;
+    overflow-y: auto;
+    background: var(--bg-panel);
+}
+
+.gallery__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 36px;
+    padding: 0 var(--space-16);
+    border-bottom: var(--border-width) solid var(--border);
+}
+
+.gallery__heading {
+    font-size: var(--font-size-title);
+    font-weight: var(--font-weight-strong);
+}
+
+.gallery__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+}
+
+.gallery__demo {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    min-width: 0;
+    padding: var(--space-12) var(--space-16) var(--space-16);
+    border-right: var(--border-width) solid var(--border);
+    border-bottom: var(--border-width) solid var(--border);
+}
+
+.gallery__title {
+    color: var(--text-muted);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-strong);
+}
+
+.gallery__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-12);
+}
+
+.gallery__column {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-8);
+}
+
+.gallery__readout {
+    color: var(--text-muted);
+}
+
+.gallery__target {
+    display: grid;
+    place-items: center;
+    height: 56px;
+    padding: 0 var(--space-16);
+    border: var(--border-width) dashed var(--border-input);
+    border-radius: var(--radius-control);
+    color: var(--text-muted);
+}
+
+.gallery__split {
+    display: flex;
+    width: 100%;
+    height: 56px;
+    border: var(--border-width) solid var(--border);
+}
+
+.gallery__pane {
+    display: grid;
+    flex: none;
+    place-items: center;
+    background: var(--bg-raised);
+    color: var(--text-muted);
+}
+
+.gallery__pane--rest {
+    flex: 1;
+    background: var(--bg-workspace);
+}
+
+.gallery__panel {
+    flex: 1;
+    min-width: 200px;
+    border: var(--border-width) solid var(--border);
+}
+
+.gallery__panel > span {
+    display: block;
+    padding: var(--space-4) var(--space-12);
+    color: var(--text-muted);
+}

@@ -1,0 +1,33 @@
+.region-error {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    min-width: 0;
+    padding: var(--space-4) var(--space-12);
+    color: var(--text-muted);
+}
+
+/* The bars and the dock sections already pad their content. */
+.shell-menubar > .region-error,
+.shell-context > .region-error,
+.shell-status > .region-error,
+.dock-section__body > .region-error {
+    padding: 0;
+}
+
+.region-error__message {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.region-error--compact {
+    justify-content: center;
+    padding: 0;
+    color: var(--warn);
+}
+
+.region-error--compact .ui-icon-button {
+    color: var(--warn);
+}

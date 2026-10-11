@@ -1,0 +1,58 @@
+.ui-slider {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-8);
+    min-width: 0;
+}
+
+.ui-slider__root {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1;
+    width: 120px;
+    min-width: 64px;
+    height: var(--control-height);
+    touch-action: none;
+}
+
+/* Inset so the ends of the track meet the edges of the 10 px dot at both extremes. */
+.ui-slider__track {
+    position: relative;
+    flex: 1;
+    height: 2px;
+    margin: 0 7px;
+    background: var(--border-input);
+}
+
+.ui-slider__range {
+    position: absolute;
+    height: 100%;
+    background: var(--text);
+}
+
+/* 24 px hit area around the 10 px dot. */
+.ui-slider__thumb {
+    display: grid;
+    place-items: center;
+    width: var(--control-height);
+    height: var(--control-height);
+    border-radius: 50%;
+}
+
+.ui-slider__thumb::after {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text);
+}
+
+.ui-slider__root[data-disabled] .ui-slider__track {
+    background: var(--border);
+}
+
+.ui-slider__root[data-disabled] .ui-slider__range,
+.ui-slider__root[data-disabled] .ui-slider__thumb::after {
+    background: var(--text-faint);
+}

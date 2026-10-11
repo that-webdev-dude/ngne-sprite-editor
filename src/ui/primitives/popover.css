@@ -1,0 +1,14 @@
+.ui-popover {
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    max-width: calc(100vw - var(--space-16));
+    padding: var(--space-12);
+    border: var(--border-width) solid var(--border-strong);
+    border-radius: var(--radius-surface);
+    background: var(--bg-raised);
+    box-shadow: var(--elevation);
+    color: var(--text);
+    animation: var(--surface-fade);
+}

@@ -1,0 +1,88 @@
+/*
+ * Design tokens (DESIGN §3). This is the only stylesheet that may contain a raw colour value;
+ * tests/unit/se-006-tokens.test.ts enforces that and checks the values against DESIGN §3.1.
+ * Dark is the default; light is the full second set under [data-theme="light"].
+ */
+:root {
+    color-scheme: dark;
+
+    /* §3.1 Colour */
+    --bg-workspace: #0f0f10;
+    --bg-panel: #18181a;
+    --bg-raised: #222225;
+    --bg-active: #2c2c30;
+    --border: #2a2a2e;
+    --border-strong: #3a3a40;
+    --border-input: #70707a;
+    --text: #e7e7ea;
+    --text-muted: #9a9aa2;
+    --text-faint: #6b6b74;
+    --accent: #83e8e1;
+    --accent-contrast: #0f0f10;
+    --danger: #ff6b6b;
+    --warn: #f2c14e;
+    --check-a: #3a3a3a;
+    --check-b: #4a4a4a;
+
+    /* §3.2 Type */
+    --font-ui: Inter, "Segoe UI", system-ui, sans-serif;
+    --font-size: 12px;
+    --font-size-label: 11px;
+    --font-size-title: 13px;
+    --line-height: 16px;
+    --font-weight: 400;
+    --font-weight-strong: 500;
+
+    /* §3.3 Space, shape, motion */
+    --space-2: 2px;
+    --space-4: 4px;
+    --space-8: 8px;
+    --space-12: 12px;
+    --space-16: 16px;
+    --space-24: 24px;
+    --control-height: 24px;
+    --row-height: 28px;
+    --radius-control: 4px;
+    --radius-surface: 6px;
+    --radius-region: 0;
+    --border-width: 1px;
+    --focus-ring-width: 2px;
+    --focus-ring-offset: 1px;
+    --elevation: 0 8px 24px rgb(0 0 0 / 0.4);
+    --motion-fast: 100ms;
+    --motion-surface: 120ms;
+    --motion-ease: ease-out;
+    /* Entrance of popovers, menus, dialogs, tooltips and toasts; keyframes in base.css. */
+    --surface-fade: ui-fade-in var(--motion-surface) var(--motion-ease);
+    --icon-size: 16px;
+    --icon-stroke: 1.5px;
+}
+
+[data-theme="light"] {
+    color-scheme: light;
+
+    --bg-workspace: #d9d9db;
+    --bg-panel: #f4f4f5;
+    --bg-raised: #ffffff;
+    --bg-active: #e6e6e9;
+    --border: #d0d0d4;
+    --border-strong: #b4b4ba;
+    --border-input: #8a8a94;
+    --text: #18181a;
+    --text-muted: #5c5c66;
+    --text-faint: #8a8a94;
+    --accent: #087f78;
+    --accent-contrast: #ffffff;
+    --danger: #c92a2a;
+    --warn: #8a5a00;
+    --check-a: #c8c8c8;
+    --check-b: #ffffff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --motion-fast: 0ms;
+        --motion-surface: 0ms;
+        --surface-fade: none;
+    }
+}

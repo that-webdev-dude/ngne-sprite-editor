@@ -1,0 +1,56 @@
+/* The overlay blocks the interface behind a modal dialog; DESIGN §3 defines no scrim colour. */
+.ui-dialog__overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+}
+
+.ui-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 41;
+    display: flex;
+    flex-direction: column;
+    width: calc(100vw - var(--space-24) * 2);
+    height: fit-content;
+    max-height: calc(100vh - var(--space-24) * 2);
+    margin: auto;
+    border: var(--border-width) solid var(--border-strong);
+    border-radius: var(--radius-surface);
+    background: var(--bg-panel);
+    box-shadow: var(--elevation);
+    color: var(--text);
+    animation: var(--surface-fade);
+}
+
+.ui-dialog--standard {
+    max-width: 560px;
+}
+
+.ui-dialog--large {
+    max-width: 960px;
+    max-height: 86vh;
+}
+
+.ui-dialog__title {
+    flex: none;
+    padding: var(--space-12) var(--space-16) var(--space-8);
+    font-size: var(--font-size-title);
+    font-weight: var(--font-weight-strong);
+}
+
+.ui-dialog__body {
+    flex: 1;
+    min-height: 0;
+    padding: var(--space-4) var(--space-16) var(--space-16);
+    overflow-y: auto;
+}
+
+.ui-dialog__actions {
+    display: flex;
+    flex: none;
+    justify-content: flex-end;
+    gap: var(--space-8);
+    padding: var(--space-12) var(--space-16);
+    border-top: var(--border-width) solid var(--border);
+}

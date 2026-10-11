@@ -1,0 +1,46 @@
+/* 8 px hit area; the 1 px line sits 4 px in, so `left/top: -4px` centres it on an edge. */
+.ui-splitter {
+    position: relative;
+    z-index: 5;
+    flex: none;
+    touch-action: none;
+}
+
+.ui-splitter--vertical {
+    width: var(--space-8);
+    cursor: col-resize;
+}
+
+.ui-splitter--horizontal {
+    height: var(--space-8);
+    cursor: row-resize;
+}
+
+.ui-splitter::after {
+    content: "";
+    position: absolute;
+    background: var(--border);
+    transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+.ui-splitter--vertical::after {
+    top: 0;
+    bottom: 0;
+    left: var(--space-4);
+    width: var(--border-width);
+}
+
+.ui-splitter--horizontal::after {
+    top: var(--space-4);
+    right: 0;
+    left: 0;
+    height: var(--border-width);
+}
+
+.ui-splitter:hover::after {
+    background: var(--border-input);
+}
+
+.ui-splitter[data-dragging]::after {
+    background: var(--text-muted);
+}

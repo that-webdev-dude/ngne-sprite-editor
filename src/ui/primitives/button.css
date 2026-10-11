@@ -1,0 +1,116 @@
+/* Button, icon button, tool button and toggle (DESIGN §4). */
+.ui-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-4);
+    flex: none;
+    height: var(--control-height);
+    padding: 0 var(--space-12);
+    border: var(--border-width) solid var(--border-strong);
+    border-radius: var(--radius-control);
+    background: var(--bg-raised);
+    color: var(--text);
+    white-space: nowrap;
+    transition:
+        background-color var(--motion-fast) var(--motion-ease),
+        border-color var(--motion-fast) var(--motion-ease),
+        filter var(--motion-fast) var(--motion-ease);
+}
+
+.ui-button:hover:not(:disabled) {
+    background: var(--bg-active);
+}
+
+.ui-button:active:not(:disabled) {
+    border-color: var(--border-input);
+}
+
+.ui-button--primary {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-contrast);
+    font-weight: var(--font-weight-strong);
+}
+
+.ui-button--primary:hover:not(:disabled) {
+    background: var(--accent);
+    filter: brightness(1.1);
+}
+
+.ui-button--primary:active:not(:disabled) {
+    border-color: var(--accent);
+    filter: brightness(0.95);
+}
+
+.ui-button--danger {
+    border-color: var(--danger);
+    background: transparent;
+    color: var(--danger);
+}
+
+.ui-button--danger:hover:not(:disabled) {
+    background: var(--bg-raised);
+}
+
+.ui-button--danger:active:not(:disabled) {
+    border-color: var(--danger);
+}
+
+.ui-button:disabled {
+    border-color: var(--border);
+    background: transparent;
+    color: var(--text-faint);
+}
+
+.ui-icon-button,
+.ui-tool-button {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    border-radius: var(--radius-control);
+    color: var(--text-muted);
+    transition:
+        background-color var(--motion-fast) var(--motion-ease),
+        color var(--motion-fast) var(--motion-ease);
+}
+
+.ui-icon-button {
+    width: var(--control-height);
+    height: var(--control-height);
+}
+
+.ui-tool-button {
+    width: var(--row-height);
+    height: var(--row-height);
+}
+
+.ui-icon-button:hover:not(:disabled),
+.ui-tool-button:hover:not(:disabled) {
+    background: var(--bg-raised);
+    color: var(--text);
+}
+
+.ui-icon-button:disabled,
+.ui-tool-button:disabled {
+    color: var(--text-faint);
+}
+
+.ui-tool-button[aria-pressed="true"] {
+    background: var(--bg-active);
+    color: var(--accent);
+}
+
+.ui-toggle[aria-pressed="true"] {
+    background: var(--bg-active);
+    color: var(--text);
+}
+
+.ui-toggle--text {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-4);
+    width: auto;
+    padding: 0 var(--space-8);
+    white-space: nowrap;
+}
