@@ -1,6 +1,6 @@
 # NGNE Sprite Editor — Specification
 
-Status: **Ready for implementation — owner acknowledgements A1–A9 pending** ([REVIEW.md](REVIEW.md)) · Spec version 1.0 · 2026-10-11
+Status: **Ready for implementation — owner acknowledgements A1–A8 recorded, A9 pending (SE-002 only)** ([REVIEW.md](REVIEW.md)) · Spec version 1.0.1 · 2026-10-11
 
 Related: [DESIGN.md](DESIGN.md) (interface) · [tickets/README.md](tickets/README.md) (implementation
 breakdown) · [REVIEW.md](REVIEW.md) (review record, owner acknowledgements)
@@ -659,6 +659,11 @@ Rules:
 - Step 7 "reduce" builds **one palette across all cells** (median cut, then 8 fixed k-means
   iterations seeded from the median-cut result). Colour distance is OKLab. The resulting palette
   can replace, extend or leave the document palette.
+- Output (A3): every import yields a true pixel image — ordinary pixel cels of exactly W×H,
+  editable like drawn pixels, never a scaled bitmap or display-time filter. With the default
+  settings, alpha is binary and every frame uses at most 256 colours, all present in the returned
+  palette (at most N after Reduce to N). Keep for alpha or colours is an explicit user choice
+  that may retain semi-transparent or blended pixels.
 - Placing into an existing document requires the target size to equal the document size.
 - "Keep source as reference" is available for single-sprite imports only. It adds a reference
   layer positioned and scaled so the cropped region overlays the canvas exactly.

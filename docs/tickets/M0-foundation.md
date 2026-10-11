@@ -17,8 +17,8 @@ core model the rest depends on. Exit: gate G0 ([README](README.md#gates)).
 | Spec         | SPEC §3, §4, §5, §6.7, §11                               |
 
 Scope
-- Git repository initialized in this directory (docs already present), `.gitignore`, licence
-  file and remote per A8.
+- Repository: already exists per A8 (`that-webdev-dude/ngne-sprite-editor`, public, default
+  branch `main`, docs committed). SE-001 adds `.gitignore` and the MIT `LICENSE` file.
 - Vite + React + TypeScript (strict) app; `@ngne/core` pinned exactly to 0.2.1 from npm.
 - `tsconfig` per the NGNE guide (`moduleResolution: "Bundler"`, `types: []`,
   `skipLibCheck: false`, target es2022). If NGNE declarations fail under the pinned TypeScript,
