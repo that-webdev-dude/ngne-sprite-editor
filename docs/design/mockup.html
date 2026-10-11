@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NGNE Sprite Editor — interface mockup</title>
+<style>
+:root {
+    --bg-workspace: #0f0f10; --bg-panel: #18181a; --bg-raised: #222225; --bg-active: #2c2c30;
+    --border: #2a2a2e; --border-strong: #3a3a40;
+    --text: #e7e7ea; --text-muted: #9a9aa2; --text-faint: #6b6b74;
+    --accent: #83e8e1; --accent-contrast: #0f0f10; --danger: #ff6b6b; --warn: #f2c14e;
+    --check-a: #3a3a3a; --check-b: #4a4a4a; --grid: rgb(255 255 255 / 0.12);
+}
+[data-theme="light"] {
+    --bg-workspace: #d9d9db; --bg-panel: #f4f4f5; --bg-raised: #ffffff; --bg-active: #e6e6e9;
+    --border: #d0d0d4; --border-strong: #b4b4ba;
+    --text: #18181a; --text-muted: #5c5c66; --text-faint: #8a8a94;
+    --accent: #0b8f87; --accent-contrast: #ffffff; --danger: #c92a2a; --warn: #9a6700;
+    --check-a: #c8c8c8; --check-b: #ffffff; --grid: rgb(0 0 0 / 0.12);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+    background: var(--bg-panel); color: var(--text);
+    font: 400 12px/16px Inter, "Segoe UI", system-ui, sans-serif;
+    font-variant-numeric: tabular-nums; overflow: hidden; user-select: none;
+}
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: default; }
+svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.app { display: grid; height: 100%; grid-template-rows: 36px 1fr 200px 24px; grid-template-columns: 44px 1fr 264px; }
+.menubar { grid-column: 1 / -1; display: flex; align-items: center; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--border); }
+.menubar .menu { padding: 4px 8px; border-radius: 4px; color: var(--text-muted); }
+.menubar .menu:hover { background: var(--bg-raised); color: var(--text); }
+.tabs { display: flex; gap: 2px; margin: 0 auto; }
+.tab { padding: 4px 12px; border-radius: 4px; color: var(--text-muted); }
+.tab.active { background: var(--bg-active); color: var(--text); font-weight: 500; }
+.dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); margin-left: 6px; vertical-align: 1px; }
+.kbd { color: var(--text-faint); border: 1px solid var(--border-strong); border-radius: 4px; padding: 1px 6px; font-size: 11px; }
+.palette-trigger { display: flex; align-items: center; gap: 8px; color: var(--text-muted); padding: 4px 8px; border-radius: 4px; }
+.palette-trigger:hover { background: var(--bg-raised); }
+
+.rail { grid-row: 2; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0; border-right: 1px solid var(--border); }
+.tool { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 4px; color: var(--text-muted); }
+.tool:hover { background: var(--bg-raised); color: var(--text); }
+.tool.active { background: var(--bg-active); color: var(--accent); }
+.sep { width: 20px; height: 1px; background: var(--border); margin: 4px 0; }
+.fgbg { margin-top: auto; position: relative; width: 28px; height: 28px; }
+.fgbg i { position: absolute; width: 18px; height: 18px; border: 1px solid var(--border-strong); border-radius: 2px; }
+.fgbg .bg { right: 0; bottom: 0; background: #1b2a41; }
+.fgbg .fg { left: 0; top: 0; background: #f2a65a; box-shadow: 0 0 0 1px var(--bg-panel); }
+
+.center { grid-row: 2; display: grid; grid-template-rows: 36px 1fr; min-width: 0; }
+.context { display: flex; align-items: center; gap: 12px; padding: 0 12px; border-bottom: 1px solid var(--border); }
+.context .name { font-weight: 500; margin-right: 4px; }
+.field { display: flex; align-items: center; gap: 6px; color: var(--text-muted); }
+.input { height: 24px; min-width: 44px; padding: 0 8px; white-space: nowrap; display: flex; align-items: center; background: var(--bg-raised); border: 1px solid var(--border-strong); border-radius: 4px; color: var(--text); }
+.toggle { height: 24px; padding: 0 8px; display: flex; align-items: center; gap: 6px; border-radius: 4px; color: var(--text-muted); }
+.toggle.on { background: var(--bg-active); color: var(--text); }
+.seg { display: flex; border: 1px solid var(--border-strong); border-radius: 4px; overflow: hidden; }
+.seg button { height: 22px; padding: 0 8px; color: var(--text-muted); }
+.seg button.on { background: var(--bg-active); color: var(--text); }
+
+.viewport { position: relative; background: var(--bg-workspace); display: grid; place-items: center; overflow: hidden; }
+.doc { position: relative; width: 384px; height: 384px; outline: 1px solid var(--border-strong);
+    background: repeating-conic-gradient(var(--check-a) 0 25%, var(--check-b) 0 50%) 0 0 / 48px 48px; }
+.doc canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+.doc .ref { opacity: 0.35; }
+.doc .grid { position: absolute; inset: 0; background-image: linear-gradient(to right, var(--grid) 1px, transparent 1px), linear-gradient(to bottom, var(--grid) 1px, transparent 1px); background-size: 12px 12px; }
+.ants { position: absolute; left: 132px; top: 60px; width: 132px; height: 96px; outline: 1px dashed #fff; box-shadow: 0 0 0 1px #000; }
+.cursor { position: absolute; left: 216px; top: 252px; width: 12px; height: 12px; outline: 1px solid #fff; mix-blend-mode: difference; }
+
+.dock { grid-row: 2; border-left: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+.section { border-bottom: 1px solid var(--border); padding: 8px 12px 12px; }
+.section h2 { margin: 0 0 8px; font-size: 11px; font-weight: 500; line-height: 16px; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; }
+.section h2 span { color: var(--text-faint); font-weight: 400; }
+.sv { height: 120px; border-radius: 4px; border: 1px solid var(--border-strong); position: relative;
+    background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, #f28a1e); }
+.sv::after { content: ""; position: absolute; left: 62%; top: 12%; width: 9px; height: 9px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #000; transform: translate(-50%, -50%); }
+.strip { height: 10px; border-radius: 4px; margin-top: 8px; border: 1px solid var(--border-strong); position: relative; }
+.hue { background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+.alpha { background: linear-gradient(to right, transparent, #f2a65a), repeating-conic-gradient(var(--check-a) 0 25%, var(--check-b) 0 50%) 0 0 / 8px 8px; }
+.strip::after { content: ""; position: absolute; top: -3px; width: 4px; height: 14px; background: #fff; border: 1px solid #000; border-radius: 2px; }
+.hue::after { left: 8%; } .alpha::after { right: 0; }
+.row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.row .input { flex: 1; }
+.swatches { display: grid; grid-template-columns: repeat(15, 16px); border: 1px solid var(--border); width: max-content; }
+.swatches i { width: 16px; height: 16px; }
+.swatches i.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+.preview { height: 132px; background: var(--bg-workspace); border: 1px solid var(--border); border-radius: 4px; display: grid; place-items: center; }
+.preview canvas { width: 96px; height: 96px; image-rendering: pixelated; }
+.icon { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 4px; color: var(--text-muted); }
+.icon:hover { background: var(--bg-raised); color: var(--text); }
+.icon.on { color: var(--accent); }
+
+.timeline { grid-column: 1 / -1; border-top: 1px solid var(--border); display: grid; grid-template-columns: 200px 1fr; grid-auto-rows: 28px; align-content: start; overflow: hidden; }
+.tl-head { display: flex; align-items: center; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); }
+.tl-tags { position: relative; border-bottom: 1px solid var(--border); }
+.tag { position: absolute; top: 5px; height: 18px; border-radius: 4px; padding: 0 8px; font-size: 11px; line-height: 18px; color: #0f0f10; }
+.tl-layer { display: flex; align-items: center; gap: 2px; padding: 0 8px; border-right: 1px solid var(--border); color: var(--text-muted); }
+.tl-layer.active { background: var(--bg-raised); color: var(--text); }
+.tl-layer .lname { margin-left: 6px; flex: 1; }
+.tl-layer.group { color: var(--text-faint); font-size: 11px; border-top: 1px solid var(--border); }
+.cells { display: flex; }
+.cells.active { background: var(--bg-raised); }
+.cells.group { border-top: 1px solid var(--border); }
+.cell { width: 24px; height: 28px; display: grid; place-items: center; color: var(--text-faint); font-size: 11px; position: relative; }
+.cell.col { background: var(--bg-raised); }
+.cell b { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+.cell u { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--text-faint); }
+.cell.link::after { content: ""; position: absolute; left: 50%; width: 24px; height: 2px; background: var(--text-muted); }
+.cell.sel { outline: 1px solid var(--accent); outline-offset: -3px; border-radius: 6px; }
+.cell.num.col { color: var(--text); font-weight: 500; }
+
+.status { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; padding: 0 12px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 11px; }
+.status .hint { margin-left: auto; color: var(--text-faint); }
+</style>
+</head>
+<body>
+<svg style="display:none">
+    <symbol id="i-pencil" viewBox="0 0 16 16"><path d="M2.5 13.5l.7-3 7.5-7.5 2.3 2.3-7.5 7.5zM9.5 4.2l2.3 2.3"/></symbol>
+    <symbol id="i-eraser" viewBox="0 0 16 16"><path d="M6 13.5L2.5 10l6.8-6.8 4 4L7.5 13.5zM5 7.5l4 4M7 13.5h6.5"/></symbol>
+    <symbol id="i-bucket" viewBox="0 0 16 16"><path d="M3 8.5l5-5 5 5-4.5 4.5a1 1 0 0 1-1.4 0L3.4 9.4a.6.6 0 0 1-.4-.9zM8 3.5V2M3.2 8.5h9.6"/></symbol>
+    <symbol id="i-pipette" viewBox="0 0 16 16"><path d="M9 4l3 3M10.5 5.5l-6 6-2 .5.5-2 6-6M11 2.5l2.5 2.5-2 2-2.5-2.5z"/></symbol>
+    <symbol id="i-line" viewBox="0 0 16 16"><path d="M3 13L13 3"/></symbol>
+    <symbol id="i-rect" viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="11" height="9" rx="1"/></symbol>
+    <symbol id="i-ellipse" viewBox="0 0 16 16"><ellipse cx="8" cy="8" rx="5.5" ry="4.5"/></symbol>
+    <symbol id="i-marquee" viewBox="0 0 16 16"><path d="M2.5 5V3.5a1 1 0 0 1 1-1H5M7 2.5h2M11 2.5h1.5a1 1 0 0 1 1 1V5M13.5 7v2M13.5 11v1.5a1 1 0 0 1-1 1H11M9 13.5H7M5 13.5H3.500a1 1 0 0 1-1-1V11M2.5 9V7"/></symbol>
+    <symbol id="i-lasso" viewBox="0 0 16 16"><path d="M8 2.5c3.3 0 5.5 1.6 5.5 3.8S11.300 10 8 10 2.500 8.500 2.500 6.300 4.700 2.500 8 2.500zM5 9.500c-.8 1.500-.500 3 1 4"/></symbol>
+    <symbol id="i-wand" viewBox="0 0 16 16"><path d="M2.5 13.5l7-7M11 2v2M14 5h-2M13 8.5l-1-1M8.500 3l1 1"/></symbol>
+    <symbol id="i-move" viewBox="0 0 16 16"><path d="M8 2v12M2 8h12M6 4l2-2 2 2M6 12l2 2 2-2M4 6L2 8l2 2M12 6l2 2-2 2"/></symbol>
+    <symbol id="i-hand" viewBox="0 0 16 16"><path d="M5.500 8V4a1 1 0 0 1 2 0v3.500V3a1 1 0 0 1 2 0v4.500V4a1 1 0 0 1 2 0v6c0 2.200-1.500 3.500-3.500 3.500S4.800 12.500 3.500 10.500L2.700 9.200a1 1 0 0 1 1.700-1z"/></symbol>
+    <symbol id="i-zoom" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.500"/><path d="M10.300 10.300l3.200 3.200M5.500 7h3M7 5.500v3"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.500 8S4 3.500 8 3.500 14.500 8 14.500 8 12 12.500 8 12.500 1.500 8 1.500 8z"/><circle cx="8" cy="8" r="1.800"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.500" y="7" width="9" height="6.500" rx="1"/><path d="M5.500 7V5a2.500 2.500 0 0 1 5 0v2"/></symbol>
+    <symbol id="i-unlock" viewBox="0 0 16 16"><rect x="3.500" y="7" width="9" height="6.500" rx="1"/><path d="M5.500 7V5a2.500 2.500 0 0 1 4.800-1"/></symbol>
+    <symbol id="i-first" viewBox="0 0 16 16"><path d="M4 3.500v9M12 3.500L6.500 8l5.500 4.500z"/></symbol>
+    <symbol id="i-prev" viewBox="0 0 16 16"><path d="M10.500 3.500L5 8l5.500 4.500z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3l8 5-8 5z"/></symbol>
+    <symbol id="i-next" viewBox="0 0 16 16"><path d="M5.500 3.500L11 8l-5.500 4.500z"/></symbol>
+    <symbol id="i-last" viewBox="0 0 16 16"><path d="M12 3.500v9M4 3.500L9.500 8 4 12.500z"/></symbol>
+    <symbol id="i-onion" viewBox="0 0 16 16"><rect x="2.500" y="2.500" width="8" height="8" rx="1"/><path d="M5.500 13.500h7a1 1 0 0 0 1-1v-7"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3.500v9M3.500 8h9"/></symbol>
+    <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.500"/><path d="M10.300 10.300l3.200 3.200"/></symbol>
+    <symbol id="i-more" viewBox="0 0 16 16"><path d="M3.500 8h.01M8 8h.01M12.500 8h.01" stroke-width="2"/></symbol>
+</svg>
+
+<div class="app">
+    <header class="menubar">
+        <span class="menu">File</span><span class="menu">Edit</span><span class="menu">Sprite</span>
+        <span class="menu">Layer</span><span class="menu">Frame</span><span class="menu">Select</span>
+        <span class="menu">View</span>
+        <div class="tabs">
+            <span class="tab active">hero.ngsprite<i class="dot" title="Unsaved changes"></i></span>
+            <span class="tab">tiles.ngsprite</span>
+        </div>
+        <button class="palette-trigger" id="theme" title="Mockup only: toggle theme">Theme</button>
+        <span class="palette-trigger"><svg><use href="#i-search"/></svg>Commands <span class="kbd">Ctrl K</span></span>
+    </header>
+
+    <nav class="rail" aria-label="Tools">
+        <button class="tool active" title="Pencil (B)"><svg><use href="#i-pencil"/></svg></button>
+        <button class="tool" title="Eraser (E)"><svg><use href="#i-eraser"/></svg></button>
+        <button class="tool" title="Paint bucket (G)"><svg><use href="#i-bucket"/></svg></button>
+        <button class="tool" title="Eyedropper (I)"><svg><use href="#i-pipette"/></svg></button>
+        <span class="sep"></span>
+        <button class="tool" title="Line (L)"><svg><use href="#i-line"/></svg></button>
+        <button class="tool" title="Rectangle (U)"><svg><use href="#i-rect"/></svg></button>
+        <button class="tool" title="Ellipse (Shift+U)"><svg><use href="#i-ellipse"/></svg></button>
+        <span class="sep"></span>
+        <button class="tool" title="Marquee (M)"><svg><use href="#i-marquee"/></svg></button>
+        <button class="tool" title="Lasso (Q)"><svg><use href="#i-lasso"/></svg></button>
+        <button class="tool" title="Magic wand (W)"><svg><use href="#i-wand"/></svg></button>
+        <button class="tool" title="Move (V)"><svg><use href="#i-move"/></svg></button>
+        <span class="sep"></span>
+        <button class="tool" title="Hand (H)"><svg><use href="#i-hand"/></svg></button>
+        <button class="tool" title="Zoom (Z)"><svg><use href="#i-zoom"/></svg></button>
+        <div class="fgbg" title="Foreground / background (X swaps)"><i class="bg"></i><i class="fg"></i></div>
+    </nav>
+
+    <main class="center">
+        <div class="context">
+            <span class="name">Pencil</span>
+            <label class="field">Size <span class="input">1 px</span></label>
+            <label class="field">Shape
+                <span class="seg"><button class="on">Square</button><button>Circle</button></span>
+            </label>
+            <span class="toggle on">Pixel-perfect</span>
+            <label class="field">Ink <span class="input">Simple</span></label>
+            <label class="field">Opacity <span class="input">100%</span></label>
+        </div>
+        <div class="viewport">
+            <div class="doc">
+                <canvas class="ref" id="ref" width="32" height="32"></canvas>
+                <canvas id="sprite" width="32" height="32"></canvas>
+                <div class="grid"></div>
+                <div class="ants"></div>
+                <div class="cursor"></div>
+            </div>
+        </div>
+    </main>
+
+    <aside class="dock">
+        <section class="section">
+            <h2>Colour</h2>
+            <div class="sv"></div>
+            <div class="strip hue"></div>
+            <div class="strip alpha"></div>
+            <div class="row">
+                <span class="seg"><button class="on">HSV</button><button>RGB</button></span>
+                <span class="input">#F2A65A</span>
+            </div>
+        </section>
+        <section class="section">
+            <h2>Palette <span>Endesga 32</span></h2>
+            <div class="swatches" id="swatches"></div>
+        </section>
+        <section class="section">
+            <h2>Preview · NGNE <span>walk</span></h2>
+            <div class="preview"><canvas id="preview" width="32" height="32"></canvas></div>
+            <div class="row">
+                <button class="icon on" title="Pause"><svg><use href="#i-play"/></svg></button>
+                <span class="input">walk</span>
+                <span class="input" style="flex:0 0 52px">1×</span>
+            </div>
+        </section>
+    </aside>
+
+    <section class="timeline" id="timeline" aria-label="Timeline"></section>
+
+    <footer class="status">
+        <span>18, 21</span><span>32 × 32</span><span>12×</span><span>Frame 3 / 8</span><span>100 ms</span>
+        <span>Selection 11 × 8</span>
+        <span class="hint">Shift: straight line from last point · Alt: eyedropper</span>
+    </footer>
+</div>
+
+<script>
+// Mockup only: placeholder artwork and timeline cells. No editor logic.
+const P = { o: "#1b1c33", s: "#f2a65a", d: "#c0623a", h: "#7a3045", w: "#f7e8c4", b: "#3a6ea5", l: "#73bed3", g: "#2f5d50" };
+const art = [
+    "................................", "................................", "...........oooooooooo...........",
+    "..........ohhhhhhhhhho..........", ".........ohhhhhhhhhhhho.........", ".........ohhsssssssshho.........",
+    ".........ohssssssssssho.........", ".........osswossssowsso.........", ".........ossoossssoosso.........",
+    ".........osssssddsssso..........", "..........ossssssssso...........", "...........oossssoo.............",
+    "..........oobbbbbboo............", ".........obbbbbbbbbbo...........", "........obblbbbbbblbbo..........",
+    "........obblbbbbbblbbo..........", "........osobbbbbbbboso..........", "........osobbbbbbbboso..........",
+    "........oo.obbbbbbo.oo..........", "...........ogggggggo............", "...........oggg.gggo............",
+    "...........oggo.oggo............", "...........oggo.oggo............", "..........ohho...ohho...........",
+    "..........oooo...oooo...........", "................................", "................................",
+    "................................", "................................", "................................",
+    "................................", "................................",
+];
+function paint(id, dx = 0) {
+    const ctx = document.getElementById(id).getContext("2d");
+    art.forEach((row, y) => [...row].forEach((c, x) => {
+        if (c === ".") return;
+        ctx.fillStyle = P[c];
+        ctx.fillRect(x + 1 + dx, y + 3, 1, 1);
+    }));
+}
+paint("sprite"); paint("preview");
+// Stand-in for a reference image: a soft silhouette, larger than the sprite.
+const ref = document.getElementById("ref").getContext("2d");
+ref.fillStyle = "#b8a9ff"; ref.beginPath(); ref.ellipse(15, 11, 8, 8, 0, 0, 7); ref.fill();
+ref.fillRect(8, 15, 15, 14);
+
+const colors = ["#be4a2f","#d77643","#ead4aa","#e4a672","#b86f50","#733e39","#3e2731","#a22633","#e43b44","#f77622","#feae34","#fee761","#63c74d","#3e8948","#265c42","#193c3e","#124e89","#0099db","#2ce8f5","#ffffff","#c0cbdc","#8b9bb4","#5a6988","#3a4466","#262b44","#181425","#ff0044","#68386c","#b55088","#f6757a"];
+document.getElementById("swatches").innerHTML = colors.map((c, i) => `<i style="background:${c}"${i === 10 ? ' class="on"' : ""}></i>`).join("");
+
+const frames = 8, active = 2;
+const icon = (n, on) => `<button class="icon${on ? " on" : ""}"><svg><use href="#i-${n}"/></svg></button>`;
+const cells = (kind, row) => Array.from({ length: frames }, (_, f) => {
+    const filled = row[f] !== "-", link = row[f] === "=";
+    return `<span class="cell${f === active ? " col" : ""}${link ? " link" : ""}${kind === "active" && f === active ? " sel" : ""}">${filled ? "<b></b>" : "<u></u>"}</span>`;
+}).join("");
+const layer = (name, row, cls = "") => `
+    <div class="tl-layer ${cls}">${icon("eye")}${icon("unlock")}<span class="lname">${name}</span></div>
+    <div class="cells ${cls}">${cells(cls, row)}</div>`;
+document.getElementById("timeline").innerHTML = `
+    <div class="tl-head">${icon("first")}${icon("prev")}${icon("play")}${icon("next")}${icon("last")}${icon("onion", true)}<span style="margin-left:auto" class="input">100 ms</span></div>
+    <div class="tl-tags"><span class="tag" style="left:0;width:120px;background:#73bed3">walk</span><span class="tag" style="left:120px;width:72px;background:#f2a65a">jump</span></div>
+    <div class="tl-layer" style="justify-content:space-between"><span>Layers</span>${icon("plus")}</div>
+    <div class="cells">${Array.from({ length: frames }, (_, f) => `<span class="cell num${f === active ? " col" : ""}">${f + 1}</span>`).join("")}</div>
+    ${layer("Outline", "###--###")}
+    ${layer("Body", "#=######", "active")}
+    ${layer("Shadow", "#===#===")}
+    <div class="tl-layer group">Reference</div><div class="cells group"></div>
+    ${layer("concept.png", "########")}`;
+
+document.getElementById("theme").onclick = () => {
+    const root = document.documentElement;
+    root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+};
+</script>
+</body>
+</html>
