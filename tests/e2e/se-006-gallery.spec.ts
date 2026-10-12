@@ -82,6 +82,8 @@ interface Surface {
 
 for (const theme of THEMES) {
     test(`axe reports no AA violations on the gallery in the ${theme} theme`, async ({ page }) => {
+        // Many audits in one test: about 26 s alone, longer while other workers are busy.
+        test.setTimeout(120_000);
         await page.setViewportSize({ width: 1440, height: 1000 });
         await openGallery(page);
         await chooseTheme(page, theme);
