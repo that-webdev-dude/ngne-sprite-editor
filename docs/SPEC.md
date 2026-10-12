@@ -304,8 +304,9 @@ preview, thumbnails, the eyedropper and every export read its output. It:
   Aseprite's formulas. A result pixel with alpha 0 is always `0,0,0,0`: colour stored under
   alpha 0 never reaches the composite (Aseprite's blend function keeps it).
 - Recomposites only a dirty rectangle during strokes.
-- Caches one composite per frame, invalidated from `Command.touched`; cache budget 128 MB,
-  least recently used.
+- Caches one composite per frame, invalidated from `Command.touched`; cache budget 128 MB per
+  document, least recently used. Only the active document keeps composites: a document that
+  stops being active has its cache cleared (SE-047).
 
 Reference layers, onion skins, symmetry axes and tiled copies are never part of this composite.
 

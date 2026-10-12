@@ -10,7 +10,7 @@ Exit: gate G1 ([README](README.md#gates)).
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Ready                                                    |
+| Status       | Done                                                     |
 | Depends on   | SE-003                                                   |
 | Blocks       | SE-011, SE-020, SE-021, SE-040, SE-050, SE-061           |
 | Blocked until | —                                                       |
@@ -174,6 +174,9 @@ Scope
 - Live-stroke display path: while a transaction is open, the viewport composites the active
   frame with the in-progress image (`compositeFrame` `overrides`) and uploads at most once per
   animation frame.
+- At stroke end the frame is not composited again in full: the live composite is handed to the
+  composite cache. `CompositeCache` (SE-010) gains `adopt(frameId, buffer)` for this, which keeps
+  the buffer only when the frame's layer stack matches the one it was composited from.
 - Temporary tools while a key is held (Alt → eyedropper once SE-016 lands, Space → hand) with
   return to the previous tool.
 - Paint target resolution and guards: active layer must be a visible, unlocked pixel layer;
@@ -188,6 +191,8 @@ Scope
 Acceptance
 - Unit tests with synthetic pointer sequences: one down–moves–up yields exactly one history
   entry; Escape mid-stroke yields none and restores pixels.
+- After a committed stroke the cache returns the adopted buffer for the frame, equal to a new
+  full composite, without compositing the frame again.
 - E2E with the dot tool: a stroke appears in the viewport while the button is held; after
   release, undo removes it within two animation frames.
 - E2E: with the active layer's `locked` flag set through the store test hook, a stroke changes

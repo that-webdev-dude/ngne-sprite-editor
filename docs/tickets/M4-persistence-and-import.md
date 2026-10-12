@@ -279,6 +279,8 @@ Scope
 - Several open documents: tab strip in the menu bar (switch, close, middle-click close, reorder,
   overflow per DESIGN §2); New and Open add a tab instead of replacing.
 - Each tab has its own session, history, view and reference blob store.
+- Composite caches (SPEC §5.3) are per document. A document that stops being active has its
+  cache cleared, so the 128 MB budget is not multiplied by the number of tabs.
 - Recent files (File System Access handles in IndexedDB) on the empty state and in
   File → Open Recent; entries whose permission is gone prompt once, then are removed on denial.
 
@@ -286,5 +288,7 @@ Acceptance
 - E2E: open two documents; drawing in one leaves the other's composite unchanged; undo acts on
   the active tab only.
 - Closing a dirty tab asks once; closing the last tab shows the empty state.
+- With three open documents only the active one holds composites (the cache of each other
+  document reports 0 bytes).
 - With 12 open tabs at 1280 px width, every tab is reachable (scroll or overflow menu).
 - A saved file appears first in the recent list after reload and reopens from it.
