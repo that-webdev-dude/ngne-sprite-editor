@@ -47,6 +47,10 @@ Several agents may work at once, each on one ticket in its own worktree and bran
 - Do not record timing results on reference hardware; the orchestrator does that alone after
   the wave is merged (EXECUTION.md, Measurements). Write the benchmark and leave the number
   out.
+- A Node benchmark is a file `tests/perf/se-0xx-*.perf.ts` that reports through
+  `tests/perf/record.ts`. Run it with `npx vitest run --config vitest.perf.config.ts`; it is
+  not part of `npm run check`. Do not set `PERF_RECORD` and do not commit a file under
+  `docs/perf`.
 - Do not change a ticket's Status and do not merge; the orchestrator does both.
 - E2E runs use the port given by the environment.
 
