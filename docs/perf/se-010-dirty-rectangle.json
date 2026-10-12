@@ -1,0 +1,29 @@
+{
+    "id": "se-010-dirty-rectangle",
+    "ticket": "SE-010",
+    "measurement": "compositeFrame with a 16×16 rect into an existing buffer, 256×256 document, 8 visible layers with every pixel half transparent (worst case), Node",
+    "statistic": "95th percentile of 5000 calls after 2000 warm-up calls",
+    "budgetMs": 2,
+    "resultMs": 0.029699999999934334,
+    "details": {
+        "samples": 5000,
+        "warmUpCalls": 2000,
+        "minMs": 0.017600000000015825,
+        "medianMs": 0.022299999999972897,
+        "meanMs": 0.02360896000000066,
+        "p95Ms": 0.029699999999934334,
+        "p99Ms": 0.05409999999994852,
+        "maxMs": 0.2907999999999902,
+        "fullFrameMedianMs": 4.900499999999965,
+        "fullFrameSamples": 50
+    },
+    "pass": true,
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-10-12T21:01:31.882Z"
+}
