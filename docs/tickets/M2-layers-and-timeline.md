@@ -30,7 +30,8 @@ Acceptance
 - Do/undo/redo symmetry test for every command on a 3-layer, 4-frame fixture with linked cels,
   including `activeLayerId`.
 - Merge down result equals `compositeFrame` restricted to the two layers, for every frame.
-- Flatten yields one layer whose composite is byte-identical to the pre-flatten composite.
+- Flatten yields one pixel layer whose composite is byte-identical to the pre-flatten composite;
+  reference layers stay in the stack.
 - Invariants hold after each command and each undo.
 
 ---
