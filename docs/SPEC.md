@@ -301,7 +301,8 @@ preview, thumbnails, the eyedropper and every export read its output. It:
 
 - Composites visible pixel layers bottom to top with layer opacity × cel opacity and the layer's
   blend mode (M1: normal; M6: all modes) in straight-alpha sRGB space with integer math matching
-  Aseprite's formulas.
+  Aseprite's formulas. A result pixel with alpha 0 is always `0,0,0,0`: colour stored under
+  alpha 0 never reaches the composite (Aseprite's blend function keeps it).
 - Recomposites only a dirty rectangle during strokes.
 - Caches one composite per frame, invalidated from `Command.touched`; cache budget 128 MB,
   least recently used.
