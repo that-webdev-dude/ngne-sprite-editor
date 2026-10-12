@@ -56,7 +56,11 @@ Scope
   the tag named by `exportSettings.frames` resets that field to `"all"` (restored by undo).
 - Tags follow their frames through reorder and delete: a tag whose range becomes empty is
   removed by the same command (and restored by undo); otherwise endpoints move to the nearest
-  remaining frame inside the range.
+  remaining frame inside the range. In a reorder or reversal the frames that stay in place
+  hold the tag: a frame dropped between them joins it, a member dragged elsewhere leaves it
+  unless it lands directly beside them, and a tag whose frames all move travels with them. A
+  frame added after a frame of a tag belongs to that tag (Aseprite). One function,
+  `followFrames` in `core/tags`, is the rule for every frame command.
 - `core/animation`: `expandTag(doc, tag) → { frameId, ms }[]` implementing the sequences of
   SPEC §7.4; shared by playback (SE-024) and export (SE-051).
 

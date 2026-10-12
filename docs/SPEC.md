@@ -204,7 +204,7 @@ interface Tag {
     id: string; name: string; color: number;
     fromFrameId: string; toFrameId: string;
     direction: "forward" | "reverse" | "pingpong";
-    repeat: number;               // 0 = infinite
+    repeat: number;               // integer 0..65535; 0 = infinite
 }
 interface DocSettings {
     grid: { width: number; height: number; offsetX: number; offsetY: number; visible: boolean };
