@@ -18,8 +18,8 @@ images (C3).
 
 Scope
 - `core/project`: `serialize(doc, referenceSources) → Uint8Array` and
-  `deserialize(bytes) → { doc, referenceSources }` using `fflate`, with fixed entry timestamps
-  and PNG entries stored uncompressed.
+  `deserialize(bytes) → Promise<{ doc, referenceSources }>` (asynchronous, as the PNG decoder
+  of SE-005 is) using `fflate`, with fixed entry timestamps and PNG entries stored uncompressed.
 - Container per SPEC §10: `manifest.json`, `doc.json`, `images/*.png`, `refs/*.png`, `thumb.png`
   (from `compositeFrame` of the first frame, nearest-scaled to at most 128 px).
 - `doc.json` covers every `SpriteDoc` field of SPEC §5.1, including `settings` and

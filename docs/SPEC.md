@@ -873,6 +873,10 @@ Export is accepted only when all three hold (SE-053):
   `refs/<sourceId>.png` (original bytes), `thumb.png` (composite of frame 1, at most 128 px).
 - Loading validates the manifest, runs version migrations, then checks model invariants. An
   unknown newer version is refused with a message; corrupt entries name the failing file.
+- [FORMAT.md](FORMAT.md) specifies the file: every field of `doc.json` with its range, the form
+  of an ID (1–64 characters of `A–Z a–z 0–9 _ -`, since IDs name entries) and the size limits
+  (among them 64 MiB per reference source, 65 535 frames, 1024 layers). Saving refuses a
+  document outside them with a typed error, so a file that was written can be read.
 - Save/Save As use the File System Access API when present, otherwise download. Open also
   accepts drag-and-drop.
 - Autosave: each dirty document is snapshotted to IndexedDB 2 s after its last change
