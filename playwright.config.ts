@@ -41,6 +41,10 @@ export default defineConfig({
     fullyParallel: true,
     forbidOnly: ci,
     retries: 0,
+    // A cold dev server and the CI runner (software WebGPU, few cores) are several times
+    // slower than a warm local run; the limits leave room for both.
+    timeout: ci ? 120_000 : 30_000,
+    expect: { timeout: ci ? 20_000 : 10_000 },
     reporter: ci ? [["github"], ["list"]] : "list",
     use: {
         baseURL: `http://127.0.0.1:${port}`,

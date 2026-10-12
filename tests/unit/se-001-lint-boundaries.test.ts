@@ -11,7 +11,8 @@ async function ruleIds(filePath: string, source: string): Promise<string[]> {
         .map((message) => message.ruleId ?? "fatal");
 }
 
-describe("import boundaries", () => {
+// The first lint loads ESLint and its plugins: over 20 s on a cold Windows file cache.
+describe("import boundaries", { timeout: 60_000 }, () => {
     it("rejects @ngne/core in src/core", async () => {
         expect(await ruleIds("src/core/probe.ts", 'import "@ngne/core";\n')).toEqual([
             "no-restricted-imports",
