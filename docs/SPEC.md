@@ -789,10 +789,14 @@ frame's corner.
 
 ### 9.4 Packing
 
-- Layout: uniform grid, near-square by default; or single row / single column. Cell size is the
-  largest rectangle. Atlas side = `n × (cell + padding + 2·extrude) + padding`.
+- Layout: uniform grid, near-square by default (`⌈√r⌉` columns for `r` rectangles); or single
+  row / single column. Rectangles fill the grid row by row in frame order. Cell size is the
+  largest rectangle; a smaller one sits at the top-left of its cell. Atlas side =
+  `n × (cell + padding + 2·extrude) + padding`; the rectangle of cell `i` starts at
+  `padding + extrude + i × (cell + padding + 2·extrude)`.
 - Options: padding 0–8 px (default 1), extrude 0–2 px (default 0), trim transparent borders
-  (default off), merge identical frames (default on; merged IDs share one rectangle).
+  (default off; a fully transparent frame keeps a 2×2 rectangle at offset 0,0), merge identical
+  frames (default on; merged IDs share one rectangle).
 - Atlas side limit 8192 px. With padding 1 that is 49 frames at 1024², 961 at 256², 15 876 at
   64². Exceeding it is an export error naming the limit and the required size.
 - Packing is deterministic for identical documents and settings.

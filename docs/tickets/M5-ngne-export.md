@@ -19,7 +19,8 @@ Exit: gate G2 ([README](README.md#gates)).
 Scope
 - `core/export/pack(frames: PixelBuffer[], options) → { atlas: PixelBuffer, rects }` where each
   rect carries `x, y, w, h, sourceW, sourceH, offsetX, offsetY`, the unpadded content size
-  `contentW, contentH` and the source frame indices it serves.
+  `contentW, contentH` (the content size of SPEC §9.2: the part of the rect inside the source
+  frame) and the source frame indices it serves.
 - Every rect has even `w` and `h` (odd sizes padded with a transparent column/row on the
   right/bottom), with or without trim.
 - Layouts: near-square grid, single row, single column; atlas size per the formula of SPEC §9.4.
