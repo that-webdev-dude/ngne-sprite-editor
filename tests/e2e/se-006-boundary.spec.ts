@@ -46,7 +46,7 @@ async function expectOthersWork(page: Page, failed: Region | "dock-panel") {
         await expect(region(page, "tool-rail").getByRole("button")).toHaveCount(13);
     }
     if (failed !== "viewport") {
-        await expect(region(page, "viewport")).toHaveText("NGNE Sprite Editor");
+        await expect(region(page, "viewport")).toHaveText("New sprite");
     }
 }
 

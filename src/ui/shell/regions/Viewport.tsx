@@ -1,4 +1,11 @@
-/** Viewport content. A placeholder until SE-008 (empty state) and SE-011 (NGNE canvas). */
+import { useSessions } from "../../../app/state/sessions";
+import { EmptyState } from "../../sprite/EmptyState";
+
+/**
+ * Viewport content: the empty state while no document is open (DESIGN §6). The NGNE canvas of
+ * the open document is added by SE-011.
+ */
 export function Viewport() {
-    return <p className="shell-placeholder">NGNE Sprite Editor</p>;
+    const open = useSessions((state) => state.activeId !== null);
+    return open ? null : <EmptyState />;
 }

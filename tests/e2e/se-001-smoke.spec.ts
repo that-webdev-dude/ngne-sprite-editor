@@ -2,7 +2,9 @@ import { expect, test } from "@playwright/test";
 
 test("the app shell loads from the dev server", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("main")).toHaveText("NGNE Sprite Editor");
+    await expect(
+        page.getByRole("main").and(page.locator('[data-region="viewport"]')),
+    ).toBeVisible();
 });
 
 test("NGNE draws a rect on a WebGPU canvas and readCanvas returns its pixels", async ({ page }) => {

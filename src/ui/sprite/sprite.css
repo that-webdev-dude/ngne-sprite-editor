@@ -1,0 +1,113 @@
+/*
+ * SE-008: empty state of the workspace (DESIGN §6), document name in the menu bar (DESIGN §2),
+ * and the New sprite and Sprite properties dialogs (DESIGN §7).
+ */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-8);
+}
+
+/* Centred in the space the menus leave, like the document tabs of the mockup. */
+.document-name {
+    min-width: 0;
+    margin: 0 auto;
+    padding: 0 var(--space-12);
+    overflow: hidden;
+    color: var(--text);
+    font-weight: var(--font-weight-strong);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Dialog body: a column of labels and a column of controls. */
+.sprite-form {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--space-12);
+    align-items: center;
+}
+
+.sprite-form__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8) var(--space-12);
+    min-width: 0;
+}
+
+/* Text field with the metrics of the number field (DESIGN §4). */
+.sprite-form__text {
+    width: 100%;
+    min-width: 0;
+    height: var(--control-height);
+    padding: 0 var(--space-8);
+    border: var(--border-width) solid var(--border-input);
+    border-radius: var(--radius-control);
+    background: var(--bg-raised);
+    color: var(--text);
+    user-select: text;
+}
+
+/* The line is always there, so the dialog does not change height when a message appears. */
+.sprite-form__message {
+    grid-column: 2;
+    min-height: var(--line-height);
+    color: var(--danger);
+}
+
+/* A dialog that waits behind a question it asked; it keeps its place and its state. */
+.sprite-dialog--covered {
+    visibility: hidden;
+}
+
+/* Pivot presets: nine 24 px targets, separated by hairlines. */
+.pivot-grid {
+    display: grid;
+    flex: none;
+    grid-template-columns: repeat(3, var(--control-height));
+    gap: var(--border-width);
+    border: var(--border-width) solid var(--border-input);
+    background: var(--border-strong);
+}
+
+.pivot-grid__cell {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: var(--control-height);
+    height: var(--control-height);
+    background: var(--bg-raised);
+    color: var(--text-muted);
+    transition:
+        background-color var(--motion-fast) var(--motion-ease),
+        color var(--motion-fast) var(--motion-ease);
+}
+
+.pivot-grid__cell::before {
+    width: var(--space-4);
+    height: var(--space-4);
+    border-radius: 50%;
+    background: currentColor;
+    content: "";
+}
+
+.pivot-grid__cell:hover {
+    color: var(--text);
+}
+
+.pivot-grid__cell[aria-checked="true"] {
+    background: var(--bg-active);
+    color: var(--accent);
+}
+
+.pivot-grid__cell[aria-checked="true"]::before {
+    width: var(--space-8);
+    height: var(--space-8);
+}
+
+/* The ring of a cell lies over its neighbours. */
+.pivot-grid__cell:focus-visible {
+    z-index: 1;
+}
