@@ -145,8 +145,8 @@ Acceptance
 - `buildPalette` returns exactly n colours when the input has ≥ n distinct colours, and the
   input's own colours when it has fewer.
 - Determinism: `runImport` twice with the same input and settings gives byte-identical output.
-- `smartDefaults`: binary-alpha, 12-colour, same-size input → Keep/Keep; a photo → threshold
-  128 / Reduce to 16.
+- `smartDefaults`: binary-alpha, 12-colour, same-size input → Keep/Keep; a photo larger than
+  the target size → threshold 128 / Reduce to 16.
 - A 2048×2048 source reduced to 16 colours at 64×64 completes in ≤ 500 ms (recorded, Node).
 - Mapping an image already using only palette colours is the identity.
 - Limit violations throw typed errors naming the limit.

@@ -659,7 +659,7 @@ Pipeline, in order:
 | 1 Decode    | PNG to straight RGBA8 with the `core/png` decoder (asynchronous, no premultiplication)    | —                  |
 | 2 Region    | Whole image or crop rectangle                                                             | Whole image        |
 | 3 Cells     | Single sprite; grid (cell W×H or columns×rows, offset, spacing, skip empty); one cell per file | Single sprite |
-| 4 Size      | **Target sprite size W×H**; fit: stretch, contain, cover                                  | Document size or 32×32 |
+| 4 Size      | **Target sprite size W×H**; fit: stretch, contain, cover                                  | Document size or 32×32; contain |
 | 5 Resample  | Nearest, area average, dominant colour per block                                          | Area average       |
 | 6 Alpha     | Keep, or threshold 1–255 to binary; optional colour key with tolerance                    | Smart (below)      |
 | 7 Colours   | Keep; reduce to N (2–256); map to the document palette or a preset palette                | Smart (below)      |
@@ -669,16 +669,20 @@ Pipeline, in order:
 Rules:
 
 - Several PNG files may be selected or dropped at once: each file is one cell, ordered by
-  natural filename order; grid slicing then does not apply.
+  natural filename order; grid slicing then does not apply, and a crop rectangle applies to
+  every file.
 - Step 3 yields N cells in row-major order; each becomes one frame.
 - Step 4 is the "specified size": every cell is resampled to exactly W×H. When a cell already
   has that size, step 5 is skipped.
-- Smart defaults: if the cells already have binary alpha, step 6 defaults to Keep, otherwise
-  threshold 128. If the cells use at most 256 distinct colours and no resampling is needed,
-  step 7 defaults to Keep, otherwise Reduce to 16.
+- Smart defaults: if the cells already have binary alpha and no resampling is needed, step 6
+  defaults to Keep, otherwise threshold 128 (averaging makes hard edges soft). If the cells use
+  at most 256 distinct colours and no resampling is needed, step 7 defaults to Keep, otherwise
+  Reduce to 16.
 - Step 7 "reduce" builds **one palette across all cells** (median cut, then 8 fixed k-means
   iterations seeded from the median-cut result). Colour distance is OKLab. The resulting palette
-  can replace, extend or leave the document palette.
+  can replace, extend or leave the document palette. With "keep" that palette is the frames' own
+  colours (reduced to 256 when there are more, the frames unchanged); with "map" it is the
+  palette mapped to.
 - Placing into an existing document requires the target size to equal the document size.
 - "Keep source as reference" is available for single-sprite imports only. It adds a reference
   layer positioned and scaled so the cropped region overlays the canvas exactly.
