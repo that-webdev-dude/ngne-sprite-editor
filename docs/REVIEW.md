@@ -185,6 +185,18 @@ only when the row below is filled in.
 | A8 | GitHub repository, GitHub Actions, GitHub Pages, MIT licence          | SE-001        | Acknowledged | 2026-10-11 |
 | A9 | Reference hardware (Intel UHD gen-12, RTX 4060) available             | SE-002        | Acknowledged | 2026-10-11 |
 
+## SE-002 amendments (gate G0)
+
+Results and raw data: [spikes/SE-002-ngne-integration.md](spikes/SE-002-ngne-integration.md).
+Measured 2026-10-11 on Intel UHD and RTX 4060; questions 1–7 and 9–11 met their thresholds.
+
+| Question | Result | SPEC change | Owner decision | Date |
+| -------- | ------ | ----------- | -------------- | ---- |
+| 4 Sizing strategy | (a) and (b) both go on both GPUs | §6.4 Lifecycle: (a) renderer replacement is the sizing strategy; the fixed oversized canvas is not adopted | (a) adopted | 2026-10-12 |
+| 8 Device loss | No-go on both GPUs: status polling on a 1 s timer redrew an idle viewport after 0/5 (Intel UHD) and 1/5 (RTX 4060) losses | §6.4 rendering bullet and §6.8 "No recovery event": a read also treats `renderer.sprites === 0` after a draw that submitted sprites as a loss. Measured: 5/5 losses redrawn, slowest 945 ms (Intel UHD) and 1047 ms (RTX 4060) against 2 s. Relies on an NGNE 0.2.1 implementation detail | Fallback adopted | 2026-10-12 |
+
+Gate G0: Passed 2026-10-12 (every question go, or amended as above).
+
 ## Descoped tickets
 
 None.

@@ -17,6 +17,16 @@ Status
   ([EXECUTION.md](../tickets/EXECUTION.md), Measurements), with the commands of section 2.
 - While a deciding result is missing, gate G0 stays Pending and SPEC §6.4 is not amended.
 
+Outcome (owner decisions of 2026-10-12, recorded in [REVIEW.md](../REVIEW.md), "SE-002
+amendments")
+
+- Question 4: strategy (a), renderer replacement, is adopted and written into SPEC §6.4. The
+  `detached` variant matches the replacement order already in §6.4, so its first Lifecycle
+  bullet is unchanged.
+- Question 8: the candidate of section 4.8 (`renderer.sprites === 0` after a draw) is adopted
+  as the fallback; SPEC §6.4 and §6.8 are amended.
+- Gate G0: Passed 2026-10-12.
+
 Text between `<!-- generated:… -->` markers is written by `spikes/ngne/runner/tables.ts` from
 the raw data. Do not edit it by hand.
 

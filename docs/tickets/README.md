@@ -23,7 +23,7 @@ A ticket may start only when every dependency is Done **and** its "Blocked until
 
 | Gate | Condition (checkable)                                                                              | Set by  | Blocks                         | State   |
 | ---- | -------------------------------------------------------------------------------------------------- | ------- | ------------------------------ | ------- |
-| G0   | Engine feasibility: every SE-002 question meets its go threshold, or SPEC §6/§9 is amended with the fallback and the amendment is recorded in REVIEW.md | SE-002 | SE-011, SE-053, SE-054 | Pending |
+| G0   | Engine feasibility: every SE-002 question meets its go threshold, or SPEC §6/§9 is amended with the fallback and the amendment is recorded in REVIEW.md | SE-002 | SE-011, SE-053, SE-054 | Passed 2026-10-12 |
 | G1   | Drawing loop: SE-015 and SE-017 Done, including the recorded stroke latency budget (with or without the echo fallback) | SE-017 | SE-022, SE-041, SE-054 | Pending |
 | G2   | Export conformance: the three conditions of SPEC §9.7 pass locally and in CI                       | SE-053  | SE-052, SE-070 (as dependencies) | Pending |
 | G3   | Release readiness: every v1 ticket other than SE-073 is Done, or descoped by the owner in writing in REVIEW.md. `.ngsprite` v1 and `ngne-sprite-atlas` v1 are frozen at this point | — | SE-073 | Pending |

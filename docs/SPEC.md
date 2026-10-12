@@ -354,15 +354,18 @@ Lifecycle
 - Each renderer instance gets its own `<canvas>` element. Creates are serialized (one in
   flight). Replacement order: create on a new canvas, upload every slot, draw once, swap the
   canvases, then dispose the old instance — so the viewport is never blank.
-- Default sizing: canvas backing size = the viewport element's size in device pixels
-  (`devicePixelContentBoxSize`); a size or DPR change replaces the renderer after 120 ms of
-  quiet, with the old canvas CSS-stretched until the swap. SE-002 also evaluates a fixed oversized canvas (backing = logical = screen size in
-  device pixels, clipped by CSS) that needs no recreation; if it wins, this paragraph is amended.
+- Sizing (decided by SE-002 question 4): canvas backing size = the viewport element's size in
+  device pixels (`devicePixelContentBoxSize`); a size or DPR change replaces the renderer
+  after 120 ms of quiet, with the old canvas CSS-stretched until the swap. The fixed
+  oversized canvas was evaluated and not adopted.
 - Rendering is on demand: a dirty flag schedules one `requestAnimationFrame`; an idle editor
   submits no frames. If `renderer.status` is not `ready` at draw time the dirty flag is kept and
   the draw is retried next animation frame. Because NGNE signals neither loss nor recovery, status is also
   read on window focus, on `visibilitychange` and by a 1 s timer while the page is visible
-  (reading status submits no frame); a transition back to `ready` marks the view dirty.
+  (reading status submits no frame). Recovery usually completes between two reads (SE-002
+  question 8), so each read also compares `renderer.sprites` with the last draw: NGNE zeroes
+  it when the device is lost. A transition back to `ready`, or `renderer.sprites === 0` after
+  a draw that submitted sprites, marks the view dirty.
   `failed` (also delivered through `onError`) triggers a fresh renderer.
 
 View
@@ -470,7 +473,7 @@ Recorded for the engine owner; none is required for v1.
 | No camera zoom                              | Scale sprite sizes when building frames     |
 | No readback                                 | CPU export; in-page canvas readback in tests |
 | Centre snapping misaligns odd-sized sprites | Even-sized export rects; snap off in editor |
-| No recovery event                           | Poll `status` on draw, focus, visibility    |
+| No recovery event                           | Poll `status` on draw, focus, visibility and the `sprites` counter |
 
 ## 7. Editor behaviour
 
