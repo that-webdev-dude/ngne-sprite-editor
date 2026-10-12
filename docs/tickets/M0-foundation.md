@@ -58,7 +58,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | Ready                                                    |
+| Status       | Done                                                     |
 | Depends on   | SE-001                                                   |
 | Blocks       | SE-011, SE-053, SE-054                                   |
 | Blocked until | Owner acknowledgement of A9 recorded in REVIEW.md       |
