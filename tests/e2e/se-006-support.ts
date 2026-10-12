@@ -96,6 +96,14 @@ export function collectErrors(page: Page): string[] {
 }
 
 /** Drags with the mouse from the centre of `handle` by the given offset. */
+/**
+ * Lets the timers the page has already queued run. Radix registers its outside-press listener
+ * one timer after a layer opens; a pointer press sent before that is not seen.
+ */
+export async function settleTimers(page: Page): Promise<void> {
+    await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 0)));
+}
+
 export async function dragBy(page: Page, handle: Locator, dx: number, dy: number) {
     const box = await boxOf(handle);
     const x = box.x + box.width / 2;

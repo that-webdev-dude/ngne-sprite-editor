@@ -262,10 +262,13 @@ test("the menus work from the keyboard", async ({ page }) => {
     await menuTrigger(page, "File").focus();
     await page.keyboard.press("ArrowRight");
     await expect(menuTrigger(page, "Edit")).toBeFocused();
+    // Radix moves the focus one timer after the key, so each step is awaited.
     await page.keyboard.press("ArrowLeft");
+    await expect(menuTrigger(page, "File")).toBeFocused();
     await page.keyboard.press("ArrowLeft");
     await expect(menuTrigger(page, "View")).toBeFocused();
     await page.keyboard.press("ArrowRight");
+    await expect(menuTrigger(page, "File")).toBeFocused();
     await page.keyboard.press("ArrowRight");
     await expect(menuTrigger(page, "Edit")).toBeFocused();
     const tabStops = await region(page, "menu-bar")

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
-import { boxOf, collectErrors, region } from "./se-006-support";
+import { boxOf, collectErrors, region, settleTimers } from "./se-006-support";
 import {
     addTextField,
     menuItem,
@@ -394,6 +394,7 @@ test("the dialog returns focus to what opened it: the empty-state button, the Fi
 
     await newSpriteButton(page).click();
     await expect(dialog).toBeVisible();
+    await settleTimers(page);
     await page.mouse.click(8, 400);
     await expect(dialog).toBeHidden();
     await expect(newSpriteButton(page)).toBeFocused();

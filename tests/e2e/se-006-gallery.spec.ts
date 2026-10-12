@@ -1,7 +1,15 @@
 import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
-import { boxOf, collectErrors, dragBy, openGallery, openShell, tabTo } from "./se-006-support";
+import {
+    boxOf,
+    collectErrors,
+    dragBy,
+    openGallery,
+    openShell,
+    settleTimers,
+    tabTo,
+} from "./se-006-support";
 
 // SE-006: the /gallery route — every primitive of DESIGN §4, operable by keyboard, with the
 // focus ring on keyboard focus only, and free of WCAG AA violations in both themes.
@@ -552,7 +560,9 @@ test.describe("keyboard operation", () => {
         const behind = page.locator(".gallery");
         await expect(behind).toHaveAttribute("aria-hidden", "true");
         await expect(behind).toHaveAttribute("inert", "");
+        // Radix moves the focus one timer after the key; Enter acts on the focused option.
         await page.keyboard.press("ArrowDown");
+        await expect(list.getByRole("option", { name: "Alpha compositing" })).toBeFocused();
         await page.keyboard.press("Enter");
         await expect(list).toBeHidden();
         await expect(behind).not.toHaveAttribute("aria-hidden");
@@ -569,7 +579,9 @@ test.describe("keyboard operation", () => {
 
         // Typeahead comes from Radix.
         await page.keyboard.press("Enter");
+        await expect(list.getByRole("option", { name: "Alpha compositing" })).toBeFocused();
         await page.keyboard.type("lock");
+        await expect(list.getByRole("option", { name: "Lock alpha" })).toBeFocused();
         await page.keyboard.press("Enter");
         await expect(select).toHaveText("Lock alpha");
 
@@ -700,6 +712,7 @@ test.describe("keyboard operation", () => {
 
         await page.keyboard.press("Space");
         await expect(popover).toBeVisible();
+        await settleTimers(page);
         await page.mouse.click(1200, 800);
         await expect(popover).toBeHidden();
     });

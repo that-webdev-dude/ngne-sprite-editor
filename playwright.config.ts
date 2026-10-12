@@ -41,6 +41,9 @@ export default defineConfig({
     fullyParallel: true,
     forbidOnly: ci,
     retries: 0,
+    // CI shows every worker's Chrome window on one X display. Two instances take the pointer
+    // grab and the hover from each other, which ends drags and closes menus mid-test.
+    workers: ci ? 1 : undefined,
     // A cold dev server and the CI runner (software WebGPU, few cores) are several times
     // slower than a warm local run; the limits leave room for both.
     timeout: ci ? 120_000 : 30_000,
@@ -51,7 +54,13 @@ export default defineConfig({
         channel: "chrome",
         headless: process.env.E2E_HEADLESS !== "0",
         launchOptions: {
-            args: ["--force-color-profile=srgb", ...(ci ? swiftShaderArgs : [])],
+            // The scale factor is fixed: a headed run on a scaled display otherwise lays out
+            // in fractional pixels.
+            args: [
+                "--force-color-profile=srgb",
+                "--force-device-scale-factor=1",
+                ...(ci ? swiftShaderArgs : []),
+            ],
         },
         trace: "retain-on-failure",
     },

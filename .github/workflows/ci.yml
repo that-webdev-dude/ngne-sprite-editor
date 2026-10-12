@@ -21,10 +21,12 @@ jobs:
             # Software WebGPU as in NGNE's own CI: headed Chrome under xvfb with SwiftShader.
             - name: Install software WebGPU presentation dependencies
               run: sudo apt-get update && sudo apt-get install -y libvulkan1 mesa-vulkan-drivers xvfb xauth
+            # The X pointer starts at the centre of the screen. The screen is large enough to
+            # keep it outside the Chrome window, so no real pointer event reaches a page.
             - name: End-to-end tests
               env:
                   E2E_HEADLESS: 0
-              run: xvfb-run -a npm run test:e2e
+              run: xvfb-run -a -s "-screen 0 4096x2304x24" npm run test:e2e
             - name: Upload end-to-end artifacts
               if: failure()
               uses: actions/upload-artifact@v4
