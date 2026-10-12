@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { KeyValueStorage } from "../../src/ui/platform/storage";
+import type { KeyValueStorage } from "../../src/app/platform/storage";
 import {
     defaultTimelineHeight,
     isWindowTooSmall,

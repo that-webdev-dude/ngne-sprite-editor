@@ -1,12 +1,8 @@
-/**
- * Straight-alpha (not premultiplied) RGBA8 image: row-major, four bytes per pixel, top-left
- * first. Same shape as `PixelBuffer` in SPEC §5.1.
- */
-export interface PixelBuffer {
-    width: number;
-    height: number;
-    data: Uint8ClampedArray;
-}
+import type { PixelBuffer } from "../model";
+
+// Straight-alpha (not premultiplied) RGBA8 image: row-major, four bytes per pixel, top-left
+// first. Defined once, in the document model (SPEC §5.1).
+export type { PixelBuffer };
 
 /** Rectangle in pixel coordinates. `x` and `y` may lie outside a buffer. */
 export interface PixelRect {

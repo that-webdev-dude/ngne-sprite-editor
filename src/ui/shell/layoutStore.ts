@@ -1,8 +1,8 @@
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import type { StoreApi } from "zustand/vanilla";
-import { browserStorage, readJson, writeItem } from "../platform/storage";
-import type { KeyValueStorage } from "../platform/storage";
+import { browserStorage, readJson, writeItem } from "../../app/platform/storage";
+import type { KeyValueStorage } from "../../app/platform/storage";
 import { parseStoredLayout } from "./layout";
 import type { StoredLayout } from "./layout";
 

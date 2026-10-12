@@ -3,8 +3,8 @@ import { createStore } from "zustand/vanilla";
 import type { StoreApi } from "zustand/vanilla";
 import { defaultDocSettings } from "../../core/model";
 import type { OnionSettings } from "../../core/model";
-import { browserStorage, readJson, writeItem } from "../../ui/platform/storage";
-import type { KeyValueStorage } from "../../ui/platform/storage";
+import { browserStorage, readJson, writeItem } from "../platform/storage";
+import type { KeyValueStorage } from "../platform/storage";
 
 /**
  * User preferences: one versioned record in `localStorage`, with defaults, typed access and

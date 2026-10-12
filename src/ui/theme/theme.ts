@@ -1,8 +1,8 @@
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import type { StoreApi } from "zustand/vanilla";
-import { browserStorage, readItem, writeItem } from "../platform/storage";
-import type { KeyValueStorage } from "../platform/storage";
+import { browserStorage, readItem, writeItem } from "../../app/platform/storage";
+import type { KeyValueStorage } from "../../app/platform/storage";
 
 /** DESIGN §3: dark is the default, light is the second full token set. */
 export type Theme = "dark" | "light";
