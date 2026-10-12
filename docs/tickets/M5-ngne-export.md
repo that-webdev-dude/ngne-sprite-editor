@@ -10,7 +10,7 @@ Exit: gate G2 ([README](README.md#gates)).
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Ready                                                    |
+| Status       | Done                                                     |
 | Depends on   | SE-005, SE-010                                           |
 | Blocks       | SE-051                                                   |
 | Blocked until | Owner acknowledgement of A2 recorded in REVIEW.md       |

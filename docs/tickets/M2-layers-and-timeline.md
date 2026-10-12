@@ -11,7 +11,7 @@ Goal: multi-layer, multi-frame documents with tags, playback and onion skin.
 | Size         | M                                                        |
 | Status       | Ready                                                    |
 | Depends on   | SE-004, SE-010                                           |
-| Blocks       | SE-022                                                   |
+| Blocks       | SE-022, SE-034                                           |
 | Blocked until | —                                                       |
 | Spec         | SPEC §7.3, §5.1                                          |
 

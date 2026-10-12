@@ -12,7 +12,7 @@ images (C3).
 | Size         | M                                                        |
 | Status       | Ready                                                    |
 | Depends on   | SE-003, SE-005, SE-010                                   |
-| Blocks       | SE-041, SE-045                                           |
+| Blocks       | SE-034, SE-041, SE-045                                   |
 | Blocked until | —                                                       |
 | Spec         | SPEC §10, §5.1                                           |
 

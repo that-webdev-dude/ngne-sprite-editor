@@ -72,7 +72,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-031 | Selection tools                                   | M    | 014, 017, 030                      | —             | Ready  |
 | SE-032 | Move, floating selection and clipboard            | L    | 005, 031                           | —             | Ready  |
 | SE-033 | Selection transforms                              | M    | 032                                | —             | Ready  |
-| SE-034 | Sprite operations                                 | M    | 006, 007, 021, 030                 | —             | Ready  |
+| SE-034 | Sprite operations                                 | L    | 006, 007, 020, 021, 030, 040       | —             | Ready  |
 | **M4** | **[Persistence and import](M4-persistence-and-import.md)** | |                                  |               |        |
 | SE-040 | Project file format (`.ngsprite`)                 | M    | 003, 005, 010                      | —             | Ready  |
 | SE-041 | File workflows                                    | L    | 007, 008, 040                      | G1            | Ready  |
@@ -83,7 +83,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-046 | Reference layer move and scale on the canvas      | M    | 032, 045                           | —             | Ready  |
 | SE-047 | Document tabs and recent files                    | M    | 041                                | —             | Ready  |
 | **M5** | **[NGNE export](M5-ngne-export.md)**              |      |                                    |               |        |
-| SE-050 | Atlas packer                                      | M    | 005, 010                           | A2            | Ready  |
+| SE-050 | Atlas packer                                      | M    | 005, 010                           | A2            | Done   |
 | SE-051 | NGNE bundle writers                               | L    | 003, 021, 050                      | —             | Ready  |
 | SE-052 | Export dialog and delivery                        | L    | 006, 041, 051, 053                 | —             | Ready  |
 | SE-053 | Export conformance against NGNE (gate G2)         | L    | 002, 051                           | G0            | Ready  |
@@ -102,7 +102,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-072 | Installable PWA and offline use                   | M    | 042, 070                           | —             | Ready  |
 | SE-073 | Documentation and release (gate G3)               | M    | 070, 071, 072                      | G3            | Ready  |
 
-52 tickets: 32 M, 20 L; 120 dependency edges. From the size ranges: 144–216 developer-days for
+52 tickets: 31 M, 21 L; 122 dependency edges. From the size ranges: 146–219 developer-days for
 one developer. Tickets outside SE-073's dependency closure (026, 034, 046, 047, 060, 061, 062,
 063, 065, 066) are still required for release by gate G3.
 
@@ -229,6 +229,7 @@ flowchart LR
     032 --> 033
     006 --> 034
     007 --> 034
+    020 --> 034
     021 --> 034
     030 --> 034
     003 --> 040
@@ -248,6 +249,7 @@ flowchart LR
     011 --> 045
     022 --> 045
     040 --> 045
+    040 --> 034
     032 --> 046
     045 --> 046
     041 --> 047

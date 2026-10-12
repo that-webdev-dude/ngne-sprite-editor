@@ -21,7 +21,7 @@ Tickets in one wave have no dependency on each other. Letters are sizes.
 | W6   | 013M                                                 | 1     |
 | W7   | 014L                                                 | 1     |
 | W8   | 015L · 016M · 030M                                   | 3     |
-| W9   | 017M · 034M · 060M                                   | 3     |
+| W9   | 017M · 034L · 060M                                   | 3     |
 | W10  | 022L · 031M · 041L · 054L · 062M · 065M · 066M       | 7     |
 | W11  | 023M · 032L · 042M · 045L · 047M · 052L · 061M       | 7     |
 | W12  | 024M · 026M · 033M · 044L · 046M · 063M              | 6     |

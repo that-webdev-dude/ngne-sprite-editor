@@ -136,9 +136,9 @@ Acceptance
 
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
-| Size         | M                                                        |
+| Size         | L                                                        |
 | Status       | Ready                                                    |
-| Depends on   | SE-006, SE-007, SE-021, SE-030                           |
+| Depends on   | SE-006, SE-007, SE-020, SE-021, SE-030, SE-040           |
 | Blocks       | —                                                        |
 | Blocked until | —                                                       |
 | Spec         | SPEC §7.7, §7.6 (sprite operations); DESIGN §7 (Canvas / Sprite size) |
@@ -160,6 +160,13 @@ Scope
   (arrow keys still step by 0.01), so a pivot on a pixel boundary of a 1024 px sprite can be
   entered.
 - Size guard: result must be within 1..1024 per side; memory guard per SPEC §5.1.
+- Document limits (from the W3 review; SPEC §5.1, FORMAT.md §1): `core/model` exports the
+  limits — pixel memory 1 GB and the layer, frame, tag and cel counts of the project format —
+  with one typed error. Every command that adds a layer, frame, tag, cel or image refuses to
+  pass a limit and leaves the document unchanged: SE-004 cel creation, SE-020 add and duplicate
+  layer, SE-021 add and duplicate frames, copy and unlink cels and create tag, and this
+  ticket's size changes. `core/project` (SE-040) takes its count limits from the same
+  constants. The app shows a warning when a document's pixel memory passes 512 MB.
 
 Acceptance
 - Do/undo symmetry for each command on a multi-layer, multi-frame fixture with linked cels
@@ -170,6 +177,10 @@ Acceptance
 - Trim on a document whose content differs per frame trims to the union of all frames.
 - Invariant "every image has the document's dimensions" holds after each command and undo.
 - A sprite-wide command larger than the history budget is retained and undoable (SE-004 rule).
+- With each limit lowered by a test option, every adding command named in the scope throws the
+  typed limit error and leaves the session deep-equal; a document exactly at a count limit
+  saves and reopens (SE-040).
+- A document whose pixel memory passes 512 MB shows the warning once.
 - E2E: with the menu-bar region failed (SE-006 boundary harness), New sprite from the empty
   state still opens its dialog and creates the document.
 - Typing 0.9688 into a pivot field stores 0.9688.
