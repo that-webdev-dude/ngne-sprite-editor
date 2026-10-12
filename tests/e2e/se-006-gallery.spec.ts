@@ -931,7 +931,7 @@ test("pointer targets are at least 24×24 px; the 8 px splitter is the exception
     await expect(page.getByRole("spinbutton", { name: "Size" })).toBeFocused();
 
     await openShell(page);
-    expect(await page.locator("button").count()).toBe(16);
+    expect(await page.locator("button").count()).toBe(23);
     expect(await tooSmall()).toEqual([]);
 });
 

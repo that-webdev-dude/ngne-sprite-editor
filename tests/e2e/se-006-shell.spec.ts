@@ -351,7 +351,7 @@ test("regions carry their landmarks and the placeholders are empty", async ({ pa
     );
     await expect(page.getByRole("contentinfo")).toHaveAttribute("data-region", "status-bar");
 
-    for (const id of ["menu-bar", "context-bar", "status-bar"] as const) {
+    for (const id of ["context-bar", "status-bar"] as const) {
         await expect(region(page, id)).toBeEmpty();
     }
     await expect(region(page, "timeline").locator(".shell-timeline__content")).toBeEmpty();

@@ -1,0 +1,17 @@
+/* Status bar fields (DESIGN §5.7); the region itself is laid out by shell.css. */
+.status-field {
+    flex: none;
+    white-space: nowrap;
+}
+
+.status-message {
+    min-width: 0;
+    margin-left: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.status-message[data-kind="feedback"] {
+    color: var(--warn);
+}
