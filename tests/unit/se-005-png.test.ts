@@ -4,7 +4,7 @@ import fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { pixelBuffersEqual } from "../../src/core/pixels";
 import type { PixelBuffer } from "../../src/core/pixels";
-import { decodePng, encodePng, PngError } from "../../src/core/png";
+import { decodePng, encodePng, MAX_PNG_SIDE, PngError } from "../../src/core/png";
 import type { PngErrorCode } from "../../src/core/png";
 
 // --- fixtures -------------------------------------------------------------------------------
@@ -207,6 +207,7 @@ const NOT_PNG = /Not a PNG/;
 const NOT_ZLIB = /not a valid zlib stream/;
 const TOO_SHORT = /shorter than the image size/;
 const TOO_LONG = /longer than the image size/;
+const TOO_LARGE = /exceeds 8192 px per side/;
 const BAD_TRNS = /tRNS does not fit/;
 const JPEG_START = Uint8Array.of(0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46, 0, 1);
 
@@ -510,6 +511,27 @@ const malformed: Malformed[] = [
         TOO_LONG,
         png(ihdr(1, 1), idat(Buffer.alloc(20_000_000)), IEND),
     ),
+
+    // Larger than the source limit of SPEC §8: refused before anything is inflated.
+    bad(
+        "a well-formed image 8193 px wide",
+        "size",
+        TOO_LARGE,
+        png(ihdr(8193, 1), idat(Buffer.alloc(1 + 8193 * 4)), IEND),
+    ),
+    bad(
+        "a well-formed image 8193 px high",
+        "size",
+        TOO_LARGE,
+        png(ihdr(1, 8193), idat(Buffer.alloc(8193 * 5)), IEND),
+    ),
+    bad(
+        // 512 kB of image data are enough for the size to be plausible.
+        "a 16384 x 8192 header over enough data to be plausible",
+        "size",
+        TOO_LARGE,
+        png(ihdr(16384, 8192), chunk("IDAT", Buffer.alloc(600_000, 0x55)), IEND),
+    ),
 ];
 
 /**
@@ -652,6 +674,15 @@ describe("decodePng", () => {
             expect(Array.from(decoded.data)).toEqual(rgba);
         },
     );
+
+    it("decodes an image of exactly MAX_PNG_SIDE px on a side", async () => {
+        expect(MAX_PNG_SIDE).toBe(8192);
+        const lines = Buffer.alloc(1 + MAX_PNG_SIDE * 4, 255);
+        lines[0] = 0;
+        const decoded = await decodePng(png(ihdr(MAX_PNG_SIDE, 1), idat(lines), IEND));
+        expect([decoded.width, decoded.height]).toEqual([MAX_PNG_SIDE, 1]);
+        expect(decoded.data.every((value) => value === 255)).toBe(true);
+    });
 
     it("reduces every 16-bit sample value to the nearest 8-bit value", async () => {
         // 256 × 256 greyscale: the pixel at (x, y) holds the sample y * 256 + x.

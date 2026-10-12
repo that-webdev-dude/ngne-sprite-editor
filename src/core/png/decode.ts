@@ -46,6 +46,9 @@ const ADAM7 = [
 ];
 const SINGLE_PASS = [[0, 0, 1, 1]];
 
+/** Largest width or height decoded: the source limit of SPEC §8. */
+export const MAX_PNG_SIDE = 8192;
+
 /** Deflate cannot expand its input by more than this factor. */
 const MAX_DEFLATE_RATIO = 1032;
 
@@ -482,6 +485,13 @@ export async function decodePng(
         const compressed = image.data.reduce((sum, part) => sum + part.length, 0);
         if (size > compressed * MAX_DEFLATE_RATIO) {
             throw new PngError("data", TOO_LITTLE_DATA);
+        }
+        // Checked after the guard above, so a header that only claims a size is still "data".
+        if (width > MAX_PNG_SIDE || height > MAX_PNG_SIDE) {
+            throw new PngError(
+                "size",
+                `Image size ${width}x${height} exceeds ${MAX_PNG_SIDE} px per side.`,
+            );
         }
         const buffer = { width, height, data: new Uint8ClampedArray(width * height * 4) };
         const raw = await inflate(image.data, size);

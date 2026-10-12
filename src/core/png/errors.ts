@@ -6,10 +6,11 @@
  * - `header`: IHDR holds a size, colour type, bit depth or method PNG does not define.
  * - `data`: palette, transparency or image data — invalid zlib stream, too little or too much
  *   data, unknown filter, palette index out of range.
+ * - `size`: the image is larger than `MAX_PNG_SIDE` on a side (SPEC §8 limit).
  * - `memory`: the image is too large to allocate.
  * - `buffer`: `encodePng` was given a buffer whose size and data do not match.
  */
-export type PngErrorCode = "signature" | "chunk" | "header" | "data" | "memory" | "buffer";
+export type PngErrorCode = "signature" | "chunk" | "header" | "data" | "size" | "memory" | "buffer";
 
 /** The one error type thrown by `decodePng` and `encodePng`. */
 export class PngError extends Error {
