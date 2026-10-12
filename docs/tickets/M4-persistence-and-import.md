@@ -115,7 +115,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | Ready                                                    |
+| Status       | Done                                                     |
 | Depends on   | SE-003, SE-005                                           |
 | Blocks       | SE-044, SE-060, SE-063                                   |
 | Blocked until | Owner acknowledgement of A3 recorded in REVIEW.md       |

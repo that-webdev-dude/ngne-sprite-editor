@@ -77,7 +77,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-040 | Project file format (`.ngsprite`)                 | M    | 003, 005, 010                      | —             | Ready  |
 | SE-041 | File workflows                                    | L    | 007, 008, 040                      | G1            | Ready  |
 | SE-042 | Autosave and crash recovery                       | M    | 041                                | —             | Ready  |
-| SE-043 | Import pipeline core and preset palettes          | L    | 003, 005                           | A3            | Ready  |
+| SE-043 | Import pipeline core and preset palettes          | L    | 003, 005                           | A3            | Done   |
 | SE-044 | Import PNG dialog                                 | L    | 006, 021, 041, 043, 045            | —             | Ready  |
 | SE-045 | Reference layers                                  | L    | 011, 022, 040                      | —             | Ready  |
 | SE-046 | Reference layer move and scale on the canvas      | M    | 032, 045                           | —             | Ready  |
