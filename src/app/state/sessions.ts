@@ -3,7 +3,9 @@ import { createStore } from "zustand/vanilla";
 import type { StoreApi } from "zustand/vanilla";
 import { History } from "../../core/history";
 import type { HistoryOptions } from "../../core/history";
+import { assertInvariants } from "../../core/model";
 import type { DocSession, DocSettings, ExportSettings } from "../../core/model";
+import type {} from "../../import-meta";
 
 /** View state of one document (SPEC §6.4). */
 export interface ViewState {
@@ -132,6 +134,10 @@ export function createSessionsStore(): StoreApi<SessionsState> {
                     } catch (error) {
                         console.error("A subscriber of the session store failed:", error);
                     }
+                    // SPEC §5.1: invariants are asserted after every command in development
+                    // builds. This throws on purpose, once the store is up to date, so the
+                    // command that broke the document fails where it was run.
+                    if (import.meta.env.DEV) assertInvariants(session);
                 }),
             );
             return {
