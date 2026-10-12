@@ -14,10 +14,12 @@ export {
     MAX_IMPORT_SOURCE_SIDE,
 } from "./errors";
 export type { ImportErrorCode } from "./errors";
+export { fitRect } from "./fit";
+export type { FitRect, ResampleFit } from "./fit";
 export { mapToPalette } from "./mapToPalette";
 export type { DitherMethod, MapOptions } from "./mapToPalette";
 export { resample } from "./resample";
-export type { ResampleFit, ResampleMethod, ResampleOptions } from "./resample";
+export type { ResampleMethod, ResampleOptions } from "./resample";
 export { IMPORTED_PALETTE_NAME, importCells, runImport } from "./runImport";
 export type { ImportResult } from "./runImport";
 export type { CellSettings, ColorSettings, ImportSettings, SizeSettings } from "./settings";

@@ -1,10 +1,12 @@
 import { clonePixelBuffer, createPixelBuffer } from "../pixels";
 import type { PixelBuffer } from "../pixels";
 import { assertInteger } from "./errors";
+import { fitAxes, roundDivide } from "./fit";
+import type { FitAxis as Axis, ResampleFit } from "./fit";
 import { KeyIndex } from "./keyIndex";
 
-// Steps 4 and 5 of SPEC §8: a cell resampled to the target sprite size. All positions and
-// weights are integers, so results are exact and the same on every machine.
+// Step 5 of SPEC §8: a cell resampled to the target sprite size, placed as `fit.ts` says. All
+// positions and weights are integers, so results are exact and the same on every machine.
 
 /**
  * - `nearest`: the source pixel under the centre of each target pixel.
@@ -13,77 +15,9 @@ import { KeyIndex } from "./keyIndex";
  */
 export type ResampleMethod = "nearest" | "area" | "dominant";
 
-/**
- * - `stretch`: the whole source fills the target; the aspect ratio is not kept.
- * - `contain`: the whole source, as large as fits, centred; the rest of the target is
- *   transparent.
- * - `cover`: the source fills the target, centred; what overflows is cut off.
- */
-export type ResampleFit = "stretch" | "contain" | "cover";
-
 export interface ResampleOptions {
     method: ResampleMethod;
     fit: ResampleFit;
-}
-
-/**
- * One axis of the mapping from target to source. The target pixels `start` to
- * `start + count - 1` receive the image; pixel `start + d` covers the source interval from
- * `(origin + d · step) / unit` to `(origin + (d + 1) · step) / unit`, in source pixels.
- */
-interface Axis {
-    start: number;
-    count: number;
-    origin: number;
-    step: number;
-    unit: number;
-}
-
-/** `numerator / denominator` rounded to the nearest integer, halves up; both are integers ≥ 0. */
-function roundDivide(numerator: number, denominator: number): number {
-    const remainder = numerator % denominator;
-    return (numerator - remainder) / denominator + (2 * remainder >= denominator ? 1 : 0);
-}
-
-/** The whole source side over the whole target side. */
-function whole(source: number, target: number): Axis {
-    return { start: 0, count: target, origin: 0, step: source, unit: target };
-}
-
-/** The x and y axes of a fit. */
-function axesOf(
-    source: PixelBuffer,
-    width: number,
-    height: number,
-    fit: ResampleFit,
-): [Axis, Axis] {
-    // Positive when the target is the wider shape: the source then fits it by height.
-    const wider = width * source.height - height * source.width;
-    if (fit === "stretch" || wider === 0) {
-        return [whole(source.width, width), whole(source.height, height)];
-    }
-    if (fit === "contain") {
-        // The side that does not fill the target is rounded to whole pixels and centred; an
-        // odd margin leaves the extra pixel after the image.
-        if (wider > 0) {
-            const count = Math.max(1, roundDivide(source.width * height, source.height));
-            const start = Math.floor((width - count) / 2);
-            return [{ ...whole(source.width, count), start }, whole(source.height, height)];
-        }
-        const count = Math.max(1, roundDivide(source.height * width, source.width));
-        const start = Math.floor((height - count) / 2);
-        return [whole(source.width, width), { ...whole(source.height, count), start }];
-    }
-    // Cover: the centred part of the source that has the target's aspect ratio. Its margin is
-    // half of |wider| / target side source pixels, hence the unit of twice the target side.
-    if (wider > 0) {
-        const step = 2 * source.width;
-        const y = { start: 0, count: height, origin: wider, step, unit: 2 * width };
-        return [whole(source.width, width), y];
-    }
-    const step = 2 * source.height;
-    const x = { start: 0, count: width, origin: -wider, step, unit: 2 * height };
-    return [x, whole(source.height, height)];
 }
 
 /**
@@ -237,6 +171,7 @@ function dominantInto(source: PixelBuffer, target: PixelBuffer, x: Axis, y: Axis
  *   colours covering the same area, the one met first wins, reading the covered source
  *   pixels left to right, then top to bottom.
  * - `nearest` with fit `stretch` equals `resizeNearest` of `core/pixels`.
+ * - The image lands on the rectangle `fitRect` reports for the same sizes and fit.
  *
  * Throws `ImportError` ("settings") when a side is not a positive integer.
  */
@@ -252,7 +187,7 @@ export function resample(
         return clonePixelBuffer(source);
     }
     const target = createPixelBuffer(width, height);
-    const [x, y] = axesOf(source, width, height, options.fit);
+    const [x, y] = fitAxes(source.width, source.height, width, height, options.fit);
     if (options.method === "nearest") {
         nearestInto(source, target, x, y);
     } else if (options.method === "area") {

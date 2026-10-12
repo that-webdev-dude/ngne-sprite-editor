@@ -39,10 +39,10 @@ export interface GridLayout {
 }
 
 /**
- * Step 2: a copy of the part of `source` inside `rect`. Throws `ImportError` ("settings")
- * unless `rect` has integer coordinates, a positive size and lies inside the image.
+ * Throws the `settings` error unless `rect` has integer coordinates, a positive size and lies
+ * inside `source`. The message names the file when `name` is given.
  */
-export function crop(source: PixelBuffer, rect: PixelRect): PixelBuffer {
+function assertRegion(source: PixelBuffer, rect: PixelRect, name?: string): void {
     const { x, y, width, height } = rect;
     const inside =
         [x, y, width, height].every(Number.isInteger) &&
@@ -53,13 +53,28 @@ export function crop(source: PixelBuffer, rect: PixelRect): PixelBuffer {
         x + width <= source.width &&
         y + height <= source.height;
     if (!inside) {
+        const image = name === undefined ? "image" : `image "${name}"`;
         throw new ImportError(
             "settings",
             `The region ${width}x${height} at (${x}, ${y}) is not a rectangle inside the ` +
-                `${source.width}x${source.height} image.`,
+                `${source.width}x${source.height} ${image}.`,
         );
     }
+}
+
+/**
+ * Step 2: a copy of the part of `source` inside `rect`. Throws `ImportError` ("settings")
+ * unless `rect` has integer coordinates, a positive size and lies inside the image.
+ */
+export function crop(source: PixelBuffer, rect: PixelRect): PixelBuffer {
+    assertRegion(source, rect);
     return cropPixels(source, rect);
+}
+
+/** `crop` for a file: the same file name with the cropped pixels; the error names the file. */
+export function cropFile(file: ImportSource, rect: PixelRect): ImportSource {
+    assertRegion(file.pixels, rect, file.name);
+    return { name: file.name, pixels: cropPixels(file.pixels, rect) };
 }
 
 /**

@@ -185,7 +185,8 @@ Acceptance
   32×32, using ≤ 8 colours, equal to `runImport` output for the same settings.
 - E2E: selecting three PNG files yields three frames in natural filename order.
 - E2E: single-sprite import with "keep source as reference" → reference layer exists, sits
-  behind, and its on-screen bounds coincide with the canvas bounds (±1 device pixel).
+  behind, and its on-screen bounds coincide with the bounds of the fitted image (the canvas
+  bounds for a source of the canvas's aspect ratio), ±1 device pixel.
 - With grid slicing producing more than one cell, "keep source as reference" is disabled.
 - E2E: dropping one PNG shows the chooser; "Add as reference" adds only a reference layer.
 - "New layer" into a 2-frame document from a 4-cell import yields 4 frames and one new layer.

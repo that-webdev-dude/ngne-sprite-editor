@@ -28,6 +28,9 @@ export interface AlphaOptions {
  * that is already fully transparent is never matched against the key. With empty options
  * the copy is unchanged.
  *
+ * `runImport` calls it twice: with the colour key alone on a cell before resampling, and with
+ * the threshold alone on the resampled frame.
+ *
  * Throws `ImportError` ("settings") when the threshold is not an integer 1..255 or the
  * tolerance not an integer 0..255.
  */

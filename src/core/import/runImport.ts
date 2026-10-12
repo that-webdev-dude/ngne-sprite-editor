@@ -4,7 +4,7 @@ import { zeroTransparentRgb } from "../pixels";
 import type { PixelBuffer } from "../pixels";
 import { applyAlpha } from "./alpha";
 import { buildPalette } from "./buildPalette";
-import { cellsFromFiles, crop, sliceGrid } from "./cells";
+import { cellsFromFiles, cropFile, sliceGrid } from "./cells";
 import type { ImportSource } from "./cells";
 import {
     ImportError,
@@ -87,7 +87,7 @@ function assertSource(source: ImportSource): void {
  *
  * Throws `ImportError`: "source-size" and "frame-count" for the limits of SPEC §8; "no-cells"
  * when there is no source or every grid cell is skipped as empty; "settings" for a region or
- * a grid that does not fit its image.
+ * a grid that does not fit its image. An error about one source names its file.
  */
 export function importCells(
     sources: readonly ImportSource[],
@@ -100,9 +100,7 @@ export function importCells(
     assertFrameCount(sources.length);
 
     const { region, cells } = settings;
-    const regions = region
-        ? sources.map(({ name, pixels }) => ({ name, pixels: crop(pixels, region) }))
-        : sources;
+    const regions = region ? sources.map((source) => cropFile(source, region)) : sources;
     if (regions.length > 1) {
         return cellsFromFiles(regions);
     }
@@ -117,11 +115,14 @@ export function importCells(
 }
 
 /**
- * Steps 2 to 8 of SPEC §8 on decoded images: region, cells, size and resampling, alpha,
- * colours and dither, in that order.
+ * Steps 2 to 8 of SPEC §8 on decoded images: region, cells, colour key, size and resampling,
+ * alpha threshold, colours and dither, in that order.
  *
  * - The cells are those of `importCells`. Every cell becomes one frame of exactly the target
  *   size. A cell that already has that size is not resampled.
+ * - Of step 6, the colour key is applied to each cell before it is resampled and the
+ *   threshold to the resampled frame. A keyed pixel therefore adds no colour to an averaged
+ *   pixel, only transparency.
  * - `palette` is, by colours mode: `keep`, the frames' own colours when there are at most
  *   256, otherwise their reduction to 256 by `buildPalette` (the frames are not changed);
  *   `reduce`, the palette built for the frames; `palette`, a copy of the given palette.
@@ -150,13 +151,15 @@ export function runImport(
         );
     }
 
-    // `resample` and `applyAlpha` each return a new buffer, so no frame aliases a source.
-    const frames = cells.map((cell) =>
-        applyAlpha(
-            resample(cell, width, height, { method: settings.resample, fit }),
-            settings.alpha,
-        ),
-    );
+    // The colour key comes before the resampling: a keyed pixel is transparent by then, so
+    // its colour is not averaged into the pixels beside it. `resample` returns a new buffer,
+    // so no frame aliases a source.
+    const { colorKey, threshold } = settings.alpha;
+    const frames = cells.map((cell) => {
+        const keyed = colorKey ? applyAlpha(cell, { colorKey }) : cell;
+        const frame = resample(keyed, width, height, { method: settings.resample, fit });
+        return threshold === undefined ? frame : applyAlpha(frame, { threshold });
+    });
     const { colors, dither } = settings;
     let palette: Palette;
     if (colors.mode === "keep") {

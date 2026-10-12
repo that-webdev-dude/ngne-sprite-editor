@@ -60,6 +60,24 @@ describe("buildPalette", () => {
         expect(hexOf(buildPalette([weighted], 2))).toEqual(["111111ff", "f0f0f0ff"]);
     });
 
+    it("stops after exactly 8 k-means iterations", () => {
+        // 15 black pixels, 5 white ones and one pixel each of the greys 40, 46, … 94. Black
+        // holds half of the pixels, so the median cut separates it from everything else.
+        // From there one more grey joins the dark group in every iteration, the darkest
+        // first: 40 in the first, 46 in the second, … 82 in the eighth. The two means are
+        // then grey 6 and grey 205.
+        // One iteration less leaves grey 82 on the light side, with means 4 and 189; one more
+        // takes 88 and 94 over as well and ends where nothing moves any more, at grey 12 and
+        // white.
+        const greys = [40, 46, 52, 58, 64, 70, 76, 82, 88, 94];
+        const pixels = [
+            ...new Array<number>(15).fill(0x000000ff),
+            ...new Array<number>(5).fill(0xffffffff),
+            ...greys.map((grey) => (grey * 0x01010100 + 0xff) >>> 0),
+        ];
+        expect(hexOf(buildPalette([image(6, pixels)], 2))).toEqual(["060606ff", "cdcdcdff"]);
+    });
+
     it("returns exactly n different colours when the input has at least n", () => {
         const source = noise(48, 48, 5);
         for (const count of [1, 2, 3, 4, 8, 16, 64, 255, 256]) {

@@ -144,6 +144,28 @@ describe("importCells", () => {
         expect(codeOf(() => importCells(blank, { cells: skipping }))).toBe("no-cells");
     });
 
+    it("names the file whose image the region does not fit", () => {
+        const region = { x: 0, y: 0, width: 8, height: 8 };
+        const files = [
+            source("a.png", createPixelBuffer(8, 8)),
+            source("b.png", createPixelBuffer(4, 4)),
+            source("c.png", createPixelBuffer(8, 8)),
+        ];
+        for (const run of [
+            () => importCells(files, { region }),
+            () => runImport(files, { ...keepAll(8, 8), region }),
+        ]) {
+            const error = errorOf(run);
+            expect(error.code).toBe("settings");
+            expect(error.message).toBe(
+                'The region 8x8 at (0, 0) is not a rectangle inside the 4x4 image "b.png".',
+            );
+        }
+        // A single source is named as well.
+        const single = errorOf(() => importCells([files[1]], { region }));
+        expect(single.message).toContain('the 4x4 image "b.png"');
+    });
+
     it("feeds smartDefaults, whose settings runImport accepts as they are", () => {
         const sources = [source("s.png", noise(48, 32, 3))];
         const settings = smartDefaults(importCells(sources, {}), { width: 16, height: 16 });
@@ -177,7 +199,7 @@ describe("runImport", () => {
         });
     });
 
-    it("applies the alpha step after resampling", () => {
+    it("applies the alpha threshold after resampling", () => {
         const settings = { ...TWO_CELLS_TO_1X1, alpha: { threshold: 128 } };
         const { frames } = runImport([source("sheet.png", TWO_CELLS)], settings);
         expect(frames.map(hex)).toEqual([["4b4b00ff"], ["ffffffff"]]);
@@ -350,6 +372,139 @@ describe("runImport", () => {
         const allowed = new Set(preset.colors);
         expect(colorsOf(frames[0]).filter((color) => !allowed.has(color))).toEqual([]);
         expect(palette).toEqual({ name: "PICO-8", colors: [...preset.colors] });
+    });
+});
+
+describe("runImport, colour key", () => {
+    const MAGENTA = 0xff00ffff;
+    const RED = 0xff0000ff;
+    const GREEN = 0x00ff00ff;
+    const BLUE = 0x0000ffff;
+    const colorKey = { color: MAGENTA, tolerance: 0 };
+
+    /** The one frame of `pixels` at the given size, as hex rows; colours are kept. */
+    function frames(
+        pixels: PixelBuffer,
+        width: number,
+        height: number,
+        resampleMethod: ImportSettings["resample"],
+        alpha: ImportSettings["alpha"],
+    ): string[] {
+        const settings = { ...keepAll(width, height), resample: resampleMethod, alpha };
+        return hex(runImport([source("s.png", pixels)], settings).frames[0]);
+    }
+
+    it("keys the background before averaging, so it puts no colour into an edge pixel", () => {
+        // Three magenta pixels and one red one, to one pixel. Keyed first, the average is
+        // pure red at alpha 255 / 4 = 63.75 → 64. Keyed afterwards it would be the pink
+        // 255, 0, 191, which no key matches any more.
+        const cell = image(2, [MAGENTA, MAGENTA, MAGENTA, RED]);
+        expect(frames(cell, 1, 1, "area", { colorKey })).toEqual(["ff000040"]);
+        // The threshold then decides on that alpha: 64 is below 128 …
+        expect(frames(cell, 1, 1, "area", { colorKey, threshold: 128 })).toEqual(["00000000"]);
+        // … and at 64, not at 65.
+        expect(frames(cell, 1, 1, "area", { colorKey, threshold: 64 })).toEqual(["ff0000ff"]);
+        expect(frames(cell, 1, 1, "area", { colorKey, threshold: 65 })).toEqual(["00000000"]);
+        // Without the key the pixels do blend.
+        expect(frames(cell, 1, 1, "area", { threshold: 128 })).toEqual(["ff00bfff"]);
+    });
+
+    it("leaves soft edges without key colour in them when alpha is kept", () => {
+        // Half of the pixels keyed: alpha 510 / 4 = 127.5 → 128, colour from the others only.
+        const half = image(2, [RED, RED, MAGENTA, MAGENTA]);
+        expect(frames(half, 1, 1, "area", { colorKey })).toEqual(["ff000080"]);
+        const mixed = image(2, [RED, GREEN, MAGENTA, MAGENTA]);
+        expect(frames(mixed, 1, 1, "area", { colorKey })).toEqual(["80800080"]);
+        // A 4 × 4 sprite on a magenta background, to 2 × 2: every block is one colour among
+        // three keyed pixels, or all background.
+        const sprite = image(4, [
+            ...[MAGENTA, MAGENTA, MAGENTA, MAGENTA],
+            ...[MAGENTA, RED, GREEN, MAGENTA],
+            ...[MAGENTA, BLUE, MAGENTA, MAGENTA],
+            ...[MAGENTA, MAGENTA, MAGENTA, MAGENTA],
+        ]);
+        expect(frames(sprite, 2, 2, "area", { colorKey })).toEqual([
+            "ff000040 00ff0040",
+            "0000ff40 00000000",
+        ]);
+    });
+
+    it("matches the key with its tolerance on the source pixels, not on averaged ones", () => {
+        // 250, 5, 250 is within 10 of magenta; the average of it and red would not be.
+        const cell = image(2, [0xfa05faff, RED]);
+        const within = { color: MAGENTA, tolerance: 10 };
+        expect(frames(cell, 1, 1, "area", { colorKey: within })).toEqual(["ff000080"]);
+        expect(frames(cell, 1, 1, "area", { colorKey })).toEqual(["fd037dff"]);
+    });
+
+    it("agrees with keying afterwards when pixels are copied, not averaged", () => {
+        // Nearest neighbour takes the pixels at (1, 1), (3, 1), (1, 3) and (3, 3).
+        const sprite = image(4, [
+            ...[RED, MAGENTA, RED, MAGENTA],
+            ...[MAGENTA, RED, MAGENTA, GREEN],
+            ...[RED, MAGENTA, RED, MAGENTA],
+            ...[MAGENTA, BLUE, MAGENTA, MAGENTA],
+        ]);
+        expect(frames(sprite, 2, 2, "nearest", { colorKey })).toEqual([
+            "ff0000ff 00ff00ff",
+            "0000ffff 00000000",
+        ]);
+
+        // On noise in which every fourth pixel is the key colour, at several sizes: the
+        // same bytes as resampling first and applying key and threshold to the result.
+        const pixels = softSheet(12, 10, 17);
+        for (let i = 0; i < pixels.data.length; i += 16) {
+            pixels.data.set([255, 0, 255], i);
+        }
+        const alpha = { colorKey, threshold: 100 };
+        for (const [width, height] of [
+            [5, 7],
+            [24, 20],
+            [12, 10],
+            [1, 1],
+        ]) {
+            const keyedAfterwards = applyAlpha(
+                resample(pixels, width, height, { method: "nearest", fit: "stretch" }),
+                alpha,
+            );
+            expect(frames(pixels, width, height, "nearest", alpha), `${width}×${height}`).toEqual(
+                hex(keyedAfterwards),
+            );
+        }
+    });
+
+    it("keys every cell of a sheet and every file", () => {
+        const sheet = image(4, [MAGENTA, RED, GREEN, MAGENTA, MAGENTA, RED, GREEN, MAGENTA]);
+        const settings: ImportSettings = {
+            ...keepAll(1, 1),
+            resample: "area",
+            alpha: { colorKey },
+            cells: { mode: "grid", grid: { cell: { width: 2, height: 2 } } },
+        };
+        const cells = runImport([source("sheet.png", sheet)], settings).frames;
+        expect(cells.map(hex)).toEqual([["ff000080"], ["00ff0080"]]);
+
+        const files = [
+            source("1.png", image(2, [MAGENTA, RED])),
+            source("2.png", image(2, [GREEN, MAGENTA])),
+        ];
+        const perFile = runImport(files, {
+            ...keepAll(1, 1),
+            resample: "area",
+            alpha: { colorKey },
+        });
+        expect(perFile.frames.map(hex)).toEqual([["ff000080"], ["00ff0080"]]);
+    });
+
+    it("does not change the sources", () => {
+        const pixels = image(2, [MAGENTA, MAGENTA, MAGENTA, RED]);
+        const before = clonePixelBuffer(pixels);
+        // At the target size the cell is the source itself, and still only a copy is keyed.
+        expect(frames(pixels, 2, 2, "area", { colorKey })).toEqual([
+            "00000000 00000000",
+            "00000000 ff0000ff",
+        ]);
+        expect(pixelBuffersEqual(pixels, before)).toBe(true);
     });
 });
 

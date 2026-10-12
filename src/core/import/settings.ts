@@ -2,8 +2,9 @@ import type { Palette } from "../model";
 import type { PixelRect } from "../pixels";
 import type { AlphaOptions } from "./alpha";
 import type { GridOptions } from "./cells";
+import type { ResampleFit } from "./fit";
 import type { DitherMethod } from "./mapToPalette";
-import type { ResampleFit, ResampleMethod } from "./resample";
+import type { ResampleMethod } from "./resample";
 
 // The choices of the import pipeline, one field per step of SPEC §8. Step 1 (decode) happens
 // before `runImport` and step 9 (place) after it.
@@ -43,7 +44,10 @@ export interface ImportSettings {
     size: SizeSettings;
     /** Step 5; not used for a cell that already has the target size. */
     resample: ResampleMethod;
-    /** Step 6. */
+    /**
+     * Step 6. The colour key is applied to every cell before it is resampled, so that the
+     * key colour does not blend into its neighbours; the threshold is applied afterwards.
+     */
     alpha: AlphaOptions;
     /** Step 7. */
     colors: ColorSettings;

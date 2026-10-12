@@ -675,6 +675,8 @@ Rules:
 - Step 3 yields N cells in row-major order; each becomes one frame.
 - Step 4 is the "specified size": every cell is resampled to exactly W×H. When a cell already
   has that size, step 5 is skipped.
+- The colour key of step 6 is applied to each cell before step 5, so the key colour is never
+  averaged into the pixels beside it; the threshold of step 6 is applied after step 5.
 - Smart defaults: if the cells already have binary alpha and no resampling is needed, step 6
   defaults to Keep, otherwise threshold 128 (averaging makes hard edges soft). If the cells use
   at most 256 distinct colours and no resampling is needed, step 7 defaults to Keep, otherwise
@@ -686,7 +688,9 @@ Rules:
   palette mapped to.
 - Placing into an existing document requires the target size to equal the document size.
 - "Keep source as reference" is available for single-sprite imports only. It adds a reference
-  layer positioned and scaled so the cropped region overlays the canvas exactly.
+  layer positioned and scaled so the cropped region overlays the pixels it was fitted to (the
+  whole canvas when the aspect ratios match). A reference layer has one scale for both axes, so
+  with fit "stretch" and a different aspect ratio it is placed as "contain" places it.
 - Limits: source up to 8192×8192 per file (the decoder refuses a larger image before
   allocating it: `PngError` code `size`); at most 1024 resulting frames; resulting pixel data
   (frames × W × H × 4) at most 256 MB; clear typed error otherwise.
