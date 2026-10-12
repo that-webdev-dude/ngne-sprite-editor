@@ -115,7 +115,7 @@ Runtime dependencies (the only ones allowed without a recorded decision):
 | UI state   | `zustand`                                          | Small, usable outside React for tool code             |
 | Primitives | `radix-ui`                                         | Accessible menus, dialogs, popovers, sliders          |
 | Icons      | `lucide-react`                                     | Consistent 16 px stroke set                           |
-| PNG        | `fast-png`                                         | Lossless straight-alpha RGBA8 without Canvas2D        |
+| PNG        | `fast-png` (encode); own decoder in `core/png`     | Lossless straight-alpha RGBA8 without Canvas2D        |
 | Zip        | `fflate`                                           | Project container, zip downloads                      |
 | GIF (M6)   | `gifenc`                                           | Small encoder; only for SE-063                        |
 
@@ -277,6 +277,11 @@ interface Command {
   always retained even when it alone exceeds the budget. Redo is cleared by a new command.
 - A command that cannot allocate memory aborts cleanly: document unchanged, typed error, toast.
 - `touched` drives compositor cache invalidation and viewport refresh (§5.3, §6.4).
+  `frameIds` and `layerIds` name every frame and layer whose composite can differ after the
+  command, including a cel the command creates or removes. `structure` is true when the list
+  of layers, frames or tags changes (an entry added, removed or reordered) or the document's
+  size changes; a command that only changes pixels or cels reports `structure: false`.
+  Document properties outside the composite (name, pivot) are not part of `touched`.
 - `DocSettings` and `ExportSettings` are the exception: they are view and output preferences,
   changed by plain setters that create no history entry (as in Aseprite, toggling the grid or
   onion skin is not undoable). Both are written whenever the document is saved or autosaved.
@@ -449,7 +454,10 @@ Reference hardware: §3. Document 256×256, 8 layers.
 
 If the stroke budget is unreachable (SE-002 question 1, or SE-015's measurement), SE-015
 implements the fallback: the in-progress stroke is echoed immediately on the Canvas2D overlay
-and cleared when the matching upload resolves.
+and cleared when the matching upload resolves. SE-002 question 2 recorded isolated pauses
+between publishes of 55–110 ms on Intel UHD during a continuous stream of replacements (about
+one per second, in the pattern of garbage collection), so SE-015's measurement covers one
+continuous stroke of at least 5 s and reports the longest gap beside the p95.
 
 ### 6.7 Tests against WebGPU canvases
 
@@ -647,7 +655,7 @@ Pipeline, in order:
 
 | Step        | Options                                                                                   | Default            |
 | ----------- | ----------------------------------------------------------------------------------------- | ------------------ |
-| 1 Decode    | PNG to straight RGBA8 with `fast-png` (no premultiplication)                              | —                  |
+| 1 Decode    | PNG to straight RGBA8 with the `core/png` decoder (asynchronous, no premultiplication)    | —                  |
 | 2 Region    | Whole image or crop rectangle                                                             | Whole image        |
 | 3 Cells     | Single sprite; grid (cell W×H or columns×rows, offset, spacing, skip empty); one cell per file | Single sprite |
 | 4 Size      | **Target sprite size W×H**; fit: stretch, contain, cover                                  | Document size or 32×32 |
@@ -673,8 +681,12 @@ Rules:
 - Placing into an existing document requires the target size to equal the document size.
 - "Keep source as reference" is available for single-sprite imports only. It adds a reference
   layer positioned and scaled so the cropped region overlays the canvas exactly.
-- Limits: source up to 8192×8192 per file; at most 1024 resulting frames; resulting pixel data
+- Limits: source up to 8192×8192 per file (the decoder refuses a larger image before
+  allocating it: `PngError` code `size`); at most 1024 resulting frames; resulting pixel data
   (frames × W × H × 4) at most 256 MB; clear typed error otherwise.
+- Decoder (SE-005): `fast-png` 8.0.0 cannot read interlaced images below 8 bits per sample and
+  returns a zero-padded buffer for image data cut short, so `decodePng` is the project's own
+  decoder over `DecompressionStream` and returns a promise. `encodePng` uses `fast-png`.
 
 ## 9. NGNE asset export (C1)
 

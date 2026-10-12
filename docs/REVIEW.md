@@ -195,7 +195,42 @@ Measured 2026-10-11 on Intel UHD and RTX 4060; questions 1–7 and 9–11 met th
 | 4 Sizing strategy | (a) and (b) both go on both GPUs | §6.4 Lifecycle: (a) renderer replacement is the sizing strategy; the fixed oversized canvas is not adopted | (a) adopted | 2026-10-12 |
 | 8 Device loss | No-go on both GPUs: status polling on a 1 s timer redrew an idle viewport after 0/5 (Intel UHD) and 1/5 (RTX 4060) losses | §6.4 rendering bullet and §6.8 "No recovery event": a read also treats `renderer.sprites === 0` after a draw that submitted sprites as a loss. Measured: 5/5 losses redrawn, slowest 945 ms (Intel UHD) and 1047 ms (RTX 4060) against 2 s. Relies on an NGNE 0.2.1 implementation detail | Fallback adopted | 2026-10-12 |
 
+| 2 Single-flight queue | Go in the recorded run (largest gap 99.4 ms against 100 ms). Five reruns on Intel UHD: 55.4, 58.2, 56.0, 109.5 and 58.7 ms, so one run in six is over the limit. The pauses come about once a second and lengthen through the stream (garbage collection in the spike page); the queue published about 400 times a second in every run with no stale render | §6.6: the pauses are recorded, and SE-015's stroke measurement covers a continuous stroke of at least 5 s and reports the longest gap; the stroke echo is the fallback. SE-015 acceptance amended to match | Kept as go; delegated to the orchestrator by the owner | 2026-10-12 |
+
 Gate G0: Passed 2026-10-12 (every question go, or amended as above).
+
+## Checkpoint B decisions (run 1, M0)
+
+The owner delegated these to the orchestrator on 2026-10-12 after the M0 tickets of run 1.
+Each row is a finding of a wave review or of an implementing agent's report.
+
+| # | Finding | Decision | Applied in |
+| - | ------- | -------- | ---------- |
+| B1 | `eslint .` on `main` linted the agent worktrees under `.claude/` | `.claude` is ignored by ESLint | `eslint.config.js` |
+| B2 | SE-006's shell test asserted an exact button count, which every ticket adding a shell control had to edit | The count is now "more than 20"; the assertion that matters (no target under 24×24 px) is unchanged | `tests/e2e/se-006-gallery.spec.ts` |
+| B3 | Placeholder assertions of earlier tickets block the ticket that fills the placeholder (three cases in run 1: smoke test, menu bar, viewport) | Standing exception to "never weaken a test", limited to the placeholder assertion and listed in the report | `AGENTS.md`, "Working on a ticket" |
+| B4 | `decodePng` is the project's own asynchronous decoder (`fast-png` 8.0.0 failed two SE-005 acceptance items); the SPEC still named `fast-png` | Accepted. Dependants await it | SPEC §4, §8 |
+| B5 | The decoder had no size cap: rejecting a malformed 16384×8192 file took 1.04 s against SE-005's 1 s item | The decoder refuses more than 8192 px per side (the §8 source limit) before allocating, with `PngError` code `size` | `src/core/png`, `tests/unit/se-005-png.test.ts`, SPEC §8 |
+| B6 | `PixelBuffer` was declared twice, in `core/model` and `core/pixels` | Declared once in `core/model` (SPEC §5.1); `core/pixels` re-exports it | `src/core/pixels/buffer.ts` |
+| B7 | SPEC §5.1 "invariants asserted after every command in development builds" had no owning ticket | The sessions store asserts them after every do, undo and redo when `import.meta.env.DEV` is set; a violation throws where the command ran | `src/app/state/sessions.ts`, `tests/unit/se-007-invariants.test.ts` |
+| B8 | `touched.structure` had no definition | Defined: true when the list of layers, frames or tags changes or the document's size changes; pixel and cel changes report it false | SPEC §5.2 |
+| B9 | `src/app/preferences` imported the storage helper from `src/ui`, against the direction of SPEC §5 | The helper moved to `src/app/platform/storage.ts`; `ui` imports it from `app` | `src/app/platform`, six import lines |
+| B10 | SE-064 expected the theme in the SE-007 preference store; it lives in SE-006's theme store | The theme store stays the single owner; SE-064 edits the theme through it | SE-064 scope |
+| B11 | SE-008's dialog host is mounted inside the menu-bar region: if that region fails, New sprite and Sprite properties do nothing | Moved to the app root with its own boundary by the next dialog ticket | SE-034 scope and acceptance |
+| B12 | SE-008's pivot fields round to hundredths | Four decimals on entry; arrow keys keep the 0.01 step | SE-034 scope and acceptance |
+| B13 | SE-007's chord E2E cannot see a chord Chrome keeps for itself (Playwright injects keys below the browser's accelerators) | Hand check by the owner at checkpoint D, "Alt (hold)" and F6 first | EXECUTION.md, checkpoint D |
+| B14 | SE-002 question 4: "never blank" was sampled by screenshots about every 40 ms | Accepted as a limit of the method; the replacement order of SPEC §6.4 is what prevents a blank | SE-002 deliverable, Outcome |
+| B15 | SE-006's two gallery axe tests ran about 26–30 s against the 30 s default (owner decision of 2026-10-12: 120 s for those two tests); a cold dev server took over 5 s to serve the gallery once; `se-001-lint-boundaries` timed out twice on a cold ESLint start | Playwright: test timeout 30 s locally and 120 s in CI, assertion timeout 10 s locally and 20 s in CI. The lint boundary tests get 60 s. No assertion changed | `playwright.config.ts`, `tests/unit/se-001-lint-boundaries.test.ts` |
+
+Not decided here, left as they are:
+
+- Ctrl+Alt+N cannot open New sprite on a keyboard layout where AltGr+N types a character
+  (SE-007 keymap rule: characters typed with AltGr are never chords). File → New Sprite and
+  the empty state remain.
+- A stored preference record of a newer version than the code knows reads as defaults and is
+  overwritten by the next change.
+- The number field shows a size message when the value is applied (Enter, blur, arrows), not
+  on each keystroke; no invalid size can be created.
 
 ## Descoped tickets
 

@@ -25,6 +25,14 @@ amendments")
   bullet is unchanged.
 - Question 8: the candidate of section 4.8 (`renderer.sprites === 0` after a draw) is adopted
   as the fallback; SPEC §6.4 and §6.8 are amended.
+- Question 2: kept as go. Five reruns on Intel UHD (section 4.2) show isolated pauses between
+  publishes of 55–110 ms, one of them over the 100 ms limit; they follow the pattern of
+  garbage collection, not of queue starvation. SPEC §6.6 records them, and SE-015's stroke
+  measurement must cover a stroke long enough to include them; the stroke echo of §6.6 is
+  the fallback if it misses the budget.
+- Question 4, limit of the method: "never blank" was sampled by screenshots about every
+  40 ms, so a shorter blank can be missed. The replacement order of SPEC §6.4 (swap only
+  after the new canvas has drawn) is what prevents one; no further check is planned.
 - Gate G0: Passed 2026-10-12.
 
 Text between `<!-- generated:… -->` markers is written by `spikes/ngne/runner/tables.ts` from
@@ -227,6 +235,26 @@ Result: **go**. Intel UHD go · RTX 4060 go · SwiftShader go (recorded, does no
 
 Every check held on the GPUs measured.
 <!-- generated:q2:end -->
+
+Reruns on Intel UHD (2026-10-12, orchestrator, alone; `--only=2`, files
+`docs/spikes/data/se-002-intel-uhd-q2-rerun-1…5.json`), because the recorded largest gap is a
+single sample 0.6 ms under the limit:
+
+| Run      | Publishes in 5 s | Median / p99 gap (ms) | Gaps over 25 ms (ms)          | Largest (ms) | By the 100 ms limit |
+| -------- | ---------------- | --------------------- | ----------------------------- | ------------ | ------------------- |
+| Recorded | 2005             | 2 / 7.2               | 32.9, 30.8, 28.9, 99.4, 55.2  | 99.4         | go                  |
+| Rerun 1  | 2010             | 2 / 7.6               | 32.6, 29.6, 44.6, 48.8, 55.4  | 55.4         | go                  |
+| Rerun 2  | 2002             | 2 / 8.5               | 35.4, 28.7, 45.3, 50.6, 58.2  | 58.2         | go                  |
+| Rerun 3  | 2016             | 2 / 6.7               | 28.6, 30.5, 40.7, 56.0, 54.6  | 56.0         | go                  |
+| Rerun 4  | 1994             | 2 / 7.8               | 29.8, 39.0, 109.5, 58.9       | 109.5        | no-go               |
+| Rerun 5  | 2019             | 2 / 6.9               | 30.4, 44.8, 55.6, 58.7        | 58.7         | go                  |
+
+- Every run has four or five pauses, about one per second, that lengthen as the stream goes
+  on. That is the pattern of garbage collection in a page that builds 400 bitmaps a second,
+  not of a queue that stops publishing: the queue published about 400 times a second in every
+  run, with no stale render.
+- By the letter one run in six exceeds the limit, so the result is not robust. The decision
+  and its consequence are recorded under "Outcome" at the top and in REVIEW.md.
 
 Consequence for the spec
 
@@ -679,6 +707,7 @@ Consequence for the spec
 | `docs/spikes/data/se-002-swiftshader.json`  | SwiftShader run (recorded)                |
 | `docs/spikes/data/se-002-intel-uhd.json`    | Intel UHD run (written by the orchestrator) |
 | `docs/spikes/data/se-002-rtx-4060.json`     | RTX 4060 run (written by the orchestrator)  |
+| `docs/spikes/data/se-002-intel-uhd-q2-rerun-1…5.json` | Question 2 only, five reruns on Intel UHD (section 4.2); not read by `tables.ts` |
 
 Structure (`spikes/ngne/lib/types.ts`, `SpikeData`):
 

@@ -58,7 +58,7 @@ merge two runs into one.
 | A  | Run 0 | `npm ci && npm run check && npm run test:e2e` pass locally; the commit is pushed and CI is green on GitHub (A8). Pushing is the owner's action |
 | B  | Run 1 | `docs/spikes/SE-002-ngne-integration.md`: every question has numbers from both GPUs; G0 state in README; any SPEC §6/§9 amendment and its REVIEW.md record |
 | C  | Run 2 | Draw by hand in the dev build (pencil, eraser, shapes, undo). Stroke latency record in `docs/perf/`; G1 and G2 states in README |
-| D  | Run 3 | Hand test of timeline, selection, save/open, import, export and preview. Ticket index: every W10–W13 ticket Done or its unmet acceptance items listed |
+| D  | Run 3 | Hand test of timeline, selection, save/open, import, export and preview. Every chord of SPEC §7.8 pressed by hand in Chrome, "Alt (hold)" and F6 first: the SE-007 E2E cannot see a chord the browser keeps for itself; a chord that does not arrive gets an alternate in SPEC §7.8. Ticket index: every W10–W13 ticket Done or its unmet acceptance items listed |
 | E  | Run 4 | SE-071 audit and SE-072 install record. The release tag and the deployment need written owner approval (SE-073 acceptance); the run stops before both |
 
 ## Orchestration

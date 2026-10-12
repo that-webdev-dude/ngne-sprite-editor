@@ -29,6 +29,10 @@
 - Done means every acceptance item is backed by a named test or a recorded measurement, and
   `npm run check` plus the ticket's E2E files pass. Never weaken, skip or delete a test to get
   there.
+- One exception: an earlier ticket's assertion about a placeholder (a region that is still
+  empty, placeholder text) may be updated by the ticket whose scope fills that placeholder.
+  Change only that assertion, keep it as strict as before, and list the before and after
+  lines in the report.
 
 ## Parallel work
 

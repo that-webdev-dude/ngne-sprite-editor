@@ -152,6 +152,13 @@ Scope
   reference stays over the same content; flip and rotate leave reference layers untouched.
 - Pivot stays normalized. Linked cels stay linked.
 - Dialogs for canvas size and sprite size.
+- Dialog host (from the SE-008 review): the host that renders command dialogs moves out of the
+  menu-bar region to the app root, inside its own error boundary, and dialogs register from
+  their own module; a request made while no host is mounted is answered at once instead of
+  staying pending.
+- Sprite properties, pivot fields (from the SE-008 review): numeric entry keeps four decimals
+  (arrow keys still step by 0.01), so a pivot on a pixel boundary of a 1024 px sprite can be
+  entered.
 - Size guard: result must be within 1..1024 per side; memory guard per SPEC §5.1.
 
 Acceptance
@@ -163,3 +170,6 @@ Acceptance
 - Trim on a document whose content differs per frame trims to the union of all frames.
 - Invariant "every image has the document's dimensions" holds after each command and undo.
 - A sprite-wide command larger than the history budget is retained and undoable (SE-004 rule).
+- E2E: with the menu-bar region failed (SE-006 boundary harness), New sprite from the empty
+  state still opens its dialog and creates the document.
+- Typing 0.9688 into a pivot field stores 0.9688.

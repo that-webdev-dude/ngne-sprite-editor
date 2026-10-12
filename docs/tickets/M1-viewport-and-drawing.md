@@ -233,7 +233,9 @@ Acceptance
 - The brush cursor outline matches the painted footprint for sizes 1, 2, 3, 8 in both shapes;
   the system cursor is hidden over the document while a paint tool is active.
 - Performance record: stroke budget of SPEC §6.6 met at 256×256 on reference hardware, with or
-  without the echo fallback; numbers committed under `docs/perf/`.
+  without the echo fallback; numbers committed under `docs/perf/`. The benchmark includes one
+  continuous stroke of at least 5 s and records the longest pointer-to-submitted gap beside
+  the p95 (SPEC §6.6, SE-002 question 2).
 
 ---
 

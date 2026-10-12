@@ -131,9 +131,10 @@ Acceptance
 Scope
 - Command palette (Ctrl+K): fuzzy search over the registry, shows shortcuts and disabled state,
   recent commands first.
-- Preferences dialog editing the SE-007 preference store: theme, checkerboard colours and size,
+- Preferences dialog editing the SE-007 preference store: checkerboard colours and size,
   default grid, onion-skin defaults, default import settings, autosave on/off. (Each consumer
-  reads the store in its own ticket; this ticket only edits it.)
+  reads the store in its own ticket; this ticket only edits it.) The theme is edited through
+  the SE-006 theme store (`src/ui/theme`), which stays its single owner.
 - Shortcut sheet (`?`): generated from the registry, grouped by menu.
 
 Acceptance
