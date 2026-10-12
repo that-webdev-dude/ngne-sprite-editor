@@ -48,7 +48,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-004 | Commands, transactions and undo history           | L    | 003                                | —             | Done   |
 | SE-005 | Pixel buffers and lossless PNG codec              | M    | 001                                | —             | Done   |
 | SE-006 | Design tokens, UI primitives and app shell        | L    | 001                                | —             | Done   |
-| SE-007 | Editor state, command registry, keymap, menus and preference store | L | 003, 004, 006         | —             | Ready  |
+| SE-007 | Editor state, command registry, keymap, menus and preference store | L | 003, 004, 006         | —             | Done   |
 | SE-008 | New sprite, sprite properties and empty state     | M    | 006, 007                           | —             | Ready  |
 | **M1** | **[Viewport and drawing](M1-viewport-and-drawing.md)** |  |                                  |               |        |
 | SE-010 | CPU compositor                                    | M    | 003                                | —             | Ready  |
