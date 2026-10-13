@@ -31,6 +31,12 @@ export interface OpenDocument {
     /** The only way the session changes (SPEC §5.2). */
     readonly history: History;
     readonly view: ViewState;
+    /**
+     * Whether the view was ever given: by the `view` option of `open`, or by `setView`. A
+     * document whose view was never set is fitted and centred once the viewport knows its
+     * size (SPEC §6.4, `app/view/autoFit`); a view that was set is kept.
+     */
+    readonly viewSet: boolean;
     /** Original bytes of the reference images, by `ReferenceLayer.sourceId`. */
     readonly referenceSources: ReadonlyMap<string, Uint8Array>;
     /** `history.position` at the last save, or when the document was opened. */
@@ -145,6 +151,7 @@ export function createSessionsStore(): StoreApi<SessionsState> {
                 session,
                 history,
                 view: { ...DEFAULT_VIEW, ...options.view },
+                viewSet: options.view !== undefined,
                 referenceSources: new Map(options.referenceSources),
                 savedPosition: history.position,
                 savedExportSettings: snapshot(session.doc.exportSettings),
@@ -226,7 +233,7 @@ export function createSessionsStore(): StoreApi<SessionsState> {
             },
 
             setView(id, view) {
-                change(id, { view: { ...find(id).view, ...view } });
+                change(id, { view: { ...find(id).view, ...view }, viewSet: true });
             },
 
             setReferenceSource(id, sourceId, bytes) {

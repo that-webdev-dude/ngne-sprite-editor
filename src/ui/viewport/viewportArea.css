@@ -1,0 +1,44 @@
+/*
+ * SE-012: the viewport element, the focusable container of the NGNE canvas (and of the
+ * overlay canvas of SE-013). It takes the whole viewport region, as the element inside it
+ * does, so both have the same box.
+ */
+.viewport-area {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+}
+
+/*
+ * The probe has the same box and nothing else: it is there to be measured, also while no
+ * document is open. Out of the flow, so the empty state stays centred in the region.
+ */
+.viewport-probe {
+    position: absolute;
+    inset: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+/* A middle-drag pans. */
+.viewport-area[data-panning] {
+    cursor: grabbing;
+}
+
+/*
+ * Focus ring (DESIGN §3.3), keyboard focus only. The region clips a ring outside the element
+ * and the canvases would cover one drawn by the element itself, so the ring is drawn inside
+ * its edge, above them.
+ */
+:root[data-modality="keyboard"] .viewport-area:focus-visible {
+    outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+:root[data-modality="keyboard"] .viewport-area:focus-visible::after {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border: var(--focus-ring-width) solid var(--accent);
+    content: "";
+    pointer-events: none;
+}
