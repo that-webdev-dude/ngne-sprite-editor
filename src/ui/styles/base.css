@@ -86,3 +86,12 @@ svg.lucide {
         opacity: 0;
     }
 }
+
+/*
+ * The fade is an entrance only. Radix keeps a closing element in the page until its animation
+ * ends, and a fade-in that has not started yet (the first frame after opening was slow) holds
+ * a closed menu there; opened again in that time, the menu does not focus its first item.
+ */
+:root [data-state="closed"] {
+    animation: none;
+}

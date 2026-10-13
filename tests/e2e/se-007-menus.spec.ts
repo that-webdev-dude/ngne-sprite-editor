@@ -372,6 +372,24 @@ test("a command registered later takes its planned item and brings its shortcut"
     expect(await calls(page)).toEqual(["tiles.ngsprite", "se007.planned", "se007.planned"]);
 });
 
+test("a menu closed before its fade-in has started leaves the page at once and opens again on its first item", async ({
+    page,
+}) => {
+    await openEditor(page);
+    // The entrance animation starts late, as it does when the first frame after opening is
+    // slow. Radix keeps a closing element in the page until its animation ends.
+    await page.addStyleTag({ content: ".ui-menu { animation-delay: 2s !important; }" });
+    await menuTrigger(page, "File").focus();
+    await page.keyboard.press("Enter");
+    await expect(menuItem(page, "file.new")).toBeFocused();
+    await page.keyboard.press("Escape");
+    // Read once, not awaited: a closed menu that stayed would be gone two seconds later.
+    expect(await page.locator('[role="menu"]').count()).toBe(0);
+    await expect(menuTrigger(page, "File")).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(menuItem(page, "file.new")).toBeFocused();
+});
+
 test("a command that fails is reported by an error toast", async ({ page }) => {
     await openEditor(page);
     await page.evaluate(() => {
