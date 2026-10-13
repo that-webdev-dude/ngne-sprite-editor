@@ -1,0 +1,11 @@
+/* Key cap of the mockup's command palette trigger; also the keys of the shortcut sheet. */
+.ui-chord {
+    flex: none;
+    padding: 0 var(--space-4);
+    border: var(--border-width) solid var(--border-strong);
+    border-radius: var(--radius-control);
+    color: var(--text-muted);
+    font: inherit;
+    font-size: var(--font-size-label);
+    white-space: nowrap;
+}

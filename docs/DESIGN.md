@@ -124,7 +124,7 @@ tokens only. Dark is the default; light is a full second set under `[data-theme=
 | Component        | Notes                                                                                   |
 | ---------------- | --------------------------------------------------------------------------------------- |
 | Menu bar         | Radix Menubar; shortcuts right-aligned in `--text-muted`; disabled items stay visible   |
-| Command palette  | Ctrl+K; fuzzy search over the command registry; shows shortcut; Enter runs              |
+| Command palette  | Ctrl+K; fuzzy search over the command registry; shows menu, shortcut and disabled state (disabled commands are listed, inert); the commands last run from it come first (kept in `localStorage`); Enter runs |
 | Tool button      | 28 px; active = accent icon on `--bg-active`; tooltip with name and key after 400 ms    |
 | Icon button      | 24 px; hover `--bg-raised`; `aria-label` required                                       |
 | Number field     | Scrub by dragging the label; arrow keys ±1, Shift ±10; unit suffix muted                |
@@ -228,8 +228,8 @@ transient tool feedback in `--warn`.
 | Onion skin      | Popover  | Frames before/after, opacity, falloff, tint, placement, within tag              |
 | Replace colour  | Dialog   | From, to, tolerance, scope (selection, cel, frame, sprite)                      |
 | Recovery        | Dialog on launch | Recoverable documents with name, time, thumbnail; Recover / Discard     |
-| Preferences     | Dialog   | Theme, checkerboard, grid, onion skin defaults, import defaults, autosave       |
-| Shortcut sheet  | Dialog   | Generated from the command registry, grouped by menu                            |
+| Preferences     | Dialog   | Theme, checkerboard, grid, onion skin defaults, import defaults, autosave. A change applies at once; actions are Restore defaults and Close |
+| Shortcut sheet  | Dialog   | Generated from the command registry, grouped by menu; commands outside the menus under "Other" |
 | WebGPU required | Full window | What is missing, supported browsers, how to enable acceleration              |
 
 Only actions that undo cannot reverse confirm once: closing or replacing an unsaved document,

@@ -1,0 +1,72 @@
+/* SE-064: the shortcut sheet (DESIGN §7). */
+
+/* The list scrolls instead of the dialog body, so that it can take keyboard focus. */
+.shortcut-dialog .ui-dialog__body {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* The margin and the padding leave room for the focus ring inside the clipping body. */
+.shortcut-sheet {
+    flex: 0 1 auto;
+    min-height: 0;
+    margin: var(--space-4) calc(-1 * var(--space-4)) 0;
+    padding: var(--space-4);
+    overflow-y: auto;
+    border-radius: var(--radius-control);
+}
+
+.shortcut-sheet__columns {
+    columns: 2;
+    column-gap: var(--space-24);
+}
+
+.shortcut-sheet__group {
+    margin-bottom: var(--space-16);
+    break-inside: avoid;
+}
+
+.shortcut-sheet__heading {
+    margin-bottom: var(--space-4);
+    color: var(--text-muted);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight-strong);
+}
+
+.shortcut-sheet__rows {
+    margin: 0;
+}
+
+.shortcut-sheet__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-12);
+    min-height: var(--control-height);
+}
+
+.shortcut-sheet__title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.shortcut-sheet__keys {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-4);
+    margin: 0;
+}
+
+/* In the sheet the keys are the content, not a hint beside it. */
+.shortcut-sheet__keys .ui-chord {
+    color: var(--text);
+}
+
+.shortcut-sheet__hold {
+    color: var(--text-muted);
+    font-size: var(--font-size-label);
+}

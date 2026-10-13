@@ -76,6 +76,33 @@ export interface PreferenceStore {
     readonly values: StoreApi<Preferences>;
 }
 
+/** A numeric preference lies in `min..max`, both included. */
+export interface PreferenceRange {
+    readonly min: number;
+    readonly max: number;
+}
+
+/**
+ * The ranges of the numeric preferences. Stored values are checked against them, and the
+ * Preferences dialog (SE-064) offers the same ranges in its fields.
+ */
+export const PREFERENCE_RANGES = {
+    /** `checkerboard.size`. */
+    checkerboardSize: { min: 1, max: 64 },
+    /** `grid.width`, `grid.height`, `import.targetWidth`, `import.targetHeight`. */
+    side: { min: 1, max: 1024 },
+    /** `onion.before`, `onion.after`. */
+    onionFrames: { min: 0, max: 3 },
+    /** `onion.opacity`. */
+    onionOpacity: { min: 0, max: 255 },
+    /** `onion.falloff`, a fraction. */
+    onionFalloff: { min: 0, max: 1 },
+    /** `import.alphaThreshold`. */
+    alphaThreshold: { min: 1, max: 255 },
+    /** `import.colors`. */
+    importColors: { min: 2, max: 256 },
+} as const satisfies Record<string, PreferenceRange>;
+
 export function defaultPreferences(): Preferences {
     return {
         checkerboard: { colors: "theme", size: 8 },
@@ -111,14 +138,14 @@ function sameValue(a: unknown, b: unknown): boolean {
     );
 }
 
-function integer(min: number, max: number): Parser<number> {
+function integer({ min, max }: PreferenceRange): Parser<number> {
     return (value, fallback) =>
         typeof value === "number" && Number.isInteger(value) && value >= min && value <= max
             ? value
             : fallback;
 }
 
-function fraction(min: number, max: number): Parser<number> {
+function fraction({ min, max }: PreferenceRange): Parser<number> {
     return (value, fallback) =>
         typeof value === "number" && Number.isFinite(value) && value >= min && value <= max
             ? value
@@ -145,7 +172,7 @@ function fields<Value extends object>(parsers: {
     };
 }
 
-const colour = integer(0, 0xffffff);
+const colour = integer({ min: 0, max: 0xffffff });
 const checkerColours: Parser<CheckerboardPreference["colors"]> = (value, fallback) => {
     if (value === "theme") return value;
     if (!isRecord(value)) return fallback;
@@ -154,17 +181,21 @@ const checkerColours: Parser<CheckerboardPreference["colors"]> = (value, fallbac
     return a < 0 || b < 0 ? fallback : { a, b };
 };
 
-const side = integer(1, 1024);
+const side = integer(PREFERENCE_RANGES.side);
+const onionFrames = integer(PREFERENCE_RANGES.onionFrames);
 
 const PARSERS: { [Key in PreferenceKey]: Parser<Preferences[Key]> } = {
-    checkerboard: fields<CheckerboardPreference>({ colors: checkerColours, size: integer(1, 64) }),
+    checkerboard: fields<CheckerboardPreference>({
+        colors: checkerColours,
+        size: integer(PREFERENCE_RANGES.checkerboardSize),
+    }),
     grid: fields<GridPreference>({ width: side, height: side }),
     onion: fields<OnionPreference>({
         enabled: flag,
-        before: integer(0, 3),
-        after: integer(0, 3),
-        opacity: integer(0, 255),
-        falloff: fraction(0, 1),
+        before: onionFrames,
+        after: onionFrames,
+        opacity: integer(PREFERENCE_RANGES.onionOpacity),
+        falloff: fraction(PREFERENCE_RANGES.onionFalloff),
         tint: flag,
         placement: oneOf("behind", "front"),
         withinTag: flag,
@@ -173,8 +204,8 @@ const PARSERS: { [Key in PreferenceKey]: Parser<Preferences[Key]> } = {
         targetWidth: side,
         targetHeight: side,
         resample: oneOf("nearest", "area", "dominant"),
-        alphaThreshold: integer(1, 255),
-        colors: integer(2, 256),
+        alphaThreshold: integer(PREFERENCE_RANGES.alphaThreshold),
+        colors: integer(PREFERENCE_RANGES.importColors),
         dither: oneOf("none", "ordered", "floyd-steinberg"),
     }),
     autosave: fields<AutosavePreference>({ enabled: flag }),

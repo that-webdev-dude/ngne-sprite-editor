@@ -1,0 +1,49 @@
+/* SE-064: the Preferences dialog (DESIGN §7): a column of names and a column of controls. */
+.preferences {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--space-12) var(--space-16);
+    align-items: start;
+}
+
+/* The name sits on the line of the first row of its controls. */
+.preferences__label {
+    line-height: var(--control-height);
+}
+
+.preferences__group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    min-width: 0;
+}
+
+.preferences__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8) var(--space-12);
+    min-width: 0;
+}
+
+/* Hex text with the metrics of the number field (DESIGN §4). */
+.preferences__hex {
+    width: calc(var(--space-24) * 3);
+    height: var(--control-height);
+    padding: 0 var(--space-8);
+    border: var(--border-width) solid var(--border-input);
+    border-radius: var(--radius-control);
+    background: var(--bg-raised);
+    color: var(--text);
+    user-select: text;
+}
+
+/* The two checkerboard colours as the viewport draws them, in 8 px squares. */
+.preferences__checker {
+    flex: none;
+    width: calc(var(--space-24) * 2);
+    height: var(--control-height);
+    border: var(--border-width) solid var(--border-strong);
+    background: repeating-conic-gradient(var(--check-a) 0 25%, var(--check-b) 0 50%) 0 0 /
+        var(--space-16) var(--space-16);
+}

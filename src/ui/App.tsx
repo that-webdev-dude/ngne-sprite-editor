@@ -7,6 +7,7 @@ import { AppShell } from "./shell/AppShell";
 import { isWindowTooSmall } from "./shell/layout";
 import { WebGpuRequired } from "./shell/notices/WebGpuRequired";
 import { WindowTooSmall } from "./shell/notices/WindowTooSmall";
+import { AppSurfaces } from "./surfaces/AppSurfaces";
 import { UiRoot } from "./UiRoot";
 
 // Development route: left out of the production bundle.
@@ -33,11 +34,13 @@ function Editor() {
     if (gpu.status === "unsupported") {
         return <WebGpuRequired reason={gpu.reason} detail={gpu.detail} />;
     }
-    // The shell stays mounted while the notice covers it, so a resize loses no state.
+    // The shell stays mounted while the notice covers it, so a resize loses no state. The
+    // surfaces that commands open (command palette, Preferences, shortcut sheet) are outside it.
     return (
         <>
             <AppShell hidden={tooSmall} />
             {tooSmall ? <WindowTooSmall width={width} height={height} /> : null}
+            <AppSurfaces />
         </>
     );
 }

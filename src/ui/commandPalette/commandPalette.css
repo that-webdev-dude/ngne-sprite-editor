@@ -1,0 +1,154 @@
+/*
+ * SE-064: the command palette (DESIGN §4) and its trigger at the right of the menu bar
+ * (DESIGN §2).
+ */
+.command-palette-trigger {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-8);
+    height: var(--control-height);
+    margin-left: auto;
+    padding: 0 var(--space-8);
+    border-radius: var(--radius-control);
+    color: var(--text-muted);
+    white-space: nowrap;
+    transition:
+        background-color var(--motion-fast) var(--motion-ease),
+        color var(--motion-fast) var(--motion-ease);
+}
+
+/* The document name takes the free space on both of its sides and stays centred. */
+.document-name + .command-palette-trigger {
+    margin-left: 0;
+}
+
+.command-palette-trigger:hover:not(:disabled) {
+    background: var(--bg-raised);
+    color: var(--text);
+}
+
+.command-palette-trigger:disabled {
+    color: var(--text-faint);
+}
+
+/* A dialog in the upper part of the window: the list grows downwards under a fixed field. */
+.command-palette {
+    position: fixed;
+    top: 15vh;
+    right: 0;
+    left: 0;
+    z-index: 41;
+    display: flex;
+    flex-direction: column;
+    width: calc(100vw - var(--space-24) * 2);
+    max-width: 560px;
+    max-height: 70vh;
+    margin: 0 auto;
+    border: var(--border-width) solid var(--border-strong);
+    border-radius: var(--radius-surface);
+    background: var(--bg-panel);
+    box-shadow: var(--elevation);
+    color: var(--text);
+    animation: var(--surface-fade);
+}
+
+/* The search field: the bordered box is the input as the user sees it. */
+.command-palette__search {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-8);
+    height: var(--row-height);
+    margin: var(--space-8);
+    padding: 0 var(--space-8);
+    border: var(--border-width) solid var(--border-input);
+    border-radius: var(--radius-control);
+    background: var(--bg-raised);
+    color: var(--text-muted);
+}
+
+.command-palette__input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    user-select: text;
+}
+
+.command-palette__input::placeholder {
+    color: var(--text-muted);
+    opacity: 1;
+}
+
+/* The ring belongs to the bordered box, not to the borderless input inside it. */
+:root[data-modality="keyboard"] .command-palette__input:focus-visible {
+    outline: none;
+}
+
+:root[data-modality="keyboard"]
+    .command-palette__search:has(.command-palette__input:focus-visible) {
+    outline: var(--focus-ring-width) solid var(--accent);
+    outline-offset: var(--focus-ring-offset);
+}
+
+.command-palette__list {
+    flex: 1;
+    min-height: 0;
+    padding: 0 var(--space-4) var(--space-4);
+    overflow-y: auto;
+}
+
+.command-palette__option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+    height: var(--row-height);
+    padding: 0 var(--space-8);
+    border-radius: var(--radius-control);
+    white-space: nowrap;
+}
+
+/* Focus stays in the search field; the active row is its highlight, as in a menu. */
+.command-palette__option[aria-selected="true"] {
+    background: var(--bg-active);
+}
+
+.command-palette__title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.command-palette__group,
+.command-palette__shortcut {
+    flex: none;
+    color: var(--text-muted);
+}
+
+.command-palette__group {
+    font-size: var(--font-size-label);
+}
+
+.command-palette__shortcut {
+    margin-left: auto;
+}
+
+.command-palette__option--disabled,
+.command-palette__option--disabled .command-palette__group,
+.command-palette__option--disabled .command-palette__shortcut {
+    color: var(--text-faint);
+}
+
+.command-palette__empty {
+    padding: var(--space-4) var(--space-12) var(--space-12);
+    color: var(--text-muted);
+}
+
+/* The live region stays on the page while it is empty, so that its message is announced. */
+.command-palette__empty:empty {
+    padding: 0;
+}
