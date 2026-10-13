@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createPreferenceStore } from "../../src/app/preferences/preferences";
+import { createActiveComposites } from "../../src/app/state/composites";
 import { createSessionsStore } from "../../src/app/state/sessions";
 import { connectViewport, DEFAULT_VIEWPORT_THEME } from "../../src/app/viewport/viewportController";
 import { compositeFrame } from "../../src/core/composite";
@@ -19,17 +20,22 @@ function sprite(name: string, width = 4, height = 4): DocSession {
     return createDocument({ name, width, height }, sequentialIds(`${name}-`));
 }
 
+/** The view every document of these tests is opened with; what a new document gets is not theirs to say. */
+const VIEW = { scale: 3, originX: 7, originY: 5 };
+const VIEW_CALL = "view 3@7,5";
+
 function setup() {
     const sessions = createSessionsStore();
     const preferences = createPreferenceStore(null);
+    const composites = createActiveComposites(sessions);
     const viewport = new RecordingViewport();
-    const connection = connectViewport(viewport, { sessions, preferences });
-    return { sessions, preferences, viewport, connection };
+    const connection = connectViewport(viewport, { sessions, preferences, composites });
+    return { sessions, preferences, composites, viewport, connection };
 }
 
 /** Opens `session` and paints its first cel `colour` (0xRRGGBBAA): one history step. */
 function openPainted(store: ReturnType<typeof setup>, session: DocSession, colour: number) {
-    const document = store.sessions.getState().open(session);
+    const document = store.sessions.getState().open(session, { view: VIEW });
     const transaction = document.history.begin({
         layerId: session.activeLayerId,
         frameId: session.activeFrameId,
@@ -72,21 +78,27 @@ describe("connectViewport: what is on show", () => {
     it("shows a document that is already open when the viewport is connected", () => {
         const sessions = createSessionsStore();
         const session = sprite("early");
-        sessions.getState().open(session);
+        const { view } = sessions.getState().open(session, { view: VIEW });
         const viewport = new RecordingViewport();
-        connectViewport(viewport, { sessions, preferences: createPreferenceStore(null) });
+        connectViewport(viewport, {
+            sessions,
+            preferences: createPreferenceStore(null),
+            composites: createActiveComposites(sessions),
+        });
         expect(viewport.document).toMatchObject({ width: 4, height: 4 });
         expect(viewport.current).toBe(frameKey(session.activeFrameId));
-        expect(viewport.view).toEqual({ scale: 1, originX: 0, originY: 0 });
+        // The view of the document, whatever it was opened with.
+        expect(viewport.view).toBe(view);
+        expect(viewport.view).toEqual(VIEW);
     });
 
     it("passes a view change on, and nothing else for a change that is not the view's", () => {
         const { sessions, viewport } = setup();
         const session = sprite("hero");
-        const { id } = sessions.getState().open(session);
+        const { id } = sessions.getState().open(session, { view: VIEW });
         viewport.take();
         sessions.getState().setView(id, { scale: 4, originX: 12 });
-        expect(viewport.take()).toEqual(["view 4@12,0"]);
+        expect(viewport.take()).toEqual(["view 4@12,5"]);
         // Document settings, saving and reference sources are not the viewport's business.
         sessions.getState().updateDocSettings(id, (settings) => {
             settings.pixelGrid = !settings.pixelGrid;
@@ -99,7 +111,7 @@ describe("connectViewport: what is on show", () => {
     it("follows the active frame, whether a command or the session itself changes it", () => {
         const { sessions, viewport } = setup();
         const session = sprite("hero");
-        const { id, history } = sessions.getState().open(session);
+        const { id, history } = sessions.getState().open(session, { view: VIEW });
         const first = session.activeFrameId;
         viewport.take();
 
@@ -119,18 +131,20 @@ describe("connectViewport: what is on show", () => {
         expect(viewport.current).toBe(frameKey(first));
     });
 
-    it("follows the active session and stops listening to the one it left", () => {
+    it("follows the active session: the document first, then its frame and its view", () => {
         const store = setup();
         const { sessions, viewport } = store;
         const a = openPainted(store, sprite("a", 4, 4), 0xff0000ff);
         const b = openPainted(store, sprite("b", 6, 2), 0x00ff00ff);
         viewport.take();
 
+        // The frame key is named after the document: none of the document left is passed
+        // on in between, and the viewport forgets its own with `setDocument`.
         sessions.getState().activate(a.id);
         expect(viewport.take()).toEqual([
             "document 4x4",
             `current ${frameKey(a.session.activeFrameId)}`,
-            "view 1@0,0",
+            VIEW_CALL,
         ]);
         // A step of the document in the background does not reach the viewport.
         b.history.undo();
@@ -142,39 +156,40 @@ describe("connectViewport: what is on show", () => {
         expect(viewport.take()).toEqual([
             "document 6x2",
             `current ${frameKey(b.session.activeFrameId)}`,
-            "view 1@0,0",
+            VIEW_CALL,
         ]);
         sessions.getState().close(b.id);
-        expect(viewport.take()).toEqual(["document -", "current -"]);
+        expect(viewport.take()).toEqual(["document -"]);
+        expect(viewport.current).toBeNull();
     });
 
     it("treats the same file opened again as a new document", () => {
         const { sessions, viewport } = setup();
         const first = sprite("same");
-        sessions.getState().open(first);
+        sessions.getState().open(first, { view: VIEW });
         const before = viewport.document;
         viewport.take();
         // Same ids: only the session object tells the two apart.
-        sessions.getState().replaceActive(sprite("same"));
-        expect(viewport.take()).toEqual(["document 4x4", "current same-3:plain", "view 1@0,0"]);
+        sessions.getState().replaceActive(sprite("same"), { view: VIEW });
+        expect(viewport.take()).toEqual(["document 4x4", "current same-3:plain", VIEW_CALL]);
         expect(viewport.document).not.toBe(before);
     });
 });
 
 describe("connectViewport: history → composite cache → viewport", () => {
-    it("invalidates the touched frames and serves the new composite", () => {
+    it("invalidates the touched frames and serves the new composite from the shared cache", () => {
         const store = setup();
         const session = sprite("hero");
         const document = openPainted(store, session, 0xff0000ff);
-        const { viewport, connection } = store;
+        const { viewport, composites } = store;
         const key = frameKey(session.activeFrameId);
         expect(viewport.take().at(-1)).toBe(`invalidate ${key}`);
 
         const before = viewport.document?.pixels(key);
         expect([...(before?.data.slice(0, 4) ?? [])]).toEqual([255, 0, 0, 255]);
-        // The cache hands out the same buffer until the frame changes.
+        // The viewport reads the cache every other reader uses: the identical buffer.
         expect(viewport.document?.pixels(key)).toBe(before);
-        expect(connection.composites?.has(session.activeFrameId)).toBe(true);
+        expect(composites.cache?.get(session.activeFrameId)).toBe(before);
 
         const [cel] = [...session.doc.cels.values()];
         document.history.execute(
@@ -229,10 +244,32 @@ describe("connectViewport: history → composite cache → viewport", () => {
         expect(viewport.document?.pixels(frameKey(first, "before"))).toBeNull();
     });
 
+    it("passes on pixels written outside a command when they are reported to the cache", () => {
+        const store = setup();
+        const session = sprite("hero");
+        const document = openPainted(store, session, 0xff0000ff);
+        const { viewport, composites } = store;
+        const frameId = session.activeFrameId;
+        viewport.take();
+
+        const transaction = document.history.begin({ layerId: session.activeLayerId, frameId });
+        transaction.image.data.set([0, 255, 0, 255], 0);
+        composites.invalidate({
+            frameIds: [frameId],
+            layerIds: [session.activeLayerId],
+            structure: false,
+        });
+        expect(viewport.take()).toEqual([`invalidate ${frameKey(frameId)}`]);
+        expect([...(viewport.document?.pixels(frameKey(frameId))?.data.slice(0, 4) ?? [])]).toEqual(
+            [0, 255, 0, 255],
+        );
+        transaction.abort();
+    });
+
     it("reports the document's size as it is now", () => {
         const { sessions, viewport } = setup();
         const session = sprite("hero", 6, 4);
-        sessions.getState().open(session);
+        sessions.getState().open(session, { view: VIEW });
         expect(viewport.document).toMatchObject({ width: 6, height: 4 });
         session.doc.width = 9;
         session.doc.height = 7;
@@ -240,18 +277,17 @@ describe("connectViewport: history → composite cache → viewport", () => {
         expect(viewport.document?.height).toBe(7);
     });
 
-    it("keeps composites of the active document only", () => {
+    it("has no pixels for a document that is no longer the active one", () => {
         const store = setup();
-        expect(store.connection.composites).toBeNull();
         const a = openPainted(store, sprite("a"), 0xff0000ff);
-        const cacheA = store.connection.composites;
-        expect(cacheA?.doc).toBe(a.session.doc);
-        const b = openPainted(store, sprite("b"), 0x00ff00ff);
-        expect(store.connection.composites?.doc).toBe(b.session.doc);
-        // Back on the first document: a new cache, the old one was let go.
-        store.sessions.getState().activate(a.id);
-        expect(store.connection.composites?.doc).toBe(a.session.doc);
-        expect(store.connection.composites).not.toBe(cacheA);
+        const key = frameKey(a.session.activeFrameId);
+        const left = store.viewport.document;
+        expect(left?.pixels(key)).not.toBeNull();
+        // Another document is active: an upload of the first that starts late gets nothing,
+        // and no composite of it is made behind the cache's back.
+        openPainted(store, sprite("b"), 0x00ff00ff);
+        expect(left?.pixels(key)).toBeNull();
+        expect(store.composites.cacheOf(a.session)).toBeNull();
     });
 });
 
@@ -271,10 +307,15 @@ describe("connectViewport: checkerboard and theme", () => {
     });
 
     it("uses a stored checkerboard preference from the start", () => {
+        const sessions = createSessionsStore();
         const preferences = createPreferenceStore(null);
         preferences.set("checkerboard", { colors: { a: 1, b: 2 }, size: 3 });
         const viewport = new RecordingViewport();
-        connectViewport(viewport, { sessions: createSessionsStore(), preferences });
+        connectViewport(viewport, {
+            sessions,
+            preferences,
+            composites: createActiveComposites(sessions),
+        });
         expect(viewport.checker).toEqual({ a: 1, b: 2, size: 3 });
     });
 
@@ -302,8 +343,12 @@ describe("connectViewport: dispose", () => {
         document.history.undo();
         store.sessions.getState().setView(document.id, { scale: 2 });
         store.preferences.set("checkerboard", { colors: "theme", size: 2 });
+        store.composites.invalidate({
+            frameIds: [session.activeFrameId],
+            layerIds: [],
+            structure: false,
+        });
         store.sessions.getState().close(document.id);
         expect(store.viewport.take()).toEqual([]);
-        expect(store.connection.composites).toBeNull();
     });
 });

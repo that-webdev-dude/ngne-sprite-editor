@@ -3,7 +3,10 @@ import { readCanvas } from "./testing/readCanvas";
 import { oncePerMessage } from "./viewport/diagnostics";
 import { backingSize } from "./viewport/geometry";
 import { createStage, RendererInstance } from "./viewport/rendererInstance";
-import type { Scene } from "./viewport/rendererInstance";
+import { isHealthy, swapDecision } from "./viewport/replacement";
+import type { SwapDecision } from "./viewport/replacement";
+import { replaceSceneDocument } from "./viewport/viewportSlots";
+import type { Scene } from "./viewport/viewportSlots";
 import type {
     DeviceSize,
     ViewportChecker,
@@ -26,6 +29,8 @@ export type {
 export const RESIZE_QUIET_MS = 120;
 /** Interval of the status check while the page is visible (SPEC §6.4). */
 export const STATUS_CHECK_MS = 1000;
+/** How often a replacement that waits for its device to be recovered looks again. */
+const RECOVERY_POLL_MS = 20;
 
 export interface NgneViewportOptions {
     /**
@@ -156,21 +161,21 @@ export class NgneViewport implements ViewportPort {
 
     setDocument(document: ViewportDocument | null): void {
         if (document === this.#scene.document) return;
-        this.#scene.document = document;
-        this.#scene.epoch++;
-        for (const instance of this.#instances()) instance.documentChanged();
+        // The frame key goes with the document: `setCurrent` names the new one's.
+        replaceSceneDocument(this.#scene, document);
+        for (const instance of this.#instances()) instance.slots.documentChanged();
         this.#markDirty();
     }
 
     setCurrent(key: string | null): void {
         if (key === this.#scene.current) return;
         this.#scene.current = key;
-        for (const instance of this.#instances()) instance.sync();
+        for (const instance of this.#instances()) instance.slots.sync();
         this.#markDirty();
     }
 
     invalidate(keys: readonly string[] | "all"): void {
-        for (const instance of this.#instances()) instance.invalidate(keys);
+        for (const instance of this.#instances()) instance.slots.invalidate(keys);
     }
 
     setView(view: ViewportView): void {
@@ -190,7 +195,7 @@ export class NgneViewport implements ViewportPort {
         const now = this.#scene.checker;
         if (checker.a === now.a && checker.b === now.b && checker.size === now.size) return;
         this.#scene.checker = { a: checker.a, b: checker.b, size: checker.size };
-        for (const instance of this.#instances()) instance.sync();
+        for (const instance of this.#instances()) instance.slots.sync();
     }
 
     setBackground(colour: number): void {
@@ -253,20 +258,36 @@ export class NgneViewport implements ViewportPort {
         }, RESIZE_QUIET_MS);
     }
 
-    /** True when the instance on screen fits the host and its renderer still works. */
+    /**
+     * True when the instance on screen fits the host, its renderer still works and none of
+     * its slots has failed for good.
+     */
     #fits(instance: RendererInstance | null): boolean {
         return (
             instance !== null &&
             instance.width === this.#size.width &&
             instance.height === this.#size.height &&
             instance.status !== "failed" &&
-            instance.status !== "disposed"
+            instance.status !== "disposed" &&
+            !instance.stuck
         );
     }
 
     /**
+     * An instance cannot show the scene in full any more: an upload failed for good on it
+     * (SPEC §6.4: retried only on a fresh renderer). The one on screen is replaced; it asks
+     * once, and when the replacement cannot be made the status check tries again. One that
+     * is still being loaded is judged when it is loaded (`swapDecision`).
+     */
+    #stuck(instance: RendererInstance): void {
+        if (instance === this.#live) void this.#replace();
+    }
+
+    /**
      * Brings the renderer in line with the host's size: one replacement at a time, and again
-     * when the size changed or the renderer failed while one was under way.
+     * when the size changed or the renderer failed while one was under way. An attempt that
+     * ends without a new renderer on screen is not repeated here: the status check does that,
+     * once a second at most.
      */
     async #replace(): Promise<void> {
         if (this.#replacing) {
@@ -296,7 +317,9 @@ export class NgneViewport implements ViewportPort {
 
     /**
      * SPEC §6.4 replacement order: create on a new canvas, upload every slot, draw once, swap
-     * the canvases, dispose the old instance. Returns false when no renderer could be made.
+     * the canvases, dispose the old instance. Returns false when no new renderer got on
+     * screen: none could be made, or the one made could not draw. The canvases are swapped
+     * only after NGNE has submitted a frame on the new one.
      */
     async #replaceOnce(size: DeviceSize): Promise<boolean> {
         let next: RendererInstance | null;
@@ -309,6 +332,7 @@ export class NgneViewport implements ViewportPort {
                     },
                     onChange: () => this.#markDirty(),
                     onError: (error) => this.#diagnostic(error),
+                    onStuck: (stuck) => this.#stuck(stuck),
                     gate: (slot) => this.probe.uploadGate?.(slot),
                 });
                 liveRenderers++;
@@ -327,16 +351,28 @@ export class NgneViewport implements ViewportPort {
         // From here on the new instance follows every scene change, as the one on screen
         // does, and uploads what the old one had cached.
         this.#next = next;
-        next.seed(this.#live?.slots.keysByAge() ?? []);
-        next.sync();
-        await next.settle();
+        next.slots.seed(this.#live?.slots.frames.keysByAge() ?? []);
+        next.slots.sync();
+        const decision = await this.#loaded(next);
+        // `dispose` has ended the new instance with the viewport.
         if (this.#disposed) return false;
         this.#next = null;
+        if (decision === "abandon") {
+            this.#disposeInstance(next);
+            return false;
+        }
 
         // One task: the new canvas has drawn before it enters the document, and the old one
         // leaves in the same step, so the viewport is never blank.
         const old = this.#live;
-        const drawn = this.#submit(next);
+        if (!this.#submit(next)) {
+            // NGNE submitted nothing and has reported why: a canvas that has not drawn does
+            // not go on screen. The scene is still to be drawn on the old one.
+            this.#disposeInstance(next);
+            this.#dirty = true;
+            if (isHealthy(old)) this.#schedule();
+            return false;
+        }
         if (old && old.canvas.parentNode === this.#host) {
             this.#host.replaceChild(next.canvas, old.canvas);
         } else {
@@ -344,9 +380,23 @@ export class NgneViewport implements ViewportPort {
         }
         this.#live = next;
         if (old) this.#disposeInstance(old);
-        // The device can be lost while the instance loads: the draw is then tried again.
-        if (!drawn) this.#markDirty();
         return true;
+    }
+
+    /**
+     * Waits until a new instance is loaded — no upload in flight or waiting, and no device
+     * being recovered — and says what to do with it. A device lost while it loads is
+     * recovered by NGNE, slots included; until then the instance cannot draw, and the one on
+     * screen stays.
+     */
+    async #loaded(next: RendererInstance): Promise<SwapDecision> {
+        for (;;) {
+            await next.slots.settle();
+            if (this.#disposed || next.disposed) return "abandon";
+            const decision = swapDecision(next, this.#live);
+            if (decision !== "wait") return decision;
+            await new Promise((resolve) => setTimeout(resolve, RECOVERY_POLL_MS));
+        }
     }
 
     // --- Drawing on demand ---------------------------------------------------------------
@@ -477,9 +527,9 @@ export class NgneViewport implements ViewportPort {
                         !this.#dirty &&
                         !this.#replacing &&
                         this.#quiet === undefined &&
-                        !this.#live.queue.busy(),
+                        !this.#live.slots.queue.busy(),
                 ),
-                slots: read(() => this.#live?.shownKeys() ?? []),
+                slots: read(() => this.#live?.slots.shownKeys() ?? []),
             },
         );
     }

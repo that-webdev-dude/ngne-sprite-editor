@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { UploadQueue } from "../../src/engine/UploadQueue";
 import type { Upload } from "../../src/engine/UploadQueue";
-import { bitmap, FakeRenderer, flush } from "./se-011-support";
+import { bitmap, ends, FakeRenderer, flush } from "./se-011-support";
 import type { FakeBitmap } from "./se-011-support";
 
 // SE-011: the upload queue of SPEC §6.4 — single-flight and latest-wins per slot, the source
@@ -384,5 +384,138 @@ describe("UploadQueue: dispose and idle", () => {
         queue.dispose();
         await waiting;
         await queue.idle();
+    });
+
+    it("is not busy from the moment it is disposed, whatever is still inside texture()", async () => {
+        // The renderer does not reject on abort: the upload stays in flight after dispose.
+        const { renderer, queue, image, built, published, errors } = harness(
+            new FakeRenderer({ rejectsOnAbort: false }),
+        );
+        queue.request("ed:f:0", image("a"));
+        queue.request("ed:f:1", image("b"));
+        await flush();
+        queue.request("ed:f:1", image("waiting"));
+        expect(queue.busy()).toBe(true);
+        expect(queue.busy("ed:f:0")).toBe(true);
+        expect(queue.pending("ed:f:1")).toBe(true);
+
+        queue.dispose();
+        // In the same task: nothing here can publish any more.
+        expect(queue.disposed).toBe(true);
+        expect(queue.busy()).toBe(false);
+        expect(queue.busy("ed:f:0")).toBe(false);
+        expect(queue.busy("ed:f:1")).toBe(false);
+        expect(queue.pending("ed:f:1")).toBe(false);
+
+        // The loop a renderer instance waits in ends; it does not spin on a queue that says
+        // "busy" and "idle" at once.
+        let turns = 0;
+        while (queue.busy() && turns < 1000) {
+            turns++;
+            await queue.idle();
+        }
+        expect(turns).toBe(0);
+        await queue.idle();
+
+        // The calls settle in the background: bitmaps closed, nothing published or reported.
+        expect(built.map((source) => source.closed)).toEqual([false, false]);
+        renderer.calls[0]?.resolve();
+        renderer.calls[1]?.reject(new Error("WebGPU resource validation failed"));
+        await flush();
+        expect(built.map((source) => `${source.label}:${source.closed}`)).toEqual([
+            "a:true",
+            "b:true",
+        ]);
+        expect(published).toEqual([]);
+        expect(errors).toEqual([]);
+        expect(queue.published("ed:f:0")).toBeUndefined();
+        expect(queue.failed("ed:f:1")).toBe(false);
+        expect(renderer.calls).toHaveLength(2);
+    });
+
+    it("resolves idle() exactly when busy() turns false", async () => {
+        const { renderer, queue, image } = harness();
+        const seen: boolean[] = [];
+        queue.request("ed:f:0", image("a"));
+        void queue.idle().then(() => seen.push(queue.busy()));
+        await flush();
+        expect(seen).toEqual([]);
+        renderer.inFlight("ed:f:0").resolve();
+        await flush();
+        // Busy was already false when the waiter ran.
+        expect(seen).toEqual([false]);
+    });
+});
+
+describe("UploadQueue: callbacks that throw", () => {
+    it("reports a throwing onPublish and keeps the slot in use", async () => {
+        const reported = vi.spyOn(console, "error").mockImplementation(() => {});
+        const renderer = new FakeRenderer();
+        const failure = new Error("the listener failed");
+        let calls = 0;
+        const queue = new UploadQueue<string>({
+            target: renderer,
+            onPublish: () => {
+                calls++;
+                if (calls === 1) throw failure;
+            },
+        });
+        queue.request("ed:f:0", () => ({ bitmap: bitmap("a"), tag: "a" }));
+        await flush();
+        queue.request("ed:f:0", () => ({ bitmap: bitmap("b"), tag: "b" }));
+        renderer.inFlight("ed:f:0").resolve();
+        await flush();
+
+        // Reported, not lost as an unhandled rejection; the upload itself went through.
+        expect(reported.mock.calls.map((call) => call[1])).toEqual([failure]);
+        expect(queue.published("ed:f:0")).toBe("a");
+        expect(queue.failed("ed:f:0")).toBe(false);
+        // The request that waited behind it runs, and the queue comes to rest.
+        expect(renderer.calls.map((call) => call.source.label)).toEqual(["a", "b"]);
+        renderer.inFlight("ed:f:0").resolve();
+        expect(await ends(() => queue.idle())).toBe(true);
+        expect(queue.busy()).toBe(false);
+        expect(queue.published("ed:f:0")).toBe("b");
+        expect(calls).toBe(2);
+
+        // And the slot takes a later request.
+        queue.request("ed:f:0", () => ({ bitmap: bitmap("c"), tag: "c" }));
+        await flush();
+        renderer.inFlight("ed:f:0").resolve();
+        await flush();
+        expect(queue.published("ed:f:0")).toBe("c");
+        reported.mockRestore();
+    });
+
+    it("reports a throwing onError and still comes to rest", async () => {
+        const reported = vi.spyOn(console, "error").mockImplementation(() => {});
+        const renderer = new FakeRenderer();
+        const failure = new Error("the error handler failed");
+        const queue = new UploadQueue<string>({
+            target: renderer,
+            onError: () => {
+                throw failure;
+            },
+        });
+        // Once for a builder that throws, once for a rejected upload.
+        queue.request("ed:f:0", () => {
+            throw new Error("no pixels");
+        });
+        queue.request("ed:f:1", () => ({ bitmap: bitmap("b"), tag: "b" }));
+        await flush();
+        renderer.inFlight("ed:f:1").reject(new Error("WebGPU resource validation failed"));
+        expect(await ends(() => queue.idle())).toBe(true);
+
+        expect(reported.mock.calls.map((call) => call[1])).toEqual([failure, failure]);
+        expect(queue.busy()).toBe(false);
+        expect(queue.failed("ed:f:0")).toBe(false);
+        expect(queue.failed("ed:f:1")).toBe(true);
+        // The slot whose builder threw is usable.
+        queue.request("ed:f:0", () => ({ bitmap: bitmap("a"), tag: "a" }));
+        await flush();
+        renderer.inFlight("ed:f:0").resolve();
+        await flush();
+        expect(queue.published("ed:f:0")).toBe("a");
+        reported.mockRestore();
     });
 });

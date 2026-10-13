@@ -33,6 +33,7 @@ export interface UploadQueueOptions<Tag> {
     /**
      * A builder threw, or `texture()` rejected for a reason other than "superseded", an abort
      * or a disposed renderer. Called once per failure; the upload is not tried again.
+     * `failed(slot)` tells the two apart: it is true only after a rejected `texture()`.
      */
     onError?(slot: string, error: unknown): void;
 }
@@ -66,6 +67,12 @@ interface SlotState<Tag> {
     failed: boolean;
 }
 
+type Outcome<Tag> =
+    | { kind: "published"; tag: Tag }
+    | { kind: "ignored" }
+    /** "failed": `texture()` rejected. "unbuilt": the builder threw. */
+    | { kind: "failed" | "unbuilt"; error: unknown };
+
 function messageOf(error: unknown): string {
     if (typeof error === "object" && error !== null && "message" in error) {
         return String(error.message);
@@ -85,10 +92,17 @@ function isAbort(error: unknown): boolean {
  * - One upload in flight per slot. A request made meanwhile waits; a newer one replaces it.
  *   Slots do not wait for each other.
  * - The source bitmap is closed when its upload settles.
- * - A rejection with "superseded", an abort, or anything after `dispose` is ignored. Any other
- *   rejection goes to `onError` once and marks the slot failed: requests for it are dropped
- *   from then on, because it is retried only on a fresh renderer (with a fresh queue).
+ * - A rejection with "superseded" or an abort is ignored. Any other rejection goes to
+ *   `onError` once and marks the slot failed: requests for it are dropped from then on,
+ *   because it is retried only on a fresh renderer (with a fresh queue).
  * - `published(slot)` changes only when an upload resolves.
+ * - `busy()` is true exactly while an upload that can still publish is in flight or waiting,
+ *   and `idle()` resolves exactly when it is false, so `while (queue.busy()) await
+ *   queue.idle()` always ends.
+ * - The queue ends with its renderer: after `dispose` nothing is published and no callback
+ *   is called, and it is not busy. Calls already inside `texture()` settle on their own;
+ *   their bitmaps are still closed.
+ * - A callback that throws is written to the console and does not stop its slot.
  */
 export class UploadQueue<Tag> {
     readonly stats: UploadQueueStats = {
@@ -112,6 +126,11 @@ export class UploadQueue<Tag> {
         this.#target = options.target;
         this.#onPublish = options.onPublish;
         this.#onError = options.onError;
+    }
+
+    /** True after `dispose`. */
+    get disposed(): boolean {
+        return this.#disposed;
     }
 
     /**
@@ -142,8 +161,12 @@ export class UploadQueue<Tag> {
         return this.#slots.get(slot)?.queued != null;
     }
 
-    /** True while an upload of `slot` is in flight or waiting. */
+    /**
+     * True while an upload that can still publish is in flight or waiting, for `slot` or for
+     * any slot. False at once after `dispose`, whatever is still inside `texture()`.
+     */
     busy(slot?: string): boolean {
+        if (this.#disposed) return false;
         if (slot !== undefined) return this.#slots.get(slot)?.running ?? false;
         for (const state of this.#slots.values()) if (state.running) return true;
         return false;
@@ -154,15 +177,17 @@ export class UploadQueue<Tag> {
         return this.#slots.get(slot)?.failed ?? false;
     }
 
-    /** Resolves when no slot has an upload in flight or waiting; at once after `dispose`. */
+    /** Resolves when `busy()` is false: at once when it already is. */
     idle(): Promise<void> {
-        if (this.#disposed || !this.busy()) return Promise.resolve();
+        if (!this.busy()) return Promise.resolve();
         return new Promise((resolve) => this.#waiters.push(resolve));
     }
 
     /**
      * Ends the queue with its renderer: waiting requests are forgotten, uploads in flight are
-     * aborted and whatever they settle with is ignored. Their bitmaps are still closed.
+     * aborted, nothing is published and no callback is called from here on. `busy()` is
+     * false and every `idle()` resolves, at once. A call already inside `texture()` settles
+     * on its own and its bitmap is closed then.
      */
     dispose(): void {
         if (this.#disposed) return;
@@ -185,6 +210,15 @@ export class UploadQueue<Tag> {
         for (const resolve of this.#waiters.splice(0)) resolve();
     }
 
+    /** A callback of the owner. One that throws is reported and does not stop the slot. */
+    #call(callback: () => void): void {
+        try {
+            callback();
+        } catch (error) {
+            console.error("UploadQueue: a callback threw.", error);
+        }
+    }
+
     #ignored(error: unknown): boolean {
         if (this.#disposed || this.#abort.signal.aborted || isAbort(error)) return true;
         // NGNE: "Texture replacement superseded: <id>", "WebGPU renderer is disposed".
@@ -193,54 +227,59 @@ export class UploadQueue<Tag> {
 
     async #run(slot: string, state: SlotState<Tag>): Promise<void> {
         state.running = true;
-        // Not in the task of the request: every listener of the change that asked for the
-        // upload has run before the builder reads the CPU state.
-        await Promise.resolve();
-        while (state.queued && !this.#disposed) {
-            const build = state.queued;
-            state.queued = null;
-            this.stats.started++;
-            const outcome = await this.#upload(slot, build);
-            if (outcome.kind === "published") {
-                state.published = { tag: outcome.tag };
-                this.stats.published++;
-                this.#onPublish?.(slot, outcome.tag);
-            } else if (outcome.kind === "ignored") {
-                this.stats.ignored++;
-            } else {
-                // A builder that threw says nothing about the renderer: only a failed
-                // `texture()` closes the slot.
-                if (outcome.kind === "failed") {
-                    state.failed = true;
-                    state.queued = null;
-                }
-                this.stats.failed++;
-                this.#onError?.(slot, outcome.error);
+        try {
+            // Not in the task of the request: every listener of the change that asked for
+            // the upload has run before the builder reads the CPU state.
+            await Promise.resolve();
+            while (state.queued && !this.#disposed) {
+                const build = state.queued;
+                state.queued = null;
+                this.stats.started++;
+                this.#settled(slot, state, await this.#upload(slot, build));
             }
+        } finally {
+            // Whatever happened above, the slot is not left running and waiters are told.
+            state.running = false;
+            if (this.#disposed) state.queued = null;
+            if (!this.busy()) this.#wake();
         }
-        state.queued = null;
-        state.running = false;
-        if (!this.busy()) this.#wake();
     }
 
-    async #upload(
-        slot: string,
-        build: UploadBuilder<Tag>,
-    ): Promise<
-        | { kind: "published"; tag: Tag }
-        | { kind: "ignored" }
-        | { kind: "failed" | "unbuilt"; error: unknown }
-    > {
+    /** Records what an upload ended with and tells the owner. Nothing after `dispose`. */
+    #settled(slot: string, state: SlotState<Tag>, outcome: Outcome<Tag>): void {
+        if (this.#disposed || outcome.kind === "ignored") {
+            this.stats.ignored++;
+            return;
+        }
+        if (outcome.kind === "published") {
+            const { tag } = outcome;
+            state.published = { tag };
+            this.stats.published++;
+            this.#call(() => this.#onPublish?.(slot, tag));
+            return;
+        }
+        // A builder that threw says nothing about the renderer: only a rejected `texture()`
+        // closes the slot.
+        if (outcome.kind === "failed") {
+            state.failed = true;
+            state.queued = null;
+        }
+        this.stats.failed++;
+        const { error } = outcome;
+        this.#call(() => this.#onError?.(slot, error));
+    }
+
+    async #upload(slot: string, build: UploadBuilder<Tag>): Promise<Outcome<Tag>> {
         let upload: Upload<Tag>;
         try {
             upload = await build();
         } catch (error) {
-            return this.#disposed ? { kind: "ignored" } : { kind: "unbuilt", error };
+            return { kind: "unbuilt", error };
         }
         try {
             if (this.#disposed) return { kind: "ignored" };
             await this.#target.texture(slot, upload.bitmap, this.#abort.signal);
-            return this.#disposed ? { kind: "ignored" } : { kind: "published", tag: upload.tag };
+            return { kind: "published", tag: upload.tag };
         } catch (error) {
             return this.#ignored(error) ? { kind: "ignored" } : { kind: "failed", error };
         } finally {

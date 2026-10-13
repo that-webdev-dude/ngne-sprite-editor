@@ -24,8 +24,10 @@ export interface ViewportDocument {
     readonly height: number;
     /**
      * The pixels of a frame key, straight RGBA8, or null when the document has no such frame
-     * (any more). Called when the upload of the key starts. The buffer must not be written
-     * to afterwards: a changed frame is a new buffer.
+     * (any more). Called when the upload of the key starts, never inside a setter. The
+     * pixels are copied in that same task (`createImageBitmap` of an `ImageData`), so the
+     * buffer may be written to again afterwards; the viewport shows the new pixels once it
+     * is told with `invalidate`.
      */
     pixels(key: string): PixelBuffer | null;
 }
@@ -56,7 +58,10 @@ export interface DeviceSize {
 
 /** The setters of `NgneViewport`: what the wiring in `app` drives. */
 export interface ViewportPort {
-    /** The document on show, or null for none. Forgets every cached frame. */
+    /**
+     * The document on show, or null for none. Forgets every cached frame and the frame key,
+     * which belonged to the document left: `setCurrent` names the new document's.
+     */
     setDocument(document: ViewportDocument | null): void;
     /** The key of the frame to draw, or null for the checkerboard alone. */
     setCurrent(key: string | null): void;

@@ -155,6 +155,45 @@ describe("FrameSlots: giving keys up", () => {
         expect(slots.reservedFor("new")).toBe(0);
     });
 
+    it("gives a reservation up when its image could not be made, so the key can be reserved again", () => {
+        const slots = new FrameSlots(2);
+        // First upload of "a" never arrived: nothing is shown, the slot is free again.
+        expect(slots.reserve("a")).toBe(0);
+        slots.unreserve(0);
+        expect(slots.reservedFor("a")).toBe(-1);
+        expect(slots.showing("a")).toBe(-1);
+        expect(slots.keysByAge()).toEqual([]);
+        expect(slots.reserve("a")).toBe(0);
+        slots.publish(0, image("a"), IDLE);
+        expect(slots.showing("a")).toBe(0);
+    });
+
+    it("stops showing a key whose refresh could not be made: those pixels are out of date", () => {
+        const slots = new FrameSlots(2);
+        load(slots, "a");
+        // "a" changed, and its new image could not be built.
+        slots.unreserve(0);
+        expect(slots.showing("a")).toBe(-1);
+        expect(slots.reservedFor("a")).toBe(-1);
+    });
+
+    it("keeps showing the old key of a slot whose re-keying could not be made", () => {
+        const slots = new FrameSlots(1);
+        load(slots, "old");
+        slots.reserve("new");
+        slots.unreserve(0);
+        // The texture is still the old frame's.
+        expect(slots.showing("old")).toBe(0);
+        expect(slots.reservedFor("new")).toBe(-1);
+        // The slot counts as free and is taken again, unless what it shows is kept.
+        expect(slots.reserve("next", ["old"])).toBe(-1);
+        expect(slots.reserve("next")).toBe(0);
+        slots.unreserve(5);
+        slots.unreserve(0);
+        slots.unreserve(0);
+        expect(slots.reservedFor("next")).toBe(-1);
+    });
+
     it("takes a disabled slot out of use", () => {
         const slots = new FrameSlots(2);
         load(slots, "a");

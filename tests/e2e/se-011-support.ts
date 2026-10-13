@@ -1,209 +1,43 @@
 import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
-// Declares `window.__ngneTest` and its `viewport` probe, the development-only test hooks.
-import type {} from "../../src/app/viewport/mountViewport";
 // Modules the page imports from the dev server, for the types of what they export.
 import type * as CoreFrames from "../../src/core/frames";
 import { openEditor, openSession } from "./se-007-support";
+import { installToolkit } from "./se-011-toolkit";
+import type { Capture, Crop, FrameTimes, Rect, Rgb, ToolkitOptions } from "./se-011-toolkit";
 
-// Shared helpers of the SE-011 specs: a page-side toolkit (canvas crops, a recorder of the
-// frames the viewport submits, the device tracker of SE-002 question 8), test documents
-// painted through the real history, and the image a document must produce.
+export type { Alive, CanvasEntry, Capture, Crop, FrameTimes, Rect, Rgb } from "./se-011-toolkit";
 
-export type Rgb = readonly [number, number, number];
+// Shared helpers of the SE-011 specs: opening the app or the harness page with the page-side
+// toolkit (se-011-toolkit.ts), test documents painted through the real history, and the
+// image a document must produce.
+
 export type Rgba = readonly [number, number, number, number];
 
-export interface Rect {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-}
-
-/** A rectangle of a canvas readback, RGBA bytes row by row. */
-export interface Crop extends Rect {
-    data: number[];
-}
-
-/** One frame the viewport submitted, as the recorder saw it in the task of its draw. */
-export interface Capture {
-    /** `submittedFrames` after this frame. */
-    serial: number;
-    /** Time of the animation frame the draw ran in (`document.timeline.currentTime`). */
-    stamp: number;
-    /** Milliseconds since the page loaded. */
-    at: number;
-    crop: Crop;
-}
-
-/** The animation frame an action ran in and the ones that followed. */
-export interface FrameTimes {
-    start: number;
-    stamps: number[];
-}
-
-interface Toolkit {
-    crop(image: ImageData, rect: Rect): Crop;
-    /** Pixels outside `rect` that are not exactly `colour`. */
-    outside(image: ImageData, rect: Rect, colour: Rgb): number;
-    /** Records a crop of every frame the viewport submits from now on. */
-    record(rect: Rect): void;
-    captures: Capture[];
-    /**
-     * Runs `action` at the start of an animation frame, where input events are handled, and
-     * resolves with the time of that frame and of the `frames` animation frames after it.
-     */
-    atFrameStart(action: () => void, frames: number): Promise<FrameTimes>;
-    /** Devices created by the page and not destroyed or lost. */
-    liveDevices(): number;
-    devicesCreated(): number;
-    /** `destroy()` on the newest live device, as a driver reset would (SE-002 question 8). */
-    loseDevice(): void;
-    /** Makes the next `count` `requestDevice` calls reject. */
-    refuseDevices(count: number): void;
-    /** Uploads wait while the gate is closed. */
-    closeUploadGate(): void;
-    openUploadGate(): void;
-}
-
-declare global {
-    interface Window {
-        __se011: Toolkit;
-    }
-}
-
-// The DOM library of the pinned TypeScript has no WebGPU types; only these fields are used.
-interface DeviceLike {
-    destroy(): void;
-    readonly lost: Promise<unknown>;
-}
-interface AdapterLike {
-    requestDevice(...args: unknown[]): Promise<DeviceLike>;
-}
-
-/** Runs in the page before the app loads. Self-contained: it is sent as source text. */
-function installToolkit(): void {
-    const devices: { device: DeviceLike; live: boolean }[] = [];
-    let refuse = 0;
-    const scope = globalThis as unknown as { GPUAdapter?: { prototype: AdapterLike } };
-    const prototype = scope.GPUAdapter?.prototype;
-    if (prototype) {
-        const original = prototype.requestDevice;
-        prototype.requestDevice = async function (this: AdapterLike, ...args: unknown[]) {
-            if (refuse > 0) {
-                refuse--;
-                throw new Error("se-011: requestDevice refused");
-            }
-            const device = await original.apply(this, args);
-            const entry = { device, live: true };
-            const destroy = device.destroy.bind(device);
-            device.destroy = () => {
-                entry.live = false;
-                destroy();
-            };
-            void device.lost.then(() => {
-                entry.live = false;
-            });
-            devices.push(entry);
-            return device;
-        };
-    }
-
-    let release: (() => void) | null = null;
-    const toolkit: Toolkit = {
-        crop(image, rect) {
-            const data: number[] = [];
-            for (let y = rect.y; y < rect.y + rect.height; y++) {
-                const start = (y * image.width + rect.x) * 4;
-                for (let at = start; at < start + rect.width * 4; at++) {
-                    data.push(image.data[at] ?? -1);
-                }
-            }
-            return { ...rect, data };
-        },
-        outside(image, rect, colour) {
-            let count = 0;
-            for (let y = 0; y < image.height; y++) {
-                for (let x = 0; x < image.width; x++) {
-                    const inside =
-                        x >= rect.x &&
-                        x < rect.x + rect.width &&
-                        y >= rect.y &&
-                        y < rect.y + rect.height;
-                    if (inside) continue;
-                    const at = (y * image.width + x) * 4;
-                    if (
-                        image.data[at] !== colour[0] ||
-                        image.data[at + 1] !== colour[1] ||
-                        image.data[at + 2] !== colour[2] ||
-                        image.data[at + 3] !== 255
-                    ) {
-                        count++;
-                    }
-                }
-            }
-            return count;
-        },
-        captures: [],
-        record(rect) {
-            const probe = window.__ngneTest?.viewport;
-            if (!probe) throw new Error("se-011: no viewport to record");
-            toolkit.captures = [];
-            probe.onFrame = (read) => {
-                toolkit.captures.push({
-                    serial: probe.submittedFrames,
-                    stamp: Number(document.timeline.currentTime),
-                    at: performance.now(),
-                    crop: toolkit.crop(read(), rect),
-                });
-            };
-        },
-        atFrameStart(action, frames) {
-            return new Promise((resolve) => {
-                requestAnimationFrame((start) => {
-                    action();
-                    const stamps: number[] = [];
-                    const next = (stamp: number) => {
-                        stamps.push(stamp);
-                        if (stamps.length < frames) requestAnimationFrame(next);
-                        else resolve({ start, stamps });
-                    };
-                    requestAnimationFrame(next);
-                });
-            });
-        },
-        liveDevices: () => devices.filter((entry) => entry.live).length,
-        devicesCreated: () => devices.length,
-        loseDevice() {
-            const entry = [...devices].reverse().find((candidate) => candidate.live);
-            if (!entry) throw new Error("se-011: no live device to destroy");
-            entry.device.destroy();
-        },
-        refuseDevices(count) {
-            refuse = count;
-        },
-        closeUploadGate() {
-            const probe = window.__ngneTest?.viewport;
-            if (!probe) throw new Error("se-011: no viewport to gate");
-            const opened = new Promise<void>((resolve) => {
-                release = resolve;
-            });
-            probe.uploadGate = () => opened;
-        },
-        openUploadGate() {
-            const probe = window.__ngneTest?.viewport;
-            if (probe) probe.uploadGate = null;
-            release?.();
-            release = null;
-        },
-    };
-    window.__se011 = toolkit;
-}
-
 /** Opens the app with the toolkit installed and waits for the shell and the test hook. */
-export async function openViewportEditor(page: Page): Promise<void> {
-    await page.addInitScript(installToolkit);
+export async function openViewportEditor(page: Page, options: ToolkitOptions = {}): Promise<void> {
+    await page.addInitScript(installToolkit, options);
     await openEditor(page);
+}
+
+/**
+ * Opens the harness page — an `NgneViewport` without the app — with the toolkit installed.
+ * With `manual` the page creates no viewport by itself: the spec calls `se011.create()`.
+ */
+export async function openHarness(
+    page: Page,
+    options: ToolkitOptions & { manual?: boolean } = {},
+): Promise<void> {
+    await page.addInitScript(installToolkit, { track: options.track });
+    await page.goto(`/tests/e2e/harness/se-011-viewport.html${options.manual ? "?manual" : ""}`);
+    await page.waitForFunction(() => window.se011 !== undefined);
+}
+
+/** Waits until the harness page's viewport is at rest. */
+export async function harnessSettled(page: Page): Promise<void> {
+    await page.waitForFunction(() => window.se011?.probe?.settled === true, undefined, {
+        polling: 50,
+    });
 }
 
 /** The element the viewport fills with its canvas. */
@@ -228,6 +62,25 @@ export async function settle(page: Page): Promise<void> {
         },
         undefined,
         { polling: 50 },
+    );
+}
+
+/**
+ * The viewport element's size in device pixels, as a `ResizeObserver` reports it for the
+ * `device-pixel-content-box`: the size the canvas backing must have (SPEC §6.4). Not the CSS
+ * size times the ratio, which is a fraction when a track of the shell has an odd CSS size.
+ */
+export function hostDeviceSize(page: Page): Promise<{ width: number; height: number }> {
+    return viewportHost(page).evaluate(
+        (host) =>
+            new Promise<{ width: number; height: number }>((resolve) => {
+                const observer = new ResizeObserver(([entry]) => {
+                    const box = entry?.devicePixelContentBoxSize[0];
+                    observer.disconnect();
+                    resolve({ width: box?.inlineSize ?? -1, height: box?.blockSize ?? -1 });
+                });
+                observer.observe(host, { box: "device-pixel-content-box" });
+            }),
     );
 }
 
@@ -494,15 +347,4 @@ export async function expectImage(
         [],
     );
     expect(result.outside).toBe(0);
-}
-
-/** The single colour of a crop, or null when its pixels are not all the same. */
-export function uniform(crop: Crop): number[] | null {
-    const first = crop.data.slice(0, 4);
-    for (let at = 0; at < crop.data.length; at += 4) {
-        for (let channel = 0; channel < 4; channel++) {
-            if (crop.data[at + channel] !== first[channel]) return null;
-        }
-    }
-    return first;
 }

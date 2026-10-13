@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 // The page imports this module from the dev server; here it is needed for its types.
+import type * as CompositesModule from "../../src/app/state/composites";
+import type * as LinkModule from "../../src/app/viewport/viewportLink";
 import type * as CoreHistory from "../../src/core/history";
+import type * as ThemeModule from "../../src/ui/theme/theme";
 import { collectErrors } from "./se-006-support";
 import {
     addFrame,
@@ -9,12 +12,12 @@ import {
     documentRect,
     expectImage,
     framesUntil,
+    hostDeviceSize,
     openDocument,
     openViewportEditor,
     paint,
     pattern,
     readback,
-    setView,
     settle,
     showFrame,
     shows,
@@ -132,13 +135,22 @@ test("switching between two frames that are both in the slot cache makes no text
     await paint(page, document.id, second);
     await settle(page);
     await expectImage(page, document, view, second);
-    // Adding the frame emptied the cache of the other one: the first visit uploads it.
-    const loaded = await page.evaluate(() => window.__ngneTest!.viewport!.textureCalls);
+    // Uploads are counted twice: by the viewport's own counter, and outside the code under
+    // test by the page's `copyExternalImageToTexture` calls, of which NGNE makes one per
+    // `texture()`.
+    const uploads = () =>
+        page.evaluate(() => ({
+            calls: window.__ngneTest!.viewport!.textureCalls,
+            copies: window.__se011.copies(),
+        }));
+    // Adding the frame emptied the cache of the other one: the first visit uploads it, and
+    // both counters see that upload.
+    const loaded = await uploads();
     await showFrame(page, document.id, document.frameId);
     await settle(page);
     await expectImage(page, document, view, first);
-    const calls = await page.evaluate(() => window.__ngneTest!.viewport!.textureCalls);
-    expect(calls).toBe(loaded + 1);
+    const cached = await uploads();
+    expect(cached).toEqual({ calls: loaded.calls + 1, copies: loaded.copies + 1 });
     expect(await page.evaluate(() => window.__ngneTest!.viewport!.slots)).toEqual(
         expect.arrayContaining([plain(document.frameId), plain(secondId)]),
     );
@@ -171,7 +183,8 @@ test("switching between two frames that are both in the slot cache makes no text
         expect(framesUntil(times, frames[0]?.stamp ?? Infinity)).toBe(1);
         await expectImage(page, document, view, images[target] ?? []);
     }
-    expect(await page.evaluate(() => window.__ngneTest!.viewport!.textureCalls)).toBe(calls);
+    // Four switches, each drawn: not one upload, by either count.
+    expect(await uploads()).toEqual(cached);
     expect(errors).toEqual([]);
 });
 
@@ -180,6 +193,14 @@ test("while a slot is re-keyed to another frame, the viewport shows the old fram
 }) => {
     const errors = collectErrors(page);
     await openViewportEditor(page);
+    // The theme's checkerboard colours as a custom choice: a change of theme then changes
+    // the workspace colour and nothing that is uploaded.
+    await page.evaluate(() =>
+        window.__ngneTest!.preferences.set("checkerboard", {
+            size: 8,
+            colors: { a: 0x3a3a3a, b: 0x4a4a4a },
+        }),
+    );
     const view = { scale: 8, originX: 48, originY: 32 };
     const size = 4;
     const document = await openDocument(page, { width: size, height: size }, view);
@@ -211,18 +232,30 @@ test("while a slot is re-keyed to another frame, the viewport shows the old fram
     }, rect);
     await showFrame(page, document.id, frameIds[8] ?? "");
 
-    // Draws made meanwhile, by a moved view and by direct readback, show frame 8 in full:
-    // the slot that is being re-keyed still holds frame 1's texture and is not drawn.
-    for (const shift of [5, 0, 3, 0]) {
-        const moved = { ...view, originX: view.originX + shift };
-        await setView(page, document.id, moved);
-        await page.evaluate(
-            () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0))),
-        );
-        const during = await readback(page, documentRect(document, moved));
-        expect(compare(during.crop, images[7] ?? [], size, view.scale)).toEqual([]);
-        expect(during.outside).toBe(0);
-    }
+    // Draws made meanwhile show frame 8 in full: the slot that is being re-keyed still holds
+    // frame 1's texture and is not drawn. The viewport is made to draw by changes of theme
+    // (the workspace colour around the document); it is also read back directly.
+    const setTheme = async (theme: "dark" | "light") => {
+        const drawn = (await captures(page)).length;
+        await page.evaluate(async (theme) => {
+            const path = "/src/ui/theme/theme.ts";
+            const module = (await import(/* @vite-ignore */ path)) as typeof ThemeModule;
+            module.setTheme(theme);
+        }, theme);
+        // The new workspace colour has been drawn.
+        await expect.poll(async () => (await captures(page)).length).toBeGreaterThan(drawn);
+    };
+    for (const theme of ["light", "dark", "light", "dark"] as const) await setTheme(theme);
+    const during = await readback(page, rect);
+    expect(compare(during.crop, images[7] ?? [], size, view.scale)).toEqual([]);
+    expect(during.outside).toBe(0);
+    // Every frame submitted while the upload waited is frame 8, in full: the one of the
+    // switch itself and those of the theme changes.
+    const waiting = await captures(page);
+    expect(waiting.length).toBeGreaterThanOrEqual(5);
+    expect(waiting.map((capture) => shows(capture.crop, images, size, view.scale))).toEqual(
+        waiting.map(() => 7),
+    );
     const slotsDuring = await page.evaluate(() => window.__ngneTest!.viewport!.slots);
     expect(slotsDuring).not.toContain(keys[8]);
     expect(slotsDuring[rekeyed]).toBe(keys[0]);
@@ -238,12 +271,13 @@ test("while a slot is re-keyed to another frame, the viewport shows the old fram
     expect(slotsAfter).not.toContain(keys[0]);
     expect(await page.evaluate(() => window.__ngneTest!.viewport!.textureCalls)).toBe(calls + 1);
 
-    // Every frame submitted from the switch on showed frame 8 or frame 9 in full, in that
-    // order, and frame 9 at least once. (Frames drawn with the view moved are not at `rect`.)
-    const seen = (await captures(page))
-        .map((capture) => shows(capture.crop, images, size, view.scale))
-        .filter((image) => image !== -1);
-    expect(seen.length).toBeGreaterThanOrEqual(2);
+    // Every frame submitted from the switch on showed frame 8 or frame 9 in full — never
+    // the checkerboard alone, never another frame, never a mix — in that order, and frame 9
+    // at least once.
+    const seen = (await captures(page)).map((capture) =>
+        shows(capture.crop, images, size, view.scale),
+    );
+    expect(seen.length).toBeGreaterThan(waiting.length);
     expect(new Set(seen)).toEqual(new Set([7, 8]));
     expect(seen).toEqual([...seen].sort((a, b) => a - b));
     expect(errors).toEqual([]);
@@ -348,9 +382,22 @@ test("the viewport follows the active session and gives its renderer up with the
         expect.not.arrayContaining([plain(a.frameId)]),
     );
 
+    // A switch uploads the checkerboard and the frame of the document switched to, and
+    // nothing for a key of the document left: no slot is reserved for it on the way.
+    const uploads = () =>
+        page.evaluate(() => ({
+            calls: window.__ngneTest!.viewport!.textureCalls,
+            copies: window.__se011.copies(),
+        }));
+    const before = await uploads();
     await page.evaluate((id) => window.__ngneTest!.sessions.getState().activate(id), a.id);
     await settle(page);
     await expectImage(page, a, viewA, imageA);
+    expect(await uploads()).toEqual({ calls: before.calls + 2, copies: before.copies + 2 });
+    expect(await page.evaluate(() => window.__ngneTest!.viewport!.slots)).toEqual([
+        plain(a.frameId),
+        ...Array.from({ length: 7 }, () => null),
+    ]);
     // One viewport, one renderer, for both documents.
     expect(await page.evaluate(() => window.__ngneTest!.viewport!.liveRenderers)).toBe(1);
     expect(await page.evaluate(() => window.__se011.liveDevices())).toBe(1);
@@ -363,5 +410,97 @@ test("the viewport follows the active session and gives its renderer up with the
     await expect(viewportHost(page)).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => window.__se011.liveDevices())).toBe(0);
     expect(await page.evaluate(() => window.__ngneTest!.viewport)).toBeUndefined();
+    expect(errors).toEqual([]);
+});
+
+test("other modules reach the active document's composites and the mounted viewport without the component", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openViewportEditor(page);
+    const view = { scale: 6, originX: 30, originY: 18 };
+    const document = await openDocument(page, { width: 6, height: 4 }, view);
+    const image = pattern(6, 4, 3);
+    await paint(page, document.id, image);
+    await settle(page);
+    await expectImage(page, document, view, image);
+
+    // The link: a viewport is mounted, and its element has this size in device pixels.
+    const link = () =>
+        page.evaluate(async () => {
+            const path = "/src/app/viewport/viewportLink.ts";
+            const { viewportLink } = (await import(/* @vite-ignore */ path)) as typeof LinkModule;
+            return { mounted: viewportLink.mounted, size: viewportLink.deviceSize };
+        });
+    expect(await link()).toEqual({ mounted: true, size: await hostDeviceSize(page) });
+    await page.setViewportSize({ width: 1400, height: 800 });
+    await settle(page);
+    expect(await link()).toEqual({ mounted: true, size: await hostDeviceSize(page) });
+
+    /** Writes the first texel inside an open stroke and tells the app in one of two ways. */
+    const stroke = (texel: number[], tell: "composites" | "viewport") =>
+        page.evaluate(
+            async ({ id, texel, tell }) => {
+                const compositesPath = "/src/app/state/composites.ts";
+                const linkPath = "/src/app/viewport/viewportLink.ts";
+                const { activeComposites } = (await import(
+                    /* @vite-ignore */ compositesPath
+                )) as typeof CompositesModule;
+                const { viewportLink, frameKey } = (await import(
+                    /* @vite-ignore */ linkPath
+                )) as typeof LinkModule;
+                const { documents } = window.__ngneTest!.sessions.getState();
+                const { session, history } = documents.find((entry) => entry.id === id)!;
+                const frameId = session.activeFrameId;
+                const layerId = session.activeLayerId;
+                const transaction = history.transaction ?? history.begin({ layerId, frameId });
+                transaction.image.data.set(texel, 0);
+                const touched = { frameIds: [frameId], layerIds: [layerId], structure: false };
+                if (tell === "composites") {
+                    // The cache drops the frame and the viewport hears of it from the cache.
+                    activeComposites.invalidate(touched);
+                } else {
+                    // The writer keeps the cache itself and tells only the viewport.
+                    activeComposites.cache!.invalidate(touched);
+                    viewportLink.invalidate([frameKey(frameId)]);
+                }
+                // What every other reader of the composite gets now.
+                return [...activeComposites.cache!.get(frameId).data.slice(0, 4)];
+            },
+            { id: document.id, texel, tell },
+        );
+
+    // No history step happens in a stroke; both ways the viewport shows the new pixels.
+    const first = [1, 2, 3, 255];
+    expect(await stroke(first, "composites")).toEqual(first);
+    await settle(page);
+    await expectImage(page, document, view, [...first, ...image.slice(4)]);
+    const second = [200, 100, 50, 255];
+    expect(await stroke(second, "viewport")).toEqual(second);
+    await settle(page);
+    await expectImage(page, document, view, [...second, ...image.slice(4)]);
+
+    // The stroke is given up: the pixels are back, and reported the same way.
+    await page.evaluate(async (id) => {
+        const path = "/src/app/state/composites.ts";
+        const { activeComposites } = (await import(
+            /* @vite-ignore */ path
+        )) as typeof CompositesModule;
+        const { documents } = window.__ngneTest!.sessions.getState();
+        const { session, history } = documents.find((entry) => entry.id === id)!;
+        history.transaction!.abort();
+        activeComposites.invalidate({
+            frameIds: [session.activeFrameId],
+            layerIds: [session.activeLayerId],
+            structure: false,
+        });
+    }, document.id);
+    await settle(page);
+    await expectImage(page, document, view, image);
+
+    // No document, no viewport: the link says so.
+    await page.evaluate((id) => window.__ngneTest!.sessions.getState().close(id), document.id);
+    await expect(viewportHost(page)).toHaveCount(0);
+    expect(await link()).toEqual({ mounted: false, size: { width: 0, height: 0 } });
     expect(errors).toEqual([]);
 });

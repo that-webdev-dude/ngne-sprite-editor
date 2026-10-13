@@ -77,6 +77,20 @@ export function flush(): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+/**
+ * Whether `work` finishes within a few turns of the event loop. Work that waits for
+ * something that never comes gives false; work that spins on microtasks lets no timer fire,
+ * and the test then ends at its timeout.
+ */
+export async function ends(work: () => Promise<void>, turns = 5): Promise<boolean> {
+    let done = false;
+    void work().then(() => {
+        done = true;
+    });
+    for (let turn = 0; turn < turns && !done; turn++) await flush();
+    return done;
+}
+
 /** A viewport that records what it is told. */
 export class RecordingViewport implements ViewportPort {
     readonly calls: string[] = [];
@@ -90,6 +104,8 @@ export class RecordingViewport implements ViewportPort {
     setDocument(document: ViewportDocument | null): void {
         this.calls.push(document ? `document ${document.width}x${document.height}` : "document -");
         this.document = document;
+        // As the viewport does: the frame key went with the document left.
+        this.current = null;
     }
 
     setCurrent(key: string | null): void {

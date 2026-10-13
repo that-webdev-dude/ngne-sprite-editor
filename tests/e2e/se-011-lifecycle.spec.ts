@@ -10,6 +10,7 @@ import {
     DARK,
     documentRect,
     expectImage,
+    hostDeviceSize,
     openDocument,
     openViewportEditor,
     paint,
@@ -93,11 +94,99 @@ test("resizing the window 20 times leaves exactly one live renderer and a correc
     expect(end).toMatchObject({ liveRenderers: 1, liveDevices: 1, status: "ready" });
     // The renderer was replaced, not kept: each settled size made a new device.
     expect(end.devicesCreated - start.devicesCreated).toBeGreaterThanOrEqual(7);
-    const host = await boxOf(viewportHost(page));
-    expect(await canvases(page)).toEqual([{ width: host.width, height: host.height }]);
+    expect(await canvases(page)).toEqual([await hostDeviceSize(page)]);
     await expectImage(page, document, VIEW, IMAGE);
+
+    // One replacement at a time: never two devices being created at once, and never more
+    // than two alive, the old and the new. (Two viewports in a row: se-011-renderer.spec.)
+    expect(await page.evaluate(() => window.__se011.peaks())).toEqual({ creating: 1, live: 2 });
     expect(errors).toEqual([]);
 });
+
+test("closing a document while its first uploads are in flight leaves the page answering and no renderer", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openViewportEditor(page);
+    // Open a document and hold the uploads of its first renderer before they start.
+    const id = await page.evaluate(async () => {
+        const hooks = window.__ngneTest!;
+        const id = hooks.openSession({ name: "held", width: 16, height: 16 });
+        const turn = () => new Promise((resolve) => setTimeout(resolve, 0));
+        while (!hooks.viewport) await turn();
+        // The development double mount is through: this is the viewport that stays.
+        await turn();
+        window.__se011.closeUploadGate();
+        return id;
+    });
+    await expect
+        .poll(() =>
+            page.evaluate(() => ({
+                renderers: window.__se011.liveRenderers(),
+                devices: window.__se011.liveDevices(),
+            })),
+        )
+        .toEqual({ renderers: 1, devices: 1 });
+    await page.waitForTimeout(150);
+    // The renderer is made and waits for its uploads: none has started, nothing is on screen.
+    expect(
+        await page.evaluate(() => ({
+            copies: window.__se011.copies(),
+            canvas: window.__ngneTest!.viewport!.canvasSize,
+            settled: window.__ngneTest!.viewport!.settled,
+        })),
+    ).toEqual({ copies: 0, canvas: null, settled: false });
+
+    await closeAndExpectNothingLeft(page, id);
+    expect(errors).toEqual([]);
+});
+
+test("closing a document during a resize replacement leaves the page answering and no renderer", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    const document = await openPainted(page);
+    await page.evaluate(() => window.__se011.closeUploadGate());
+    await page.setViewportSize({ width: 1400, height: 800 });
+    // The new renderer exists beside the old one and waits for its uploads.
+    await expect.poll(() => page.evaluate(() => window.__se011.liveRenderers())).toBe(2);
+    await page.waitForTimeout(150);
+    expect(await page.evaluate(() => window.__se011.liveDevices())).toBe(2);
+
+    await closeAndExpectNothingLeft(page, document.id);
+    expect(errors).toEqual([]);
+});
+
+/**
+ * Closes the last document while the viewport waits for held uploads. The page must go on
+ * answering (a viewport that spins on its queue freezes it), show the empty state, and keep
+ * no renderer and no device, also once the held uploads are let go.
+ */
+async function closeAndExpectNothingLeft(page: Page, id: string): Promise<void> {
+    const answered = await Promise.race([
+        page
+            .evaluate((id) => {
+                window.__ngneTest!.sessions.getState().close(id);
+                return "answered";
+            }, id)
+            .then(() => page.evaluate(() => "answered")),
+        new Promise<string>((resolve) => setTimeout(() => resolve("frozen"), 8000)),
+    ]);
+    expect(answered).toBe("answered");
+    await expect(page.locator("[data-empty-state]")).toBeVisible();
+    await expect(viewportHost(page)).toHaveCount(0);
+    const left = () =>
+        page.evaluate(() => ({
+            renderers: window.__se011.liveRenderers(),
+            devices: window.__se011.liveDevices(),
+        }));
+    await expect.poll(left).toEqual({ renderers: 0, devices: 0 });
+
+    await page.evaluate(() => window.__se011.openUploadGate());
+    await page.waitForTimeout(300);
+    expect(await left()).toEqual({ renderers: 0, devices: 0 });
+    expect(await page.evaluate(() => window.__ngneTest!.viewport)).toBeUndefined();
+}
 
 /** What the window shows over the document rectangle, from a screenshot (SPEC §6.7). */
 async function onScreen(page: Page, rect: { x: number; y: number; width: number; height: number }) {
@@ -120,9 +209,23 @@ test("the window shows the image the new renderer drew before the swap, and stil
     page,
 }) => {
     const errors = collectErrors(page);
-    const document = await openPainted(page);
-    const rect = documentRect(document, VIEW);
-    expect(compare(await onScreen(page, rect), IMAGE, SIZE.width, VIEW.scale)).toEqual([]);
+    await openViewportEditor(page);
+    // A screenshot shows everything stacked over the NGNE canvas as well. This test is about
+    // the canvas alone, so the document is shown below the scale at which the pixel grid
+    // appears (8×, DESIGN §6), with the grids off.
+    const view = { scale: 6, originX: 42, originY: 30 };
+    const document = await openDocument(page, SIZE, view);
+    await page.evaluate((id) => {
+        window.__ngneTest!.sessions.getState().updateDocSettings(id, (settings) => {
+            settings.pixelGrid = false;
+            settings.grid.visible = false;
+        });
+    }, document.id);
+    await paint(page, document.id, IMAGE);
+    await settle(page);
+    const rect = documentRect(document, view);
+    const shown = async () => compare(await onScreen(page, rect), IMAGE, SIZE.width, view.scale);
+    expect(await shown()).toEqual([]);
 
     // A new size: the new canvas draws once, off the page, and is swapped in. Nothing is
     // drawn afterwards, so the screen shows that one frame.
@@ -131,7 +234,7 @@ test("the window shows the image the new renderer drew before the swap, and stil
     const swapped = await counters(page);
     await twoFrames(page);
     expect(await counters(page)).toEqual(swapped);
-    expect(compare(await onScreen(page, rect), IMAGE, SIZE.width, VIEW.scale)).toEqual([]);
+    expect(await shown()).toEqual([]);
 
     // Below the minimum window size the shell is hidden and the viewport element has no
     // size: the renderer is kept, and its image is on screen again afterwards.
@@ -148,7 +251,7 @@ test("the window shows the image the new renderer drew before the swap, and stil
         liveDevices: 1,
         devicesCreated: swapped.devicesCreated,
     });
-    expect(compare(await onScreen(page, rect), IMAGE, SIZE.width, VIEW.scale)).toEqual([]);
+    expect(await shown()).toEqual([]);
     expect(errors).toEqual([]);
 });
 
@@ -233,6 +336,150 @@ test("a renderer that fails is replaced by a fresh one, and its error is shown o
         expect(errors.filter((line) => failure.test(line))).toHaveLength(1);
         expect(errors).toHaveLength(1);
     }
+});
+
+/**
+ * Starts a replacement for a new window size and holds it while the new renderer waits for
+ * its uploads: two renderers and two devices are alive, the old canvas is on screen.
+ */
+async function holdReplacement(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        window.__se011.watchCanvases();
+        window.__se011.closeUploadGate();
+    });
+    await page.setViewportSize({ width: 1400, height: 800 });
+    await expect.poll(() => page.evaluate(() => window.__se011.liveRenderers())).toBe(2);
+    await page.waitForTimeout(150);
+    expect(await page.evaluate(() => window.__se011.liveDevices())).toBe(2);
+    expect(await page.evaluate(() => window.__se011.canvasLog)).toEqual([]);
+}
+
+test("a device lost while a replacement loads: no canvas gets on screen before it has drawn", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    const document = await openPainted(page);
+    const before = await counters(page);
+    await holdReplacement(page);
+
+    // The device of the renderer that is being loaded is lost; NGNE recovers it. The old
+    // canvas stays until the new one has drawn.
+    await page.evaluate(() => {
+        window.__se011.loseDevice();
+        window.__se011.openUploadGate();
+    });
+    await settle(page);
+    const after = await counters(page);
+    expect(after).toMatchObject({ liveRenderers: 1, liveDevices: 1, status: "ready" });
+    // The replacement's device and the one NGNE recovered it on.
+    expect(after.devicesCreated).toBe(before.devicesCreated + 2);
+    expect(await canvases(page)).toEqual([await hostDeviceSize(page)]);
+    await expectImage(page, document, VIEW, IMAGE);
+    // One canvas entered the viewport element, in place of the old one, and it had drawn.
+    expect(await page.evaluate(() => window.__se011.canvasLog)).toEqual([
+        { drawn: true, canvases: 1 },
+    ]);
+    expect(errors).toEqual([]);
+});
+
+test("a replacement whose renderer fails is given up: the old canvas stays until the next one has drawn", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    const document = await openPainted(page);
+    await viewportHost(page)
+        .locator("canvas")
+        .evaluate((canvas) => canvas.setAttribute("data-old", ""));
+    await holdReplacement(page);
+
+    // The new renderer loses its device and NGNE cannot get another: it ends as `failed`,
+    // and its uploads, let go, are rejected. Devices asked for from now on are held, so the
+    // next attempt cannot get ahead of the checks below.
+    await page.evaluate(() => {
+        window.__se011.refuseDevices(1);
+        window.__se011.loseDevice();
+        window.__se011.holdDevices();
+        window.__se011.openUploadGate();
+    });
+    // It is disposed, and the canvas that was on screen is still the one on screen.
+    const alive = () =>
+        page.evaluate(() => ({
+            renderers: window.__se011.liveRenderers(),
+            devices: window.__se011.liveDevices(),
+        }));
+    await expect.poll(alive).toEqual({ renderers: 1, devices: 1 });
+    // The status check tries the replacement again, within its second.
+    await expect
+        .poll(() => page.evaluate(() => window.__se011.creatingDevices()), { timeout: 5000 })
+        .toBe(1);
+    expect(await alive()).toEqual({ renderers: 1, devices: 1 });
+    expect(await viewportHost(page).locator("canvas[data-old]").count()).toBe(1);
+    expect(await canvases(page)).toHaveLength(1);
+    expect(await page.evaluate(() => window.__se011.canvasLog)).toEqual([]);
+    expect(await page.evaluate(() => window.__ngneTest!.viewport!.status)).toBe("ready");
+
+    // This attempt goes through.
+    await page.evaluate(() => window.__se011.releaseDevices());
+    await settle(page);
+    expect(await counters(page)).toMatchObject({
+        liveRenderers: 1,
+        liveDevices: 1,
+        status: "ready",
+    });
+    expect(await viewportHost(page).locator("canvas[data-old]").count()).toBe(0);
+    expect(await canvases(page)).toEqual([await hostDeviceSize(page)]);
+    await expectImage(page, document, VIEW, IMAGE);
+    // The failed renderer's canvas never entered the document; the one that did had drawn.
+    expect(await page.evaluate(() => window.__se011.canvasLog)).toEqual([
+        { drawn: true, canvases: 1 },
+    ]);
+    // NGNE's diagnostic of the failure, once.
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/WebGPU recovery failed/);
+});
+
+test("a checkerboard upload that fails gets a fresh renderer, once", async ({ page }) => {
+    const errors = collectErrors(page);
+    await openViewportEditor(page);
+    // Half transparent everywhere: the checkerboard shows through every texel.
+    const size = 8;
+    const view = { scale: 4, originX: 16, originY: 16 };
+    const pixels = Array.from({ length: size * size }, () => [240, 20, 60, 128]).flat();
+    const document = await openDocument(page, { width: size, height: size }, view);
+    await paint(page, document.id, pixels);
+    await settle(page);
+    await expectImage(page, document, view, pixels);
+    const before = await counters(page);
+    await viewportHost(page)
+        .locator("canvas")
+        .evaluate((canvas) => canvas.setAttribute("data-old", ""));
+
+    // The next upload is the new checkerboard, and NGNE rejects it: the slot takes no more
+    // uploads on this renderer, and there is no other slot for the checkerboard.
+    const custom: Checker = { a: [0x10, 0x90, 0x30], b: [0xf0, 0xe0, 0x20], size: 3 };
+    await page.evaluate(() => {
+        window.__se011.failCopies(1);
+        window.__ngneTest!.preferences.set("checkerboard", {
+            size: 3,
+            colors: { a: 0x109030, b: 0xf0e020 },
+        });
+    });
+    // A fresh renderer shows it.
+    await expect(viewportHost(page).locator("canvas[data-old]")).toHaveCount(0);
+    await settle(page);
+    await expectImage(page, document, view, pixels, custom);
+    const after = await counters(page);
+    expect(after).toMatchObject({ liveRenderers: 1, liveDevices: 1, status: "ready" });
+    expect(after.devicesCreated).toBe(before.devicesCreated + 1);
+
+    // One replacement for the failed renderer, not a loop: nothing more happens.
+    await page.waitForTimeout(1500);
+    expect(await counters(page)).toEqual(after);
+    // The rejected upload was reported, once.
+    const failure = /WebGPU resource validation failed/;
+    await expect(page.getByRole("alert").filter({ hasText: failure })).toHaveCount(1);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(failure);
 });
 
 test("the checkerboard follows the preference and the theme", async ({ page }) => {

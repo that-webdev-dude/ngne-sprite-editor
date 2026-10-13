@@ -5,6 +5,7 @@ import {
     DARK,
     documentRect,
     expectImage,
+    hostDeviceSize,
     openDocument,
     openViewportEditor,
     paint,
@@ -52,10 +53,15 @@ export function readbackTests(ratio: number): void {
             await paint(page, document.id, PIXELS);
             await settle(page);
 
-            // The canvas backing size is the viewport element's size in device pixels.
+            // The canvas backing size is the viewport element's size in device pixels, as a
+            // `ResizeObserver` reports it. That is the element's CSS size times the ratio, up
+            // to the half pixel a track of odd CSS size leaves at 1.5: with the emulated
+            // ratio alone it would be the CSS size (SE-002 finding 7.1).
             expect(await page.evaluate(() => devicePixelRatio)).toBe(ratio);
             const host = await boxOf(viewportHost(page));
-            const backing = { width: host.width * ratio, height: host.height * ratio };
+            const backing = await hostDeviceSize(page);
+            expect(Math.abs(backing.width - host.width * ratio)).toBeLessThan(1);
+            expect(Math.abs(backing.height - host.height * ratio)).toBeLessThan(1);
             const rect = documentRect(document, VIEW);
             const result = await readback(page, rect);
             expect(result.size).toEqual(backing);

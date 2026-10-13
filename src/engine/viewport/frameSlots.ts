@@ -147,6 +147,20 @@ export class FrameSlots {
         return freed;
     }
 
+    /**
+     * Gives up the reservation of `slot` when the image it was reserved for could not be
+     * made. Nothing was uploaded, so the texture is what it was: the slot stops showing the
+     * key it was reserved for, whose pixels there are out of date, and keeps showing another
+     * key it was being re-keyed from. The key can be reserved again, here or elsewhere.
+     */
+    unreserve(slot: number): void {
+        const state = this.#slots[slot];
+        if (!state || state.reserved === null) return;
+        if (state.shown?.key === state.reserved) state.shown = null;
+        state.reserved = null;
+        state.used = 0;
+    }
+
     /** Takes `slot` out of use: its uploads failed on this renderer. */
     disable(slot: number): void {
         const state = this.#slots[slot];

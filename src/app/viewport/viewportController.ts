@@ -1,19 +1,20 @@
 import type { StoreApi } from "zustand/vanilla";
-import { CompositeCache } from "../../core/composite";
 import { frameIndex } from "../../core/model";
 import type { DocSession } from "../../core/model";
 import { frameKey, parseFrameKey } from "../../engine/viewport/types";
 import type { ViewportPort } from "../../engine/viewport/types";
 import { preferences as appPreferences } from "../preferences/preferences";
 import type { PreferenceStore } from "../preferences/preferences";
+import { activeComposites } from "../state/composites";
+import type { ActiveComposites } from "../state/composites";
 import { activeDocument, sessionsStore } from "../state/sessions";
 import type { OpenDocument, SessionsState, ViewState } from "../state/sessions";
 
 // The wiring of SE-011 between the stores and the viewport: which document and frame it
 // shows, with which view and checkerboard, and when the pixels behind a frame changed.
 //
-//   history change (touched) → composite cache invalidated → viewport told which frame keys
-//   are out of date → it uploads the current one again and draws.
+//   history change (touched) → composite cache invalidated (app/state/composites) → viewport
+//   told which frame keys are out of date → it uploads the current one again and draws.
 //
 // Nothing here touches the DOM or NGNE: the viewport is the `ViewportPort` it is given.
 
@@ -36,38 +37,34 @@ export const DEFAULT_VIEWPORT_THEME: ViewportTheme = {
 export interface ViewportSources {
     sessions: StoreApi<SessionsState>;
     preferences: PreferenceStore;
+    /** The composite cache of the active document of `sessions`. */
+    composites: ActiveComposites;
 }
 
 export interface ViewportConnection {
     /** The interface's theme changed. */
     setTheme(theme: ViewportTheme): void;
-    /**
-     * The composite cache of the active document, which the viewport reads its frames from;
-     * null while no document is open. It belongs to the active document only (SPEC §5.3).
-     */
-    readonly composites: CompositeCache | null;
     /** Stops following the stores. The viewport itself is not disposed. */
     dispose(): void;
 }
 
-interface Attached {
-    session: DocSession;
-    cache: CompositeCache;
-    /** Stops the history subscription. */
-    stop(): void;
-}
-
 /**
  * Keeps `viewport` in step with the stores: the active session and its active frame and view,
- * every step of the active document's history, and the checkerboard preference.
+ * every change to the active document's composites, and the checkerboard preference. The
+ * frames it shows are read from `sources.composites`, the cache every other reader uses.
  */
 export function connectViewport(
     viewport: ViewportPort,
-    sources: ViewportSources = { sessions: sessionsStore, preferences: appPreferences },
+    sources: ViewportSources = {
+        sessions: sessionsStore,
+        preferences: appPreferences,
+        composites: activeComposites,
+    },
 ): ViewportConnection {
-    const { sessions, preferences } = sources;
+    const { sessions, preferences, composites } = sources;
     let theme = DEFAULT_VIEWPORT_THEME;
-    let attached: Attached | null = null;
+    /** The session whose document the viewport shows. */
+    let shown: DocSession | null = null;
     let frameId: string | null = null;
     let view: ViewState | null = null;
 
@@ -80,27 +77,17 @@ export function connectViewport(
         );
     };
 
-    const attach = (document: OpenDocument | null) => {
-        attached?.stop();
-        attached = null;
+    const show = (document: OpenDocument | null) => {
+        shown = document?.session ?? null;
+        // `setDocument` forgets the frame key as well: the new document's follows below.
         frameId = null;
         view = null;
         if (!document) {
             viewport.setDocument(null);
-            viewport.setCurrent(null);
             return;
         }
-        const { session, history } = document;
+        const { session } = document;
         const { doc } = session;
-        // A cache per active document: one that stops being active loses its composites.
-        const cache = new CompositeCache(doc);
-        const stop = history.subscribe(({ touched }) => {
-            cache.invalidate(touched);
-            viewport.invalidate(
-                touched.structure ? "all" : touched.frameIds.map((id) => frameKey(id)),
-            );
-        });
-        attached = { session, cache, stop };
         viewport.setDocument({
             get width() {
                 return doc.width;
@@ -110,7 +97,9 @@ export function connectViewport(
             },
             pixels(key) {
                 const { frameId: id, variant } = parseFrameKey(key);
-                if (variant !== "plain" || frameIndex(doc, id) === -1) return null;
+                // Null once the document is no longer the active one: it has no composites.
+                const cache = composites.cacheOf(session);
+                if (!cache || variant !== "plain" || frameIndex(doc, id) === -1) return null;
                 return cache.get(id);
             },
         });
@@ -119,7 +108,7 @@ export function connectViewport(
     const follow = () => {
         const document = activeDocument(sessions.getState());
         // The session object, not the id: the same file opened again is another session.
-        if ((document?.session ?? null) !== (attached?.session ?? null)) attach(document);
+        if ((document?.session ?? null) !== shown) show(document);
         if (!document) return;
         const active = document.session.activeFrameId;
         if (active !== frameId) {
@@ -139,6 +128,11 @@ export function connectViewport(
     const stopPreferences = preferences.subscribe((key) => {
         if (key === "checkerboard") pushChecker();
     });
+    // The cache has dropped what a history step (or a write reported to it) touched.
+    const stopComposites = composites.subscribe((touched, session) => {
+        if (session !== shown) return;
+        viewport.invalidate(touched.structure ? "all" : touched.frameIds.map((id) => frameKey(id)));
+    });
 
     return {
         setTheme(next) {
@@ -146,14 +140,11 @@ export function connectViewport(
             viewport.setBackground(theme.workspace);
             pushChecker();
         },
-        get composites() {
-            return attached?.cache ?? null;
-        },
         dispose() {
             stopSessions();
             stopPreferences();
-            attached?.stop();
-            attached = null;
+            stopComposites();
+            shown = null;
         },
     };
 }
