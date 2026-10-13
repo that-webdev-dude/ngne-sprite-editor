@@ -48,7 +48,7 @@ function tagCommand(label: string, doc: SpriteDoc, tags: Tag[], structure: boole
 /**
  * Adds a tag at the end of the tag list, so it is the one created last (SPEC §7.4). Its ID
  * comes from `newId`. Throws `TagRangeError` when the range is not a run of the document's
- * frames and `TagRepeatError` for a repeat outside 0..65535; the command is then not created.
+ * frames and `TagRepeatError` for a repeat outside 0..255; the command is then not created.
  */
 export function createTagCommand(
     doc: SpriteDoc,

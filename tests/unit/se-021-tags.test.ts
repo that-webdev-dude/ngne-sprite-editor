@@ -98,21 +98,25 @@ describe("createTagCommand", () => {
         },
     );
 
-    it("repeat accepts 0 to 65535 and rejects other values with a typed error", () => {
+    it("repeat accepts 0 to 255 and rejects other values with a typed error", () => {
         const { session, doc, history } = fixture();
-        expect(MAX_TAG_REPEAT).toBe(65535);
+        expect(MAX_TAG_REPEAT).toBe(255);
         history.execute(createTagCommand(doc, properties({ repeat: 0 })));
-        history.execute(createTagCommand(doc, properties({ repeat: 65535 })));
+        history.execute(createTagCommand(doc, properties({ repeat: 255 })));
         const before = snapshot(session);
 
-        for (const repeat of [-1, 65536, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+        for (const repeat of [-1, 256, 65535, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
             const error = thrownBy(() => createTagCommand(doc, properties({ repeat })));
             expect(error).toBeInstanceOf(TagRepeatError);
             expect(error).toMatchObject({ name: "TagRepeatError", repeat });
+            expect((error as Error).message).toContain("0 to 255");
             expect(isTagRepeat(repeat)).toBe(false);
         }
+        // An edit is held to the same bound.
+        expect(() => editTagCommand(doc, "walk", { repeat: 256 })).toThrow(TagRepeatError);
+        expect(editTagCommand(doc, "walk", { repeat: 255 })).not.toBeNull();
         expect(isTagRepeat(0)).toBe(true);
-        expect(isTagRepeat(65535)).toBe(true);
+        expect(isTagRepeat(255)).toBe(true);
         expect(snapshot(session)).toStrictEqual(before);
     });
 

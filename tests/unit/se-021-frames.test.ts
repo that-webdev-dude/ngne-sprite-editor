@@ -14,7 +14,12 @@ import {
     reverseFramesCommand,
     setFrameDurationCommand,
 } from "../../src/core/frames";
-import { AllocationError, compositeCommand, pixelPatchCommand } from "../../src/core/history";
+import {
+    AllocationError,
+    chainedCommand,
+    compositeCommand,
+    pixelPatchCommand,
+} from "../../src/core/history";
 import { celAt, createDocument, sequentialIds } from "../../src/core/model";
 import type { SpriteDoc } from "../../src/core/model";
 import { deleteTagCommand } from "../../src/core/tags";
@@ -911,21 +916,25 @@ describe("a frame command whose document changed since it was made", () => {
         expect(history.undoCount).toBe(0);
     });
 
-    it("a command made after the one before it has run does share a step", () => {
+    it("a command made after the one before it has run does share a step: chainedCommand", () => {
         const { session, doc, history } = fixture();
         const before = snapshot(session);
-        // Planned one after the other on the session itself, then taken back.
-        const first = deleteFramesCommand(doc, ["f2"]);
-        first.do(session);
-        const second = deleteFramesCommand(doc, ["f3"]);
-        first.undo(session);
-        expect(snapshot(session)).toStrictEqual(before);
 
-        history.execute(compositeCommand("Delete Two", [first, second]));
+        history.execute(
+            some(
+                chainedCommand("Delete Two", session, [
+                    (current) => deleteFramesCommand(current.doc, ["f2"]),
+                    (current) => deleteFramesCommand(current.doc, ["f3"]),
+                ]),
+            ),
+        );
 
         expect(frameIds(doc)).toEqual(["f1", "f4", "f5"]);
         expect(history.undoCount).toBe(1);
+        expect(history.undoLabel).toBe("Delete Two");
         history.undo();
         expect(snapshot(session)).toStrictEqual(before);
+        history.redo();
+        expect(frameIds(doc)).toEqual(["f1", "f4", "f5"]);
     });
 });

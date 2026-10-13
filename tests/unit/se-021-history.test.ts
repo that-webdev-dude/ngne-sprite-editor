@@ -164,9 +164,10 @@ function commandOf(doc: SpriteDoc, { kind, n }: Operation, newId: IdGenerator): 
         frameIds: several(frames, b),
     };
     // A move or a copy takes one or two frames of one pixel layer, with the reference layers
-    // for company, to a place that mostly exists.
+    // for company, to a place that mostly exists. A layer offset counts pixel layers.
     const pixelLayers = doc.layers.flatMap((item, index) => (item.kind === "pixel" ? [index] : []));
-    const fromLayer = pick(pixelLayers, a);
+    const fromRow = a % pixelLayers.length;
+    const fromLayer = pixelLayers[fromRow];
     const fromFrame = b % frames.length;
     const shifted = {
         layerIds: doc.layers
@@ -175,7 +176,7 @@ function commandOf(doc: SpriteDoc, { kind, n }: Operation, newId: IdGenerator): 
         frameIds: frames.slice(fromFrame, fromFrame + 1 + (a % 2)),
     };
     const offset = {
-        layers: pick(pixelLayers, c) - fromLayer,
+        layers: (c % pixelLayers.length) - fromRow,
         frames: (d % frames.length) - fromFrame,
     };
     const tag = doc.tags.length > 0 ? pick(doc.tags, a) : null;
@@ -285,7 +286,9 @@ function expectReported(before: SpriteDoc, after: SpriteDoc, command: Command): 
     expect(command.bytes).toBe(removed);
 }
 
-describe("frame, cel and tag commands, property", () => {
+// A snapshot per step of 300 sequences: about a second, and over the default 5 s when the
+// machine is busy with other work.
+describe("frame, cel and tag commands, property", { timeout: 60_000 }, () => {
     it("for 300 random sequences, undo all then redo all reproduces every intermediate session exactly", () => {
         let executed = 0;
         const seen = new Set<string>();

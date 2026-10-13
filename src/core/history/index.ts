@@ -2,6 +2,7 @@
 // its `History`: `execute(command)` for a command, `begin(target)` for a tool stroke.
 
 export type { PixelAllocator } from "./allocate";
+export { chainedCommand, type CommandFactory } from "./chained";
 export { compositeCommand } from "./command";
 export type { Command } from "./command";
 export { AllocationError, TransactionError } from "./errors";

@@ -13,7 +13,7 @@ import {
 import type { CelSelection } from "../../src/core/cels";
 import { compositeFrame } from "../../src/core/composite";
 import { AllocationError, pixelPatchCommand } from "../../src/core/history";
-import type { History } from "../../src/core/history";
+import type { Command, History } from "../../src/core/history";
 import { celAt, sequentialIds } from "../../src/core/model";
 import type { SpriteDoc } from "../../src/core/model";
 import {
@@ -207,9 +207,9 @@ describe("moveCelsCommand", () => {
         expect(celAt(doc, L2, "f5")?.opacity).toBe(255);
     });
 
-    it("moves to another layer, across the reference layer between them", () => {
+    it("moves to the next pixel layer, over the reference layer between them", () => {
         const { doc, history } = fixture();
-        const command = some(moveCelsCommand(doc, cells(L1, "f1"), { layers: 2, frames: 0 }));
+        const command = some(moveCelsCommand(doc, cells(L1, "f1"), { layers: 1, frames: 0 }));
 
         history.execute(command);
 
@@ -232,7 +232,7 @@ describe("moveCelsCommand", () => {
         // The reference layer is not moved, so where it would land does not matter.
         const up = fixture();
         up.history.execute(
-            some(moveCelsCommand(up.doc, cells([L1, REF], "f5"), { layers: 2, frames: 0 })),
+            some(moveCelsCommand(up.doc, cells([L1, REF], "f5"), { layers: 1, frames: 0 })),
         );
         expect(row(up.doc, L2)).toEqual(["d", ".", "e", "e", "c"]);
         expect(row(up.doc, L3)).toEqual([".", ".", ".", ".", "g"]);
@@ -243,8 +243,10 @@ describe("moveCelsCommand", () => {
         { layers: L1, frames: "f1", offset: { layers: 0, frames: -1 }, reason: "outside-frames" },
         { layers: L3, frames: "f5", offset: { layers: 1, frames: 0 }, reason: "outside-layers" },
         { layers: L1, frames: "f1", offset: { layers: -1, frames: 0 }, reason: "outside-layers" },
-        { layers: L1, frames: "f1", offset: { layers: 1, frames: 0 }, reason: "reference-layer" },
-        { layers: L2, frames: "f1", offset: { layers: -1, frames: 0 }, reason: "reference-layer" },
+        // Three pixel layers: layer-1, layer-2 and layer-3.
+        { layers: L1, frames: "f1", offset: { layers: 3, frames: 0 }, reason: "outside-layers" },
+        { layers: L2, frames: "f1", offset: { layers: 2, frames: 0 }, reason: "outside-layers" },
+        { layers: L2, frames: "f1", offset: { layers: -2, frames: 0 }, reason: "outside-layers" },
         // The empty cell at f5 would land outside as well.
         {
             layers: L2,
@@ -291,8 +293,8 @@ describe("moveCelsCommand", () => {
     it.each([
         { layers: [L1], frames: ["f1", "f2", "f3"], offset: { layers: 0, frames: 2 } },
         { layers: [L1, L2], frames: ["f1", "f3"], offset: { layers: 0, frames: 1 } },
-        { layers: [L1], frames: ["f3", "f5"], offset: { layers: 3, frames: -2 } },
-        { layers: [L2], frames: ["f3", "f4", "f5"], offset: { layers: -2, frames: -2 } },
+        { layers: [L1], frames: ["f3", "f5"], offset: { layers: 2, frames: -2 } },
+        { layers: [L2], frames: ["f3", "f4", "f5"], offset: { layers: -1, frames: -2 } },
     ])(
         "do/undo/redo symmetry moving $layers at $frames by $offset",
         ({ layers, frames, offset }) => {
@@ -346,7 +348,7 @@ describe("copyCelsCommand", () => {
         const { doc, history } = fixture();
 
         history.execute(
-            some(copyCelsCommand(doc, cells(L1, ["f1", "f2"]), { layers: 3, frames: 0 }, ids())),
+            some(copyCelsCommand(doc, cells(L1, ["f1", "f2"]), { layers: 2, frames: 0 }, ids())),
         );
 
         expect(row(doc, L1)).toEqual(["a", "a", "b", ".", "c"]);
@@ -435,8 +437,167 @@ describe("copyCelsCommand", () => {
 
     it("touches the cells it lands on", () => {
         const { doc } = fixture();
-        const command = some(copyCelsCommand(doc, cells(L1, "f3"), { layers: 2, frames: 2 }));
+        const command = some(copyCelsCommand(doc, cells(L1, "f3"), { layers: 1, frames: 2 }));
         expect(command.touched).toEqual({ frameIds: ["f5"], layerIds: [L2], structure: false });
+    });
+});
+
+// A layer offset counts rows of the timeline grid, which are the pixel layers (DESIGN §5.6). A
+// reference layer has no cels and is no row, wherever it sits in the stack.
+describe("cel offsets count pixel layers", () => {
+    const REF2 = "layer-ref-2";
+
+    /** A fixture whose layers are stacked in the given order, bottom to top. */
+    function stacked(order: readonly string[]) {
+        const made = fixture();
+        const { doc } = made;
+        const reference = doc.layers.find((layer) => layer.id === REF);
+        if (!reference) throw new Error("the fixture has no reference layer");
+        const second = { ...reference, id: REF2, name: REF2, sourceId: `source-of-${REF2}` };
+        doc.layers = order.map((id) => {
+            const found = id === REF2 ? second : doc.layers.find((layer) => layer.id === id);
+            if (!found) throw new Error(`no layer ${id}`);
+            return found;
+        });
+        return made;
+    }
+
+    const STACKS = [
+        { stack: [L1, L2, L3] },
+        { stack: [REF, L1, L2, L3] },
+        { stack: [L1, REF, L2, L3] },
+        { stack: [L1, L2, REF, L3] },
+        { stack: [L1, L2, L3, REF] },
+        { stack: [L1, REF, REF2, L2, L3] },
+        { stack: [REF, L1, REF2, L2, L3] },
+        { stack: [L1, REF, L2, REF2, L3] },
+    ];
+
+    it("in the stack P1 P2 R P3, the rows of P1 and P2 move one row up, over the reference layer", () => {
+        const { doc, history } = stacked([L1, L2, REF, L3]);
+        const command = moveCelsCommand(doc, cells([L1, L2], ALL_FRAMES), { layers: 1, frames: 0 });
+
+        expectSymmetric(history, command);
+
+        expect(row(doc, L1)).toEqual([".", ".", ".", ".", "."]);
+        expect(row(doc, L2)).toEqual(["a", "a", "b", ".", "c"]);
+        expect(row(doc, L3)).toEqual(["d", ".", "e", "e", "."]);
+        expect(row(doc, REF)).toEqual([".", ".", ".", ".", "."]);
+        // The empty cell of P2 at f5 landed on g.
+        expect(doc.images.has("g")).toBe(false);
+        expect(some(command).touched.layerIds).toEqual([L1, L2, L3]);
+    });
+
+    it("in the stack P1 P2 R P3, the rows of P2 and P3 move one row down", () => {
+        const { doc, history } = stacked([L1, L2, REF, L3]);
+
+        expectSymmetric(
+            history,
+            moveCelsCommand(doc, cells([L3, L2], ALL_FRAMES), { layers: -1, frames: 0 }),
+        );
+
+        expect(row(doc, L1)).toEqual(["d", ".", "e", "e", "."]);
+        expect(row(doc, L2)).toEqual([".", ".", ".", ".", "g"]);
+        expect(row(doc, L3)).toEqual([".", ".", ".", ".", "."]);
+    });
+
+    it("in the stack P1 P2 R P3, two rows cannot move two rows up: P2 would leave the top", () => {
+        const { session, doc } = stacked([L1, L2, REF, L3]);
+        const before = snapshot(session);
+        const selection = cells([L1, L2], ALL_FRAMES);
+
+        const error = thrownBy(() => moveCelsCommand(doc, selection, { layers: 2, frames: 0 }));
+
+        expect(error).toBeInstanceOf(CelTargetError);
+        expect(error).toMatchObject({ layers: 2, frames: 0, reason: "outside-layers" });
+        expect((error as Error).message).toContain("pixel layers");
+        expect(snapshot(session)).toStrictEqual(before);
+        // One row alone does go two rows up.
+        expect(
+            moveCelsCommand(doc, cells(L1, ALL_FRAMES), { layers: 2, frames: 0 }),
+        ).not.toBeNull();
+    });
+
+    it.each(STACKS)("in the stack $stack, one row up is the next pixel layer", ({ stack }) => {
+        const moved = stacked(stack);
+        expectSymmetric(
+            moved.history,
+            moveCelsCommand(moved.doc, cells(L1, "f1"), { layers: 1, frames: 0 }),
+        );
+        expect(row(moved.doc, L1)).toEqual([".", "a", "b", ".", "c"]);
+        expect(row(moved.doc, L2)).toEqual(["a", ".", "e", "e", "."]);
+
+        const copied = stacked(stack);
+        expectSymmetric(
+            copied.history,
+            copyCelsCommand(copied.doc, cells(L2, "f3"), { layers: 1, frames: 0 }, ids()),
+        );
+        expect(row(copied.doc, L3)).toEqual([".", ".", "n1", ".", "g"]);
+        expect(celAt(copied.doc, L3, "f3")).toEqual({ imageId: "n1", opacity: 128 });
+    });
+
+    it.each(STACKS)("in the stack $stack, two rows span all three pixel layers", ({ stack }) => {
+        const up = stacked(stack);
+        up.history.execute(
+            some(moveCelsCommand(up.doc, cells(L1, "f3"), { layers: 2, frames: 0 })),
+        );
+        expect(row(up.doc, L1)).toEqual(["a", "a", ".", ".", "c"]);
+        expect(row(up.doc, L3)).toEqual([".", ".", "b", ".", "g"]);
+
+        const down = stacked(stack);
+        down.history.execute(
+            some(copyCelsCommand(down.doc, cells(L3, "f5"), { layers: -2, frames: -1 }, ids())),
+        );
+        expect(row(down.doc, L1)).toEqual(["a", "a", "b", "n1", "c"]);
+    });
+
+    it.each(STACKS)(
+        "in the stack $stack, the top and the bottom pixel layer are the edges",
+        ({ stack }) => {
+            const { session, doc } = stacked(stack);
+            const before = snapshot(session);
+            const refusals = [
+                { selection: cells(L3, "f5"), offset: { layers: 1, frames: 0 } },
+                { selection: cells(L1, "f1"), offset: { layers: -1, frames: 0 } },
+                { selection: cells(L1, "f1"), offset: { layers: 3, frames: 0 } },
+                { selection: cells(L3, "f5"), offset: { layers: -3, frames: 0 } },
+                { selection: cells([L1, L2, L3], "f1"), offset: { layers: 1, frames: 0 } },
+                { selection: cells([L2, L3], "f1"), offset: { layers: -2, frames: 0 } },
+            ];
+            for (const { selection, offset } of refusals) {
+                for (const make of [moveCelsCommand, copyCelsCommand]) {
+                    const error = thrownBy(() => make(doc, selection, offset));
+                    expect(error).toBeInstanceOf(CelTargetError);
+                    expect(error).toMatchObject({ ...offset, reason: "outside-layers" });
+                }
+            }
+            expect(snapshot(session)).toStrictEqual(before);
+        },
+    );
+
+    it.each(STACKS)("in the stack $stack, no cel lands on a reference layer", ({ stack }) => {
+        const { doc, history } = stacked(stack);
+        const everything = cells([...stack], ALL_FRAMES);
+        // Every offset the three rows allow, for one row and for all rows that fit.
+        for (const layers of [-2, -1, 1, 2]) {
+            for (const selected of [cells(L2, ALL_FRAMES), everything]) {
+                for (const make of [moveCelsCommand, copyCelsCommand]) {
+                    let command: Command | null = null;
+                    try {
+                        command = make(doc, selected, { layers, frames: 0 });
+                    } catch (error) {
+                        expect(error).toBeInstanceOf(CelTargetError);
+                    }
+                    // The history of the fixture checks after the step that no cel is a stray.
+                    if (command) history.execute(command);
+                    expect(row(doc, REF)).toEqual([".", ".", ".", ".", "."]);
+                    expect(row(doc, REF2)).toEqual([".", ".", ".", ".", "."]);
+                }
+            }
+        }
+        expect(history.undoCount).toBeGreaterThan(0);
+        while (history.undo());
+        expect(snapshot(history.session)).toStrictEqual(snapshot(stacked(stack).session));
     });
 });
 
@@ -821,7 +982,7 @@ describe("cel commands, selections", () => {
             some(copyCelsCommand(doc, cells([L1, REF], ["f1", "f2"]), { layers: 0, frames: 3 })),
         );
         history.execute(
-            some(moveCelsCommand(doc, cells([L1, REF], "f1"), { layers: 3, frames: 0 })),
+            some(moveCelsCommand(doc, cells([L1, REF], "f1"), { layers: 2, frames: 0 })),
         );
         // The history of the fixture has checked after each step that no cel is a stray.
         expect(row(doc, REF)).toEqual([".", ".", ".", ".", "."]);

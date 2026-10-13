@@ -16,7 +16,11 @@ export interface CelSelection {
 
 /** How far a selection is moved or copied, in cells of the timeline grid. */
 export interface CelOffset {
-    /** Layers up the stack: positions in `SpriteDoc.layers`, negative towards the bottom. */
+    /**
+     * Rows up the stack, negative towards the bottom, counted in pixel layers: 1 is the next
+     * pixel layer above. Reference layers have no cels, so they are no rows of the grid: they
+     * are stepped over wherever they sit in `SpriteDoc.layers`, and no cel lands on one.
+     */
     layers: number;
     /** Frames later in playback order, negative for earlier. */
     frames: number;
@@ -104,9 +108,10 @@ export function clearCelsCommand(doc: SpriteDoc, selection: CelSelection): Comma
 }
 
 /**
- * Each selected cell with the cell it lands on when the selection is shifted by `offset`.
- * Throws `RangeError` for an offset that is not made of integers and `CelTargetError` when a
- * cell would not land on a cell of a pixel layer.
+ * Each selected cell with the cell it lands on when the selection is shifted by `offset`. A
+ * layer moves among the pixel layers only, so a reference layer between two of them does not
+ * count. Throws `RangeError` for an offset that is not made of integers and `CelTargetError`
+ * when a cell would land past the bottom or top pixel layer or the first or last frame.
  */
 function shifted(
     doc: SpriteDoc,
@@ -122,16 +127,17 @@ function shifted(
     }
     const refused = (reason: CelTargetError["reason"]) =>
         new CelTargetError(offset.layers, offset.frames, reason);
+    /** Positions of the pixel layers in the stack, bottom to top: the rows of the grid. */
+    const rows = doc.layers.flatMap((layer, index) => (layer.kind === "pixel" ? [index] : []));
     const pairs: { from: CellRef; to: CellRef }[] = [];
     for (const layer of layers) {
-        const target = doc.layers[layer + offset.layers];
-        if (!target) throw refused("outside-layers");
-        if (target.kind !== "pixel") throw refused("reference-layer");
+        const target = rows[rows.indexOf(layer) + offset.layers];
+        if (target === undefined) throw refused("outside-layers");
         for (const frame of frames) {
             if (!doc.frames[frame + offset.frames]) throw refused("outside-frames");
             pairs.push({
                 from: cellAt(doc, layer, frame),
-                to: cellAt(doc, layer + offset.layers, frame + offset.frames),
+                to: cellAt(doc, target, frame + offset.frames),
             });
         }
     }
@@ -144,10 +150,10 @@ function shifted(
  * become empty. A moved cel keeps its image and opacity, so its links stay. Images no cel
  * uses afterwards are removed, and undo restores them.
  *
- * Returns null when nothing would change. Throws `CelTargetError` when a selected cell of a
- * pixel layer would land outside the document's frames or layers or on a reference layer,
- * and `RangeError` for an offset that is not made of integers or a selection that names a
- * layer or frame the document lacks.
+ * Returns null when nothing would change. Throws `CelTargetError` when a selected cell would
+ * land past the first or last frame or past the bottom or top pixel layer (`CelOffset` counts
+ * pixel layers, so no cel lands on a reference layer), and `RangeError` for an offset that is
+ * not made of integers or a selection that names a layer or frame the document lacks.
  */
 export function moveCelsCommand(
     doc: SpriteDoc,

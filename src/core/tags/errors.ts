@@ -1,7 +1,10 @@
-/** Largest `Tag.repeat`. 0 repeats without end (SPEC §5.1). */
-export const MAX_TAG_REPEAT = 65535;
+/**
+ * Largest `Tag.repeat`; 0 repeats without end (SPEC §5.1). The bound keeps an expanded tag
+ * small: `expandTag` and the exported atlas (SPEC §9.3) write every pass out.
+ */
+export const MAX_TAG_REPEAT = 255;
 
-/** Whether the value is a repeat count a tag can have: an integer in 0..65535. */
+/** Whether the value is a repeat count a tag can have: an integer in 0..255. */
 export function isTagRepeat(value: number): boolean {
     return Number.isInteger(value) && value >= 0 && value <= MAX_TAG_REPEAT;
 }
@@ -30,7 +33,7 @@ export class TagRangeError extends Error {
     }
 }
 
-/** Thrown when a tag's repeat count is not an integer in 0..65535. */
+/** Thrown when a tag's repeat count is not an integer in 0..255. */
 export class TagRepeatError extends Error {
     override readonly name = "TagRepeatError";
     readonly repeat: number;

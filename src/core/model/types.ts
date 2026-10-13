@@ -107,7 +107,7 @@ export interface Tag {
     fromFrameId: string;
     toFrameId: string;
     direction: "forward" | "reverse" | "pingpong";
-    /** 0 = infinite. */
+    /** Integer 0..255; 0 = infinite. */
     repeat: number;
 }
 

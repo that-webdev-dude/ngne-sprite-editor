@@ -22,24 +22,22 @@ export class CelOpacityError extends Error {
 }
 
 /**
- * Thrown when cels are moved or copied to a place that is not a cell of a pixel layer: past
- * the first or last frame, below the bottom or above the top layer, or onto a reference
- * layer, which has no cels.
+ * Thrown when cels are moved or copied to a place that is no cell of the grid: past the first
+ * or last frame, or below the bottom or above the top pixel layer.
  */
 export class CelTargetError extends Error {
     override readonly name = "CelTargetError";
-    /** Layers up the stack, as in `CelOffset`. */
+    /** Pixel layers up the stack, as in `CelOffset`. */
     readonly layers: number;
     /** Frames later, as in `CelOffset`. */
     readonly frames: number;
     /** Where the shifted cels would land. */
-    readonly reason: "outside-frames" | "outside-layers" | "reference-layer";
+    readonly reason: "outside-frames" | "outside-layers";
 
     constructor(layers: number, frames: number, reason: CelTargetError["reason"]) {
         const where = {
             "outside-frames": "they would leave the frames of the document",
-            "outside-layers": "they would leave the layers of the document",
-            "reference-layer": "they would land on a reference layer, which has no cels",
+            "outside-layers": "they would leave the pixel layers of the document",
         }[reason];
         super(`Cels cannot be shifted by ${layers} layers and ${frames} frames: ${where}.`);
         this.layers = layers;
