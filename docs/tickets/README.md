@@ -52,7 +52,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-008 | New sprite, sprite properties and empty state     | M    | 006, 007                           | —             | Done   |
 | **M1** | **[Viewport and drawing](M1-viewport-and-drawing.md)** |  |                                  |               |        |
 | SE-010 | CPU compositor                                    | M    | 003                                | —             | Done   |
-| SE-011 | NgneViewport                                      | L    | 002, 006, 007, 010                 | G0            | Ready  |
+| SE-011 | NgneViewport                                      | L    | 002, 006, 007, 010                 | G0            | In progress |
 | SE-012 | View navigation and coordinate mapping            | M    | 007, 008, 011                      | —             | Ready  |
 | SE-013 | Overlay canvas                                    | M    | 012                                | —             | Ready  |
 | SE-014 | Tool framework and pointer pipeline               | L    | 004, 007, 012, 013                 | —             | Ready  |
@@ -86,7 +86,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-050 | Atlas packer                                      | M    | 005, 010                           | A2            | Done   |
 | SE-051 | NGNE bundle writers                               | L    | 003, 021, 050                      | —             | Done   |
 | SE-052 | Export dialog and delivery                        | L    | 006, 041, 051, 053                 | —             | Ready  |
-| SE-053 | Export conformance against NGNE (gate G2)         | L    | 002, 051                           | G0            | Ready  |
+| SE-053 | Export conformance against NGNE (gate G2)         | L    | 002, 051                           | G0            | In progress |
 | SE-054 | Preview panel (NGNE `BrowserGame`)                | L    | 002, 006, 007, 011, 051            | G0, G1        | Ready  |
 | **M6** | **[Palette and parity extras](M6-palette-and-parity.md)** | |                                   |               |        |
 | SE-060 | Palette panel                                     | M    | 016, 043                           | —             | Ready  |
