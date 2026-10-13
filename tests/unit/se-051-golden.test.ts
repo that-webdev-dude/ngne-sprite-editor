@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { compositeFrame } from "../../src/core/composite";
 import { bundle, validateAtlas } from "../../src/core/export";
 import { decodePng, encodePng } from "../../src/core/png";
@@ -20,8 +20,7 @@ import {
 // Every expected value below was worked out by hand from SPEC §9.2 to §9.5 and from the
 // frames as they are drawn in se-051-support.ts; the arithmetic stands next to it. The
 // committed files are checked against these values, and the output of `bundle` against the
-// committed files, byte for byte (the PNG pixel for pixel: its compression is not part of
-// any format).
+// committed files, byte for byte: the files of an earlier run against those of this one.
 //
 // The files are written by this test from the fixture:
 //
@@ -30,10 +29,20 @@ import {
 // They are not to be written again to make a failing test pass. A failure here after a
 // change to `core/export` means that an export differs from the ones made before: for
 // `hero-walk.atlas.json` that is a change of the `ngne-sprite-atlas` format (SPEC §10).
-// The text files carry `.golden` after their name, so that the formatter, the linter and
-// the compiler of this repository leave them as `bundle` wrote them.
+//
+// - A new version of the editor is no such change. The files name the version that wrote
+//   them, 0.0.0; the comparison puts that name in place of the current one, and so does
+//   the switch above when it writes.
+// - The bytes of `hero-walk.png` are those the PNG encoder gives for the pixels, and no
+//   format fixes them. When a new version of that dependency compresses differently, the
+//   byte comparison fails while the pixel comparison beside it holds: then, and only then,
+//   the image may be written again, by the switch and in a commit that says so.
+// - The text files carry `.golden` after their name, so that the formatter, the linter and
+//   the compiler of this repository leave them as `bundle` wrote them.
 
 const DIRECTORY = new URL("./se-051-fixtures/", import.meta.url);
+
+const TEXT_ENDINGS = ["atlas.json", "sprites.ts", "preview.config.mjs", "aseprite.json"];
 
 /** The committed file of the bundle with this ending. */
 function golden(ending: string): Buffer {
@@ -44,7 +53,12 @@ function golden(ending: string): Buffer {
 if (process.env.SE051_WRITE_GOLDEN === "1") {
     mkdirSync(DIRECTORY, { recursive: true });
     for (const { name, bytes } of bundle(heroWalk()).files) {
-        writeFileSync(new URL(name.endsWith(".png") ? name : `${name}.golden`, DIRECTORY), bytes);
+        if (name.endsWith(".png")) {
+            writeFileSync(new URL(name, DIRECTORY), bytes);
+        } else {
+            const text = withGoldenGenerator(new TextDecoder().decode(bytes));
+            writeFileSync(new URL(`${name}.golden`, DIRECTORY), text);
+        }
     }
 }
 
@@ -434,7 +448,7 @@ describe("bundle against the golden files", () => {
         ]);
     });
 
-    it.each(["atlas.json", "sprites.ts", "preview.config.mjs", "aseprite.json"])(
+    it.each(TEXT_ENDINGS)(
         "writes hero-walk.%s byte for byte, apart from the generator",
         (ending) => {
             const written = Buffer.from(withGoldenGenerator(textOf(made, ending)), "utf8");
@@ -457,6 +471,17 @@ describe("bundle against the golden files", () => {
         ).toBe(0);
     });
 
+    it("writes hero-walk.png byte for byte", () => {
+        // The committed image is the one an earlier run wrote: 203 bytes. Should this fail
+        // while the test above holds, the encoder has changed and not the atlas (see the
+        // head of this file).
+        const written = Buffer.from(bytesOf(made, "png"));
+
+        expect(golden("png")).toHaveLength(203);
+        expect(written).toHaveLength(203);
+        expect(Buffer.compare(written, golden("png"))).toBe(0);
+    });
+
     it("returns the content of the atlas JSON as `meta`", () => {
         expect(JSON.parse(withGoldenGenerator(JSON.stringify(made.meta)))).toEqual(GOLDEN_ATLAS);
         expect(Object.keys(made.meta)).toEqual(Object.keys(GOLDEN_ATLAS));
@@ -467,5 +492,88 @@ describe("bundle against the golden files", () => {
         // Frame 0 has a cel on the hidden layer, full of "Z"; the composite is the drawing.
         expect(show(compositeFrame(doc, "frame-0"))).toEqual(show(HERO_FRAMES[0]!));
         expect(GOLDEN_PIXELS.join("")).not.toContain("ZZ");
+    });
+});
+
+describe("bundle against the golden files, from another version of the editor", () => {
+    /** What a later release calls itself. */
+    const LATER = "ngne-sprite-editor 12.34.56";
+    const FORMAT_MODULE = "../../src/core/export/atlasFormat";
+
+    afterEach(() => {
+        vi.doUnmock(FORMAT_MODULE);
+        vi.resetModules();
+    });
+
+    /** `core/export` loaded anew, with the generator of the later release. */
+    async function laterExport() {
+        vi.resetModules();
+        vi.doMock(FORMAT_MODULE, async (original) => ({
+            ...(await original<Record<string, unknown>>()),
+            ATLAS_GENERATOR: LATER,
+        }));
+        return import("../../src/core/export");
+    }
+
+    it("writes files that name the later version", async () => {
+        const later = await laterExport();
+        const made = later.bundle(heroWalk());
+
+        expect(later.ATLAS_GENERATOR).toBe(LATER);
+        expect(made.meta.generator).toBe(LATER);
+        for (const ending of TEXT_ENDINGS) {
+            const text = textOf(made, ending);
+            expect(text, ending).toContain("12.34.56");
+            expect(text, ending).not.toContain("0.0.0");
+            expect(text, ending).not.toBe(golden(ending).toString("utf8"));
+        }
+        // The Aseprite data names the editor in two members, not in one string.
+        const sheet = JSON.parse(textOf(made, "aseprite.json")) as {
+            meta: Record<string, unknown>;
+        };
+        expect(sheet.meta).toMatchObject({ app: "ngne-sprite-editor", version: "12.34.56" });
+        expect(textOf(made, "aseprite.json")).not.toContain(LATER);
+    });
+
+    it.each(TEXT_ENDINGS)(
+        "still writes hero-walk.%s byte for byte, apart from the generator",
+        async (ending) => {
+            const later = await laterExport();
+            const text = textOf(later.bundle(heroWalk()), ending);
+            const written = Buffer.from(withGoldenGenerator(text, LATER), "utf8");
+
+            expect(written.toString("utf8")).toBe(golden(ending).toString("utf8"));
+            expect(Buffer.compare(written, golden(ending))).toBe(0);
+        },
+    );
+
+    it("still writes the golden atlas and image", async () => {
+        const later = await laterExport();
+        const made = later.bundle(heroWalk());
+
+        expect(JSON.parse(withGoldenGenerator(JSON.stringify(made.meta), LATER))).toEqual(
+            GOLDEN_ATLAS,
+        );
+        expect(Buffer.compare(Buffer.from(bytesOf(made, "png")), golden("png"))).toBe(0);
+    });
+
+    it("needs both names of the editor put back: the one string does not do for Aseprite", () => {
+        // The control of the tests above: what the comparison did before it knew `meta.app`
+        // and `meta.version`.
+        const text = `{\n    "app": "ngne-sprite-editor",\n    "version": "12.34.56"\n}\n`;
+
+        expect(text.replaceAll(LATER, GOLDEN_GENERATOR)).toBe(text);
+        expect(withGoldenGenerator(text, LATER)).toBe(
+            `{\n    "app": "ngne-sprite-editor",\n    "version": "0.0.0"\n}\n`,
+        );
+        // The version of the format, a number, is no version of the editor.
+        const atlas = `{\n    "version": 1,\n    "generator": "${LATER}"\n}\n`;
+        expect(withGoldenGenerator(atlas, LATER)).toBe(
+            `{\n    "version": 1,\n    "generator": "${GOLDEN_GENERATOR}"\n}\n`,
+        );
+        // With the generator the files were written by, nothing is changed.
+        expect(
+            withGoldenGenerator(golden("aseprite.json").toString("utf8"), GOLDEN_GENERATOR),
+        ).toBe(golden("aseprite.json").toString("utf8"));
     });
 });

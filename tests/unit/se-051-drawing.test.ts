@@ -55,7 +55,10 @@ function drawing(
     return frame;
 }
 
-/** The fixtures of SE-053: (a) to (d). */
+/** A transparent row of 40 pixels. */
+const BLANK = ".".repeat(40);
+
+/** The fixtures of SE-053, (a) to (d), and two more. */
 const FIXTURES: Record<string, () => SpriteDoc> = {
     "(a) 32 × 32, four frames, no trim": () =>
         sprite({
@@ -97,6 +100,17 @@ const FIXTURES: Record<string, () => SpriteDoc> = {
             settings: { trim: true },
         }),
     "the fixture of the golden files": heroWalk,
+    // Trimmed, the two frames are small rectangles far to either side of the pivot: what a
+    // turn makes of their offsets, (∓19, 0.5), differs in sign.
+    "(e) 40 × 5 with trim, two pixels at either end": () =>
+        sprite({
+            name: "Bar",
+            frames: [
+                grid(BLANK, BLANK, `AB${".".repeat(38)}`, BLANK, BLANK),
+                grid(BLANK, BLANK, `${".".repeat(38)}CD`, BLANK, BLANK),
+            ],
+            settings: { trim: true },
+        }),
 };
 
 interface Drawn {
@@ -334,6 +348,116 @@ describe("drawing with rotation 90°", () => {
         expect(ys[3]).toBeCloseTo(97.5, 4);
     });
 });
+
+/** What the window of the quarter-turn tests shows: 192 × 192 pixels from (−64, −64). */
+const WINDOW_ORIGIN: [number, number] = [-64, -64];
+const WINDOW_SIZE = 192;
+
+/** Anchors near the corner of a canvas, where a sum keeps the last bits of what is added. */
+const SMALL_ANCHORS: [number, number][] = [
+    [4, 4],
+    [20, 20],
+    [0, 0],
+    [1, 3],
+    [37, 2],
+    [3, 64],
+];
+
+/**
+ * Where a composite must appear when its frame is drawn at `anchor` after `quarters` quarter
+ * turns clockwise, under NGNE's default camera. Worked out from the definition and from
+ * NGNE's rule, not from the runtime: the frame is drawn from its even rectangle, the
+ * composite with a transparent column or row where a side is odd (SPEC §9.2); the pivot P
+ * lies on the anchor, so the middle C of that rectangle lies at anchor + R·(C − P), where a
+ * quarter turn R takes (x, y) to (−y, x); and `Frame` rounds the centre of a quad to whole
+ * pixels with `Math.round` (renderer.js). Without a turn the runtime has rounded C − P
+ * itself, which at a whole-number anchor is the same thing.
+ */
+function expectedTurned(
+    doc: SpriteDoc,
+    composite: PixelBuffer,
+    quarters: 0 | 1 | 2 | 3,
+    anchor: readonly [number, number],
+): PixelBuffer {
+    const evenW = composite.width + (composite.width % 2);
+    const evenH = composite.height + (composite.height % 2);
+    const rectangle = placed(composite, 0, 0, evenW, evenH);
+    const x = evenW / 2 - doc.pivot.x * composite.width;
+    const y = evenH / 2 - doc.pivot.y * composite.height;
+    const [turnedX, turnedY] = [
+        [x, y],
+        [-y, x],
+        [-x, -y],
+        [y, -x],
+    ][quarters];
+    const centreX = Math.round(anchor[0] + turnedX);
+    const centreY = Math.round(anchor[1] + turnedY);
+    const turned =
+        quarters === 0 ? rectangle : rotatePixels(rectangle, (quarters * 90) as 90 | 180 | 270);
+    return placed(
+        turned,
+        centreX - turned.width / 2 - WINDOW_ORIGIN[0],
+        centreY - turned.height / 2 - WINDOW_ORIGIN[1],
+        WINDOW_SIZE,
+        WINDOW_SIZE,
+    );
+}
+
+// Six anchors, four turns and every frame, drawn from two atlases each.
+describe.each(Object.entries(FIXTURES))(
+    "drawing %s at quarter turns, near the corner",
+    { timeout: 60_000 },
+    (_name, fixture) => {
+        // The same document exported with trim and without: the frames of the first are
+        // rectangles of many sizes and offsets, those of the second all the whole canvas.
+        const doc = fixture();
+        const trimmed = exported(doc, { ...doc.exportSettings, trim: true });
+        const whole = exported(doc, { ...doc.exportSettings, trim: false });
+
+        /** What NGNE's default camera shows of one frame, also where a canvas has no pixels. */
+        const turned = (made: Bundle, id: string, quarters: number, [x, y]: [number, number]) => {
+            const frame = ngneFrame();
+            spriteAt(frame, made.meta, "atlas", id, x, y, { rotation: (quarters * Math.PI) / 2 });
+            return rasterize(frame, made.atlas, WINDOW_SIZE, WINDOW_SIZE, WINDOW_ORIGIN);
+        };
+
+        it("is trimmed where its frames are not all the canvas", () => {
+            const sizes = (made: Bundle) =>
+                new Set(Object.values(made.meta.frames).map(({ w, h }) => `${w}×${h}`));
+            expect(sizes(whole.made).size).toBe(1);
+            expect(
+                Object.values(whole.made.meta.frames).every((frame) => frame.offsetX === 0),
+            ).toBe(true);
+            expect(Object.keys(trimmed.made.meta.frames)).toEqual(
+                Object.keys(whole.made.meta.frames),
+            );
+        });
+
+        it.each([0, 1, 2, 3] as const)(
+            "after %d quarter turns every frame lands where the untrimmed export puts it",
+            (quarters) => {
+                for (const anchor of SMALL_ANCHORS) {
+                    for (const [id, composite] of trimmed.composites) {
+                        const label = `${id}, ${quarters} quarter turns about ${anchor.join()}`;
+                        const fromWhole = turned(whole.made, id, quarters, anchor);
+                        const fromTrimmed = turned(trimmed.made, id, quarters, anchor);
+
+                        // The untrimmed frame is where the definition puts it, and the
+                        // trimmed one on the same rows and columns.
+                        expect(
+                            firstDifference(
+                                fromWhole,
+                                expectedTurned(doc, composite, quarters, anchor),
+                            ),
+                            label,
+                        ).toBeNull();
+                        expect(firstDifference(fromTrimmed, fromWhole), label).toBeNull();
+                    }
+                }
+            },
+        );
+    },
+);
 
 // 150 documents, each drawn frame by frame.
 describe("drawing any document", { timeout: 60_000 }, () => {

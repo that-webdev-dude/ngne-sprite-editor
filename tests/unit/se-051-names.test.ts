@@ -10,7 +10,7 @@ import {
     exportName,
     isAtlasId,
 } from "../../src/core/export";
-import { frameId } from "../../src/core/export/names";
+import { frameId, isPlainFileName } from "../../src/core/export/names";
 import { exportSettings, grid, sprite, textOf } from "./se-051-support";
 
 // The names of an export (SPEC §9.1, §9.3, §9.5). The rule of a slug, stated once in
@@ -419,6 +419,25 @@ describe("bundleFileNames", () => {
             "nul-sprite.preview.config.mjs",
             "nul-sprite.aseprite.json",
         ]);
+    });
+
+    it("gives only plain file names, the kind an atlas may name as its image", () => {
+        // The rule the reader of an atlas applies to `image` (FORMAT §2.2), on every file.
+        expect(isPlainFileName("con.png")).toBe(false);
+        expect(isPlainFileName("C:hero.png")).toBe(false);
+        expect(isPlainFileName("hero.png")).toBe(true);
+        const names = fc.oneof(
+            fc.string({ unit: "binary", maxLength: 40 }),
+            fc.constantFrom("con", "PRN", "aux", "NUL", "com1", "LPT9", "..", ".", "C:", "a/b", ""),
+        );
+        fc.assert(
+            fc.property(names, (name) => {
+                for (const file of bundleFileNames(name, all)) {
+                    expect(isPlainFileName(file)).toBe(true);
+                }
+            }),
+            { numRuns: 500 },
+        );
     });
 });
 

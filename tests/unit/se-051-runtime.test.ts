@@ -1,5 +1,5 @@
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
     animationDone,
     animationFrame,
@@ -12,11 +12,18 @@ import {
     Recorder,
     cornersOf,
     demoDrawSprite,
+    grid,
     heroWalk,
+    litPixels,
     ngneFrame,
     quadsOf,
+    rasterize,
+    sprite,
 } from "./se-051-support";
 import type { DemoRect } from "./se-051-support";
+
+/** A transparent row of 40 pixels. */
+const BLANK = ".".repeat(40);
 
 // The draw maths of SPEC §9.2, as the sprite runtime does them:
 //
@@ -25,9 +32,10 @@ import type { DemoRect } from "./se-051-support";
 //     size   = (fx·s·w, fy·s·h)                                      x sin θ + y cos θ)
 //     uv     = (x/width, y/height, w/width, h/height)
 //
-// with `s·d` rounded to integers when θ = 0 and s is an integer. Every expected number is
-// worked out by hand from these lines. What the runtime hands over is looked at twice: as
-// the sprite it gives a recording sink, and as the quad NGNE's own `Frame` packs from it.
+// with `s·d` rounded to integers when θ = 0 and s is an integer, and with the sine and
+// cosine of a quarter turn taken as exactly 0 and ±1. Every expected number is worked out by
+// hand from these lines. What the runtime hands over is looked at twice: as the sprite it
+// gives a recording sink, and as the quad NGNE's own `Frame` packs from it.
 
 /** The frame `player` of the atlas of NGNE's demo (demo/assets/starfall.json). */
 const PLAYER = { x: 34, y: 72, w: 32, h: 36 };
@@ -153,17 +161,39 @@ describe("an untrimmed frame of even size, against NGNE's demo/sprites.ts", () =
         }
     });
 
-    it("off-centre pivot: the same sprite as the demo, the whole pixels at rotation 0 aside", () => {
+    it("off-centre pivot: the same sprite as the demo, whole pixels and exact quarter turns aside", () => {
         // d = (16 − 0.25·32, 18 − 0.75·36) = (8, −9); the demo has
         // ((0.5 − 0.25)·32, (0.5 − 0.75)·36) = (8, −9). Whole numbers: rounding changes nothing.
+        // What a quarter turn and half a turn make of that offset: (−d.y, d.x) and (−d.x, −d.y).
+        const turned = new Map([
+            [Math.PI / 2, [9, 8]],
+            [Math.PI, [-8, 9]],
+        ]);
         for (const [x, y] of ANCHORS) {
             for (const rotation of ROTATIONS) {
+                const label = `${x}, ${y} at ${rotation}`;
                 const demo = new Recorder();
                 demoDrawSprite(demo, DEMO_ART, "ships", "nose", x, y, rotation);
                 const ours = new Recorder();
                 spriteAt(ours, SHEET, "ships", "nose", x, y, { rotation, layer: 3, alpha: 1 });
 
-                expect(ours.sprites, `${x}, ${y} at ${rotation}`).toEqual(demo.sprites);
+                const exact = turned.get(rotation);
+                if (exact === undefined) {
+                    expect(ours.sprites, label).toEqual(demo.sprites);
+                    continue;
+                }
+                // At these two the demo's centre carries what Math.cos(π/2) = 6.1e-17 and
+                // Math.sin(π) = 1.2e-16 make of the offset (about (−7, 3) it is
+                // 2.000000000000001 for 2); the runtime's is exact. Everything else is equal.
+                const [sprite] = ours.sprites;
+                expect([sprite.x, sprite.y], label).toEqual([x + exact[0], y + exact[1]]);
+                expect(sprite.x, label).toBeCloseTo(demo.sprites[0].x, 12);
+                expect(sprite.y, label).toBeCloseTo(demo.sprites[0].y, 12);
+                expect({ ...sprite, x: 0, y: 0 }, label).toEqual({
+                    ...demo.sprites[0],
+                    x: 0,
+                    y: 0,
+                });
             }
         }
         expect(drawn("nose", 120, 80)).toMatchObject({ x: 128, y: 71 });
@@ -227,8 +257,7 @@ describe("a trimmed frame with an off-centre pivot", () => {
     it("rotation 90°: the offset turns with the frame and is not rounded", () => {
         // R(π/2)·(−3.5, −10) = (10, −3.5): centre = (40 + 10, 30 − 3.5) = (50, 26.5).
         const sprite = drawn("boot", 40, 30, { rotation: Math.PI / 2 });
-        expect(sprite.x).toBeCloseTo(50, 12);
-        expect(sprite.y).toBeCloseTo(26.5, 12);
+        expect([sprite.x, sprite.y]).toEqual([50, 26.5]);
         expect([sprite.width, sprite.height, sprite.rotation]).toEqual([12, 6, Math.PI / 2]);
 
         // The quad stands on its side: 6 wide and 12 high around the centre. NGNE's snap
@@ -328,6 +357,166 @@ describe("a trimmed frame with an off-centre pivot", () => {
     });
 });
 
+describe("quarter turns", () => {
+    // `Math.cos(Math.PI / 2)` is 6.1e-17 and `Math.sin(Math.PI)` 1.2e-16, not 0. Multiplied
+    // with an offset and added to an anchor, such a number moves a centre that should end in
+    // .5 a hair above or below it, by the sign of the offset; a camera that rounds centres
+    // then sends one frame of a sheet up and another down. So the runtime takes the sine
+    // and cosine of a quarter turn as exactly 0 and ±1 (SPEC §9.2).
+
+    /** The centre the runtime gives `boot`, whose d is (−3.5, −10), about (`x`, `y`). */
+    function centre(rotation: number, x = 40, y = 30): number[] {
+        const sprite = drawn("boot", x, y, { rotation });
+        return [sprite.x, sprite.y];
+    }
+
+    it("turn the offset exactly: no 1e-16 of the sine or cosine is left in the centre", () => {
+        expect(Math.cos(Math.PI / 2)).not.toBe(0);
+        expect(Math.sin(Math.PI)).not.toBe(0);
+
+        // R(θ)·(x, y) = (x cos θ − y sin θ, x sin θ + y cos θ) with d = (−3.5, −10):
+        // a quarter turn gives (−d.y, d.x) = (10, −3.5),
+        expect(centre(Math.PI / 2)).toEqual([50, 26.5]);
+        // half a turn (−d.x, −d.y) = (3.5, 10),
+        expect(centre(Math.PI)).toEqual([43.5, 40]);
+        // three quarters (d.y, −d.x) = (−10, 3.5), which is also a quarter turn back.
+        expect(centre((3 * Math.PI) / 2)).toEqual([30, 33.5]);
+        expect(centre(-Math.PI / 2)).toEqual([30, 33.5]);
+        expect(centre(-Math.PI)).toEqual([43.5, 40]);
+        // The rotation is handed to the engine as it was given.
+        expect(drawn("boot", 40, 30, { rotation: Math.PI }).rotation).toBe(Math.PI);
+    });
+
+    it("are exact at small anchors, where the 1e-16 would not be lost in the sum", () => {
+        // 0 + 3.5 and 1 + 10; with the raw sine, 4 − 19 × 6.1e-17 − 0.5 is 3.499999999999999.
+        expect(centre(Math.PI, 0, 0)).toEqual([3.5, 10]);
+        expect(centre(Math.PI / 2, 1, 1)).toEqual([11, -2.5]);
+        expect(centre((3 * Math.PI) / 2, 4, 4)).toEqual([-6, 7.5]);
+        expect(centre(Math.PI, 0.25, -0.125)).toEqual([3.75, 9.875]);
+    });
+
+    it("are exact after any number of turns", () => {
+        // A whole turn is not rotation 0: d is turned back onto itself and is not rounded.
+        expect(Math.sin(2 * Math.PI)).not.toBe(0);
+        expect(centre(2 * Math.PI)).toEqual([36.5, 20]);
+        expect(centre(-2 * Math.PI)).toEqual([36.5, 20]);
+        // 5/2 π and 1001/2 π are quarter turns (5 = 4 + 1, 1001 = 4 × 250 + 1); 7/2 π and
+        // −501/2 π three quarters (−501 = 4 × −126 + 3); 100 π is 50 whole turns.
+        expect(centre((5 * Math.PI) / 2)).toEqual([50, 26.5]);
+        expect(centre((1001 * Math.PI) / 2)).toEqual([50, 26.5]);
+        expect(centre((7 * Math.PI) / 2)).toEqual([30, 33.5]);
+        expect(centre((-501 * Math.PI) / 2)).toEqual([30, 33.5]);
+        expect(centre(100 * Math.PI)).toEqual([36.5, 20]);
+    });
+
+    it("take the larger of the two as exactly 1 or −1, whatever its last bit", () => {
+        // An engine may give a cosine one bit short of 1 where the sine is 1e-13. Both are
+        // put right: the turn is the exact quarter turn on both axes. About (0, 0), where
+        // nothing hides a last bit, d = (−3.5, −10) comes out as itself and its three turns.
+        const short = 1 - 2 ** -53;
+        expect(short).toBeLessThan(1);
+        const cos = vi.spyOn(Math, "cos");
+        const sin = vi.spyOn(Math, "sin");
+        try {
+            cos.mockReturnValue(short);
+            sin.mockReturnValue(1e-13);
+            expect(centre(1e-13, 0, 0)).toEqual([-3.5, -10]);
+            cos.mockReturnValue(1e-13);
+            sin.mockReturnValue(short);
+            expect(centre(1.57, 0, 0)).toEqual([10, -3.5]);
+            cos.mockReturnValue(-short);
+            sin.mockReturnValue(-1e-13);
+            expect(centre(3.14, 0, 0)).toEqual([3.5, 10]);
+            cos.mockReturnValue(-1e-13);
+            sin.mockReturnValue(-short);
+            expect(centre(4.71, 0, 0)).toEqual([-10, 3.5]);
+            // The control: at 1e-11 neither counts as 0, and the last bits show.
+            cos.mockReturnValue(short);
+            sin.mockReturnValue(1e-11);
+            expect(centre(1e-11, 0, 0)).not.toEqual([-3.5, -10]);
+        } finally {
+            cos.mockRestore();
+            sin.mockRestore();
+        }
+        expect(Math.cos(0)).toBe(1);
+    });
+
+    it("leave every other angle to its sine and cosine", () => {
+        // Below 1e-12 a sine or cosine counts as 0; from there on it is used as it is.
+        const expected = (rotation: number) => [
+            40 + -3.5 * Math.cos(rotation) - -10 * Math.sin(rotation),
+            30 + -3.5 * Math.sin(rotation) + -10 * Math.cos(rotation),
+        ];
+        for (const rotation of [
+            0.3,
+            1,
+            -2.1,
+            7,
+            Math.PI / 4,
+            Math.PI / 2 + 1e-9,
+            Math.PI - 1e-6,
+            2e-12,
+        ]) {
+            expect(centre(rotation), String(rotation)).toEqual(expected(rotation));
+        }
+        // sin 2e-12 = 2e-12: the centre is 36.5 + 10 × 2e-12.
+        expect(centre(2e-12)[0]).toBeCloseTo(36.5 + 2e-11, 14);
+        expect(centre(2e-12)[0]).not.toBe(36.5);
+        // sin 5e-13 counts as 0. The rotation is not 0, so d is not rounded.
+        expect(centre(5e-13)).toEqual([36.5, 20]);
+        expect(centre(Math.PI / 2 - 5e-13)).toEqual([50, 26.5]);
+    });
+
+    it("keep the frames of a trimmed sheet together under NGNE's centre snapping", () => {
+        // A sprite of 40 × 5 with the pivot at its centre, P = (20, 2.5). Frame 0 has two
+        // pixels at the left end of row 2, frame 1 two at the right end.
+        const doc = (trim: boolean) =>
+            sprite({
+                name: "Bar",
+                frames: [
+                    grid(BLANK, BLANK, `AB${".".repeat(38)}`, BLANK, BLANK),
+                    grid(BLANK, BLANK, `${".".repeat(38)}CD`, BLANK, BLANK),
+                ],
+                settings: { trim },
+            });
+        const trimmed = bundle(doc(true));
+        const whole = bundle(doc(false));
+        // Trimmed, each frame is a 2 × 2 rectangle: d = (0 + 1 − 20, 2 + 1 − 2.5) = (−19, 0.5)
+        // and (38 + 1 − 20, 0.5) = (19, 0.5). Whole, both are 40 × 6: d = (0, 3 − 2.5).
+        expect(trimmed.meta.frames["bar-0"]).toMatchObject({ w: 2, h: 2, offsetX: 0, offsetY: 2 });
+        expect(trimmed.meta.frames["bar-1"]).toMatchObject({ w: 2, h: 2, offsetX: 38, offsetY: 2 });
+        expect(whole.meta.frames["bar-1"]).toMatchObject({ w: 40, h: 6, offsetX: 0, offsetY: 0 });
+
+        /** The pixels NGNE lights for one frame, also where a canvas has none. */
+        const lit = (made: typeof whole, id: string, rotation: number, [x, y]: number[]) => {
+            const frame = ngneFrame();
+            spriteAt(frame, made.meta, "atlas", id, x, y, { rotation });
+            return litPixels(rasterize(frame, made.atlas, 96, 96, [-32, -32]), [-32, -32]);
+        };
+        // Where the whole frame puts its pixels. With d = (0, 0.5):
+        const cases: [number, number[], string[], string[]][] = [
+            // Half a turn about (20, 20): the centre (20, 19.5) is rounded to (20, 20), the
+            // quad covers 0..40 by 17..23, and the pixel (c, r) of the frame lands on
+            // (39 − c, 22 − r): row 2 on row 20.
+            [Math.PI, [20, 20], ["38,20", "39,20"], ["0,20", "1,20"]],
+            // A quarter turn about (4, 4): the centre (3.5, 4) is rounded to (4, 4), the quad
+            // covers 1..7 by −16..24, and (c, r) lands on (6 − r, c − 16): row 2 on column 4.
+            [Math.PI / 2, [4, 4], ["4,-16", "4,-15"], ["4,22", "4,23"]],
+            // Three quarters about (20, 20): the centre (20.5, 20) is rounded to (21, 20), the
+            // quad covers 18..24 by 0..40, and (c, r) lands on (18 + r, 39 − c): column 20.
+            [(3 * Math.PI) / 2, [20, 20], ["20,38", "20,39"], ["20,0", "20,1"]],
+        ];
+        for (const [rotation, anchor, first, second] of cases) {
+            const label = `${rotation} about ${anchor.join()}`;
+            expect(lit(whole, "bar-0", rotation, anchor), label).toEqual(first);
+            expect(lit(whole, "bar-1", rotation, anchor), label).toEqual(second);
+            // Trimmed, every frame lands on the same rows and columns.
+            expect(lit(trimmed, "bar-0", rotation, anchor), label).toEqual(first);
+            expect(lit(trimmed, "bar-1", rotation, anchor), label).toEqual(second);
+        }
+    });
+});
+
 describe("a frame of odd size in its even rectangle", () => {
     // `odd`: 33 × 17 in 34 × 18. d = (0 + 17 − 16.5, 0 + 9 − 8.5) = (0.5, 0.5).
 
@@ -406,8 +595,7 @@ describe("top-left placement", () => {
         // Mirrored: the frame lies to the left of X. Centre x = 10 − 13.
         expect(at({ flipX: true })).toMatchObject({ x: -3, y: 27, width: -12 });
         // Turned a quarter: R(π/2)·(13, 7) = (−7, 13).
-        expect(at({ rotation: Math.PI / 2 }).x).toBeCloseTo(3, 12);
-        expect(at({ rotation: Math.PI / 2 }).y).toBeCloseTo(33, 12);
+        expect(at({ rotation: Math.PI / 2 })).toMatchObject({ x: 3, y: 33 });
     });
 });
 

@@ -4,6 +4,7 @@ import {
     ATLAS_FORMAT,
     ATLAS_GENERATOR,
     ATLAS_VERSION,
+    AtlasError,
     ExportError,
     MAX_ATLAS_ENTRIES,
     MAX_ATLAS_FRAMES,
@@ -201,6 +202,70 @@ describe("docs/FORMAT.md, sprite atlas version 1", { timeout: 60_000 }, () => {
         expect(errorOf(ExportError, () => entries(258, "forward")).count).toBe(65_790);
         expect(entries(129, "pingpong")).toBe(65_280);
         expect(errorOf(ExportError, () => entries(130, "pingpong")).count).toBe(65_790);
+    });
+
+    it("states the real range of a rectangle's corner", () => {
+        // An even side of at least 2 in an image of at most 8192: no rectangle starts later.
+        expect(section).toContain(`| \`x\`, \`y\`     | integer | 0..${MAX_ATLAS_SIDE - 2} `);
+        expect(section).not.toContain(`| \`x\`, \`y\`     | integer | 0..${MAX_ATLAS_SIDE} `);
+        const corner = (x: number): unknown => {
+            const atlas = structuredClone(examples[0]) as {
+                width: number;
+                frames: Record<string, Record<string, number>>;
+            };
+            atlas.width = MAX_ATLAS_SIDE;
+            Object.assign(atlas.frames["hero-1"], { x, w: 2 });
+            return validateAtlas(atlas, { width: MAX_ATLAS_SIDE, height: EXAMPLE_SIZE.height });
+        };
+        expect(corner(8190)).toMatchObject({ frames: { "hero-1": { x: 8190, w: 2 } } });
+        const error = errorOf(AtlasError, () => corner(8191));
+        expect([error.code, error.path]).toEqual(["field", 'frames["hero-1"].x']);
+    });
+
+    it("states what a plain file name is, as the reader has it", () => {
+        expect(section).toContain("| `image`      | string  | A plain file name (below)  |");
+        expect(section).toContain("`image` is a **plain file name**");
+        const named = (image: string) => () =>
+            validateAtlas({ ...(examples[0] as object), image }, EXAMPLE_SIZE);
+        // Every name the paragraph gives as an example, and every device it lists.
+        expect(section).toContain("(`C:hero.png` is a path on Windows)");
+        expect(section).toContain(
+            "`CON` and `nul.png` are devices there, `console.png` is a file.",
+        );
+        expect(section).toContain("U+0000 to U+001F and U+007F to U+009F");
+        for (const image of [
+            "C:hero.png",
+            "a/hero.png",
+            "a\\hero.png",
+            ".",
+            "..",
+            "CON",
+            "nul.png",
+            "",
+        ]) {
+            expect(errorOf(AtlasError, named(image)).path, image).toBe("image");
+        }
+        expect(named("console.png")()).toMatchObject({ image: "console.png" });
+        expect(section).toContain(
+            "none of `con`, `prn`, `aux`, `nul`, `com0` to `com9`\n  and `lpt0` to `lpt9`",
+        );
+        const devices = ["con", "prn", "aux", "nul"];
+        for (let digit = 0; digit <= 9; digit++) devices.push(`com${digit}`, `lpt${digit}`);
+        for (const device of devices) {
+            for (const image of [device, device.toUpperCase(), `${device}.png`, `${device} .png`]) {
+                expect(errorOf(AtlasError, named(image)).path, image).toBe("image");
+            }
+            expect(named(`${device}s.png`)()).toMatchObject({ image: `${device}s.png` });
+        }
+        // The control characters of the two ranges, and their neighbours.
+        for (const code of [0x00, 0x01, 0x1f, 0x7f, 0x80, 0x9f]) {
+            const image = `a${String.fromCharCode(code)}.png`;
+            expect(errorOf(AtlasError, named(image)).path, String(code)).toBe("image");
+        }
+        for (const code of [0x20, 0x7e, 0xa0]) {
+            const image = `a${String.fromCharCode(code)}.png`;
+            expect(named(image)(), String(code)).toMatchObject({ image });
+        }
     });
 
     it("lists every code of the reader's error", () => {

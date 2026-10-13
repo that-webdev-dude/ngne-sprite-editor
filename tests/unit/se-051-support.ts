@@ -215,12 +215,25 @@ export function textOf(bundle: Bundle, ending: string): string {
     return new TextDecoder("utf-8", { fatal: true }).decode(bytesOf(bundle, ending));
 }
 
-/** The generator the golden files were written by. */
+/** The generator the golden files were written by: its name, a space and its version. */
 export const GOLDEN_GENERATOR = "ngne-sprite-editor 0.0.0";
 
-/** A text as the version of the editor that wrote the golden files would have written it. */
-export function withGoldenGenerator(text: string): string {
-    return text.replaceAll(ATLAS_GENERATOR, GOLDEN_GENERATOR);
+/**
+ * A text as the version of the editor that wrote the golden files would have written it.
+ * A bundle names the editor in two ways: as one string, name and version (the `generator`
+ * of the atlas, the first line of the generated modules), and in the Aseprite data as the
+ * two members `"app"` and `"version"` of `meta`. Both are put back to the golden ones, so
+ * that a new version of the editor does not make the golden files wrong. `generator` is the
+ * one the text was written with: `ATLAS_GENERATOR`, unless a test loads the module anew.
+ */
+export function withGoldenGenerator(text: string, generator: string = ATLAS_GENERATOR): string {
+    const [app, version] = generator.split(" ");
+    const [goldenApp, goldenVersion] = GOLDEN_GENERATOR.split(" ");
+    const member = (name: string, value: string) => `"${name}": ${JSON.stringify(value)}`;
+    return text
+        .replaceAll(generator, GOLDEN_GENERATOR)
+        .replaceAll(member("app", app), member("app", goldenApp))
+        .replaceAll(member("version", version), member("version", goldenVersion));
 }
 
 /** The error of class `type` that `run` throws. Any other is passed on; none is one. */
@@ -306,12 +319,18 @@ export function cornersOf(quad: Quad): { xs: number[]; ys: number[] } {
  * corner coordinates (s, t) with `centre = origin + s·i + t·j`, both in [0, 1); its texture
  * coordinate is `uv.xy + (s, t)·uv.zw`; and the sampler takes the nearest texel. A texel
  * with alpha above 0 replaces what is there (the tests draw opaque or transparent texels).
+ *
+ * The target shows the pixels from `origin` on: its pixel (0, 0) is the pixel `origin` of
+ * the frame's own coordinates. A canvas starts at (0, 0); an origin below that lets a test
+ * see what a draw near the corner puts where a canvas has no pixels, without moving the
+ * draw (and with it the arithmetic under test) away from the corner.
  */
 export function rasterize(
     frame: Frame,
     atlas: PixelBuffer,
     width: number,
     height: number,
+    origin: readonly [number, number] = [0, 0],
 ): PixelBuffer {
     const target = createPixelBuffer(width, height);
     for (const quad of quadsOf(frame)) {
@@ -320,10 +339,10 @@ export function rasterize(
         const determinant = ix * jy - jx * iy;
         // Only the pixels of the target that the quad's bounding box touches can lie in it.
         const { xs, ys } = cornersOf(quad);
-        const left = Math.max(0, Math.floor(xs[0]));
-        const right = Math.min(width, Math.ceil(xs[3]));
-        const top = Math.max(0, Math.floor(ys[0]));
-        const bottom = Math.min(height, Math.ceil(ys[3]));
+        const left = Math.max(origin[0], Math.floor(xs[0]));
+        const right = Math.min(origin[0] + width, Math.ceil(xs[3]));
+        const top = Math.max(origin[1], Math.floor(ys[0]));
+        const bottom = Math.min(origin[1] + height, Math.ceil(ys[3]));
         for (let y = top; y < bottom; y++) {
             for (let x = left; x < right; x++) {
                 const px = x + 0.5 - quad.origin[0];
@@ -335,11 +354,28 @@ export function rasterize(
                 const v = Math.floor((quad.uv[1] + t * quad.uv[3]) * atlas.height);
                 const from = (v * atlas.width + u) * 4;
                 if (atlas.data[from + 3] === 0) continue;
-                target.data.set(atlas.data.subarray(from, from + 4), (y * width + x) * 4);
+                const to = ((y - origin[1]) * width + (x - origin[0])) * 4;
+                target.data.set(atlas.data.subarray(from, from + 4), to);
             }
         }
     }
     return target;
+}
+
+/** The pixels of a buffer with alpha above 0, as `x,y` in the coordinates `origin` gives it. */
+export function litPixels(
+    buffer: PixelBuffer,
+    origin: readonly [number, number] = [0, 0],
+): string[] {
+    const lit: string[] = [];
+    for (let y = 0; y < buffer.height; y++) {
+        for (let x = 0; x < buffer.width; x++) {
+            if (buffer.data[(y * buffer.width + x) * 4 + 3] !== 0) {
+                lit.push(`${x + origin[0]},${y + origin[1]}`);
+            }
+        }
+    }
+    return lit;
 }
 
 /**

@@ -779,8 +779,12 @@ uv     = (x/width, y/height, w/width, h/height)
 For `θ = 0` and integer `s`, the helper rounds `s·d` to integers (before applying the flip
 sign), so a quad at an integer anchor has integer edges under both snapping modes. Rounding
 applies only at exactly `θ = 0`; rotated sprites use the unrounded value (a difference of at
-most half a pixel). For an untrimmed frame of even size this is exactly the maths in NGNE's
-`demo/sprites.ts`. The runtime also offers top-left placement
+most half a pixel). A quarter turn is exact: a `sin θ` or `cos θ` less than 1e-12 from 0 is
+taken as 0 and the other as ±1. `Math.sin(Math.PI)` is 1.2e-16, and what it adds to a centre
+ending in .5 has the sign of the frame's offset, so NGNE's centre snapping would round the
+frames of one trimmed sheet apart. For an untrimmed frame of even size this is the maths in
+NGNE's `demo/sprites.ts`, equal to the last bit for a centre pivot. The runtime also offers
+top-left placement
 (`centre = (X + offsetX + w/2, Y + offsetY + h/2)`) for callers that position by the source
 frame's corner.
 

@@ -65,8 +65,14 @@ describe("bundle is deterministic", () => {
         // of the editor, which that run and this one need not share.
         const made = everyFile();
         const directory = new URL("./se-051-fixtures/", import.meta.url);
+        const [image, ...texts] = made.files;
 
-        for (const file of made.files.slice(1)) {
+        // All five: the image as it is, byte for byte.
+        expect(image.name).toBe("hero-walk.png");
+        const committedImage = readFileSync(new URL(image.name, directory));
+        expect(Buffer.compare(Buffer.from(image.bytes), committedImage), image.name).toBe(0);
+        expect(texts).toHaveLength(4);
+        for (const file of texts) {
             const committed = readFileSync(new URL(`${file.name}.golden`, directory));
             const written = Buffer.from(
                 withGoldenGenerator(new TextDecoder().decode(file.bytes)),

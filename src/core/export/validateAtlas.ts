@@ -9,7 +9,7 @@ import {
 import type { AtlasMeta } from "./atlasFormat";
 import { AtlasError } from "./errors";
 import type { AtlasErrorCode } from "./errors";
-import { isAtlasId } from "./names";
+import { isAtlasId, isPlainFileName } from "./names";
 import { MAX_ATLAS_SIDE } from "./packErrors";
 import type { AtlasAnimation, AtlasEntry, AtlasFrame } from "./sprite-runtime";
 
@@ -110,8 +110,9 @@ function readFrame(value: unknown, path: string, width: number, height: number):
         if (size % 2 !== 0) fail("field", at(path, key), `must be even, got ${size}`);
         return size;
     };
-    const x = read("x", 0, MAX_ATLAS_SIDE);
-    const y = read("y", 0, MAX_ATLAS_SIDE);
+    // The smallest rectangle is 2 × 2, so in the largest image none starts beyond 8190.
+    const x = read("x", 0, MAX_ATLAS_SIDE - 2);
+    const y = read("y", 0, MAX_ATLAS_SIDE - 2);
     const w = side("w");
     const h = side("h");
     const sourceW = read("sourceW", 1, MAX_ATLAS_SIDE);
@@ -237,8 +238,13 @@ function read(json: unknown, pngSize: { width: number; height: number }): AtlasM
 
     const generator = string(member(json, "generator", ""), "generator");
     const image = string(member(json, "image", ""), "image");
-    if (image === "" || /[/\\]/.test(image)) {
-        fail("field", "image", `must be a file name without a folder, got ${shown(image)}`);
+    if (!isPlainFileName(image)) {
+        fail(
+            "field",
+            "image",
+            `must be a plain file name, without a folder, a drive, a control character or the ` +
+                `name of a device, got ${shown(image)}`,
+        );
     }
     const width = integer(member(json, "width", ""), "width", 1, MAX_ATLAS_SIDE);
     const height = integer(member(json, "height", ""), "height", 1, MAX_ATLAS_SIDE);

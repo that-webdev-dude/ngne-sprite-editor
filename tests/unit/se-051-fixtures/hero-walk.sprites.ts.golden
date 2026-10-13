@@ -336,6 +336,11 @@ function frameOf<FrameId extends string>(atlas: SpriteAtlas<FrameId>, id: FrameI
  * whole-number scale, `scale*d` is rounded to whole pixels before it is mirrored: `w` and
  * `h` are even, so a frame at a whole-number anchor then has its edges on pixel boundaries,
  * whether or not the camera snaps sprite centres. A rotated frame is not rounded.
+ *
+ * A quarter turn is exact: when the sine or the cosine of the rotation is less than 1e-12
+ * from 0, it is taken as 0 and the other as 1 or -1. `Math.sin(Math.PI)` is 1.2e-16, and
+ * what it adds to a centre that should end in .5 depends on the frame; a camera that snaps
+ * centres would then round the frames of one sheet apart.
  */
 function place(
     sink: SpriteSink,
@@ -359,8 +364,15 @@ function place(
     }
     dx *= flipX;
     dy *= flipY;
-    const cos = Math.cos(rotation);
-    const sin = Math.sin(rotation);
+    let cos = Math.cos(rotation);
+    let sin = Math.sin(rotation);
+    if (Math.abs(sin) < 1e-12) {
+        sin = 0;
+        cos = cos < 0 ? -1 : 1;
+    } else if (Math.abs(cos) < 1e-12) {
+        cos = 0;
+        sin = sin < 0 ? -1 : 1;
+    }
     const sprite: SheetSprite = {
         x: x + dx * cos - dy * sin,
         y: y + dx * sin + dy * cos,

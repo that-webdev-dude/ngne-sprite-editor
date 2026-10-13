@@ -599,7 +599,7 @@ frames 1 to 2 in reverse, twice.
 | `format`     | string  | `"ngne-sprite-atlas"`      | Names the format |
 | `version`    | integer | At least 1                 | The version of the format the file is written in. This section specifies 1 |
 | `generator`  | string  |                            | Name and version of the program that wrote the file. Informative only |
-| `image`      | string  | A file name: at least one character, no `/` and no `\` | The atlas image, a PNG file in the folder of the JSON file (§2.5) |
+| `image`      | string  | A plain file name (below)  | The atlas image, a PNG file in the folder of the JSON file (§2.5) |
 | `width`      | integer | 1..8192                    | Width of the image in pixels |
 | `height`     | integer | 1..8192                    | Height of the image in pixels |
 | `frames`     | object  | At least one member; at most 65 536 | The frames: each member is a Frame (§2.3) under its ID |
@@ -612,6 +612,17 @@ them before anything else in the file:
 2. `version` is above the newest version the reader knows: it refuses the file and says so,
    naming both versions. It does not look at the rest of the file.
 
+`image` is a **plain file name**: a reader that joins it to the folder of the JSON file stays
+in that folder and opens a file there, on every system.
+
+- It has at least one character and none of `/`, `\` and `:`: no folder, no drive
+  (`C:hero.png` is a path on Windows), no stream of a file.
+- It has no control character: U+0000 to U+001F and U+007F to U+009F.
+- It is not made of dots alone: `.` and `..` are folders.
+- It is no device of Windows: the part before its first dot, without spaces at its end and
+  whatever the case of its letters, is none of `con`, `prn`, `aux`, `nul`, `com0` to `com9`
+  and `lpt0` to `lpt9`. `CON` and `nul.png` are devices there, `console.png` is a file.
+
 `width` and `height` are those of the image. A reader that has the image compares them, and
 refuses an atlas that states another size: every texture coordinate is a fraction of them.
 
@@ -622,7 +633,7 @@ as it was drawn, the **source frame**. All coordinates are in pixels, from the t
 
 | Member       | Type    | Constraint                  | Meaning |
 | ------------ | ------- | --------------------------- | ------- |
-| `x`, `y`     | integer | 0..8192                     | Top-left corner of the rectangle in the image |
+| `x`, `y`     | integer | 0..8190                     | Top-left corner of the rectangle in the image. The smallest rectangle, 2 × 2, ends at 8192 from there |
 | `w`, `h`     | integer | 2..8192, **even**           | Size of the rectangle. It is never rotated |
 | `sourceW`    | integer | 1..8192                     | Width of the source frame |
 | `sourceH`    | integer | 1..8192                     | Height of the source frame |
@@ -810,7 +821,10 @@ This much follows from the format. How a program rounds is its own matter. The m
 editor exports rounds `s·d` to whole numbers, halves upwards, when `θ = 0` and `s` is a whole
 number, and before it mirrors: a pivot that falls between two pixels would otherwise put
 every pixel of the frame across two pixels of the screen. All frames of one sprite then move
-by the same amount, at most half a pixel. A rotated frame is not rounded.
+by the same amount, at most half a pixel. A rotated frame is not rounded, but a quarter turn
+is taken exactly: a sine or cosine of `θ` less than 1e-12 from 0 counts as 0 and the other as
+1 or −1. In floating point the sine of π is 1.2e-16, and a renderer that rounds the centres of
+sprites, as NGNE does, would otherwise round the frames of one sprite apart.
 
 In the example, `hero-1` drawn at `A = (100, 80)` has
 `d = (5 + 10 − 15.5, 22 + 5 − 32) = (−0.5, −5)`, rounded `(0, −5)`: a quad of 20 × 10

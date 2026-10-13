@@ -1,3 +1,4 @@
+import { posix, win32 } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -18,6 +19,15 @@ import { errorOf, exportSettings, heroWalk, textOf } from "./se-051-support";
 type Json = Record<string, unknown>;
 
 const SIZE = { width: 67, height: 67 };
+
+/** Control characters, made from their numbers so that this file holds none. */
+const CONTROL = {
+    nul: String.fromCharCode(0x00),
+    tab: String.fromCharCode(0x09),
+    lineFeed: String.fromCharCode(0x0a),
+    del: String.fromCharCode(0x7f),
+    nextLine: String.fromCharCode(0x85),
+};
 
 /**
  * A valid atlas, written out by hand: the example of SPEC §9.2 with a second frame, whose
@@ -132,6 +142,55 @@ describe("validateAtlas accepts", () => {
         atlas.animations.walk.entries[0].event = "step";
 
         expect(validateAtlas(atlas, SIZE)).toEqual(valid());
+    });
+
+    it("an image under any plain file name", () => {
+        const names = [
+            "hero.png",
+            "hero",
+            ".hero.png",
+            "hero..png",
+            "hero.",
+            "a.b.c.png",
+            "hero walk.png",
+            " hero.png",
+            "hero.PNG",
+            "héro.png",
+            "英雄.png",
+            // Not devices: a device name is the whole part before the first dot.
+            "console.png",
+            "null.png",
+            "nul-sprite.png",
+            "com10.png",
+            "com.png",
+            "lpt.png",
+            "hero.con",
+            "hero.nul.png",
+            `${"x".repeat(300)}.png`,
+        ];
+        for (const image of names) {
+            const atlas = valid();
+            atlas.image = image;
+            expect(validateAtlas(atlas, SIZE).image, image).toBe(image);
+        }
+    });
+
+    it("a rectangle in the last corner of the largest image", () => {
+        // 8190 + 2 = 8192: the largest x and y a frame can have.
+        const atlas = valid();
+        atlas.width = 8192;
+        atlas.height = 8192;
+        Object.assign(atlas.frames["hero-1"], {
+            x: 8190,
+            y: 8190,
+            w: 2,
+            h: 2,
+            sourceW: 2,
+            sourceH: 2,
+        });
+        const result = validateAtlas(atlas, { width: 8192, height: 8192 });
+
+        expect(result.frames["hero-1"]).toMatchObject({ x: 8190, y: 8190, w: 2, h: 2 });
     });
 
     it("a rectangle that touches the edge of the image", () => {
@@ -336,10 +395,53 @@ describe("validateAtlas rejects", () => {
         );
     });
 
-    it("an image name that is not a file name", () => {
-        for (const image of ["", "atlas/hero.png", "..\\hero.png", "/hero.png", "C:\\hero.png"]) {
-            expectRefused((atlas) => (atlas.image = image), "field", "image");
+    it("an image name that is not a plain file name", () => {
+        const refusedNames = [
+            // No name, a folder, a drive.
+            "",
+            "atlas/hero.png",
+            "..\\hero.png",
+            "/hero.png",
+            "C:\\hero.png",
+            // A drive without a folder is a path on Windows; a colon also names a stream.
+            "C:hero.png",
+            "hero.png:Zone.Identifier",
+            ":",
+            // The folder itself and the one above it.
+            ".",
+            "..",
+            "...",
+            // Control characters: NUL, line feed, tab, DEL and one of U+0080 to U+009F.
+            `a${CONTROL.nul}.png`,
+            `hero${CONTROL.lineFeed}.png`,
+            `${CONTROL.tab}hero.png`,
+            `hero.png${CONTROL.del}`,
+            `hero${CONTROL.nextLine}.png`,
+            // Devices of Windows, whatever the case, the extension and the spaces behind.
+            "CON",
+            "con",
+            "Con.png",
+            "nul",
+            "NUL.tar.gz",
+            "aux .png",
+            "PRN",
+            "COM1",
+            "com0.png",
+            "lpt9.png",
+            "LPT1",
+        ];
+        for (const image of refusedNames) {
+            const error = expectRefused((atlas) => (atlas.image = image), "field", "image");
+            expect(error.message, JSON.stringify(image)).toContain("must be a plain file name");
         }
+        expect(refused((atlas) => (atlas.image = "C:hero.png")).message).toBe(
+            "`image` must be a plain file name, without a folder, a drive, a control character " +
+                'or the name of a device, got "C:hero.png".',
+        );
+        // A control character is shown by its number, not put into the message.
+        const message = refused((atlas) => (atlas.image = `a${CONTROL.nul}.png`)).message;
+        expect(message).toContain('got "a\\u0000.png"');
+        expect(message.includes(CONTROL.nul)).toBe(false);
     });
 
     it("a rectangle that is not made of integers", () => {
@@ -353,9 +455,22 @@ describe("validateAtlas rejects", () => {
                 expect(error.message).toContain("must be an integer from");
             }
         }
+        // The smallest rectangle is 2 × 2 and the largest image 8192 a side: 8192 − 2 = 8190.
         expect(refused((atlas) => (atlas.frames["hero-0"].x = 1.5)).message).toBe(
-            '`frames["hero-0"].x` must be an integer from 0 to 8192, got 1.5.',
+            '`frames["hero-0"].x` must be an integer from 0 to 8190, got 1.5.',
         );
+        for (const beyond of [8191, 8192, 8193]) {
+            expectRefused(
+                (atlas) => (atlas.frames["hero-0"].x = beyond),
+                "field",
+                'frames["hero-0"].x',
+            );
+            expectRefused(
+                (atlas) => (atlas.frames["hero-0"].y = beyond),
+                "field",
+                'frames["hero-0"].y',
+            );
+        }
     });
 
     it("an odd w or h", () => {
@@ -383,7 +498,8 @@ describe("validateAtlas rejects", () => {
         );
         expectRefused((atlas) => (atlas.frames["hero-1"].y = 36), "bounds", 'frames["hero-1"]');
         expectRefused((atlas) => (atlas.frames["hero-0"].w = 68), "bounds", 'frames["hero-0"]');
-        expectRefused((atlas) => (atlas.frames["hero-0"].x = 8192), "bounds", 'frames["hero-0"]');
+        // The last x a frame can have at all: 8190 + 32 is far outside this image.
+        expectRefused((atlas) => (atlas.frames["hero-0"].x = 8190), "bounds", 'frames["hero-0"]');
         // A corrupted bundle: a rectangle of the fixture moved out of its 22 × 11 image.
         const made = bundle(heroWalk());
         const corrupted = JSON.parse(textOf(made, ".atlas.json")) as Atlas;
@@ -787,6 +903,63 @@ describe("validateAtlas and untrusted input", { timeout: 60_000 }, () => {
             ]);
             expect(error.cause).toBeInstanceOf(TypeError);
         }
+    });
+
+    it("accepts no image name that leads a reader out of the folder of the atlas", () => {
+        // What a reader does with the name, on Windows and elsewhere: it joins it to the
+        // folder the atlas lies in.
+        const windowsFolder = "D:\\export\\bundle";
+        const folder = "/export/bundle";
+        // The control: names the reader must not be given.
+        expect(win32.resolve(windowsFolder, "C:hero.png").startsWith(windowsFolder)).toBe(false);
+        expect(win32.resolve(windowsFolder, "..")).toBe("D:\\export");
+        expect(win32.resolve(windowsFolder, "..\\x.png")).toBe("D:\\export\\x.png");
+        expect(posix.resolve(folder, "../x.png")).toBe("/export/x.png");
+
+        const names = fc.oneof(
+            fc.string({ unit: "binary", maxLength: 12 }),
+            fc.string({
+                unit: fc.constantFrom(
+                    ".",
+                    "/",
+                    "\\",
+                    ":",
+                    "C",
+                    "c",
+                    "o",
+                    "n",
+                    "u",
+                    "l",
+                    " ",
+                    "1",
+                    CONTROL.nul,
+                ),
+                maxLength: 8,
+            }),
+        );
+        let accepted = 0;
+        fc.assert(
+            fc.property(names, (image) => {
+                const atlas = valid();
+                atlas.image = image;
+                try {
+                    validateAtlas(atlas, SIZE);
+                } catch (error) {
+                    expect(error).toBeInstanceOf(AtlasError);
+                    expect((error as AtlasError).path).toBe("image");
+                    return;
+                }
+                accepted++;
+                // Accepted: the file it names lies in the folder, under that very name.
+                expect(win32.dirname(win32.resolve(windowsFolder, image))).toBe(windowsFolder);
+                expect(win32.basename(win32.resolve(windowsFolder, image))).toBe(image);
+                expect(posix.dirname(posix.resolve(folder, image))).toBe(folder);
+                expect(posix.basename(posix.resolve(folder, image))).toBe(image);
+                expect(image).not.toMatch(/^(?:con|prn|aux|nul|com\d|lpt\d) *(?:\.|$)/i);
+            }),
+            { numRuns: 3000 },
+        );
+        expect(accepted).toBeGreaterThan(300);
     });
 
     it("does not follow a value into itself", () => {

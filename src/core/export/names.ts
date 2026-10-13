@@ -21,6 +21,11 @@ const FALLBACK_TAG = "tag";
  */
 const DEVICE_NAME = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])$/;
 
+/** A text with its letters A–Z as a–z, and no other character changed. */
+function lowerAscii(text: string): string {
+    return text.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+}
+
 /**
  * The slug of a name, or "" when nothing of the name is left:
  * 1. the letters A–Z become a–z. No other character is changed: there is no Unicode case
@@ -33,11 +38,32 @@ const DEVICE_NAME = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])$/;
  * A slug matches `[a-z0-9][a-z0-9-]*`, has no "--" and does not end with "-".
  */
 function slugify(text: string): string {
-    const slug = text
-        .replace(/[A-Z]/g, (letter) => letter.toLowerCase())
+    const slug = lowerAscii(text)
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
     return slug.slice(0, MAX_SLUG_LENGTH).replace(/-$/, "");
+}
+
+/**
+ * Whether the text is a plain file name, as `image` of `ngne-sprite-atlas` must be
+ * (docs/FORMAT.md §2.2): a reader that joins it to the folder of the atlas stays in that
+ * folder and opens a file, on every system.
+ * - At least one character, and none of `/`, `\` and `:`: no folder, no drive (`C:hero.png`
+ *   is a path on Windows), no stream of a file.
+ * - No control character: U+0000 to U+001F and U+007F to U+009F.
+ * - Not made of dots alone: `.` and `..` are folders.
+ * - Not a device of Windows: the part before the first dot, without spaces at its end and
+ *   whatever its case, is none of `con`, `prn`, `aux`, `nul`, `com0`–`com9`, `lpt0`–`lpt9`.
+ * `exportName` gives no slug that would make `<name>.png` break one of these.
+ */
+export function isPlainFileName(text: string): boolean {
+    if (text === "" || /[/\\:]/.test(text) || /^\.+$/.test(text)) return false;
+    for (let index = 0; index < text.length; index++) {
+        const code = text.charCodeAt(index);
+        if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) return false;
+    }
+    const base = text.split(".")[0].replace(/ +$/, "");
+    return !DEVICE_NAME.test(lowerAscii(base));
 }
 
 /**
