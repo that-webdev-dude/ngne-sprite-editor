@@ -70,6 +70,7 @@ const END_BYTES = 22;
 const CENTRAL_BYTES = 46;
 const LOCAL_BYTES = 30;
 const ZIP64_LOCATOR_BYTES = 20;
+const ZIP64_COUNT = 0xffff;
 const MAX_COMMENT_BYTES = 0xffff;
 
 const METHOD_STORED = 0;
@@ -172,9 +173,10 @@ function inflate(compressed: Uint8Array, size: number, name: string): Uint8Array
 
 /**
  * Opens a zip archive: finds and checks its central directory; no entry is read yet. The
- * archive must be a plain one: one disk, no zip64 records, a directory that ends where the
- * end record starts, no name twice. `maxTotalBytes` bounds what all `read` calls together
- * may return. `bytes` must not change while the archive is in use.
+ * archive must be a plain one: one disk, no zip64 records and so at most 65 534 entries, a
+ * directory that ends where the end record starts, no name twice. `maxTotalBytes` bounds
+ * what all `read` calls together may return. `bytes` must not change while the archive is in
+ * use.
  *
  * Throws `ProjectError` "not-a-zip" or "unsupported-zip".
  */
@@ -194,6 +196,10 @@ export function openZip(bytes: Uint8Array, maxTotalBytes: number): ZipArchive {
     const disks = [view.getUint16(end + 4, true), view.getUint16(end + 6, true)];
     if (disks.some((disk) => disk !== 0) || view.getUint16(end + 8, true) !== count) {
         throw unsupported("it spans several disks");
+    }
+    // The largest count the record can state is also how it says "see the zip64 record".
+    if (count === ZIP64_COUNT) {
+        throw unsupported("it states 65 535 entries, the count of an archive that needs zip64");
     }
 
     // A byte order mark stays a character of the name: names are compared as they are spelled.

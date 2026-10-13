@@ -51,34 +51,64 @@ describe("core/project imports", () => {
             expect(imported).toContain(specifier);
         }
     });
+
+    it("takes the bounds of frames, cels and tags from their modules", () => {
+        const imported = new Set(specifiers(join(projectDir, "docFromJson.ts")));
+        for (const specifier of ["../frames", "../cels", "../tags"]) {
+            expect(imported).toContain(specifier);
+        }
+    });
 });
 
 describe("core/project API", () => {
-    it("exports its functions, its error and the constants a caller needs, and nothing else", () => {
-        const names = Object.keys(project).sort();
-
-        expect(names.filter((name) => typeof Reflect.get(project, name) === "function")).toEqual([
+    it("exports every function, the error and every constant its documentation names", () => {
+        // More may be exported by a later ticket; what is listed here must stay.
+        const names = Object.keys(project);
+        const functions = [
             "ProjectError",
             "deserialize",
             "docFromJson",
             "docToJson",
             "isProjectId",
+            "maxImageEntryBytes",
             "projectThumbnail",
             "serialize",
-        ]);
-        expect(names.filter((name) => typeof Reflect.get(project, name) !== "function")).toEqual([
-            "MAX_ID_LENGTH",
-            "MAX_PROJECT_FRAMES",
-            "MAX_PROJECT_LAYERS",
-            "MAX_PROJECT_PIXEL_BYTES",
-            "MAX_PROJECT_TAGS",
-            "MAX_REFERENCE_SOURCE_BYTES",
+        ];
+        for (const name of functions) {
+            expect(names, name).toContain(name);
+            expect(typeof Reflect.get(project, name), name).toBe("function");
+        }
+        const constants = [
             "PROJECT_FILE_EXTENSION",
             "PROJECT_FORMAT",
             "PROJECT_GENERATOR",
             "PROJECT_VERSION",
             "THUMBNAIL_MAX_SIDE",
-        ]);
+            // Every limit of docs/FORMAT.md §1.8, for the commands that have to respect them.
+            "MAX_PROJECT_LAYERS",
+            "MAX_PROJECT_REFERENCE_LAYERS",
+            "MAX_PROJECT_FRAMES",
+            "MAX_PROJECT_TAGS",
+            "MAX_PROJECT_CELS",
+            "MAX_PROJECT_IMAGES",
+            "MAX_PROJECT_PALETTE_COLORS",
+            "MAX_ID_LENGTH",
+            "MAX_NAME_LENGTH",
+            "MAX_REFERENCE_OFFSET",
+            "MIN_REFERENCE_SCALE",
+            "MAX_REFERENCE_SCALE",
+            "MAX_MANIFEST_BYTES",
+            "MAX_DOC_JSON_BYTES",
+            "IMAGE_ENTRY_OVERHEAD_BYTES",
+            "MAX_REFERENCE_SOURCE_BYTES",
+            "MAX_PROJECT_PIXEL_BYTES",
+            "MAX_PROJECT_CONTENT_BYTES",
+            "MAX_PROJECT_ENTRIES",
+        ];
+        for (const name of constants) {
+            expect(names, name).toContain(name);
+            expect(["number", "string"], name).toContain(typeof Reflect.get(project, name));
+        }
     });
 
     it("names the format as SPEC §10 does", () => {

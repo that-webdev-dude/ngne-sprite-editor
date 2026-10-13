@@ -2,12 +2,24 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { assertInvariants } from "../../src/core/model";
 import {
+    MAX_DOC_JSON_BYTES,
     MAX_ID_LENGTH,
+    MAX_MANIFEST_BYTES,
+    MAX_NAME_LENGTH,
+    MAX_PROJECT_CELS,
+    MAX_PROJECT_CONTENT_BYTES,
+    MAX_PROJECT_ENTRIES,
     MAX_PROJECT_FRAMES,
+    MAX_PROJECT_IMAGES,
     MAX_PROJECT_LAYERS,
+    MAX_PROJECT_PALETTE_COLORS,
     MAX_PROJECT_PIXEL_BYTES,
+    MAX_PROJECT_REFERENCE_LAYERS,
     MAX_PROJECT_TAGS,
+    MAX_REFERENCE_OFFSET,
+    MAX_REFERENCE_SCALE,
     MAX_REFERENCE_SOURCE_BYTES,
+    MIN_REFERENCE_SCALE,
     PROJECT_FILE_EXTENSION,
     PROJECT_FORMAT,
     PROJECT_VERSION,
@@ -18,23 +30,28 @@ import {
     serialize,
 } from "../../src/core/project";
 import type { DocJson } from "../../src/core/project";
-import {
-    MAX_DOC_JSON_BYTES,
-    MAX_MANIFEST_BYTES,
-    MAX_PROJECT_CONTENT_BYTES,
-    MAX_PROJECT_ENTRIES,
-    maxImageEntryBytes,
-} from "../../src/core/project/format";
 import { readManifest } from "../../src/core/project/manifest";
+import { MAX_TAG_REPEAT } from "../../src/core/tags";
 import { REFERENCE_PNG, fixtureDocJson, noiseImage } from "./se-040-support";
 
-// docs/FORMAT.md is what another program is written against, so what it shows and states is
-// held to the code here.
+// docs/FORMAT.md is what another program is written against, so what section 1 of it shows
+// and states about the sprite project is held to the code here. The file has a section per
+// format: nothing below looks at another section, or counts on there being none.
 
-const text = readFileSync(new URL("../../docs/FORMAT.md", import.meta.url), "utf8");
+const file = readFileSync(new URL("../../docs/FORMAT.md", import.meta.url), "utf8");
 
-/** The JSON code blocks of the document, parsed, in order. */
-const examples = [...text.matchAll(/```json\n(.*?)```/gs)].map(
+const HEADING = `## 1. Sprite project (\`${PROJECT_FILE_EXTENSION}\`), version 1`;
+
+/** Section 1: from its heading to the next heading of the same level, or to the end. */
+const section = (() => {
+    const start = file.indexOf(`\n${HEADING}\n`);
+    if (start === -1) return "";
+    const next = file.indexOf("\n## ", start + 1);
+    return file.slice(start + 1, next === -1 ? undefined : next);
+})();
+
+/** The JSON code blocks of section 1, parsed, in order. */
+const examples = [...section.matchAll(/```json\n(.*?)```/gs)].map(
     (match) => JSON.parse(match[1]) as unknown,
 );
 
@@ -43,16 +60,43 @@ function grouped(value: number): string {
     return String(value).replace(/\B(?=(\d{3})+$)/g, " ");
 }
 
+/** The rows of the tables of section 1 that start with this cell. */
+function rows(firstCell: string): string[] {
+    return section.split("\n").filter((line) => line.startsWith(`| ${firstCell} `));
+}
+
 describe("docs/FORMAT.md, sprite project version 1", () => {
-    it("has a title, a table of formats and one numbered section per format", () => {
-        expect(text.startsWith("# NGNE Sprite Editor — File formats\n")).toBe(true);
-        expect(text).toContain("| Format ");
-        expect(text).toContain(`## 1. Sprite project (\`${PROJECT_FILE_EXTENSION}\`), version 1`);
-        expect(text).toContain(`"${PROJECT_FORMAT}"`);
+    it("is section 1 of a document with a title and a table of formats", () => {
+        expect(file.startsWith("# NGNE Sprite Editor — File formats\n")).toBe(true);
+        expect(section.startsWith(`${HEADING}\n`)).toBe(true);
+        // The table of formats, above the sections, has a row that points to this one.
+        const head = file.slice(0, file.indexOf(`\n${HEADING}\n`));
+        expect(head).toContain("| Format ");
+        expect(head).toMatch(/\| NGNE sprite project \| `<name>\.ngsprite` +\| 1 +\| \[1\]\(#1-/);
+        expect(section).toContain(`"${PROJECT_FORMAT}"`);
         expect(PROJECT_VERSION).toBe(1);
     });
 
+    it("keeps the rules of this format in its own section", () => {
+        // What is shared by every format is how the tables are to be read, and no more.
+        const start = file.indexOf("\n## Conventions\n");
+        const shared = file.slice(start, file.indexOf("\n## ", start + 1));
+        expect(start).toBeGreaterThan(-1);
+        expect(shared).toContain("Shared by every format");
+        for (const rule of ["refuses", "byte order mark", "#rrggbbaa", "UTF-16", "indent"]) {
+            expect(shared, rule).not.toContain(rule);
+        }
+        // The rules a reader of a project follows stand in section 1.
+        expect(section).toContain("A reader refuses an entry with a missing or an unknown member");
+        expect(section).toContain(
+            "a reader refuses\n  an entry in which an object has two members of the same name",
+        );
+        expect(section).toContain("byte order mark; a reader skips one");
+        expect(section).toContain("`#rrggbbaa`");
+    });
+
     it("shows a manifest.json that the reader accepts", () => {
+        // The examples of this section: the manifest and the document.
         expect(examples).toHaveLength(2);
         const manifest = readManifest(examples[0]);
 
@@ -94,38 +138,72 @@ describe("docs/FORMAT.md, sprite project version 1", () => {
     });
 
     it("states the limits the code enforces", () => {
-        const limits: [string, number][] = [
-            ["manifest.json", MAX_MANIFEST_BYTES],
-            ["doc.json", MAX_DOC_JSON_BYTES],
-            ["reference source", MAX_REFERENCE_SOURCE_BYTES],
-            ["pixel data", MAX_PROJECT_PIXEL_BYTES],
-            ["all entries", MAX_PROJECT_CONTENT_BYTES],
-            ["entries", MAX_PROJECT_ENTRIES],
-            ["frames", MAX_PROJECT_FRAMES],
-        ];
-        for (const [name, value] of limits) {
-            expect(text, name).toContain(`${grouped(value)}`);
-        }
-        expect(grouped(MAX_PROJECT_PIXEL_BYTES)).toBe("1 073 741 824");
+        const limit = (what: string): string => {
+            const found = rows(what);
+            expect(found, what).toHaveLength(1);
+            return found[0].split("|")[2].trim();
+        };
 
-        expect(text).toContain(
-            "| `doc.json`, uncompressed                          | 16 MiB (16 777 216 bytes) |",
+        expect(limit("Layers")).toBe(
+            `${MAX_PROJECT_LAYERS}, of which at most ${MAX_PROJECT_REFERENCE_LAYERS} reference layers`,
         );
-        expect(text).toContain(
-            "| One `refs/<sourceId>.png`, uncompressed           | 64 MiB (67 108 864 bytes) |",
+        expect(limit("Frames")).toBe(grouped(MAX_PROJECT_FRAMES));
+        expect(limit("Tags")).toBe(String(MAX_PROJECT_TAGS));
+        expect(limit("Cels")).toMatch(new RegExp(`^${grouped(MAX_PROJECT_CELS)} \\(`));
+        expect(limit("Images")).toMatch(new RegExp(`^${grouped(MAX_PROJECT_IMAGES)};`));
+        expect(limit("Palette colours")).toBe(String(MAX_PROJECT_PALETTE_COLORS));
+        expect(limit("Length of an ID")).toBe(`${MAX_ID_LENGTH} characters`);
+        expect(limit("Length of a text (a name, `generator`)")).toBe(
+            `${MAX_NAME_LENGTH} UTF-16 code units`,
         );
-        expect(text).toContain("`height × (4 × width + 1) + 65 536` bytes");
-        expect(maxImageEntryBytes(1024, 1024)).toBe(1024 * (4 * 1024 + 1) + 65_536);
-        expect(text).toContain(
-            `| Layers                                            | ${MAX_PROJECT_LAYERS}, of which`,
+
+        expect(limit("`manifest.json`, uncompressed")).toBe(
+            `64 KiB (${grouped(MAX_MANIFEST_BYTES)} bytes)`,
         );
-        expect(text).toContain(
-            `| Tags                                              | ${MAX_PROJECT_TAGS} |`,
+        expect(limit("`doc.json`, uncompressed")).toBe(
+            `64 MiB (${grouped(MAX_DOC_JSON_BYTES)} bytes)`,
         );
-        expect(text).toContain(
-            `| Length of an ID                                   | ${MAX_ID_LENGTH} characters |`,
+        expect(limit("One `images/<imageId>.png`, uncompressed")).toMatch(
+            /^`height × \(4 × width \+ 1\) \+ 65 536` bytes/,
         );
-        expect(text).toContain(`at most ${THUMBNAIL_MAX_SIDE} px a side`);
+        expect(limit("One `refs/<sourceId>.png`, uncompressed")).toBe(
+            `64 MiB (${grouped(MAX_REFERENCE_SOURCE_BYTES)} bytes)`,
+        );
+        expect(limit("Pixel data: images × `width` × `height` × 4")).toBe(
+            `1 GiB (${grouped(MAX_PROJECT_PIXEL_BYTES)} bytes)`,
+        );
+        expect(limit("All entries of the project together, uncompressed")).toBe(
+            `2 GiB (${grouped(MAX_PROJECT_CONTENT_BYTES)} bytes)`,
+        );
+        expect(limit("Entries in the archive")).toBe(grouped(MAX_PROJECT_ENTRIES));
+        expect(section).toContain(`at most ${THUMBNAIL_MAX_SIDE} px a side`);
+        expect(section).toContain(`at most\n  ${grouped(MAX_PROJECT_ENTRIES)} entries`);
+        // The figure of the worst case, which se-040-limits.test.ts measures.
+        expect(section).toContain("the editor writes 52.5 MiB");
+    });
+
+    it("states the ranges the code enforces where the code has a constant for them", () => {
+        // The first row of that name: `frames` is also a member of the export settings.
+        const constraint = (member: string): string => {
+            const found = rows(`\`${member}\``);
+            expect(found.length, member).toBeGreaterThan(0);
+            return found[0].split("|")[3].trim();
+        };
+
+        expect(constraint("repeat")).toBe(`0..${MAX_TAG_REPEAT}`);
+        expect(constraint("scale")).toBe(
+            `${MIN_REFERENCE_SCALE.toFixed(6)}..${grouped(MAX_REFERENCE_SCALE)}`,
+        );
+        expect(rows("`x`, `y`")[0].split("|")[3].trim()).toBe(
+            `−${grouped(MAX_REFERENCE_OFFSET)}..${grouped(MAX_REFERENCE_OFFSET)}`,
+        );
+        expect(constraint("layers")).toMatch(new RegExp(`^At most ${MAX_PROJECT_LAYERS};`));
+        expect(constraint("frames")).toBe(`1 to ${grouped(MAX_PROJECT_FRAMES)}`);
+        expect(constraint("cels")).toBe(
+            `At most ${grouped(MAX_PROJECT_CELS)}, on at most ${grouped(MAX_PROJECT_IMAGES)} images`,
+        );
+        expect(constraint("tags")).toBe(`At most ${MAX_PROJECT_TAGS}`);
+        expect(constraint("colors")).toBe(`At most ${MAX_PROJECT_PALETTE_COLORS}`);
     });
 
     it("names every member of doc.json in its tables", () => {
@@ -149,16 +227,51 @@ describe("docs/FORMAT.md, sprite project version 1", () => {
         ]);
         expect(all.size).toBeGreaterThan(60);
         const missing = [...all].filter(
-            (name) => !text.includes(`| \`${name}\``) && !text.includes(`\`${name}\`, \``),
+            (name) => !section.includes(`| \`${name}\``) && !section.includes(`\`${name}\`, \``),
         );
         // `x` and `y` share a row; `tagId` is written inside the `frames` row.
         expect(missing.filter((name) => !["x", "y", "tagId"].includes(name))).toEqual([]);
-        expect(text).toContain("| `x`, `y` ");
-        expect(text).toContain('`{ "tagId": ID }`');
+        expect(section).toContain("| `x`, `y` ");
+        expect(section).toContain('`{ "tagId": ID }`');
+    });
+
+    it("marks every free text as text, and nothing else", () => {
+        const typed = section
+            .split("\n")
+            .filter((line) => /^\| `[A-Za-z.]+` +\| text +\|/.test(line))
+            .map((line) => line.split("|")[1].trim());
+        // The names of the document, a layer, a tag and the palette, and the generator.
+        expect(typed.sort()).toEqual(["`generator`", "`name`", "`name`", "`name`", "`name`"]);
+
+        // Each of them takes the full length and not one code unit more.
+        const long = "n".repeat(MAX_NAME_LENGTH + 1);
+        const refuses = (read: () => unknown): boolean => {
+            try {
+                read();
+            } catch {
+                return true;
+            }
+            return false;
+        };
+        const refused = (change: (doc: DocJson) => void): boolean => {
+            const doc: DocJson = { ...fixtureDocJson(), cels: [] };
+            change(doc);
+            return refuses(() => docFromJson(doc, new Map()));
+        };
+        for (const length of [MAX_NAME_LENGTH, MAX_NAME_LENGTH + 1]) {
+            const name = long.slice(0, length);
+            const over = length > MAX_NAME_LENGTH;
+            expect(refused((doc) => void (doc.name = name))).toBe(over);
+            expect(refused((doc) => void (doc.layers[1].name = name))).toBe(over);
+            expect(refused((doc) => void (doc.tags[0].name = name))).toBe(over);
+            expect(refused((doc) => void (doc.palette.name = name))).toBe(over);
+            const manifest = { format: PROJECT_FORMAT, version: 1, generator: name };
+            expect(refuses(() => readManifest(manifest))).toBe(over);
+        }
     });
 
     it("lists every blend mode", () => {
-        const row = text.split("\n").find((line) => line.startsWith("| `blend` ")) ?? "";
+        const row = rows("`blend`")[0] ?? "";
         const listed = [...row.matchAll(/`"([a-z-]+)"`/g)].map((match) => match[1]);
 
         expect(listed).toHaveLength(19);
@@ -170,5 +283,18 @@ describe("docs/FORMAT.md, sprite project version 1", () => {
             Object.assign(json.layers[1], { blend });
             expect(docFromJson(json, new Map()).layers[1], blend).toMatchObject({ blend });
         }
+    });
+
+    it("is read the same when another format's section follows it", () => {
+        // What SE-051 will do to the file: append a section with rows and JSON of its own.
+        const appended =
+            `${file}\n## 2. Another format, version 1\n\n` +
+            "| `repeat` | integer | 0..9 | not this format's |\n\n" +
+            '```json\n{ "format": "another" }\n```\n';
+        const start = appended.indexOf(`\n${HEADING}\n`);
+        const next = appended.indexOf("\n## ", start + 1);
+        expect(next).toBeGreaterThan(start);
+        expect(appended.slice(start + 1, next)).toBe(section);
+        expect(section).not.toContain("Another format");
     });
 });

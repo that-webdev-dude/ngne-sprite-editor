@@ -372,7 +372,8 @@ const BLEND_MODES: BlendMode[] = [
 const byte = fc.integer({ min: 0, max: 255 });
 const color = fc.integer({ min: 0, max: 0xffffffff });
 const name = fc.string({ unit: "grapheme", maxLength: 12 });
-const finite = fc.double({ noNaN: true, noDefaultInfinity: true }).map((value) => value + 0);
+/** A position of a reference layer; `+ 0` makes −0 the 0 that JSON writes. */
+const offset = fc.double({ min: -1e6, max: 1e6, noNaN: true }).map((value) => value + 0);
 const unit = fc.double({ min: 0, max: 1, noNaN: true }).map((value) => value + 0);
 const axes = fc.constantFrom("none", "x", "y", "both") as fc.Arbitrary<DocSettings["tiled"]>;
 const placement = fc.constantFrom("behind", "front") as fc.Arbitrary<"behind" | "front">;
@@ -456,8 +457,8 @@ const projects: fc.Arbitrary<RandomProject> = fc
                     locked: fc.boolean(),
                     opacity: byte,
                     blend: fc.constantFrom(...BLEND_MODES),
-                    x: finite,
-                    y: finite,
+                    x: offset,
+                    y: offset,
                     scale: fc.double({ min: 1e-6, max: 1e6, noNaN: true }),
                     placement,
                     // Two reference layers may share a source.
@@ -491,7 +492,7 @@ const projects: fc.Arbitrary<RandomProject> = fc
                     direction: fc.constantFrom("forward", "reverse", "pingpong") as fc.Arbitrary<
                         Tag["direction"]
                     >,
-                    repeat: fc.integer({ min: 0, max: 65535 }),
+                    repeat: fc.integer({ min: 0, max: 255 }),
                 }),
                 { maxLength: 3 },
             ),

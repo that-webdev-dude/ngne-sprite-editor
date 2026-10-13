@@ -11,7 +11,9 @@ import type { InvariantName, PixelBuffer, ReferenceLayer, SpriteDoc } from "../.
 import { PngError, encodePng } from "../../src/core/png";
 import {
     MAX_ID_LENGTH,
+    MAX_PROJECT_ENTRIES,
     MAX_PROJECT_FRAMES,
+    MAX_PROJECT_IMAGES,
     MAX_PROJECT_LAYERS,
     MAX_PROJECT_PIXEL_BYTES,
     MAX_PROJECT_TAGS,
@@ -24,7 +26,6 @@ import {
     serialize,
 } from "../../src/core/project";
 import type { DocJson, ProjectErrorCode } from "../../src/core/project";
-import { MAX_PROJECT_ENTRIES } from "../../src/core/project/format";
 import { MAX_GRID_OFFSET, MAX_GRID_SIDE, MIN_GRID_SIDE } from "../../src/core/sprite";
 import {
     HEIGHT,
@@ -253,6 +254,31 @@ const invalid: [string, Change, RegExp][] = [
     ["a name that is a number", set("name", 5), /`name` must be a string, got 5/],
     ["an empty name", set("name", ""), /`name` must not be empty or only white space/],
     ["a name of white space", set("name", " \t\n"), /`name` must not be empty or only white space/],
+    [
+        "a name of 256 code units",
+        set("name", "n".repeat(256)),
+        /`name` must be a string of at most 255 UTF-16 code units, got one of 256/,
+    ],
+    [
+        "a name of 128 characters that take two code units each",
+        set("name", "😀".repeat(128)),
+        /`name` must be a string of at most 255 UTF-16 code units, got one of 256/,
+    ],
+    [
+        "a layer name of 15 million characters",
+        set("layers[1].name", "x".repeat(15_000_000)),
+        /`layers\[1\].name` must be a string of at most 255 UTF-16 code units, got one of 15000000/,
+    ],
+    [
+        "a tag name of 256 code units",
+        set("tags[0].name", "t".repeat(256)),
+        /`tags\[0\].name` must be a string of at most 255 UTF-16 code units/,
+    ],
+    [
+        "a palette name of 256 code units",
+        set("palette.name", "p".repeat(256)),
+        /`palette.name` must be a string of at most 255 UTF-16 code units/,
+    ],
     ["width 0", set("width", 0), /`width` must be an integer from 1 to 1024, got 0/],
     ["width 1025", set("width", 1025), /`width` must be an integer from 1 to 1024, got 1025/],
     [
@@ -349,21 +375,45 @@ const invalid: [string, Change, RegExp][] = [
         set("layers[0].sourceId", "../../secret"),
         /`layers\[0\].sourceId` must be an ID/,
     ],
-    ['a reference x of "1"', set("layers[0].x", "1"), /`layers\[0\].x` must be a number, got "1"/],
+    [
+        'a reference x of "1"',
+        set("layers[0].x", "1"),
+        /`layers\[0\].x` must be a number from -1000000 to 1000000, got "1"/,
+    ],
     [
         "a reference y of null",
         set("layers[0].y", null),
-        /`layers\[0\].y` must be a number, got null/,
+        /`layers\[0\].y` must be a number from -1000000 to 1000000, got null/,
+    ],
+    [
+        "a reference x beyond a million",
+        set("layers[0].x", 1_000_000.5),
+        /`layers\[0\].x` must be a number from -1000000 to 1000000, got 1000000.5/,
+    ],
+    [
+        "a reference y beyond minus a million",
+        set("layers[0].y", -1e300),
+        /`layers\[0\].y` must be a number from -1000000 to 1000000, got -1e\+300/,
     ],
     [
         "a reference scale of 0",
         set("layers[0].scale", 0),
-        /`layers\[0\].scale` must be above 0, got 0/,
+        /`layers\[0\].scale` must be a number from 0.000001 to 1000000, got 0/,
     ],
     [
         "a negative reference scale",
         set("layers[0].scale", -2),
-        /`layers\[0\].scale` must be above 0, got -2/,
+        /`layers\[0\].scale` must be a number from 0.000001 to 1000000, got -2/,
+    ],
+    [
+        "a reference scale below a millionth",
+        set("layers[0].scale", 5e-324),
+        /`layers\[0\].scale` must be a number from 0.000001 to 1000000, got 5e-324/,
+    ],
+    [
+        "a reference scale above a million",
+        set("layers[0].scale", 1_000_001),
+        /`layers\[0\].scale` must be a number from 0.000001 to 1000000, got 1000001/,
     ],
     [
         "a placement in the middle",
@@ -509,12 +559,12 @@ const invalid: [string, Change, RegExp][] = [
     [
         "a repeat of -1",
         set("tags[1].repeat", -1),
-        /`tags\[1\].repeat` must be an integer from 0 to 65535, got -1/,
+        /`tags\[1\].repeat` must be an integer from 0 to 255, got -1/,
     ],
     [
-        "a repeat of 65536",
-        set("tags[1].repeat", 65_536),
-        /`tags\[1\].repeat` must be an integer from 0 to 65535/,
+        "a repeat of 256",
+        set("tags[1].repeat", 256),
+        /`tags\[1\].repeat` must be an integer from 0 to 255, got 256/,
     ],
     [
         "a tag endpoint that is no ID",
@@ -769,11 +819,12 @@ describe("deserialize: doc.json against the schema", () => {
         await expectFailure(
             rebuilt(fixtureFile(), { "doc.json": Buffer.from(text) }),
             "invalid-document",
-            /`layers\[0\].x` must be a number, got -Infinity/,
+            /`layers\[0\].x` must be a number from -1000000 to 1000000, got -Infinity/,
         );
     });
 
     it("rejects more layers, frames or tags than a project holds", async () => {
+        // Cels and images: se-040-limits.test.ts, "one more of anything is refused".
         expect([MAX_PROJECT_LAYERS, MAX_PROJECT_FRAMES, MAX_PROJECT_TAGS]).toEqual([
             1024, 65_535, 1024,
         ]);
@@ -801,8 +852,8 @@ describe("deserialize: doc.json against the schema", () => {
     });
 
     it("reads the largest document the counts allow in little time", async () => {
-        // 65 535 frames and 1024 tags over them: the invariants compare every tag with the
-        // frame list, which is what the limits keep small.
+        // 65 535 frames and 1024 tags over the last of them. Looking every tag's frames up by
+        // walking the frame list would be 134 million comparisons of IDs.
         const json = changedDocJson(set("cels", []), set("exportSettings.frames", "all"));
         json.frames = Array.from({ length: MAX_PROJECT_FRAMES }, (_, index) => ({
             id: `f${index}`,
@@ -816,12 +867,19 @@ describe("deserialize: doc.json against the schema", () => {
         }));
         const bytes = withDocJson(json);
 
-        // About a second on a development machine. Without the limits on the counts, a file
-        // of a few megabytes would take minutes.
         const started = performance.now();
         const { doc } = await deserialize(bytes);
-        expect(performance.now() - started).toBeLessThan(15_000);
+        expect(performance.now() - started).toBeLessThan(5000);
         expect([doc.frames.length, doc.tags.length]).toEqual([65_535, 1024]);
+
+        // And it finds the one tag among them that is wrong, the last.
+        json.tags[MAX_PROJECT_TAGS - 1].fromFrameId = `f${MAX_PROJECT_FRAMES - 1}`;
+        json.tags[MAX_PROJECT_TAGS - 1].toFrameId = `f${MAX_PROJECT_FRAMES - 2}`;
+        const error = await failure(withDocJson(json));
+        expect((error.cause as InvariantError).invariant).toBe("tag-order");
+        expect(error.message).toContain(
+            `tag "t1023" runs from frame index ${MAX_PROJECT_FRAMES - 1} to ${MAX_PROJECT_FRAMES - 2}`,
+        );
     }, 30_000);
 
     it("writes a document of 1024 layers and 65 535 frames with a single cel in little time", async () => {
@@ -857,14 +915,16 @@ describe("deserialize: doc.json against the schema", () => {
             set("height", 1024),
             set("layers[1].opacity", 0),
             set("layers[1].name", ""),
-            set("layers[0].x", -1e308),
-            set("layers[0].y", 1e308),
-            set("layers[0].scale", 5e-324),
+            set("layers[2].name", "n".repeat(255)),
+            set("layers[0].x", -1_000_000),
+            set("layers[0].y", 1_000_000),
+            set("layers[0].scale", 0.000001),
             set("layers[0].sourceId", "s".repeat(MAX_ID_LENGTH)),
             set("frames[0].durationMs", 1),
             set("frames[1].durationMs", 65_535),
-            set("tags[0].repeat", 65_535),
+            set("tags[0].repeat", 255),
             set("tags[0].name", ""),
+            set("tags[1].name", "😀".repeat(127)),
             set("tags[0].color", "#00000000"),
             set("tags[1].color", "#FFFFFFFF"),
             set("palette.name", ""),
@@ -892,6 +952,12 @@ describe("deserialize: doc.json against the schema", () => {
         });
         expect(doc.palette.colors).toHaveLength(256);
         expect([doc.width, doc.height]).toEqual([1, 1024]);
+        // The other end of the scale of a reference layer.
+        const large = docFromJson(
+            changedDocJson(set("cels", []), set("layers[0].scale", 1e6)),
+            new Map(),
+        );
+        expect(large.layers[0]).toMatchObject({ scale: 1_000_000 });
 
         // An empty palette and no tags are a document too.
         const bare = changedDocJson(
@@ -904,9 +970,10 @@ describe("deserialize: doc.json against the schema", () => {
     });
 
     it("has the ranges of the model and of the grid setter", () => {
-        // The numbers in docs/FORMAT.md are written out in core/project, not taken from these
-        // constants: a format does not change because a constant does. When this fails, the
-        // model moved, and the format needs a decision.
+        // These numbers of docs/FORMAT.md are written out in core/project, not taken from the
+        // constants here. When this fails, the model moved, and the format needs a decision.
+        // (The bounds of a frame, a cel and a tag are taken from their modules:
+        // se-040-limits.test.ts.)
         expect(MAX_DOCUMENT_SIDE).toBe(1024);
         expect(MAX_REFERENCE_LAYERS).toBe(4);
         expect([MIN_GRID_SIDE, MAX_GRID_SIDE, MAX_GRID_OFFSET]).toEqual([1, 1024, 1024]);
@@ -1305,12 +1372,27 @@ describe("serialize refuses a document it could not read back", () => {
         [
             "an infinite reference position",
             (doc) => void ((doc.layers[0] as ReferenceLayer).x = Infinity),
-            /`layers\[0\].x` must be a number, got Infinity/,
+            /`layers\[0\].x` must be a number from -1000000 to 1000000, got Infinity/,
+        ],
+        [
+            "a reference position beyond a million",
+            (doc) => void ((doc.layers[0] as ReferenceLayer).y = -1_000_001),
+            /`layers\[0\].y` must be a number from -1000000 to 1000000, got -1000001/,
         ],
         [
             "a reference scale of 0",
             (doc) => void ((doc.layers[0] as ReferenceLayer).scale = 0),
-            /`layers\[0\].scale` must be above 0/,
+            /`layers\[0\].scale` must be a number from 0.000001 to 1000000, got 0/,
+        ],
+        [
+            "a layer name of 256 code units",
+            (doc) => void (doc.layers[2].name = "Layer 1".padEnd(256, " Copy")),
+            /`layers\[2\].name` must be a string of at most 255 UTF-16 code units, got one of 256/,
+        ],
+        [
+            "a tag repeat of 256",
+            (doc) => void (doc.tags[1].repeat = 256),
+            /`tags\[1\].repeat` must be an integer from 0 to 255, got 256/,
         ],
         [
             "a negative colour",
@@ -1486,8 +1568,9 @@ describe("serialize refuses a document it could not read back", () => {
         );
     });
 
-    it("refuses more entries than a zip archive counts", () => {
-        // Two layers of 32 767 frames, every cel with an image of its own: 65 534 images.
+    it("refuses more images than an archive has entries for", () => {
+        // Two layers of 32 767 frames, every cel with an image of its own: 65 534 images,
+        // which with the three other entries would be more than a zip directory counts.
         const { doc } = createDocument({ name: "many", width: 1, height: 1 });
         const image: PixelBuffer = { width: 1, height: 1, data: new Uint8ClampedArray(4) };
         doc.layers.push({ ...doc.layers[0], id: "second" });
@@ -1502,15 +1585,17 @@ describe("serialize refuses a document it could not read back", () => {
                 doc.cels.set(celKey(layer.id, frame.id), { imageId, opacity: 255 });
             });
         }
-        expect(MAX_PROJECT_ENTRIES).toBe(65_535);
+        expect(MAX_PROJECT_ENTRIES).toBe(65_534);
+        expect(MAX_PROJECT_IMAGES).toBe(MAX_PROJECT_ENTRIES - 3 - MAX_REFERENCE_LAYERS);
 
         const error = thrown(() => serialize(doc, new Map()));
-        expect(error.code).toBe("too-large");
-        expect(error.message).toMatch(/would have 65537 entries; the limit is 65535/);
+        expect(error.code).toBe("invalid-document");
+        expect(error.message).toMatch(/`cels` names more than 65527 images/);
     });
 
-    it("refuses a document whose doc.json would exceed 16 MiB", () => {
-        // 150 layers of 1000 frames, every cel linked to one image: 150 000 cels.
+    it("refuses more cels than a project holds", () => {
+        // 150 layers of 1000 frames, every cel linked to one image: 150 000 cels. The count
+        // is what stops the document, well before its doc.json reaches the size limit.
         const { doc } = createDocument({ name: "long", width: 1, height: 1 });
         doc.images.set("image", { width: 1, height: 1, data: new Uint8ClampedArray(4) });
         doc.layers = Array.from({ length: 150 }, (_, index) => ({
@@ -1528,10 +1613,8 @@ describe("serialize refuses a document it could not read back", () => {
         }
 
         const error = thrown(() => serialize(doc, new Map()));
-        expect(error.code).toBe("too-large");
-        expect(error.message).toMatch(
-            /"doc.json" would hold \d+ bytes; the limit is 16777216 bytes/,
-        );
+        expect(error.code).toBe("invalid-document");
+        expect(error.message).toMatch(/`cels` holds 150000 items; at most 131072 are allowed/);
         expect(error.entry).toBe("doc.json");
     });
 });

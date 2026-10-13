@@ -8,7 +8,6 @@ import {
     MANIFEST_ENTRY,
     MAX_DOC_JSON_BYTES,
     MAX_PROJECT_CONTENT_BYTES,
-    MAX_PROJECT_ENTRIES,
     MAX_REFERENCE_SOURCE_BYTES,
     THUMBNAIL_ENTRY,
     imageEntry,
@@ -47,13 +46,10 @@ function writeProject(
     // file gets. What passes here can be opened again.
     const written = checkedDocument(docJson, doc.images);
     assertPixelBytes(written, written.images.size);
+    // At most `MAX_PROJECT_IMAGES` images and `MAX_PROJECT_REFERENCE_LAYERS` sources passed
+    // those checks, so with the three other entries the archive stays within
+    // `MAX_PROJECT_ENTRIES`.
     const sourceIds = referenceSourceIds(written);
-    const count = 3 + written.images.size + sourceIds.length;
-    if (count > MAX_PROJECT_ENTRIES) {
-        throw tooLarge(
-            `The project would have ${count} entries; the limit is ${MAX_PROJECT_ENTRIES}.`,
-        );
-    }
 
     const entries = [
         entryOf(MANIFEST_ENTRY, encodeJson(projectManifest()), false, Infinity),
@@ -110,13 +106,14 @@ function writeProject(
  *
  * A file that is returned can be read back by `deserialize`, as an equal document; a document
  * for which that does not hold is refused. Throws `ProjectError`: "invalid-document" for a
- * value outside the schema (an ID with other characters, a number outside its range, more
- * layers, frames or tags than the format holds), "invariant" for a broken invariant of SPEC
- * §5.1, "missing-image" and "image-size" for a cel's image, "missing-reference" when
+ * value outside the schema (an ID with other characters, a name longer than
+ * `MAX_NAME_LENGTH`, a number outside its range, more layers, frames, tags, cels or images
+ * than the `MAX_PROJECT_…` limits), "invariant" for a broken invariant of SPEC §5.1,
+ * "missing-image" and "image-size" for a cel's image, "missing-reference" when
  * `referenceSources` lacks a source, "corrupt-entry" when a source is not a PNG file,
- * "too-large" beyond a limit of the format, "memory" when memory runs out. Two kinds of
- * unreachable data are left out instead: a cel whose key names no pixel layer and frame of
- * the document, and an image no written cel uses.
+ * "too-large" beyond a limit of a size (pixel data, a reference source), "memory" when memory
+ * runs out. Two kinds of unreachable data are left out instead: a cel whose key names no
+ * pixel layer and frame of the document, and an image no written cel uses.
  */
 export function serialize(
     doc: SpriteDoc,

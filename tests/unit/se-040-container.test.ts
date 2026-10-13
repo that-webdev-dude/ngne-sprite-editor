@@ -269,7 +269,8 @@ describe("deserialize: not a zip archive", () => {
         await fc.assert(
             fc.asyncProperty(
                 fc.uint8Array({ maxLength: 300 }),
-                fc.nat({ max: 0xffff }),
+                // Every count but the one that announces zip64, which has a test below.
+                fc.nat({ max: 0xfffe }),
                 fc.nat({ max: 300 }),
                 async (bytes, count, size) => {
                     // The directory is where the record says: the bytes before it are read
@@ -309,6 +310,18 @@ describe("deserialize: zip features a project file must not use", () => {
             patchEnd: (end) => void end.writeUInt16LE(4, 8),
         });
         await expectFailure(partial, "unsupported-zip", /spans several disks/);
+    });
+
+    it("rejects an archive that states 65 535 entries, the count that announces zip64", async () => {
+        // The directory is not looked at: the count alone is refused. An archive that really
+        // has that many entries is in se-040-limits.test.ts.
+        const bytes = zipOf(projectEntries(valid), {
+            patchEnd: (end) => {
+                end.writeUInt16LE(0xffff, 8);
+                end.writeUInt16LE(0xffff, 10);
+            },
+        });
+        await expectFailure(bytes, "unsupported-zip", /states 65 535 entries/);
     });
 
     it("rejects an encrypted entry", async () => {
@@ -361,16 +374,16 @@ describe("deserialize: limits", () => {
         expect(error.entry).toBe("manifest.json");
     });
 
-    it("refuses a doc.json above 16 MiB before inflating it", async () => {
-        expect(MAX_DOC_JSON_BYTES).toBe(16 * MIB);
-        // A real one: 17 kB of deflate data that expand to 16 MiB + 1 of white space.
+    it("refuses a doc.json above 64 MiB before inflating it", async () => {
+        expect(MAX_DOC_JSON_BYTES).toBe(64 * MIB);
+        // A real one: 65 kB of deflate data that expand to 64 MiB + 1 of white space.
         const real = rebuilt(valid, {
             "doc.json": { data: Buffer.alloc(MAX_DOC_JSON_BYTES + 1, 0x20), method: 8 },
         });
-        expect(real.length).toBeLessThan(64 * 1024);
+        expect(real.length).toBeLessThan(128 * 1024);
         const largest = await largestAllocation(async () => {
-            const error = await expectFailure(real, "too-large", /"doc.json" holds 16777217 bytes/);
-            expect(error.message).toMatch(/the limit is 16777216 bytes/);
+            const error = await expectFailure(real, "too-large", /"doc.json" holds 67108865 bytes/);
+            expect(error.message).toMatch(/the limit is 67108864 bytes/);
         });
         expect(largest).toBeLessThan(64 * 1024);
     });

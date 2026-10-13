@@ -1,3 +1,5 @@
+import { MAX_CEL_OPACITY, MIN_CEL_OPACITY } from "../cels";
+import { MAX_FRAME_DURATION_MS, MIN_FRAME_DURATION_MS } from "../frames";
 import { InvariantError, assertInvariants, celKey } from "../model";
 import type {
     BlendMode,
@@ -11,13 +13,21 @@ import type {
     SpriteDoc,
     Tag,
 } from "../model";
+import { createPixelBuffer } from "../pixels";
+import { MAX_TAG_REPEAT } from "../tags";
 import { ProjectError, quoted } from "./errors";
 import {
     DOC_ENTRY,
+    MAX_PROJECT_CELS,
     MAX_PROJECT_FRAMES,
+    MAX_PROJECT_IMAGES,
     MAX_PROJECT_LAYERS,
+    MAX_PROJECT_PALETTE_COLORS,
     MAX_PROJECT_PIXEL_BYTES,
     MAX_PROJECT_TAGS,
+    MAX_REFERENCE_OFFSET,
+    MAX_REFERENCE_SCALE,
+    MIN_REFERENCE_SCALE,
     PROJECT_VERSION,
 } from "./format";
 import { JsonReader, namesOf } from "./json";
@@ -26,21 +36,21 @@ import { migrateDocJson } from "./migrations";
 // `doc.json` to document. A parsed `doc.json` is checked field by field against schema
 // version 1 (docs/FORMAT.md) while the document is built from it: exactly the fields of the
 // schema, each of its type and inside its range, every ID well-formed and every cel on a
-// pixel layer and a frame that exist. The invariants of SPEC §5.1 are checked afterwards, by
-// the model's own `assertInvariants`.
+// pixel layer and a frame that exist. The invariants of SPEC §5.1 are checked next, by the
+// model's own `assertInvariants`, and only then does the document get its images: nothing
+// that can be refused without pixels waits for them to be decoded.
 
 // The annotation lets the compiler see that `reader.fail` never returns.
 const reader: JsonReader = new JsonReader("invalid-document", DOC_ENTRY);
 
 // --- value ranges of schema version 1 -----------------------------------------------------------
+// The duration of a frame, the opacity of a cel and the repeat count of a tag have their
+// bounds where their commands are (`core/frames`, `core/cels`, `core/tags`): one source each.
 
 /** Longest side of a document and of a grid cell, in pixels. */
 const MAX_SIDE = 1024;
 /** Largest grid offset in either direction, in pixels. */
 const MAX_GRID_OFFSET = 1024;
-const MAX_FRAME_DURATION_MS = 65_535;
-const MAX_TAG_REPEAT = 65_535;
-const MAX_PALETTE_COLORS = 256;
 /** Most onion-skin frames on either side. */
 const MAX_ONION_FRAMES = 3;
 /** A symmetry axis counts half pixels from the left or top edge of the largest canvas. */
@@ -113,8 +123,13 @@ function readReferenceLayer(value: unknown, path: string): Layer {
         "scale",
         "placement",
     ]);
-    const scale = reader.number(fields.scale, `${path}.scale`);
-    if (scale <= 0) reader.fail(`${path}.scale`, `must be above 0, got ${scale}`);
+    const offset = (field: "x" | "y") =>
+        reader.number(
+            fields[field],
+            `${path}.${field}`,
+            -MAX_REFERENCE_OFFSET,
+            MAX_REFERENCE_OFFSET,
+        );
     return {
         id: reader.id(fields.id, `${path}.id`),
         kind: "reference",
@@ -123,9 +138,15 @@ function readReferenceLayer(value: unknown, path: string): Layer {
         locked: reader.boolean(fields.locked, `${path}.locked`),
         opacity: reader.integer(fields.opacity, `${path}.opacity`, 0, 255),
         sourceId: reader.id(fields.sourceId, `${path}.sourceId`),
-        x: reader.number(fields.x, `${path}.x`),
-        y: reader.number(fields.y, `${path}.y`),
-        scale,
+        x: offset("x"),
+        y: offset("y"),
+        // Bounded on both sides: nothing computed from it, or from its inverse, overflows.
+        scale: reader.number(
+            fields.scale,
+            `${path}.scale`,
+            MIN_REFERENCE_SCALE,
+            MAX_REFERENCE_SCALE,
+        ),
         placement: reader.oneOf(fields.placement, `${path}.placement`, PLACEMENTS),
     };
 }
@@ -137,7 +158,7 @@ function readFrame(value: unknown, path: string): FrameInfo {
         durationMs: reader.integer(
             fields.durationMs,
             `${path}.durationMs`,
-            1,
+            MIN_FRAME_DURATION_MS,
             MAX_FRAME_DURATION_MS,
         ),
     };
@@ -165,6 +186,10 @@ class EntryIds {
         }
     }
 
+    get size(): number {
+        return this.#spelled.size;
+    }
+
     list(): string[] {
         return [...this.#spelled.values()];
     }
@@ -185,7 +210,7 @@ function readCels(
     const frameIds = new Set(frames.map((frame) => frame.id));
     const cels = new Map<string, Cel>();
     const imageIds = new EntryIds();
-    reader.array(value, "cels").forEach((item, index) => {
+    reader.array(value, "cels", MAX_PROJECT_CELS).forEach((item, index) => {
         const path = `cels[${index}]`;
         const fields = reader.object(item, path, ["layerId", "frameId", "imageId", "opacity"]);
         const layerId = reader.id(fields.layerId, `${path}.layerId`);
@@ -205,9 +230,20 @@ function readCels(
         }
         const imageId = reader.id(fields.imageId, `${path}.imageId`);
         imageIds.add(imageId, `${path}.imageId`);
+        if (imageIds.size > MAX_PROJECT_IMAGES) {
+            reader.fail(
+                "cels",
+                `names more than ${MAX_PROJECT_IMAGES} images; cels beyond that share images`,
+            );
+        }
         cels.set(key, {
             imageId,
-            opacity: reader.integer(fields.opacity, `${path}.opacity`, 0, 255),
+            opacity: reader.integer(
+                fields.opacity,
+                `${path}.opacity`,
+                MIN_CEL_OPACITY,
+                MAX_CEL_OPACITY,
+            ),
         });
     });
     return { cels, imageIds: imageIds.list() };
@@ -239,7 +275,7 @@ function readPalette(value: unknown): SpriteDoc["palette"] {
     return {
         name: reader.string(fields.name, "palette.name"),
         colors: reader
-            .array(fields.colors, "palette.colors", MAX_PALETTE_COLORS)
+            .array(fields.colors, "palette.colors", MAX_PROJECT_PALETTE_COLORS)
             .map((color, index) => reader.color(color, `palette.colors[${index}]`)),
     };
 }
@@ -474,24 +510,68 @@ export function attachImages(
 }
 
 /**
- * Checks the invariants of SPEC §5.1 with the model's `assertInvariants`. Throws
- * `ProjectError` "invariant" whose `cause` is the `InvariantError`.
+ * The two invariants of SPEC §5.1 about the range of a tag, "tag-endpoints-exist" and
+ * "tag-order", with the model's own error. Called once the frame IDs are known to be
+ * distinct. `assertInvariants` finds each endpoint by walking the frame list, which is
+ * tags × frames comparisons of IDs: many seconds for a file at the limits of both, with IDs
+ * of full length. Here the frames are looked up, and the work is their sum.
  */
-export function assertDocument(doc: SpriteDoc): void {
+function assertTagRanges(doc: SpriteDoc): void {
+    const indexOf = new Map(doc.frames.map((frame, index) => [frame.id, index] as const));
+    for (const tag of doc.tags) {
+        const from = indexOf.get(tag.fromFrameId);
+        const to = indexOf.get(tag.toFrameId);
+        if (from === undefined || to === undefined) {
+            const missing = from === undefined ? tag.fromFrameId : tag.toFrameId;
+            throw new InvariantError(
+                "tag-endpoints-exist",
+                `tag "${tag.id}" names frame "${missing}"`,
+            );
+        }
+        if (from > to) {
+            throw new InvariantError(
+                "tag-order",
+                `tag "${tag.id}" runs from frame index ${from} to ${to}`,
+            );
+        }
+    }
+}
+
+/**
+ * Checks the invariants of SPEC §5.1 with the model's `assertInvariants`, on a document that
+ * has no image yet: before a pixel is decoded. One blank image of the document's size stands
+ * in for every image the cels name, since the invariants ask whether a cel's image exists
+ * and what size it has, never what it shows. `attachImages` then puts an image of that size
+ * under each of those IDs and no other, so what holds here holds for the finished document.
+ *
+ * The model is shown every tag with its range set to the first frame, and the ranges are
+ * checked by `assertTagRanges`: the same two invariants, in time a file cannot stretch.
+ *
+ * Throws `ProjectError` "invariant" whose `cause` is the `InvariantError`.
+ */
+export function assertSkeleton(skeleton: DocSkeleton): void {
+    const { doc, imageIds } = skeleton;
+    const blank = createPixelBuffer(doc.width, doc.height);
+    for (const imageId of imageIds) doc.images.set(imageId, blank);
     try {
+        const first = doc.frames[0]?.id ?? "";
+        const tags = doc.tags.map((tag) => ({ ...tag, fromFrameId: first, toFrameId: first }));
         // The session part of the check cannot fail: without a first layer or a first frame
         // the document's own invariants fail before it.
         assertInvariants({
-            doc,
+            doc: { ...doc, tags },
             selection: null,
             activeLayerId: doc.layers[0]?.id ?? "",
-            activeFrameId: doc.frames[0]?.id ?? "",
+            activeFrameId: first,
         });
+        assertTagRanges(doc);
     } catch (cause) {
         if (!(cause instanceof InvariantError)) throw cause;
         throw new ProjectError("invariant", `The document is not valid. ${cause.message}.`, {
             cause,
         });
+    } finally {
+        doc.images.clear();
     }
 }
 
@@ -506,15 +586,16 @@ export function referenceSourceIds(doc: SpriteDoc): string[] {
 
 /**
  * The document of a parsed `doc.json` of the current schema version with its images, after
- * every check: `readDocJson`, `attachImages`, `assertDocument`.
+ * every check, in the order `deserialize` makes them: `readDocJson`, `assertSkeleton`,
+ * `attachImages`.
  */
 export function checkedDocument(
     docJson: unknown,
     images: ReadonlyMap<string, PixelBuffer>,
 ): SpriteDoc {
     const skeleton = readDocJson(docJson);
+    assertSkeleton(skeleton);
     attachImages(skeleton, images);
-    assertDocument(skeleton.doc);
     return skeleton.doc;
 }
 

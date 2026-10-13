@@ -1,8 +1,8 @@
 import type { PixelBuffer, SpriteDoc } from "../model";
 import { PngError, decodePng } from "../png";
 import {
-    assertDocument,
     assertPixelBytes,
+    assertSkeleton,
     attachImages,
     readDocJson,
     referenceSourceIds,
@@ -131,15 +131,16 @@ async function readProject(bytes: Uint8Array): Promise<ProjectContents> {
     const skeleton = readDocJson(docJson);
     const { doc, imageIds } = skeleton;
 
+    // Everything that can be refused without pixels is, before the first image is decoded.
+    // The invariants also bound how many reference sources there are to read.
     assertPixelBytes(doc, imageIds.length);
+    assertSkeleton(skeleton);
     const images = new Map<string, PixelBuffer>();
     // One at a time: the decoder's working memory is then that of a single image.
     for (const imageId of imageIds) {
         images.set(imageId, await readImage(archive, doc, imageId));
     }
     attachImages(skeleton, images);
-    // Before the references are read: the invariants bound how many there are.
-    assertDocument(doc);
 
     const referenceSources = new Map<string, Uint8Array>();
     for (const sourceId of referenceSourceIds(doc)) {
@@ -157,9 +158,10 @@ async function readProject(bytes: Uint8Array): Promise<ProjectContents> {
  *
  * `bytes` is untrusted. Everything is checked before it is used: the zip structure; the
  * size every entry states, against the limits of the format, before it is inflated; its
- * CRC-32; the manifest; every field of `doc.json` against the schema; the header of every
- * image against the document's size before it is decoded; that every image and reference
- * source the document names is present; and at last the invariants of SPEC §5.1.
+ * CRC-32; the manifest; every field of `doc.json` against the schema, and the invariants of
+ * SPEC §5.1, before any image is decoded; the header of every image against the document's
+ * size before that image is decoded; that every image and reference source the document
+ * names is present.
  *
  * Rejects with `ProjectError`, whose `code` says what failed and whose `entry` names the
  * entry at fault when there is one. A document is returned whole or not at all.

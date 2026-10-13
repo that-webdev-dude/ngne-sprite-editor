@@ -878,8 +878,10 @@ Export is accepted only when all three hold (SE-053):
 - Loading validates the manifest, runs version migrations, then checks model invariants. An
   unknown newer version is refused with a message; corrupt entries name the failing file.
 - [FORMAT.md](FORMAT.md) specifies the file: every field of `doc.json` with its range, the form
-  of an ID (1–64 characters of `A–Z a–z 0–9 _ -`, since IDs name entries) and the size limits
-  (among them 64 MiB per reference source, 65 535 frames, 1024 layers). Saving refuses a
+  of an ID (1–64 characters of `A–Z a–z 0–9 _ -`, since IDs name entries) and the limits
+  (FORMAT §1.8): 1024 layers, 65 535 frames, 1024 tags, 131 072 cels on 65 527 images, names of
+  255 UTF-16 code units, 64 MiB per reference source, 1 GiB of pixel data. They hold together:
+  a document at every count limit at once is saved inside every size limit. Saving refuses a
   document outside them with a typed error, so a file that was written can be read.
 - Save/Save As use the File System Access API when present, otherwise download. Open also
   accepts drag-and-drop.
