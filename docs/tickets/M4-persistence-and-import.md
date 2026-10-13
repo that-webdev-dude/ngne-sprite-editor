@@ -10,7 +10,7 @@ images (C3).
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Ready                                                    |
+| Status       | Done                                                     |
 | Depends on   | SE-003, SE-005, SE-010                                   |
 | Blocks       | SE-034, SE-041, SE-045                                   |
 | Blocked until | —                                                       |

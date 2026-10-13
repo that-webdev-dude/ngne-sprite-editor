@@ -74,7 +74,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-033 | Selection transforms                              | M    | 032                                | —             | Ready  |
 | SE-034 | Sprite operations                                 | L    | 006, 007, 020, 021, 030, 040       | —             | Ready  |
 | **M4** | **[Persistence and import](M4-persistence-and-import.md)** | |                                  |               |        |
-| SE-040 | Project file format (`.ngsprite`)                 | M    | 003, 005, 010                      | —             | Ready  |
+| SE-040 | Project file format (`.ngsprite`)                 | M    | 003, 005, 010                      | —             | Done   |
 | SE-041 | File workflows                                    | L    | 007, 008, 040                      | G1            | Ready  |
 | SE-042 | Autosave and crash recovery                       | M    | 041                                | —             | Ready  |
 | SE-043 | Import pipeline core and preset palettes          | L    | 003, 005                           | A3            | Done   |

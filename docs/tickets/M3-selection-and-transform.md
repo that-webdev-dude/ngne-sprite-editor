@@ -167,6 +167,13 @@ Scope
   layer, SE-021 add and duplicate frames, copy and unlink cels and create tag, and this
   ticket's size changes. `core/project` (SE-040) takes its count limits from the same
   constants. The app shows a warning when a document's pixel memory passes 512 MB.
+- Text length (same source): sprite, layer, tag and palette names are limited to the 255
+  UTF-16 code units of the project format by the commands that set them (SE-008 rename, SE-020
+  rename and duplicate, SE-021 create and edit tag), so nothing the editor creates is refused
+  on save.
+- `assertInvariants` checks tag ranges with a frame-index map instead of a search per tag (it
+  is quadratic in tags × frames today), and the `assertTagRanges` workaround of `core/project`
+  is removed.
 
 Acceptance
 - Do/undo symmetry for each command on a multi-layer, multi-frame fixture with linked cels
