@@ -97,7 +97,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-007, SE-008, SE-011                                   |
 | Blocks       | SE-013, SE-014                                           |
 | Blocked until | —                                                       |
@@ -154,6 +154,10 @@ Scope
 - From the SE-011 review: `NgneViewport` appends and replaces its own canvas inside the
   element it was given and expects to be alone there. The overlay canvas is a sibling of that
   element, not a child of it.
+- From the SE-012 review: the overlay is the second child of SE-012's viewport element
+  (`[data-viewport]`), which keeps the focus and the wheel and middle-drag listeners. Events
+  from the overlay reach them by bubbling, so the overlay stops neither. Positions are mapped
+  with `currentViewMapping()` (`app/view/viewNavigation`), read at each event or redraw.
 
 Acceptance
 - E2E at DPR 1 and 1.5 (screenshot of both canvases): grid lines fall exactly on texel
@@ -199,6 +203,11 @@ Scope
   viewport; `text` context passes only the † chords.
 - First tools: Hand, Zoom, and a development-only "dot" tool that writes one pixel per sample
   (used by this ticket's tests; removed by SE-015).
+- From the SE-012 review: Hand and Space use `panBy`, the Zoom tool `zoomBy` with the clicked
+  device pixel as anchor (`app/view/viewNavigation`); both keep the pan limit. A middle-button
+  `pointerdown` is left to SE-012's panning. At the overview steps (1/2, 1/4, 1/8)
+  `clientToDoc` names the first texel of a device pixel, which need not be the one NGNE
+  shows: this ticket decides whether a paint tool works below 1× and tests what it decides.
 
 Acceptance
 - Unit tests with synthetic pointer sequences: one down–moves–up yields exactly one history

@@ -303,9 +303,11 @@ is carried out in legs under the usage limit (EXECUTION.md, Legs), with the auto
 run 1 decisions: where AGENTS.md says "stop and report", the agent or the orchestrator decided
 and recorded it here. One read-only review ran per ticket.
 
-### Leg 1 (2026-10-13): SE-011, SE-053
+### Leg 1 (2026-10-13): SE-011, SE-053, SE-012
 
-SE-011 is Done. SE-053 is merged, reviewed and fixed, and waits for CI (E2).
+SE-011 and SE-012 are Done. SE-053 is merged, reviewed and fixed; its tests passed in CI
+(E25) and it waits for a green run of the whole suite (E2). The owner pushed once during the
+leg (df62375) and stopped the leg after SE-012.
 
 | #   | Source | Finding | Decision | Applied in |
 | --- | ------ | ------- | -------- | ---------- |
@@ -325,10 +327,21 @@ SE-011 is Done. SE-053 is merged, reviewed and fixed, and waits for CI (E2).
 | E14 | SE-053 review | The orphan check did not run after a failed test of its file; a child that had not printed its address was tracked nowhere and could outlive a timed-out test; two runs in one checkout saw each other's processes | The check runs in every outcome and `afterAll` asserts as well as cleans; a child is tracked from `spawn` and its start times out before the test does (15 s); the marker is the run's own temp folder | `tests/e2e/se-053-preview*` |
 | E15 | SE-053 review | What the three conditions did not see: the atlas file on disk against the copy in the module, the merged rectangles of the bundle made in the browser, the gutters (nearest sampling never reads them), an entry boundary inside a 10 ms tick, the later entries of an animation in `ngne-preview` | All are asserted now: the module's atlas equals the file; the rectangles, the gutters and the padded sides on the PNG read from disk; boundaries to the millisecond and at ±0.001 ms; every entry of every animation | `tests/e2e/se-053-*`, `tests/unit/se-053-*` |
 | E16 | SE-053 review | What conformance does not cover | SE-052 adds a conformance draw for an export of one tag and takes expected bytes from the page. SE-054's readback is the first GPU check with `pixelSnap` off | SE-052, SE-054 scope |
+| E17 | SE-012 | The fit needs the size of the viewport, which is mounted only while a document is open; a fit one frame after `open` changed the stores behind SE-007's tests | The viewport region is measured by an element that is always there. A document is fitted in the step that opens it, by a policy the session store applies (`setViewPolicy`), so every subscriber sees one change, with the fitted view. `OpenDocument.viewSet` says whether a view was set; a set view is never fitted | `src/app/state/sessions.ts`, `src/app/view/viewPolicy.ts`; SPEC §6.4 |
+| E18 | SE-012 review | The pan limit did not hold after the viewport shrank, after a switch to a document whose view was set under a larger viewport, or for a view passed to `open`: nothing of the document was visible | A change of size and an activation move the view back inside the limit, and never fit | `src/app/view/viewPolicy.ts`; SPEC §6.4 |
+| E19 | SE-012 | Choices the ticket and the documents left open: the pan limit per axis is `min(32, document side, viewport side)`; keys and commands zoom about the centre of the viewport; one zoom step per 50 CSS px of wheel travel; a device position within 1/128 of a whole device pixel counts as that pixel (Chrome's reported positions fall just short at 1.25); the viewport element is `role="application"` named "Canvas"; a "Fit" button after the zoom readout (DESIGN §6 puts fit in the status bar, §5.7 did not list it) | Accepted | SPEC §6.4; DESIGN §5.7 |
+| E20 | SE-012 review | Wheel travel short of a step was forgotten after 400 ms, so a wheel that reports under 50 px per notch never zoomed notch by notch | Kept until the wheel turns the other way | `src/app/view/wheel.ts` |
+| E21 | SE-012 review | Seven assertions would have failed SE-013, SE-014 or SE-022 without a change of behaviour (the children of the viewport element, the list of `mousedown` events, Tab, a probe on a key the SPEC binds later, a `z-index`, centring with an even leftover only), and one test read the fit before the size was known | Corrected by the ticket's agent: each asserts what SE-012 owns; centring is asserted by its exact rule, also for an odd leftover; the test waits for the size | `tests/e2e/se-012-*` |
+| E22 | SE-012 review | No test placed the viewport element between two device pixels, so the rounding of its corner was checked against itself only | The pointer cases also run at 1.1, and a new case compares the status readout with a screenshot of the page at all four ratios. The mapping was right | `tests/e2e/se-012-pointer-*`; SPEC §6.7 |
+| E23 | SE-012 review | What later tickets must know of the view | SE-013: the overlay is the second child of the viewport element and stops neither wheel nor middle button. SE-014: `panBy` and `zoomBy`; painting below 1× is decided there | SE-013, SE-014 scope |
+| E24 | Full E2E after SE-012 | One SE-006 test failed once: the gallery's info toast timed out between two audits while the machine ran about three times slower than usual (heat, after the 17 min SwiftShader run). It passes on its own and passed in the three full runs since (two on hardware, one with `CI=1`) | Not changed. If it comes back, that test stops the page's clock while it audits a surface that closes by itself | — |
+| E25 | CI run 38458951119 | The run on the pushed df62375 failed: 266 of 267 E2E tests passed, the 48 of SE-053 among them, and one SE-011 test failed (the re-key test counted 4 submitted frames where it expects at least 5). The viewport draws once per animation frame whatever asked for it; on the slow runner the frame switch and the first theme change of the test shared one frame. The same suite had passed three times with `CI=1` on this machine | The test waits for the frame of the switch before it changes the theme. No assertion changed. G2 is not marked on a red run: the next leg marks it on a green one | `tests/e2e/se-011-updates.spec.ts` |
+| E26 | `npm run check` at the end of the leg | Two SE-040 unit tests (every time zone; 150 random projects written and read) reached Vitest's default 5 s beside the other 106 files, on the machine while it was slow from heat; SE-012's agent had seen the same four times. Both pass alone in under 6 s for their two files | Each has 30 s. No assertion changed. The SE-040 tests that assert a time of their own are untouched | `tests/unit/se-040-determinism.test.ts`, `se-040-round-trip.test.ts` |
 
-Checks at the end of the leg, on this machine: `npm run check` passes (2685 unit tests);
-`npm run test:e2e` passes on the hardware adapter (235 tests) and, with `CI=1`, on SwiftShader
-with one worker (235 tests in 17.0 min). CI itself has not run on these commits.
+Checks at the end of the leg, on this machine: `npm run check` passes (2782 unit tests);
+`npm run test:e2e` passes on the hardware adapter (277 tests) and, with `CI=1`, on SwiftShader
+with one worker (277 tests in 22.8 min). The test changed by E25 was then repeated alone, 8
+times on hardware and 4 times with `CI=1`. CI has not run on the commits after df62375.
 
 Not decided here, left as they are:
 
@@ -341,7 +354,10 @@ Not decided here, left as they are:
   left out until the next renderer.
 - A create that never settles holds every later viewport of the page: creates are serialized
   and have no timeout.
-- A new document appears at scale 1 in the top-left corner until SE-012.
+- At the overview steps (1/2, 1/4, 1/8) `clientToDoc` names the first texel of a device
+  pixel, which need not be the one drawn (SE-014 decides what a tool does there).
+- The cursor field of the status bar is not rendered while it is blank, so the fields beside
+  it move when the pointer crosses the document's edge (SE-071 looks at it).
 - A Playwright worker that is killed outright leaves its `ngne-preview` children and temp
   folders; the next run's check names them. The consumer and animation specs write bundles
   under `test-results`, so two Playwright runs of them at once in one checkout disturb each

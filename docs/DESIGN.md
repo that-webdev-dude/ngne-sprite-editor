@@ -195,8 +195,8 @@ too large to preview, the canvas area shows that message instead.
 
 ### 5.7 Status bar
 
-Left to right: cursor `x, y` · document size · zoom · frame `n/total` · frame duration ·
-selection size when one exists. Right: one-line hint for the active tool's modifiers, or
+Left to right: cursor `x, y` · document size · zoom with a "Fit" button after it · frame
+`n/total` · frame duration · selection size when one exists. Right: one-line hint for the active tool's modifiers, or
 transient tool feedback in `--warn`.
 
 ## 6. Viewport

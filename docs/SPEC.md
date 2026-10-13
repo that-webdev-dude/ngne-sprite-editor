@@ -392,6 +392,17 @@ View
 - "100%" means 1 device pixel per sprite pixel.
 - View state per document: `scale`, integer `originX`/`originY` (device pixels). The document
   rectangle is `[originX, originY, width × scale, height × scale]`.
+- A document whose view was never set is fitted (the largest zoom step at which it lies inside
+  the viewport) and centred, in the step that opens it: the viewport region is measured while
+  the shell is on the page. Without a size the fit waits for the first one. A view that was
+  set is never fitted again.
+- Panning and zooming keep `min(32, document side on screen, viewport side)` device pixels of
+  the document visible on each axis. A change of the viewport's size and a document becoming
+  the active one move the view back inside that limit; they never fit.
+- A zoom keeps the document pixel under its anchor: the cursor for the wheel, the centre of
+  the viewport for keys and commands. The pan limit wins over the anchor. The wheel zooms one
+  step per 50 CSS px of travel, at most one per event; travel short of a step is kept until
+  the wheel turns the other way.
 
 Texture slots (IDs are fixed for the life of a renderer)
 
@@ -500,6 +511,9 @@ continuous stroke of at least 5 s and reports the longest gap beside the p95.
   options belong to the worker, so such tests have their own spec file.
 - A test that counts animation frames has `@alone` in its title: it runs after every other
   test has finished, because beside other workers its frames come late and the count is wrong.
+- Pointer tests run at the ratios 1, 1.1, 1.25 and 1.5: at 1.25 Chrome reports a mouse
+  position just short of its device pixel, and at 1.1 the viewport element starts between
+  two device pixels.
 
 ### 6.8 Engine gaps and workarounds
 
