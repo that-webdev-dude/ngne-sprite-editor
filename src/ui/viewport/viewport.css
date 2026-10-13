@@ -1,0 +1,10 @@
+/*
+ * SE-011: the element the NGNE viewport fills (DESIGN §6). It takes the whole viewport region;
+ * its size in device pixels is the canvas backing size (SPEC §6.4).
+ */
+.viewport-canvas {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    background: var(--bg-workspace);
+}

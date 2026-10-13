@@ -1,0 +1,486 @@
+import type { RendererResourceInspection, RendererStatus } from "@ngne/core";
+import { readCanvas } from "./testing/readCanvas";
+import { oncePerMessage } from "./viewport/diagnostics";
+import { backingSize } from "./viewport/geometry";
+import { createStage, RendererInstance } from "./viewport/rendererInstance";
+import type { Scene } from "./viewport/rendererInstance";
+import type {
+    DeviceSize,
+    ViewportChecker,
+    ViewportDocument,
+    ViewportPort,
+    ViewportView,
+} from "./viewport/types";
+
+export { frameKey, parseFrameKey } from "./viewport/types";
+export type {
+    DeviceSize,
+    FrameVariant,
+    ViewportChecker,
+    ViewportDocument,
+    ViewportPort,
+    ViewportView,
+} from "./viewport/types";
+
+/** A size change replaces the renderer after this long without another one (SPEC §6.4). */
+export const RESIZE_QUIET_MS = 120;
+/** Interval of the status check while the page is visible (SPEC §6.4). */
+export const STATUS_CHECK_MS = 1000;
+
+export interface NgneViewportOptions {
+    /**
+     * An NGNE diagnostic or a failed upload, once per distinct message. The viewport has
+     * already written it to the console.
+     */
+    onError?(message: string, error: unknown): void;
+    /** The viewport element's size in device pixels changed. */
+    onResize?(size: DeviceSize): void;
+}
+
+/**
+ * What tests read of a viewport and how they script it (SE-011). `app` puts the probe of the
+ * mounted viewport on the page's test hook in development builds.
+ */
+export interface ViewportProbe {
+    /** Frames submitted to NGNE by the viewport since it was created. */
+    readonly submittedFrames: number;
+    /** `texture()` calls made by the viewport since it was created. */
+    readonly textureCalls: number;
+    /** Renderers alive in the page: created by any viewport and not disposed. */
+    readonly liveRenderers: number;
+    /** Backing size of the canvas on screen; null before the first renderer. */
+    readonly canvasSize: DeviceSize | null;
+    /** Status of the renderer on screen; null before the first renderer. */
+    readonly status: RendererStatus | null;
+    /** True while nothing is under way: no upload, no draw, no renderer replacement. */
+    readonly settled: boolean;
+    /** The frame key each cache slot of the renderer on screen shows. */
+    readonly slots: readonly (string | null)[];
+    /**
+     * Draws the scene again and reads the canvas back in the same task (SPEC §6.7), at
+     * backing resolution. The draw is not counted in `submittedFrames`. Null while there is
+     * no renderer, or it is not ready.
+     */
+    readCanvas(): ImageData | null;
+    /** `renderer.inspect()` of the renderer on screen. */
+    inspect(): RendererResourceInspection | null;
+    /**
+     * Called in the task of every submitted frame, after it: `read()` returns that frame's
+     * image.
+     */
+    onFrame: ((read: () => ImageData) => void) | null;
+    /** While set, the upload of a slot starts when the promise it returns has resolved. */
+    uploadGate: ((slot: string) => Promise<void>) | null;
+}
+
+/** Creates run one at a time, across every viewport of the page (SPEC §6.2 #12). */
+let creating: Promise<unknown> = Promise.resolve();
+function serialized<Result>(task: () => Promise<Result>): Promise<Result> {
+    const result = creating.then(task, task);
+    creating = result.catch(() => undefined);
+    return result;
+}
+
+/** Renderers created and not disposed, in the whole page. */
+let liveRenderers = 0;
+
+/**
+ * The editing viewport (SPEC §6.4): one `WebGPURenderer` on its own canvas inside `host`,
+ * drawing the workspace colour, the checkerboard and the current frame of a document, on
+ * demand.
+ *
+ * - The canvas backing size is the host's size in device pixels. A new size replaces the
+ *   renderer after `RESIZE_QUIET_MS` of quiet: a new instance is created on a new canvas,
+ *   every slot uploaded, one frame drawn, the canvases swapped, the old instance disposed.
+ * - Nothing is drawn unless something changed: a dirty flag and one animation frame.
+ * - NGNE signals neither a lost device nor its recovery, so the status and the sprite counter
+ *   are read on window focus, on `visibilitychange` and once a second while visible.
+ */
+export class NgneViewport implements ViewportPort {
+    readonly probe: ViewportProbe;
+    readonly #host: HTMLElement;
+    readonly #options: NgneViewportOptions;
+    readonly #scene: Scene = {
+        document: null,
+        epoch: 0,
+        current: null,
+        view: { scale: 1, originX: 0, originY: 0 },
+        checker: { a: 0x3a3a3a, b: 0x4a4a4a, size: 8 },
+        background: 0x0f0f10,
+    };
+    /** The viewport's one `Frame` and one `Camera` (`pixelSnap` off). */
+    readonly #stage = createStage();
+    readonly #report: (error: unknown) => void;
+    readonly #observer: ResizeObserver;
+    /** The instance whose canvas is in the host. */
+    #live: RendererInstance | null = null;
+    /** The instance being prepared to replace it; it follows every scene change too. */
+    #next: RendererInstance | null = null;
+    /** The host's size in device pixels as last observed. */
+    #size: DeviceSize = { width: 0, height: 0 };
+    #replacing = false;
+    #replaceAgain = false;
+    #quiet: ReturnType<typeof setTimeout> | undefined;
+    #statusTimer: ReturnType<typeof setInterval> | undefined;
+    #dirty = false;
+    #frameRequest = 0;
+    #submittedFrames = 0;
+    #textureCalls = 0;
+    #disposed = false;
+
+    constructor(host: HTMLElement, options: NgneViewportOptions = {}) {
+        this.#host = host;
+        this.#options = options;
+        this.#report = oncePerMessage((message, error) => {
+            console.error("NGNE viewport:", error);
+            options.onError?.(message, error);
+        });
+        this.probe = this.#createProbe();
+
+        this.#observer = new ResizeObserver((entries) => this.#observed(entries));
+        try {
+            this.#observer.observe(host, { box: "device-pixel-content-box" });
+        } catch {
+            // Not supported: the content box times the pixel ratio is used instead.
+            this.#observer.observe(host);
+        }
+        window.addEventListener("focus", this.#checkStatus);
+        document.addEventListener("visibilitychange", this.#visibilityChanged);
+        this.#watchStatus();
+    }
+
+    /** The viewport element's size in device pixels, which is the canvas backing size. */
+    get deviceSize(): DeviceSize {
+        return { ...this.#size };
+    }
+
+    setDocument(document: ViewportDocument | null): void {
+        if (document === this.#scene.document) return;
+        this.#scene.document = document;
+        this.#scene.epoch++;
+        for (const instance of this.#instances()) instance.documentChanged();
+        this.#markDirty();
+    }
+
+    setCurrent(key: string | null): void {
+        if (key === this.#scene.current) return;
+        this.#scene.current = key;
+        for (const instance of this.#instances()) instance.sync();
+        this.#markDirty();
+    }
+
+    invalidate(keys: readonly string[] | "all"): void {
+        for (const instance of this.#instances()) instance.invalidate(keys);
+    }
+
+    setView(view: ViewportView): void {
+        const now = this.#scene.view;
+        if (
+            view.scale === now.scale &&
+            view.originX === now.originX &&
+            view.originY === now.originY
+        ) {
+            return;
+        }
+        this.#scene.view = { scale: view.scale, originX: view.originX, originY: view.originY };
+        this.#markDirty();
+    }
+
+    setChecker(checker: ViewportChecker): void {
+        const now = this.#scene.checker;
+        if (checker.a === now.a && checker.b === now.b && checker.size === now.size) return;
+        this.#scene.checker = { a: checker.a, b: checker.b, size: checker.size };
+        for (const instance of this.#instances()) instance.sync();
+    }
+
+    setBackground(colour: number): void {
+        if (colour === this.#scene.background) return;
+        this.#scene.background = colour;
+        this.#markDirty();
+    }
+
+    /** Ends the viewport: listeners and timers stopped, every renderer disposed. */
+    dispose(): void {
+        if (this.#disposed) return;
+        this.#disposed = true;
+        this.#observer.disconnect();
+        window.removeEventListener("focus", this.#checkStatus);
+        document.removeEventListener("visibilitychange", this.#visibilityChanged);
+        clearTimeout(this.#quiet);
+        clearInterval(this.#statusTimer);
+        if (this.#frameRequest) cancelAnimationFrame(this.#frameRequest);
+        const instances = this.#instances();
+        this.#live = null;
+        this.#next = null;
+        for (const instance of instances) this.#disposeInstance(instance);
+    }
+
+    #instances(): RendererInstance[] {
+        return [this.#live, this.#next].filter((instance) => instance !== null);
+    }
+
+    #disposeInstance(instance: RendererInstance): void {
+        if (instance.disposed) return;
+        instance.dispose();
+        liveRenderers--;
+    }
+
+    // --- Size and renderer replacement ---------------------------------------------------
+
+    #observed(entries: readonly ResizeObserverEntry[]): void {
+        const entry = entries[entries.length - 1];
+        if (!entry || this.#disposed) return;
+        const box = entry.devicePixelContentBoxSize?.[0];
+        const size = box
+            ? backingSize(box.inlineSize, box.blockSize)
+            : backingSize(
+                  entry.contentRect.width * devicePixelRatio,
+                  entry.contentRect.height * devicePixelRatio,
+              );
+        if (size.width === this.#size.width && size.height === this.#size.height) return;
+        this.#size = size;
+        this.#options.onResize?.({ ...size });
+        clearTimeout(this.#quiet);
+        this.#quiet = undefined;
+        if (!this.#live && !this.#replacing) {
+            // Nothing on screen yet: the first renderer is created at once.
+            void this.#replace();
+            return;
+        }
+        this.#quiet = setTimeout(() => {
+            this.#quiet = undefined;
+            void this.#replace();
+        }, RESIZE_QUIET_MS);
+    }
+
+    /** True when the instance on screen fits the host and its renderer still works. */
+    #fits(instance: RendererInstance | null): boolean {
+        return (
+            instance !== null &&
+            instance.width === this.#size.width &&
+            instance.height === this.#size.height &&
+            instance.status !== "failed" &&
+            instance.status !== "disposed"
+        );
+    }
+
+    /**
+     * Brings the renderer in line with the host's size: one replacement at a time, and again
+     * when the size changed or the renderer failed while one was under way.
+     */
+    async #replace(): Promise<void> {
+        if (this.#replacing) {
+            this.#replaceAgain = true;
+            return;
+        }
+        this.#replacing = true;
+        try {
+            do {
+                this.#replaceAgain = false;
+                const size = this.#size;
+                // A host that is not laid out (the shell is hidden) keeps what it has.
+                if (this.#disposed || size.width === 0 || size.height === 0) break;
+                if (this.#fits(this.#live)) break;
+                if (!(await this.#replaceOnce(size))) break;
+            } while (this.#replaceAgain && !this.#disposed);
+        } catch (error) {
+            // The instance that was being prepared is given up; the one on screen stays.
+            const abandoned = this.#next;
+            this.#next = null;
+            if (abandoned) this.#disposeInstance(abandoned);
+            this.#report(error);
+        } finally {
+            this.#replacing = false;
+        }
+    }
+
+    /**
+     * SPEC §6.4 replacement order: create on a new canvas, upload every slot, draw once, swap
+     * the canvases, dispose the old instance. Returns false when no renderer could be made.
+     */
+    async #replaceOnce(size: DeviceSize): Promise<boolean> {
+        let next: RendererInstance | null;
+        try {
+            next = await serialized(async () => {
+                if (this.#disposed) return null;
+                const instance = await RendererInstance.create(size, this.#scene, this.#stage, {
+                    onTexture: () => {
+                        this.#textureCalls++;
+                    },
+                    onChange: () => this.#markDirty(),
+                    onError: (error) => this.#diagnostic(error),
+                    gate: (slot) => this.probe.uploadGate?.(slot),
+                });
+                liveRenderers++;
+                return instance;
+            });
+        } catch (error) {
+            this.#report(error);
+            return false;
+        }
+        if (!next) return false;
+        if (this.#disposed) {
+            this.#disposeInstance(next);
+            return false;
+        }
+
+        // From here on the new instance follows every scene change, as the one on screen
+        // does, and uploads what the old one had cached.
+        this.#next = next;
+        next.seed(this.#live?.slots.keysByAge() ?? []);
+        next.sync();
+        await next.settle();
+        if (this.#disposed) return false;
+        this.#next = null;
+
+        // One task: the new canvas has drawn before it enters the document, and the old one
+        // leaves in the same step, so the viewport is never blank.
+        const old = this.#live;
+        const drawn = this.#submit(next);
+        if (old && old.canvas.parentNode === this.#host) {
+            this.#host.replaceChild(next.canvas, old.canvas);
+        } else {
+            this.#host.append(next.canvas);
+        }
+        this.#live = next;
+        if (old) this.#disposeInstance(old);
+        // The device can be lost while the instance loads: the draw is then tried again.
+        if (!drawn) this.#markDirty();
+        return true;
+    }
+
+    // --- Drawing on demand ---------------------------------------------------------------
+
+    #markDirty(): void {
+        this.#dirty = true;
+        this.#schedule();
+    }
+
+    #schedule(): void {
+        if (this.#frameRequest || this.#disposed) return;
+        this.#frameRequest = requestAnimationFrame(this.#tick);
+    }
+
+    readonly #tick = (): void => {
+        this.#frameRequest = 0;
+        const live = this.#live;
+        // Before the first renderer the swap draws; the flag is kept for it.
+        if (!this.#dirty || this.#disposed || !live) return;
+        const status = live.status;
+        live.lastStatus = status;
+        if (status === "recovering") {
+            // `render()` would be a silent no-op: the flag stays and the draw is tried again
+            // next animation frame (SPEC §6.2 #13).
+            this.#schedule();
+            return;
+        }
+        if (status !== "ready") {
+            // Failed: a fresh renderer, whose swap draws the scene.
+            void this.#replace();
+            return;
+        }
+        this.#submit(live);
+    };
+
+    /** Draws the scene on `instance`. Returns false when NGNE submitted nothing. */
+    #submit(instance: RendererInstance): boolean {
+        this.#dirty = false;
+        if (!instance.draw()) return false;
+        this.#submittedFrames++;
+        this.probe.onFrame?.(() => readCanvas(instance.canvas));
+        return true;
+    }
+
+    // --- Status --------------------------------------------------------------------------
+
+    /**
+     * Reading the status submits no frame. A way back to `ready`, or a sprite counter that
+     * fell to 0 after a draw with sprites (NGNE zeroes it when the device is lost; recovery
+     * usually completes between two reads), marks the view dirty. `failed` asks for a fresh
+     * renderer.
+     */
+    readonly #checkStatus = (): void => {
+        if (this.#disposed) return;
+        const live = this.#live;
+        if (!live) {
+            // No renderer could be made earlier: try again.
+            if (!this.#replacing) void this.#replace();
+            return;
+        }
+        const status = live.status;
+        const before = live.lastStatus;
+        live.lastStatus = status;
+        if (status === "failed") {
+            void this.#replace();
+            return;
+        }
+        // A replacement for a new size that could not be made is tried again.
+        if (!this.#replacing && this.#quiet === undefined && !this.#fits(live)) {
+            void this.#replace();
+        }
+        if (status !== "ready") return;
+        if (before !== "ready" || (live.drewSprites > 0 && live.renderer.sprites === 0)) {
+            this.#markDirty();
+        }
+    };
+
+    readonly #visibilityChanged = (): void => {
+        this.#watchStatus();
+        this.#checkStatus();
+    };
+
+    /** Runs the status timer while the page is visible. */
+    #watchStatus(): void {
+        const visible = document.visibilityState === "visible";
+        if (visible && this.#statusTimer === undefined) {
+            this.#statusTimer = setInterval(this.#checkStatus, STATUS_CHECK_MS);
+        } else if (!visible && this.#statusTimer !== undefined) {
+            clearInterval(this.#statusTimer);
+            this.#statusTimer = undefined;
+        }
+    }
+
+    /** An NGNE diagnostic: shown once per message; `failed` arrives this way too. */
+    #diagnostic(error: unknown): void {
+        this.#report(error);
+        // Not inside NGNE's own call: the status is read once it has returned.
+        queueMicrotask(this.#checkStatus);
+    }
+
+    // --- Test hooks ----------------------------------------------------------------------
+
+    #createProbe(): ViewportProbe {
+        const read = <Value>(get: () => Value) => ({ get, enumerable: true });
+        return Object.defineProperties(
+            {
+                onFrame: null,
+                uploadGate: null,
+                readCanvas: () => {
+                    const live = this.#live;
+                    if (!live || live.status !== "ready") return null;
+                    live.draw();
+                    return readCanvas(live.canvas);
+                },
+                inspect: () => this.#live?.inspect() ?? null,
+            } as ViewportProbe,
+            {
+                submittedFrames: read(() => this.#submittedFrames),
+                textureCalls: read(() => this.#textureCalls),
+                liveRenderers: read(() => liveRenderers),
+                canvasSize: read(() =>
+                    this.#live ? { width: this.#live.width, height: this.#live.height } : null,
+                ),
+                status: read(() => this.#live?.status ?? null),
+                settled: read(
+                    () =>
+                        this.#live !== null &&
+                        !this.#dirty &&
+                        !this.#replacing &&
+                        this.#quiet === undefined &&
+                        !this.#live.queue.busy(),
+                ),
+                slots: read(() => this.#live?.shownKeys() ?? []),
+            },
+        );
+    }
+}
