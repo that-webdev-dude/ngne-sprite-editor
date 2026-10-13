@@ -65,6 +65,11 @@ Scope
   the two `enabled` flags and Toggle buttons for Tint and Within tag), recorded in DESIGN §4;
   and a write to storage that fails (full or blocked) is reported once by a toast instead of
   being lost silently (preferences, theme, layout, recent commands).
+- From the SE-011 and SE-012 reviews: the cursor field of the status bar is not rendered
+  while it is blank, so the fields beside it move when the pointer crosses the edge of the
+  document; and the toast of a renderer that could not recover shows the engine's text
+  ("Reload to create a new renderer") although the viewport has already replaced it. Both
+  are settled here.
 
 Acceptance
 - Zero axe violations of level A/AA outside the canvas elements.
