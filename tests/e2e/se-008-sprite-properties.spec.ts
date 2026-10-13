@@ -499,6 +499,7 @@ test("the dialog works from the keyboard and returns focus to the Sprite menu", 
 
     // And after OK.
     await page.keyboard.press("Enter");
+    await expect(menuItem(page, "sprite.properties")).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(dialog).toBeVisible();
     await page.keyboard.type("villain");

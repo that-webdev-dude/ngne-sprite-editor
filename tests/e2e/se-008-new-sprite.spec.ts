@@ -431,6 +431,7 @@ test("the dialog returns focus to what opened it: the empty-state button, the Fi
 
     // After Create the opener in the empty state no longer exists; the menu still does.
     await page.keyboard.press("Enter");
+    await expect(menuItem(page, "file.new")).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(dialog).toBeVisible();
     await page.keyboard.type("hero");
