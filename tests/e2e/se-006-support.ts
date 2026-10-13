@@ -104,6 +104,17 @@ export async function settleTimers(page: Page): Promise<void> {
     await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 0)));
 }
 
+/**
+ * Presses an arrow key in a radio group and releases it once `target` is checked. Radix moves
+ * the focus one timer after the key goes down and checks the radio that receives it only
+ * while the key is still down; a key pressed and released in one step can be up by then.
+ */
+export async function arrowToRadio(page: Page, key: string, target: Locator): Promise<void> {
+    await page.keyboard.down(key);
+    await expect(target).toBeChecked();
+    await page.keyboard.up(key);
+}
+
 export async function dragBy(page: Page, handle: Locator, dx: number, dy: number) {
     const box = await boxOf(handle);
     const x = box.x + box.width / 2;

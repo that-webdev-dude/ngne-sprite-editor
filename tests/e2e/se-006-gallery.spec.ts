@@ -2,6 +2,7 @@ import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 import {
+    arrowToRadio,
     boxOf,
     collectErrors,
     dragBy,
@@ -606,11 +607,11 @@ test.describe("keyboard operation", () => {
         await expect(page.getByRole("radiogroup", { name: "Brush shape" })).toBeVisible();
         await expect(square).toBeChecked();
         await tabTo(page, square);
-        await page.keyboard.press("ArrowRight");
+        await arrowToRadio(page, "ArrowRight", circle);
         await expect(circle).toBeChecked();
         await expect(circle).toBeFocused();
         await expect(readout(page, "shape")).toHaveText("Shape: circle");
-        await page.keyboard.press("ArrowLeft");
+        await arrowToRadio(page, "ArrowLeft", square);
         await expect(square).toBeChecked();
         await expect(readout(page, "shape")).toHaveText("Shape: square");
     });
