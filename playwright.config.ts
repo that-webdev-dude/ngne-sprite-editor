@@ -24,15 +24,21 @@ const ci = !!process.env.CI;
 
 // NGNE's CI setup for software WebGPU (ngne/.github/workflows/ci.yml): headed Chrome under
 // xvfb with the SwiftShader adapter. Locally Chrome uses the hardware adapter.
+// The Vulkan flags are for Linux; on Windows they leave Chrome without a WebGPU adapter, so
+// a local run with CI=1 there uses the first three only (SE-002 method notes).
 const swiftShaderArgs = [
     "--use-webgpu-adapter=swiftshader",
     "--enable-unsafe-webgpu",
     "--enable-unsafe-swiftshader",
-    "--no-sandbox",
-    "--enable-features=Vulkan",
-    "--use-angle=vulkan",
-    "--use-vulkan=swiftshader",
-    "--disable-vulkan-surface",
+    ...(process.platform === "win32"
+        ? []
+        : [
+              "--no-sandbox",
+              "--enable-features=Vulkan",
+              "--use-angle=vulkan",
+              "--use-vulkan=swiftshader",
+              "--disable-vulkan-surface",
+          ]),
 ];
 
 export default defineConfig({
@@ -49,6 +55,15 @@ export default defineConfig({
     timeout: ci ? 120_000 : 30_000,
     expect: { timeout: ci ? 20_000 : 10_000 },
     reporter: ci ? [["github"], ["list"]] : "list",
+    // A test that counts animation frames has @alone in its title and runs after every other
+    // test has finished: beside the other workers its frames come late and the count is
+    // wrong. "alone" is the teardown of a project without tests, so it runs once "parallel"
+    // is through, whether that passed or not, and one worker at a time.
+    projects: [
+        { name: "first", testMatch: /^$/, teardown: "alone" },
+        { name: "parallel", grepInvert: /@alone/, dependencies: ["first"] },
+        { name: "alone", grep: /@alone/, fullyParallel: false },
+    ],
     use: {
         baseURL: `http://127.0.0.1:${port}`,
         channel: "chrome",

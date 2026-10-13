@@ -28,7 +28,8 @@ import type { FrameTimes } from "./se-011-support";
 /** Frame keys of the slot cache, as the viewport's probe reports them. */
 const plain = (frameId: string) => `${frameId}:plain`;
 
-test("a pixel patch command changes the image within two animation frames, and undo restores it within two", async ({
+// @alone: the frame counts are right only when no other worker takes the processor.
+test("a pixel patch command changes the image within two animation frames, and undo restores it within two @alone", async ({
     page,
 }) => {
     const errors = collectErrors(page);
