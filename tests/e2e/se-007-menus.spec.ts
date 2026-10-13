@@ -292,9 +292,19 @@ test("the menus work from the keyboard", async ({ page }) => {
 
     // Arrow keys walk the open menus; Escape closes and returns focus to the trigger.
     await page.keyboard.press("ArrowDown");
-    await expect(page.getByRole("menu", { name: "Edit" })).toBeVisible();
+    // A menu takes the focus a moment after it opens; the next key belongs to it only from
+    // then on.
+    const holdsFocus = (menu: Locator) =>
+        expect
+            .poll(() => menu.evaluate((element) => element.contains(document.activeElement)))
+            .toBe(true);
+    const edit = page.getByRole("menu", { name: "Edit" });
+    await expect(edit).toBeVisible();
+    await holdsFocus(edit);
     await page.keyboard.press("ArrowRight");
-    await expect(page.getByRole("menu", { name: "Sprite" })).toBeVisible();
+    const sprite = page.getByRole("menu", { name: "Sprite" });
+    await expect(sprite).toBeVisible();
+    await holdsFocus(sprite);
     await page.keyboard.press("Escape");
     await expect(page.getByRole("menu")).toHaveCount(0);
     await expect(menuTrigger(page, "Sprite")).toBeFocused();
