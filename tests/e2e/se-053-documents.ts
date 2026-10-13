@@ -1,3 +1,4 @@
+import type { AtlasMeta } from "../../src/core/export/atlasFormat";
 import { celKey, defaultDocSettings, defaultExportSettings } from "../../src/core/model";
 import type { ExportSettings, PixelBuffer, SpriteDoc, Tag } from "../../src/core/model";
 
@@ -7,10 +8,13 @@ import type { ExportSettings, PixelBuffer, SpriteDoc, Tag } from "../../src/core
 // `bundle()` in the browser as the editor does; the specs, which composite the frames in
 // Node to know what a game must show; and the unit tests.
 
-/** The four fixtures of ticket SE-053, by the letter the ticket gives them. */
-export type FixtureId = "a" | "b" | "c" | "d";
+/**
+ * The fixtures: (a) to (d) are those of ticket SE-053, by the letter the ticket gives them;
+ * (e) was added by the review of the ticket, for a pivot that is off centre in x.
+ */
+export type FixtureId = "a" | "b" | "c" | "d" | "e";
 
-export const FIXTURE_IDS: readonly FixtureId[] = ["a", "b", "c", "d"];
+export const FIXTURE_IDS: readonly FixtureId[] = ["a", "b", "c", "d", "e"];
 
 export interface Fixture {
     id: FixtureId;
@@ -274,6 +278,35 @@ function feet(): SpriteDoc {
     });
 }
 
+/**
+ * (e) Pivot `[0.25, 0.75]` on 24 × 16 with trim: off centre on both axes, on a canvas that
+ * is not square, so that x and y, and width and height, cannot stand in for each other. The
+ * pivot point is (6, 12), a pixel corner. Its tag is a ping-pong that loops.
+ */
+function lean(): SpriteDoc {
+    return spriteDocument({
+        name: "Lean",
+        width: 24,
+        height: 16,
+        durations: [80, 120, 60],
+        layers: [
+            {
+                name: "Layer 1",
+                cels: [
+                    drawing(24, 16, 60),
+                    // Content 17 × 13 from (2, 3): odd both ways, against the bottom edge.
+                    drawing(24, 16, 61, [2, 3, 5, 0]),
+                    // Content 17 × 10 from (7, 0): odd width against the right edge.
+                    drawing(24, 16, 62, [7, 0, 0, 6]),
+                ],
+            },
+        ],
+        tags: [{ name: "Sway", from: 0, to: 2, direction: "pingpong" }],
+        pivot: [0.25, 0.75],
+        settings: { trim: true },
+    });
+}
+
 export const FIXTURES: Readonly<Record<FixtureId, Fixture>> = {
     a: {
         id: "a",
@@ -306,6 +339,120 @@ export const FIXTURES: Readonly<Record<FixtureId, Fixture>> = {
         camel: "sprite2dFeet",
         pascal: "Sprite2dFeet",
         build: feet,
+    },
+    e: {
+        id: "e",
+        title: "(e) pivot [0.25, 0.75] on 24 × 16",
+        name: "lean",
+        camel: "lean",
+        pascal: "Lean",
+        build: lean,
+    },
+};
+
+// --- what the atlas of a fixture states -------------------------------------------------------------
+
+/** What the functions below read of an atlas. */
+type AtlasContent = Pick<AtlasMeta, "frames" | "animations">;
+
+/** The rectangle of every frame of an atlas, in frame order: `x,y w×h @offsetX,offsetY`. */
+export function rectanglesOf(meta: AtlasContent): string[] {
+    return Object.values(meta.frames).map(
+        ({ x, y, w, h, offsetX, offsetY }) => `${x},${y} ${w}×${h} @${offsetX},${offsetY}`,
+    );
+}
+
+/** The animations of an atlas: `id playback durationMs: frame:ms …`, frames by their index. */
+export function animationsOf(meta: AtlasContent): string[] {
+    return Object.entries(meta.animations).map(
+        ([id, { playback, durationMs, entries }]) =>
+            `${id} ${playback} ${durationMs}: ` +
+            entries.map(({ frame, ms }) => `${frame.split("-").pop()}:${ms}`).join(" "),
+    );
+}
+
+export interface AtlasFacts {
+    /** Width and height of the atlas image. */
+    size: readonly [number, number];
+    /** `rectanglesOf` the atlas. */
+    rectangles: readonly string[];
+    /** How many different rectangles that is: fewer than frames where frames were merged. */
+    distinct: number;
+    /** `animationsOf` the atlas. */
+    animations: readonly string[];
+}
+
+/**
+ * What the atlas of each fixture must state, written out. The unit tests hold the bundle
+ * made in Node against it, the specs the one a browser made and wrote to disk: trimming,
+ * merging and the layout are checked on the files the conformance checks run on.
+ */
+export const ATLAS_FACTS: Readonly<Record<FixtureId, AtlasFacts>> = {
+    a: {
+        // Two columns of 32 with padding 1: 2 × 33 + 1. Untrimmed.
+        size: [67, 67],
+        rectangles: ["1,1 32×32 @0,0", "34,1 32×32 @0,0", "1,34 32×32 @0,0", "34,34 32×32 @0,0"],
+        distinct: 4,
+        animations: [
+            "walk loop 300: 0:100 1:50 2:150",
+            // The repeat of the tag is written out (SPEC §9.3).
+            "blink once 460: 2:150 3:80 2:150 3:80",
+            "turn once 580: 0:100 1:50 2:150 3:80 2:150 1:50",
+        ],
+    },
+    b: {
+        // Three columns of 34 and two rows of 18, padding 1 and extrude 1:
+        // 3 × (34 + 1 + 2) + 1 by 2 × (18 + 1 + 2) + 1.
+        size: [112, 43],
+        rectangles: [
+            // The whole canvas: even, so one pixel past the frame on both axes.
+            "2,2 34×18 @0,0",
+            // 30 × 13 inside the frame: the fourteenth row is a transparent one of the frame.
+            "39,2 30×14 @3,2",
+            // 27 × 16 against the right edge: one column past the frame.
+            "76,2 28×16 @6,1",
+            // 5 × 3 inside the frame.
+            "2,23 6×4 @1,1",
+            // Nothing: 2 × 2 at the corner.
+            "39,23 2×2 @0,0",
+        ],
+        distinct: 5,
+        animations: ["flap loop 300: 3:60 2:120 1:60 0:60"],
+    },
+    c: {
+        // One row of two rectangles with padding 2; the frame is 9 × 7, the rectangle even.
+        size: [26, 12],
+        // Frames 0, 2 and 4 share one rectangle, frames 1 and 3 the other.
+        rectangles: [
+            "2,2 10×8 @0,0",
+            "14,2 10×8 @0,0",
+            "2,2 10×8 @0,0",
+            "14,2 10×8 @0,0",
+            "2,2 10×8 @0,0",
+        ],
+        distinct: 2,
+        // No tag: one loop over all frames, named like the document.
+        animations: ["twice loop 300: 0:70 1:30 2:70 3:30 4:100"],
+    },
+    d: {
+        // A column of three cells of 32 without padding.
+        size: [32, 96],
+        rectangles: ["0,0 24×26 @4,6", "0,32 32×32 @0,0", "0,64 14×18 @10,12"],
+        distinct: 3,
+        animations: ["idle loop 200: 1:110 0:90"],
+    },
+    e: {
+        // Two columns of 24 and two rows of 16 with padding 1.
+        size: [51, 35],
+        rectangles: [
+            "1,1 24×16 @0,0",
+            // 17 × 13 against the bottom edge: one column of the frame, one row past it.
+            "26,1 18×14 @2,3",
+            // 17 × 10 against the right edge: one column past the frame.
+            "1,18 18×10 @7,0",
+        ],
+        distinct: 3,
+        animations: ["sway loop 380: 0:80 1:120 2:60 1:120"],
     },
 };
 

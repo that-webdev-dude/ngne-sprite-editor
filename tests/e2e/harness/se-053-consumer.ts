@@ -18,8 +18,12 @@ import type { AnimationReadback, CanvasReadback, DrawCommand } from "../se-053-e
 // - `raf`: the game runs on `requestAnimationFrame` with NGNE's own settings.
 // The canvas is read back in `afterFrame`, in the task of the render (SPEC §6.7).
 
-/** Milliseconds of game time per tick under the manual scheduler. */
-const TICK_MS = 10;
+/**
+ * Milliseconds of game time per tick under the manual scheduler: one, the unit of an entry's
+ * duration, so the game can stand on the last millisecond before a boundary and on the
+ * boundary itself. `dt` is then 0.001 s, and `dt × 1000` is exactly 1.
+ */
+const TICK_MS = 1;
 
 /**
  * A scheduler in the place of `requestAnimationFrame`: it keeps the callback the game asks
@@ -174,6 +178,12 @@ async function run(): Promise<void> {
             return animationFrame(0);
         },
         advance: animationFrame,
+        resolve: (animation, ages) =>
+            ages.map((age) => ({
+                frame: sheet.animationFrame(animation, age),
+                done: sheet.animationDone(animation, age),
+            })),
+        atlas: module[`${camel}Atlas`],
         show(commands) {
             stage.animation = null;
             stage.sprites = commands.map(spriteOf);

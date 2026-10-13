@@ -9,8 +9,16 @@ import type { AtlasMeta } from "../../src/core/export/atlasFormat";
 import { validateAtlas } from "../../src/core/export/validateAtlas";
 import type { PixelBuffer, SpriteDoc } from "../../src/core/model";
 import { decodePng } from "../../src/core/png/decode";
-import { fileOf, fromBase64 } from "./se-053-documents";
+import {
+    ATLAS_FACTS,
+    FIXTURES,
+    animationsOf,
+    fileOf,
+    fromBase64,
+    rectanglesOf,
+} from "./se-053-documents";
 import type { FileBytes, Fixture, FixtureId } from "./se-053-documents";
+import { expectedAtlas, imageDifference } from "./se-053-expected";
 import type {
     AnimationReadback,
     CanvasImage,
@@ -95,6 +103,71 @@ export async function openConsumer(
     testInfo.annotations.push({ type: "adapter", description: adapter });
 }
 
+/**
+ * The atlas and the image read from a folder are those of the fixture:
+ * - the atlas states what `ATLAS_FACTS` writes out for it: the size, the rectangle of every
+ *   frame (trimmed, merged and laid out as the fixture asks) and the animations;
+ * - the image is, pixel for pixel, the composites of the frames in those rectangles, their
+ *   edges repeated into the gutter where the fixture extrudes, and nothing else.
+ * Returns the composite of every frame, by its ID.
+ */
+export function expectFixtureAtlas(
+    fixture: Fixture,
+    doc: SpriteDoc,
+    meta: AtlasMeta,
+    image: PixelBuffer,
+): Map<string, PixelBuffer> {
+    const facts = ATLAS_FACTS[fixture.id];
+    expect([meta.width, meta.height]).toEqual(facts.size);
+    expect(rectanglesOf(meta)).toEqual(facts.rectangles);
+    expect(new Set(rectanglesOf(meta)).size).toBe(facts.distinct);
+    expect(animationsOf(meta)).toEqual(facts.animations);
+    const composites = compositesOf(doc, fixture, meta);
+    const expected = expectedAtlas(meta, composites, doc.exportSettings.extrude);
+    expect(imageDifference(image, expected)).toBeNull();
+    return composites;
+}
+
+/** A fixture exported by the browser, read back from disk, and loaded by the consumer game. */
+export interface Stage {
+    fixture: Fixture;
+    doc: SpriteDoc;
+    /** `<name>.atlas.json` as it lies in the folder, read by `validateAtlas`. */
+    meta: AtlasMeta;
+    /** The composite of every frame, by its ID in the atlas. */
+    composites: Map<string, PixelBuffer>;
+}
+
+/**
+ * Exports a fixture, writes its bundle to disk and starts the consumer game on the exported
+ * module. The files on disk are checked on the way:
+ * - `<name>.atlas.json` and `<name>.png` are the fixture's (`expectFixtureAtlas`);
+ * - the atlas the generated module carries, the one its draw functions read rectangles and
+ *   entries from, is the atlas file: serialized the way the writer does, it is the text of
+ *   the file. What the game then draws is drawn from the content of that file.
+ */
+export async function openStage(
+    page: Page,
+    testInfo: TestInfo,
+    id: FixtureId,
+    scheduler: "manual" | "raf" = "manual",
+): Promise<Stage> {
+    const fixture = FIXTURES[id];
+    const files = await exportFixture(page, id);
+    await openConsumer(page, testInfo, fixture, files, scheduler);
+    const directory = testInfo.outputPath("bundle");
+    const { meta, image } = await readAtlas(directory, fixture.name);
+    const doc = fixture.build();
+    const composites = expectFixtureAtlas(fixture, doc, meta, image);
+
+    const carried = await page.evaluate(() => window.__se053!.atlas);
+    expect(`${JSON.stringify(carried, null, 4)}\n`).toBe(
+        readFileSync(join(directory, `${fixture.name}.atlas.json`), "utf8"),
+    );
+    expect(carried).toEqual(meta);
+    return { fixture, doc, meta, composites };
+}
+
 function imageOf(readback: CanvasReadback): CanvasImage {
     return { width: readback.width, height: readback.height, data: fromBase64(readback.data) };
 }
@@ -149,6 +222,18 @@ export async function play(
 /** Lets `ms` milliseconds pass on the game's clock; the frame after them. */
 export async function advance(page: Page, ms: number): Promise<AnimationFrame> {
     return animationFrameOf(await page.evaluate((time) => window.__se053!.advance(time), ms));
+}
+
+/** What the generated module's two animation functions return for each age, without the game. */
+export function resolveAnimation(
+    page: Page,
+    animation: string,
+    ages: number[],
+): Promise<{ frame: string; done: boolean }[]> {
+    return page.evaluate(([id, list]) => window.__se053!.resolve(id, list), [
+        animation,
+        ages,
+    ] as const);
 }
 
 /**

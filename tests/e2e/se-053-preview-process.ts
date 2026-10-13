@@ -1,6 +1,15 @@
 import { execFile, spawn } from "node:child_process";
 import type { ChildProcessByStdio } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
+import {
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    readdirSync,
+    writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -17,9 +26,15 @@ export const PREVIEW_CLI = fileURLToPath(
 /** The line the CLI prints once its server listens. */
 const URL_LINE = /^NGNE preview: (http:\/\/127\.0\.0\.1:\d+\/)\r?$/m;
 
-export interface PreviewProcess {
-    /** The address the CLI printed. */
-    url: string;
+/**
+ * How long `startPreview` waits for the address. Below the time a test has locally (30 s),
+ * with room for what the test does before it: a start that hangs ends by the rejection of
+ * `startPreview`, with what the process wrote, and not by the test running out of time.
+ */
+export const START_TIMEOUT_MS = 15_000;
+
+/** A child process started on `ngne-preview`, from the moment it exists. */
+export interface PreviewChild {
     pid: number;
     /** The adapter file it was started on. */
     config: string;
@@ -34,11 +49,22 @@ export interface PreviewProcess {
     stop(graceMs?: number): Promise<void>;
 }
 
-/** Every process `startPreview` has started that has not exited, started in this process. */
-const running = new Map<number, PreviewProcess>();
+/** A preview that has printed its address: its server listens. */
+export interface PreviewProcess extends PreviewChild {
+    /** The address the CLI printed. */
+    url: string;
+}
 
-/** The previews of this process that have not exited. */
-export function runningPreviews(): PreviewProcess[] {
+/**
+ * Every child `startPreview` has spawned in this process that has not exited: entered when
+ * it is spawned, before it has printed anything, and removed when it exits. A test that
+ * runs out of time while a preview starts has no `PreviewProcess` to stop; the child is
+ * here all the same.
+ */
+const running = new Map<number, PreviewChild>();
+
+/** The previews of this process that have not exited, started or still starting. */
+export function runningPreviews(): PreviewChild[] {
     return [...running.values()];
 }
 
@@ -76,10 +102,17 @@ function exited(
  * Starts `ngne-preview` on an adapter file, the way SPEC §9.7 states it: this Node binary
  * with the absolute path of the installed CLI and the absolute path of the adapter. Resolves
  * with the address the CLI prints (`NGNE preview: <url>`); the server picks a free port of
- * its own. Rejects, with everything the process wrote, when it exits first or prints no
- * address within `timeoutMs`; the process is gone by then.
+ * its own.
+ *
+ * Rejects, with everything the process wrote, when it exits first, when it is stopped
+ * first (through `runningPreviews`), or when it prints no address within `timeoutMs`; the
+ * process is gone by then. From the moment of the call the child is one of
+ * `runningPreviews`.
  */
-export function startPreview(config: string, timeoutMs = 60_000): Promise<PreviewProcess> {
+export function startPreview(
+    config: string,
+    timeoutMs: number = START_TIMEOUT_MS,
+): Promise<PreviewProcess> {
     const child = spawn(process.execPath, [PREVIEW_CLI, config], {
         stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,
@@ -103,6 +136,12 @@ export function startPreview(config: string, timeoutMs = 60_000): Promise<Previe
         throw new Error(`ngne-preview (pid ${child.pid}) did not end: ${output()}`);
     };
 
+    const { pid } = child;
+    if (pid !== undefined) {
+        running.set(pid, { pid, config, output, stop });
+        child.once("exit", () => running.delete(pid));
+    }
+
     return new Promise((resolve, reject) => {
         const fail = (reason: string) => {
             cleanup();
@@ -118,14 +157,9 @@ export function startPreview(config: string, timeoutMs = 60_000): Promise<Previe
         const onData = (chunk: string) => {
             stdout += chunk;
             const match = URL_LINE.exec(stdout);
-            if (!match || child.pid === undefined) return;
+            if (!match || pid === undefined) return;
             cleanup();
-            const preview: PreviewProcess = { url: match[1], pid: child.pid, config, output, stop };
-            running.set(preview.pid, preview);
-            child.once("exit", () => running.delete(preview.pid));
-            // It may have exited between the line and here.
-            if (child.exitCode !== null || child.signalCode !== null) running.delete(preview.pid);
-            resolve(preview);
+            resolve({ url: match[1], pid, config, output, stop });
         };
         // "close" and not "exit": by then everything the process wrote has been read.
         const onClose = (code: number | null, signal: string | null) =>
@@ -143,6 +177,34 @@ export function startPreview(config: string, timeoutMs = 60_000): Promise<Previe
         child.once("close", onClose);
         child.once("error", onError);
     });
+}
+
+// --- the folder of a run --------------------------------------------------------------------------
+
+/**
+ * The temporary folder of one run of a test file: a new folder of the system's, named
+ * `<prefix>` and six random characters. Every adapter the run starts a preview on lies in
+ * it, so its path is in the command line of every preview of the run and of no other
+ * process: not of another checkout, not of a run before it, not of a second run going on in
+ * the same checkout.
+ *
+ * With `pointer`, the path is kept in that file, and a call that finds the file returns the
+ * folder it names (made again when it was removed). The processes of one run then share one
+ * folder: a test runner starts a new worker after a failed test, and the new one must look
+ * for what the old one left. The pointer has to be a file of this run alone.
+ */
+export function runFolder(prefix: string, pointer?: string): string {
+    if (pointer !== undefined && existsSync(pointer)) {
+        const folder = readFileSync(pointer, "utf8");
+        mkdirSync(folder, { recursive: true });
+        return folder;
+    }
+    const folder = mkdtempSync(join(tmpdir(), prefix));
+    if (pointer !== undefined) {
+        mkdirSync(dirname(pointer), { recursive: true });
+        writeFileSync(pointer, folder);
+    }
+    return folder;
 }
 
 // --- the process list -----------------------------------------------------------------------------
@@ -221,11 +283,25 @@ async function readProcessList(): Promise<ListedProcess[]> {
 
 /**
  * The processes of the list that run this checkout's `ngne-preview`: their command line
- * names its CLI file. With `marker`, only those whose command line also holds that text (a
- * folder of adapter files, for one).
+ * names its CLI file. With `marker`, only those whose command line also holds that text:
+ * the folder of a run (`runFolder`), for the previews of that run alone.
  */
 export async function previewProcesses(marker = ""): Promise<ListedProcess[]> {
     return (await listProcesses()).filter(
         ({ command }) => command.includes(PREVIEW_CLI) && command.includes(marker),
     );
+}
+
+/**
+ * Ends the listed processes, whoever started them. For what a run finds left of itself:
+ * the caller reports it, and it is not left for the next run of the machine to find.
+ */
+export function endProcesses(list: readonly ListedProcess[]): void {
+    for (const { pid } of list) {
+        try {
+            process.kill(pid, "SIGKILL");
+        } catch {
+            // Gone since it was listed.
+        }
+    }
 }

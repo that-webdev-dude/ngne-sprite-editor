@@ -14,18 +14,23 @@ import {
 } from "../../src/core/export";
 import type { AtlasMeta, Bundle } from "../../src/core/export";
 import { celKey } from "../../src/core/model";
+import type { PixelBuffer } from "../../src/core/model";
 import { clonePixelBuffer, cropPixels, pixelBuffersEqual } from "../../src/core/pixels";
 import { decodePng } from "../../src/core/png";
 import {
+    ATLAS_FACTS,
     FIXTURES,
     FIXTURE_IDS,
+    animationsOf,
     fileOf,
     fromBase64,
+    rectanglesOf,
     textOf,
     toBase64,
     withRectOutsideImage,
 } from "../e2e/se-053-documents";
 import type { FixtureId } from "../e2e/se-053-documents";
+import { expectedAtlas, guttersOf, imageDifference } from "../e2e/se-053-expected";
 import { errorOf } from "./se-051-support";
 
 // SE-053: the fixture documents of the conformance checks, and condition 1 of SPEC §9.7 on
@@ -49,19 +54,14 @@ async function read(files: Bundle["files"]): Promise<AtlasMeta> {
     return validateAtlas(json, await decodePng(fileOf(files, ".png").bytes));
 }
 
-/** The frames of an atlas as `x,y w×h @offsetX,offsetY`. */
-function rectangles(meta: AtlasMeta): string[] {
-    return Object.values(meta.frames).map(
-        ({ x, y, w, h, offsetX, offsetY }) => `${x},${y} ${w}×${h} @${offsetX},${offsetY}`,
-    );
-}
-
-/** The animations of an atlas as `id playback duration: frame:ms …`, frames by their index. */
-function animations(meta: AtlasMeta): string[] {
-    return Object.entries(meta.animations).map(
-        ([id, { playback, durationMs, entries }]) =>
-            `${id} ${playback} ${durationMs}: ` +
-            entries.map(({ frame, ms }) => `${frame.split("-").pop()}:${ms}`).join(" "),
+/** The composite of every frame of a fixture's document, by its ID in the atlas. */
+function compositesOf(id: FixtureId): Map<string, PixelBuffer> {
+    const doc = FIXTURES[id].build();
+    return new Map(
+        Object.keys(made(id).meta.frames).map((frame, index) => [
+            frame,
+            compositeFrame(doc, doc.frames[index].id),
+        ]),
     );
 }
 
@@ -69,6 +69,32 @@ describe.each(FIXTURE_IDS)("the bundle of fixture (%s)", (id) => {
     const fixture = FIXTURES[id];
     const doc = fixture.build();
     const { files, atlas, meta } = made(id);
+
+    it("states the size, the rectangles and the animations written out for it", () => {
+        // The same table the specs hold the bundle of a browser against, from its files.
+        const facts = ATLAS_FACTS[id];
+        expect([meta.width, meta.height]).toEqual(facts.size);
+        expect(rectanglesOf(meta)).toEqual(facts.rectangles);
+        expect(new Set(rectanglesOf(meta)).size).toBe(facts.distinct);
+        expect(animationsOf(meta)).toEqual(facts.animations);
+        expect(facts.rectangles).toHaveLength(doc.frames.length);
+    });
+
+    it("has an image that is its composites in their rectangles, their gutters, and nothing else", () => {
+        const expected = expectedAtlas(meta, compositesOf(id), doc.exportSettings.extrude);
+        expect(imageDifference(atlas, expected)).toBeNull();
+        // The control: one pixel of the image changed is found, wherever it lies.
+        const pixels = atlas.width * atlas.height;
+        for (const pixel of [0, pixels >> 1, pixels - 1]) {
+            const changed = clonePixelBuffer(atlas);
+            changed.data[pixel * 4 + 3] ^= 0x80;
+            expect(imageDifference(changed, expected)).toBe(
+                `pixel (${pixel % atlas.width}, ${Math.floor(pixel / atlas.width)}) is ` +
+                    `${changed.data.subarray(pixel * 4, pixel * 4 + 4).join()}, expected ` +
+                    `${atlas.data.subarray(pixel * 4, pixel * 4 + 4).join()}`,
+            );
+        }
+    });
 
     it("has the names the specs use for it", () => {
         expect(exportName(doc.name)).toBe(fixture.name);
@@ -164,13 +190,13 @@ describe("the fixtures of ticket SE-053", () => {
         expect(doc.exportSettings).toMatchObject({ trim: false, extrude: 0, padding: 1 });
         // Two columns of 32 with padding 1: 2 × 33 + 1.
         expect([meta.width, meta.height]).toEqual([67, 67]);
-        expect(rectangles(meta)).toEqual([
+        expect(rectanglesOf(meta)).toEqual([
             "1,1 32×32 @0,0",
             "34,1 32×32 @0,0",
             "1,34 32×32 @0,0",
             "34,34 32×32 @0,0",
         ]);
-        expect(animations(meta)).toEqual([
+        expect(animationsOf(meta)).toEqual([
             "walk loop 300: 0:100 1:50 2:150",
             "blink once 460: 2:150 3:80 2:150 3:80",
             "turn once 580: 0:100 1:50 2:150 3:80 2:150 1:50",
@@ -189,7 +215,7 @@ describe("the fixtures of ticket SE-053", () => {
         expect([doc.width, doc.height]).toEqual([33, 17]);
         expect(doc.exportSettings).toMatchObject({ trim: true, extrude: 1 });
         expect(doc.pivot).toEqual({ x: 0.5, y: 0.5 });
-        expect(rectangles(meta)).toEqual([
+        expect(rectanglesOf(meta)).toEqual([
             // The whole canvas: even, so one pixel past the frame on both axes.
             "2,2 34×18 @0,0",
             // 30 × 13 inside the frame: the fourteenth row is a transparent one of the frame.
@@ -208,7 +234,53 @@ describe("the fixtures of ticket SE-053", () => {
         ];
         expect(pixel(x, y + 1)[3]).toBeGreaterThan(0);
         expect(pixel(x - 1, y + 1)).toEqual(pixel(x, y + 1));
-        expect(animations(meta)).toEqual(["flap loop 300: 3:60 2:120 1:60 0:60"]);
+        expect(animationsOf(meta)).toEqual(["flap loop 300: 3:60 2:120 1:60 0:60"]);
+    });
+
+    it("(b) repeats the edges of every rectangle into its gutter, and leaves a padded side clear", () => {
+        // What the spec reads from the PNG a browser wrote, on the atlas made here.
+        const { meta, atlas } = made("b");
+        for (const [frame, rect] of Object.entries(meta.frames)) {
+            const gutters = guttersOf(atlas, rect);
+            for (const side of ["left", "right", "top", "bottom", "corners"] as const) {
+                expect(gutters[side].outside, `${frame}, ${side}`).toEqual(gutters[side].edge);
+            }
+        }
+        const clear = (count: number) => new Array<string>(count).fill("0,0,0,0");
+        // 33 × 17 in 34 × 18: the right column and the bottom row are padding (SPEC §9.2).
+        const whole = guttersOf(atlas, meta.frames["odd-bird-0"]);
+        expect([whole.left.lit, whole.top.lit]).toEqual([15, 30]);
+        expect(whole.right).toEqual({ outside: clear(18), edge: clear(18), lit: 0 });
+        expect(whole.bottom).toEqual({ outside: clear(34), edge: clear(34), lit: 0 });
+        expect(whole.corners.outside[0]).not.toBe("0,0,0,0");
+        expect(whole.corners.outside.slice(1)).toEqual(clear(3));
+        // 30 × 13 in 30 × 14: the fourteenth row is padding.
+        const trimmed = guttersOf(atlas, meta.frames["odd-bird-1"]);
+        expect([trimmed.left.lit, trimmed.right.lit, trimmed.top.lit]).toEqual([12, 12, 27]);
+        expect(trimmed.bottom).toEqual({ outside: clear(30), edge: clear(30), lit: 0 });
+
+        // The control: a gutter pixel that does not repeat its edge is seen, on each side.
+        const { x, y, w, h } = meta.frames["odd-bird-1"];
+        const spoiled: [keyof typeof trimmed, number, number][] = [
+            ["left", x - 1, y + 2],
+            ["right", x + w, y + 2],
+            ["top", x + 2, y - 1],
+            ["bottom", x + 2, y + h],
+            ["corners", x + w, y + h],
+        ];
+        for (const [side, px, py] of spoiled) {
+            const changed = clonePixelBuffer(atlas);
+            changed.data[(py * atlas.width + px) * 4 + 3] ^= 0x40;
+            const gutters = guttersOf(changed, meta.frames["odd-bird-1"]);
+            expect(gutters[side].outside, side).not.toEqual(gutters[side].edge);
+            // And only there.
+            for (const other of ["left", "right", "top", "bottom", "corners"] as const) {
+                if (other === side) continue;
+                expect(gutters[other].outside, `${side}: ${other}`).toEqual(gutters[other].edge);
+            }
+        }
+        // A rectangle at the border of an image has no gutter to read.
+        expect(() => guttersOf(atlas, { x: 0, y: 2, w: 2, h: 2 })).toThrow(/outside the image/);
     });
 
     it("(c) has merged duplicate frames: five frames in two rectangles, under five IDs", () => {
@@ -225,20 +297,21 @@ describe("the fixtures of ticket SE-053", () => {
             "image-0-3",
             "image-0-0",
         ]);
-        expect(rectangles(meta)).toEqual([
+        expect(rectanglesOf(meta)).toEqual([
             "2,2 10×8 @0,0",
             "14,2 10×8 @0,0",
             "2,2 10×8 @0,0",
             "14,2 10×8 @0,0",
             "2,2 10×8 @0,0",
         ]);
+        expect(new Set(rectanglesOf(meta)).size).toBe(2);
         // One row of two rectangles with padding 2; the frame is 9 × 7, the rectangle even.
         expect([meta.width, meta.height]).toEqual([26, 12]);
         // Without merging the same document needs five rectangles.
         const apart = bundle(doc, { ...doc.exportSettings, mergeDuplicates: false });
-        expect(new Set(rectangles(apart.meta)).size).toBe(5);
+        expect(new Set(rectanglesOf(apart.meta)).size).toBe(5);
         // No tag: one loop over all frames, named like the document.
-        expect(animations(meta)).toEqual(["twice loop 300: 0:70 1:30 2:70 3:30 4:100"]);
+        expect(animationsOf(meta)).toEqual(["twice loop 300: 0:70 1:30 2:70 3:30 4:100"]);
     });
 
     it("(d) has the pivot [0.5, 1] on trimmed frames, and a name that starts with a digit", () => {
@@ -251,13 +324,41 @@ describe("the fixtures of ticket SE-053", () => {
             [0.5, 1],
         ]);
         // A column without padding: the full frame and the one below it touch.
-        expect(rectangles(meta)).toEqual([
+        expect(rectanglesOf(meta)).toEqual([
             "0,0 24×26 @4,6",
             "0,32 32×32 @0,0",
             "0,64 14×18 @10,12",
         ]);
         expect(FIXTURES.d).toMatchObject({ name: "2d-feet", camel: "sprite2dFeet" });
-        expect(animations(meta)).toEqual(["idle loop 200: 1:110 0:90"]);
+        expect(animationsOf(meta)).toEqual(["idle loop 200: 1:110 0:90"]);
+    });
+
+    it("(e) has a pivot off centre in x and in y, on a canvas that is not square", () => {
+        const doc = FIXTURES.e.build();
+        const { meta } = made("e");
+        expect([doc.width, doc.height]).toEqual([24, 16]);
+        expect(doc.pivot).toEqual({ x: 0.25, y: 0.75 });
+        // The pivot point is a pixel corner, and no axis has it in the middle.
+        expect([doc.pivot.x * doc.width, doc.pivot.y * doc.height]).toEqual([6, 12]);
+        expect(Object.values(meta.frames).map((frame) => frame.pivot)).toEqual([
+            [0.25, 0.75],
+            [0.25, 0.75],
+            [0.25, 0.75],
+        ]);
+        expect(doc.exportSettings).toMatchObject({ trim: true, extrude: 0, padding: 1 });
+        expect(rectanglesOf(meta)).toEqual([
+            "1,1 24×16 @0,0",
+            // 17 × 13 against the bottom edge: one row past the frame.
+            "26,1 18×14 @2,3",
+            // 17 × 10 against the right edge: one column past the frame.
+            "1,18 18×10 @7,0",
+        ]);
+        // A ping-pong that loops: there and back, without either end twice.
+        expect(animationsOf(meta)).toEqual(["sway loop 380: 0:80 1:120 2:60 1:120"]);
+        // Every other fixture has its pivot in the middle of its width.
+        for (const id of ["a", "b", "c", "d"] as const) {
+            expect(FIXTURES[id].build().pivot.x, id).toBe(0.5);
+        }
     });
 
     it("build the same document every time", () => {

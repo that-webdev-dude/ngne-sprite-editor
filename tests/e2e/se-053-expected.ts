@@ -13,9 +13,13 @@ import {
 // use it on what a GPU drew, a unit test on what NGNE's `Frame` holds.
 //
 // Where a frame must appear is worked out from the composite of the frame, the pivot of the
-// document and the draw alone. Nothing here reads an atlas: not a rectangle, not an offset.
-// So the result is the same for every way of packing the frame, and an error in the packer,
+// document and the draw alone. That part reads no atlas: not a rectangle, not an offset. So
+// the result is the same for every way of packing the frame, and an error in the packer,
 // the writers or the generated module cannot move the expectation with it.
+//
+// The atlas itself is held against the composites further down: the image a bundle must
+// hold for the rectangles its atlas states, the gutters of an extruded rectangle, and what
+// an animation shows at an age.
 
 // --- the scene ------------------------------------------------------------------------------------
 
@@ -324,6 +328,181 @@ export function alphaCounts(image: PixelBuffer): {
     return counts;
 }
 
+// --- the atlas image ------------------------------------------------------------------------------
+
+/** What the functions below read of a frame of an atlas. */
+interface FrameRect {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    offsetX: number;
+    offsetY: number;
+}
+
+/**
+ * The atlas image a bundle must hold, pixel for pixel, worked out from the composites and
+ * the rectangles its atlas states (SPEC §9.2, §9.4):
+ * - a rectangle holds the part of the frame's composite it covers, from (offsetX, offsetY);
+ *   where it reaches past the frame, to make its size even, it is transparent;
+ * - with `extrude`, the pixels of its edge are repeated that many pixels outwards, the
+ *   corner pixel into the corner. A side that is the transparent column or row of an even
+ *   size has nothing to repeat: its gutter is transparent, the side is not extruded;
+ * - every other pixel, the padding between the gutters and at the border, is transparent.
+ * Frames merged into one rectangle are written once; they have the same composite.
+ */
+export function expectedAtlas(
+    meta: { width: number; height: number; frames: Readonly<Record<string, FrameRect>> },
+    composites: ReadonlyMap<string, PixelBuffer>,
+    extrude: number,
+): PixelBuffer {
+    const atlas = createPixelBuffer(meta.width, meta.height);
+    const written = new Set<string>();
+    for (const [id, { x, y, w, h, offsetX, offsetY }] of Object.entries(meta.frames)) {
+        const composite = composites.get(id);
+        if (!composite) throw new Error(`expectedAtlas: no composite of frame ${id}.`);
+        if (written.has(`${x},${y}`)) continue;
+        written.add(`${x},${y}`);
+        const piece = cropPixels(composite, { x: offsetX, y: offsetY, width: w, height: h });
+        const ring = createPixelBuffer(w + 2 * extrude, h + 2 * extrude);
+        for (let row = 0; row < ring.height; row++) {
+            for (let column = 0; column < ring.width; column++) {
+                // The nearest pixel of the rectangle: itself inside, its edge in the gutter.
+                const fromX = Math.min(Math.max(column - extrude, 0), w - 1);
+                const fromY = Math.min(Math.max(row - extrude, 0), h - 1);
+                const from = (fromY * w + fromX) * 4;
+                ring.data.set(piece.data.subarray(from, from + 4), (row * ring.width + column) * 4);
+            }
+        }
+        blitPixels(atlas, ring, x - extrude, y - extrude);
+    }
+    return atlas;
+}
+
+/** Describes the first pixel in which two images differ, or null when they are byte-equal. */
+export function imageDifference(actual: PixelBuffer, expected: PixelBuffer): string | null {
+    if (actual.width !== expected.width || actual.height !== expected.height) {
+        return `${actual.width}×${actual.height}, expected ${expected.width}×${expected.height}`;
+    }
+    for (let at = 0; at < expected.data.length; at += 4) {
+        const found = actual.data.subarray(at, at + 4).join();
+        const wanted = expected.data.subarray(at, at + 4).join();
+        if (found !== wanted) {
+            const index = at / 4;
+            const x = index % expected.width;
+            return `pixel (${x}, ${(index - x) / expected.width}) is ${found}, expected ${wanted}`;
+        }
+    }
+    return null;
+}
+
+/** The pixels beside one side of a rectangle, and the pixels of the rectangle they lie against. */
+export interface Gutter {
+    /** The pixels one step outside the rectangle, each as `r,g,b,a`. */
+    outside: string[];
+    /** The pixel of the rectangle's edge next to each of them. */
+    edge: string[];
+    /** How many of the edge pixels show (alpha above 0). */
+    lit: number;
+}
+
+/**
+ * The gutter of a rectangle of an atlas image extruded by one pixel: its four sides, and
+ * its four corners (top-left, top-right, bottom-left, bottom-right) against the corner
+ * pixels of the rectangle. Read from the image alone; extrusion is right when `outside`
+ * equals `edge` on every side.
+ */
+export function guttersOf(
+    image: PixelBuffer,
+    rect: { x: number; y: number; w: number; h: number },
+): Record<"left" | "right" | "top" | "bottom" | "corners", Gutter> {
+    const { x, y, w, h } = rect;
+    const pixel = (px: number, py: number): string => {
+        if (px < 0 || py < 0 || px >= image.width || py >= image.height) {
+            throw new Error(`guttersOf: (${px}, ${py}) lies outside the image.`);
+        }
+        return image.data
+            .subarray((py * image.width + px) * 4, (py * image.width + px) * 4 + 4)
+            .join();
+    };
+    const side = (pairs: [number, number, number, number][]): Gutter => {
+        const edge = pairs.map(([, , ex, ey]) => pixel(ex, ey));
+        return {
+            outside: pairs.map(([ox, oy]) => pixel(ox, oy)),
+            edge,
+            lit: edge.filter((value) => !value.endsWith(",0")).length,
+        };
+    };
+    const rows = Array.from({ length: h }, (_, index) => y + index);
+    const columns = Array.from({ length: w }, (_, index) => x + index);
+    return {
+        left: side(rows.map((py) => [x - 1, py, x, py])),
+        right: side(rows.map((py) => [x + w, py, x + w - 1, py])),
+        top: side(columns.map((px) => [px, y - 1, px, y])),
+        bottom: side(columns.map((px) => [px, y + h, px, y + h - 1])),
+        corners: side([
+            [x - 1, y - 1, x, y],
+            [x + w, y - 1, x + w - 1, y],
+            [x - 1, y + h, x, y + h - 1],
+            [x + w, y + h, x + w - 1, y + h - 1],
+        ]),
+    };
+}
+
+// --- animations -----------------------------------------------------------------------------------
+
+/** What the functions below read of an animation of an atlas. */
+interface AnimationData {
+    playback: "loop" | "once";
+    durationMs: number;
+    entries: readonly { frame: string; ms: number }[];
+}
+
+/**
+ * What an animation shows at an age, from its entries alone (SPEC §9.5): an entry shows
+ * from its start up to, not including, its end; a `"loop"` starts over at `durationMs`; a
+ * `"once"` stays on its last entry and is done from `durationMs` on; an age below 0 counts
+ * as 0. The specs hold the functions of a generated module against this.
+ */
+export function expectedAnimationState(
+    animation: AnimationData,
+    ageMs: number,
+): { frame: string; done: boolean } {
+    const { playback, durationMs, entries } = animation;
+    const age = Math.max(ageMs, 0);
+    const done = playback === "once" && age >= durationMs;
+    const time = playback === "loop" ? age % durationMs : age;
+    let start = 0;
+    for (const entry of entries) {
+        if (time >= start && time < start + entry.ms) return { frame: entry.frame, done };
+        start += entry.ms;
+    }
+    // Past the last entry: only a "once" animation gets here, and it stays on that entry.
+    return { frame: entries[entries.length - 1].frame, done };
+}
+
+/**
+ * Ages at which an animation is asked for its frame, around every place where the answer
+ * changes: for the start of each entry and for `durationMs`, one millisecond and a
+ * thousandth of one before, the boundary itself, and a thousandth and one millisecond
+ * after; the same one, two and seven lengths later; and ages below 0. An error of less
+ * than a tick of a game at a boundary shows here.
+ */
+export function boundaryAges(animation: AnimationData): number[] {
+    const { durationMs, entries } = animation;
+    const boundaries = [0];
+    for (const entry of entries) boundaries.push(boundaries[boundaries.length - 1] + entry.ms);
+    const ages = new Set<number>([-1000, -1, -0.001]);
+    for (const laps of [0, 1, 2, 7]) {
+        for (const boundary of boundaries) {
+            for (const offset of [-1, -0.001, 0, 0.001, 1]) {
+                ages.add(laps * durationMs + boundary + offset);
+            }
+        }
+    }
+    return [...ages].sort((a, b) => a - b);
+}
+
 // --- the consumer page ----------------------------------------------------------------------------
 
 /** A canvas read back in the page, as the page hands it to a spec. */
@@ -356,6 +535,15 @@ export interface ConsumerHarness {
     play(animation: string, x: number, y: number): AnimationReadback;
     /** Lets `ms` milliseconds pass on the game's clock and returns the frame after them. */
     advance(ms: number): AnimationReadback;
+    /**
+     * `<name>AnimationFrame` and `<name>AnimationDone` of the generated module, called with
+     * each age: what they return, without the game.
+     */
+    resolve(animation: string, ages: number[]): { frame: string; done: boolean }[];
+    /**
+     * `<name>Atlas` of the generated module: the atlas the module carries, and draws from.
+     */
+    atlas: unknown;
     /**
      * Under `requestAnimationFrame`: puts the commands on the stage for the frames to come
      * and returns the number of frames rendered so far.

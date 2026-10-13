@@ -1,22 +1,21 @@
 import { expect, test } from "@playwright/test";
 import type { Page, TestInfo } from "@playwright/test";
-import { FIXTURES } from "./se-053-documents";
+import { FIXTURES, FIXTURE_IDS } from "./se-053-documents";
 import type { FixtureId } from "./se-053-documents";
-import { ANCHOR, compareCanvas, expectedCanvas } from "./se-053-expected";
 import {
-    advance,
-    compositesOf,
-    expectHealthy,
-    exportFixture,
-    openConsumer,
-    play,
-    readAtlas,
-} from "./se-053-support";
+    ANCHOR,
+    boundaryAges,
+    compareCanvas,
+    expectedAnimationState,
+    expectedCanvas,
+} from "./se-053-expected";
+import { advance, expectHealthy, openStage, play, resolveAnimation } from "./se-053-support";
 
 // SE-053, the animation check: an NGNE game plays the animations of an exported sprite with
 // `<name>AnimationFrame` and `<name>AnimationDone` of the generated module, on a scheduler
-// the test controls. A tick of the game is 10 ms, and the test lets whole ticks pass, so the
-// age of an animation is exact: an entry boundary is reached on a tick, not near one.
+// the test controls. A tick of the game is 1 ms, the unit of an entry's duration, and the
+// test lets whole ticks pass, so the age of an animation is exact: the game stands on the
+// last millisecond before a boundary, and then on the boundary.
 //
 // For every time the test states the frame by its ID, and the canvas must show the composite
 // of that frame: the frame the module names is the frame the game draws.
@@ -41,13 +40,9 @@ async function expectAnimation(
     animation: string,
     expected: Expected,
 ): Promise<void> {
-    const fixture = FIXTURES[id];
-    const files = await exportFixture(page, id);
-    await openConsumer(page, testInfo, fixture, files);
-    const { meta } = await readAtlas(testInfo.outputPath("bundle"), fixture.name);
-    const doc = fixture.build();
-    const composites = compositesOf(doc, fixture, meta);
+    const { fixture, doc, meta, composites } = await openStage(page, testInfo, id);
     const frameId = (index: number) => `${fixture.name}-${index}`;
+    expect(await page.evaluate(() => window.__se053!.tickMs)).toBe(1);
 
     // What the test steps through is what the bundle holds.
     expect(meta.animations[animation]).toEqual({
@@ -94,24 +89,36 @@ test.describe("an NGNE game playing the animations of an exported sprite", () =>
             ],
             moments: [
                 [0, 0, false],
-                // Mid-entry, and the last tick before the boundary.
+                [1, 0, false],
+                // Mid-entry, and the last millisecond before the boundary.
                 [50, 0, false],
                 [90, 0, false],
+                [99, 0, false],
                 // An entry starts on its boundary and ends before the next.
                 [100, 1, false],
+                [101, 1, false],
                 [120, 1, false],
+                [125, 1, false],
                 [140, 1, false],
+                [149, 1, false],
                 [150, 2, false],
+                [151, 2, false],
                 [220, 2, false],
                 [290, 2, false],
+                [299, 2, false],
                 // At `durationMs` the loop starts over; after the end it goes on.
                 [300, 0, false],
+                [301, 0, false],
                 [350, 0, false],
+                [399, 0, false],
                 [400, 1, false],
+                [449, 1, false],
                 [450, 2, false],
                 [590, 2, false],
+                [599, 2, false],
                 [600, 0, false],
                 [1040, 1, false],
+                [1199, 2, false],
                 [1200, 0, false],
             ],
         });
@@ -135,16 +142,21 @@ test.describe("an NGNE game playing the animations of an exported sprite", () =>
                 [0, 2, false],
                 [70, 2, false],
                 [140, 2, false],
+                [149, 2, false],
                 [150, 3, false],
                 [190, 3, false],
                 [220, 3, false],
+                [229, 3, false],
                 // The second pass.
                 [230, 2, false],
                 [370, 2, false],
+                [379, 2, false],
                 [380, 3, false],
-                // The last tick before the end, the end, and after it.
+                // The last millisecond before the end, the end, and after it.
                 [450, 3, false],
+                [459, 3, false],
                 [460, 3, true],
+                [461, 3, true],
                 [470, 3, true],
                 [920, 3, true],
                 [5000, 3, true],
@@ -168,14 +180,20 @@ test.describe("an NGNE game playing the animations of an exported sprite", () =>
             ],
             moments: [
                 [0, 0, false],
+                [99, 0, false],
                 [100, 1, false],
+                [149, 1, false],
                 [150, 2, false],
+                [299, 2, false],
                 [300, 3, false],
                 [370, 3, false],
+                [379, 3, false],
                 [380, 2, false],
                 [520, 2, false],
+                [529, 2, false],
                 [530, 1, false],
                 [570, 1, false],
+                [579, 1, false],
                 [580, 1, true],
                 [600, 1, true],
             ],
@@ -197,11 +215,15 @@ test.describe("an NGNE game playing the animations of an exported sprite", () =>
             moments: [
                 [0, 3, false],
                 [50, 3, false],
+                [59, 3, false],
                 [60, 2, false],
                 [170, 2, false],
+                [179, 2, false],
                 [180, 1, false],
+                [239, 1, false],
                 [240, 0, false],
                 [290, 0, false],
+                [299, 0, false],
                 [300, 3, false],
                 [480, 1, false],
             ],
@@ -226,12 +248,17 @@ test.describe("an NGNE game playing the animations of an exported sprite", () =>
             moments: [
                 [0, 0, false],
                 [60, 0, false],
+                [69, 0, false],
                 [70, 1, false],
+                [99, 1, false],
                 [100, 2, false],
                 [160, 2, false],
+                [169, 2, false],
                 [170, 3, false],
+                [199, 3, false],
                 [200, 4, false],
                 [290, 4, false],
+                [299, 4, false],
                 [300, 0, false],
                 [370, 1, false],
             ],
@@ -251,11 +278,90 @@ test.describe("an NGNE game playing the animations of an exported sprite", () =>
             moments: [
                 [0, 1, false],
                 [100, 1, false],
+                [109, 1, false],
                 [110, 0, false],
                 [190, 0, false],
+                [199, 0, false],
                 [200, 1, false],
                 [310, 0, false],
             ],
         });
     });
+
+    test("a looping ping-pong of the fixture with the off-centre pivot passes its middle frame twice", async ({
+        page,
+    }, testInfo) => {
+        await expectAnimation(page, testInfo, "e", "sway", {
+            playback: "loop",
+            durationMs: 380,
+            entries: [
+                [0, 80],
+                [1, 120],
+                [2, 60],
+                [1, 120],
+            ],
+            moments: [
+                [0, 0, false],
+                [79, 0, false],
+                [80, 1, false],
+                [199, 1, false],
+                [200, 2, false],
+                [259, 2, false],
+                [260, 1, false],
+                [379, 1, false],
+                [380, 0, false],
+                [460, 1, false],
+            ],
+        });
+    });
+});
+
+test.describe("the animation functions of an exported module", () => {
+    for (const id of FIXTURE_IDS) {
+        const { title } = FIXTURES[id];
+
+        test(`${title}: every animation changes frame on each boundary, to the millisecond`, async ({
+            page,
+        }, testInfo) => {
+            // The functions the game calls, called without it: one millisecond and a
+            // thousandth of one before every boundary, on it, and after it; laps later; and
+            // before the start. An error of less than a tick of any game shows here.
+            const { meta } = await openStage(page, testInfo, id);
+            const animations = Object.entries(meta.animations);
+            expect(animations.length).toBeGreaterThan(0);
+            for (const [animation, data] of animations) {
+                const ages = boundaryAges(data);
+                const resolved = await resolveAnimation(page, animation, ages);
+                expect(
+                    resolved.map((state, index) => [ages[index], state.frame, state.done]),
+                    animation,
+                ).toEqual(
+                    ages.map((age) => {
+                        const state = expectedAnimationState(data, age);
+                        return [age, state.frame, state.done];
+                    }),
+                );
+
+                // Written out for the end, where a "once" animation flips: not done one
+                // millisecond before `durationMs`, done on it.
+                const { durationMs, entries, playback } = data;
+                const last = entries[entries.length - 1].frame;
+                const [before, justBefore, at, after] = await resolveAnimation(page, animation, [
+                    durationMs - 1,
+                    durationMs - 0.001,
+                    durationMs,
+                    durationMs + 1,
+                ]);
+                expect([before, justBefore], animation).toEqual([
+                    { frame: last, done: false },
+                    { frame: last, done: false },
+                ]);
+                const once = playback === "once";
+                // A loop is back on its first entry and never done.
+                const then = { frame: once ? last : entries[0].frame, done: once };
+                expect([at, after], animation).toEqual([then, then]);
+            }
+            await expectHealthy(page);
+        });
+    }
 });
