@@ -60,7 +60,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-016 | Colour state, picker and eyedropper               | M    | 006, 014                           | —             | Ready  |
 | SE-017 | Bucket, line, rectangle and ellipse (gate G1)     | M    | 015, 016                           | —             | Ready  |
 | **M2** | **[Layers and timeline](M2-layers-and-timeline.md)** |   |                                    |               |        |
-| SE-020 | Layer commands                                    | M    | 004, 010                           | —             | Ready  |
+| SE-020 | Layer commands                                    | M    | 004, 010                           | —             | Done   |
 | SE-021 | Frame, cel and tag commands                       | L    | 004, 010                           | —             | Done   |
 | SE-022 | Timeline panel                                    | L    | 007, 011, 020, 021                 | G1            | Ready  |
 | SE-023 | Tags UI                                           | M    | 021, 022                           | —             | Ready  |

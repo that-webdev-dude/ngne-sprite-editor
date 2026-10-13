@@ -9,7 +9,7 @@ Goal: multi-layer, multi-frame documents with tags, playback and onion skin.
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Ready                                                    |
+| Status       | Done                                                     |
 | Depends on   | SE-004, SE-010                                           |
 | Blocks       | SE-022, SE-034                                           |
 | Blocked until | —                                                       |
