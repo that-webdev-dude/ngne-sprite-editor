@@ -97,7 +97,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Ready                                                    |
+| Status       | In progress                                              |
 | Depends on   | SE-007, SE-008, SE-011                                   |
 | Blocks       | SE-013, SE-014                                           |
 | Blocked until | —                                                       |
