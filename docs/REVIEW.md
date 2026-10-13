@@ -296,6 +296,57 @@ Not decided here, left as they are:
   has no frame offset and centres each frame. The exported sprite module draws it correctly.
 - Merges into `main` in W3 and W4 waited for ticket order even where a later ticket was ready.
 
+## Run 2 decisions
+
+Run 2 (SE-011, SE-053, SE-012, SE-013, SE-014, SE-015, SE-016, SE-030, SE-017, SE-034, SE-060)
+is carried out in legs under the usage limit (EXECUTION.md, Legs), with the autonomy of the
+run 1 decisions: where AGENTS.md says "stop and report", the agent or the orchestrator decided
+and recorded it here. One read-only review ran per ticket.
+
+### Leg 1 (2026-10-13): SE-011, SE-053
+
+SE-011 is Done. SE-053 is merged, reviewed and fixed, and waits for CI (E2).
+
+| #   | Source | Finding | Decision | Applied in |
+| --- | ------ | ------- | -------- | ---------- |
+| E1 | Start of the leg | `main` equalled `origin/main` and CI was green on the pushed HEAD (be177b1). No ticket was In progress | SE-011 and SE-053 started together (5-hour limit 18% used) | — |
+| E2 | Orchestrator | SE-053's acceptance asks for a pass in CI and for the G2 mark, and the owner pushes only after the leg | SE-053 is merged, reviewed and fixed, and stays In progress. The next leg reads the CI run of the pushed HEAD, then marks G2 passed and the ticket Done. Until then a local run of the whole suite with `CI=1` (SwiftShader, one worker) stands in for it | Ticket index |
+| E3 | SE-011, SE-053 | `CI=1` could not be used on Windows: the Vulkan flags of the Linux runner leave Chrome without a WebGPU adapter | On Windows the three SwiftShader flags of the SE-002 runner only. Every engine and interface ticket runs its E2E files once with `CI=1` before it reports | `playwright.config.ts` |
+| E4 | Local `CI=1` run | A page froze for good: closing a document while its first uploads were in flight (an SE-008 test, on the slow adapter only). `settle()` waited in a loop on a queue that was disposed: `idle()` resolved at once while `busy()` stayed true, so no task ever ran again. On hardware a close during a resize replacement would do the same | The queue ends with its renderer: after `dispose` it is not busy, publishes nothing and calls nothing; `idle()` resolves exactly when `busy()` is false; a callback that throws does not stop its slot. Tests close a document during the first uploads and during a replacement, and dispose during a create | `src/engine/UploadQueue.ts`, `viewport/viewportSlots.ts`; SPEC §6.4 |
+| E5 | Full E2E after the merge | SE-011's "within two animation frames" test failed once beside the other workers (undo drawn in the third frame) and passed 36 of 36 times repeated on its own | A test that counts animation frames has `@alone` in its title and runs in a project that starts when every other test has finished, also when one of them failed and with any file filter. The assertion is unchanged. The review's proposal (the median of several repeats) was not taken: it asserts less | `playwright.config.ts`; `tests/e2e/se-011-updates.spec.ts`; SPEC §6.7 |
+| E6 | SE-011 review | A replacement renderer that was `recovering` or `failed` at the swap was still put on screen, undrawn, and the good one disposed | Not swapped in: a recovering one waits with the old canvas kept, a failed one is disposed and the replacement made again. A canvas enters the viewport only after NGNE submitted a frame on it. The `recovering` branch is covered by a unit test of the decision only: NGNE's `texture()` waits for the recovery itself, so a script cannot reach it | `src/engine/viewport/replacement.ts`, `NgneViewport.ts`; SPEC §6.4 |
+| E7 | SE-011 review | An image that could not be built left its key reserved and was never asked for again; a failed checkerboard upload was final for that renderer | A failed build gives the reservation up and the key is asked for again when it is next needed; the frame is not shown meanwhile, because its pixels are out of date. A failed slot with no other to move to asks for one fresh renderer; only the instance on screen asks at once, so an upload that keeps failing cannot chain replacements | `src/engine/viewport/viewportSlots.ts`, `frameSlots.ts`; SPEC §6.4 |
+| E8 | SE-011 review | The composite cache and the mounted viewport were reachable only through a React ref, while SPEC §5.3 names four more readers and SE-014 must reach both during a stroke | The cache of the active document belongs to `app/state/composites` (`activeComposites`); the mounted viewport is reached through `app/viewport/viewportLink` (size in device pixels, `invalidate`). Later tickets import them and edit neither | SPEC §5.3; SE-014 scope |
+| E9 | SE-011 | Choices the ticket and SPEC left open: the workspace colour drawn by NGNE as a rect at layer 0, so every frame has a sprite and the loss check is always armed; a history step uploads the current frame in place and gives the other touched keys up; a slot is drawn over the rectangle of the image it holds, with the document's epoch in its tag; an upload starts no earlier than the next microtask; the viewport exists only while a document is open; creates are serialized for the whole page; DPR 1.5 has its own spec file | Accepted and written into the SPEC | SPEC §6.4, §6.7 |
+| E10 | SE-011 review | Six SE-011 tests would have failed the next tickets without a change of behaviour (the pixel grid at scale 8, a shell size that is odd in CSS pixels, exact lists of slot IDs, the default view, an import path), one let a checkerboard-only frame pass, and the count of `texture()` calls was the viewport's own | Corrected by the ticket's agent: the acceptance assertions are as strict or stricter; uploads are counted a second time at `copyExternalImageToTexture`. Dropped from the imports test: "engine imports nothing of the interface", which is no SPEC rule. Tests were added for the scope lines that had none (serialized creates, one replacement after 20 quick resizes, the status reads, the wait while recovering) | `tests/e2e/se-011-*`, `tests/unit/se-011-*` |
+| E11 | SE-011 review | What later tickets must know of the viewport | SE-012: the fit applies only to a view never set. SE-013: the overlay is a sibling of the viewport element. SE-024: 9 or more frames in a cycle give up the next frame at each step. SE-025: the onion neighbours are keys on screen. SE-054: the queue's contract | SE-012, SE-013, SE-024, SE-025, SE-054 scope |
+| E12 | SE-053 | `core/export` cannot be imported by the Playwright process (the sprites module reads the runtime with `?raw`); the ticket names four fixtures | `bundle()` runs in a page and the specs read the files it wrote. A fifth fixture (e), 24 × 16 with pivot `[0.25, 0.75]`, was added after the review: no fixture had a pivot off centre in x | `tests/e2e/se-053-*` |
+| E13 | SE-053, review | "±1 per channel after blending over the clear colour" has two readings; measured distance from the exact blend: SwiftShader 0.50, Intel UHD 0.95, RTX 4060 0.99 | Opaque exact; alpha 0 shows the colour beneath exactly; others within 1 of the blend rounded to 8 bits. Rotation is checked at 90°, 180° and 270° near the view origin: the error of D33 shows only at 180° and 270° there | SPEC §9.7 |
+| E14 | SE-053 review | The orphan check did not run after a failed test of its file; a child that had not printed its address was tracked nowhere and could outlive a timed-out test; two runs in one checkout saw each other's processes | The check runs in every outcome and `afterAll` asserts as well as cleans; a child is tracked from `spawn` and its start times out before the test does (15 s); the marker is the run's own temp folder | `tests/e2e/se-053-preview*` |
+| E15 | SE-053 review | What the three conditions did not see: the atlas file on disk against the copy in the module, the merged rectangles of the bundle made in the browser, the gutters (nearest sampling never reads them), an entry boundary inside a 10 ms tick, the later entries of an animation in `ngne-preview` | All are asserted now: the module's atlas equals the file; the rectangles, the gutters and the padded sides on the PNG read from disk; boundaries to the millisecond and at ±0.001 ms; every entry of every animation | `tests/e2e/se-053-*`, `tests/unit/se-053-*` |
+| E16 | SE-053 review | What conformance does not cover | SE-052 adds a conformance draw for an export of one tag and takes expected bytes from the page. SE-054's readback is the first GPU check with `pixelSnap` off | SE-052, SE-054 scope |
+
+Checks at the end of the leg, on this machine: `npm run check` passes (2685 unit tests);
+`npm run test:e2e` passes on the hardware adapter (235 tests) and, with `CI=1`, on SwiftShader
+with one worker (235 tests in 17.0 min). CI itself has not run on these commits.
+
+Not decided here, left as they are:
+
+- NGNE's diagnostic for a renderer that could not recover says "Reload to create a new
+  renderer", and the toast shows it and stays, although the viewport has already replaced the
+  renderer.
+- With more than 8 frames and a second switch inside the first upload, one frame can be drawn
+  with the checkerboard only. Never another frame's pixels.
+- An upload in flight when the device is lost can be rejected by NGNE; that frame slot is then
+  left out until the next renderer.
+- A create that never settles holds every later viewport of the page: creates are serialized
+  and have no timeout.
+- A new document appears at scale 1 in the top-left corner until SE-012.
+- A Playwright worker that is killed outright leaves its `ngne-preview` children and temp
+  folders; the next run's check names them. The consumer and animation specs write bundles
+  under `test-results`, so two Playwright runs of them at once in one checkout disturb each
+  other.
+
 ## Descoped tickets
 
 None.

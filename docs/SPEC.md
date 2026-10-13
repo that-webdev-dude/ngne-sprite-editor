@@ -307,6 +307,10 @@ preview, thumbnails, the eyedropper and every export read its output. It:
 - Caches one composite per frame, invalidated from `Command.touched`; cache budget 128 MB per
   document, least recently used. Only the active document keeps composites: a document that
   stops being active has its cache cleared (SE-047).
+- The cache of the active document belongs to `app` (`app/state/composites`), not to the
+  viewport. Every reader takes composites from it and hears of changes from it, after it has
+  been brought up to date for a history step, so no reader is served a composite from before
+  the step.
 
 Reference layers, onion skins, symmetry axes and tiled copies are never part of this composite.
 
@@ -360,7 +364,13 @@ All symbols are exported from the package root.
 Lifecycle
 - Each renderer instance gets its own `<canvas>` element. Creates are serialized (one in
   flight). Replacement order: create on a new canvas, upload every slot, draw once, swap the
-  canvases, then dispose the old instance — so the viewport is never blank.
+  canvases, then dispose the old instance — so the viewport is never blank. A new instance
+  whose renderer is not `ready` at the swap is not swapped in: while it is `recovering` the old
+  canvas stays until it can draw; when it has `failed` it is disposed and the replacement is
+  made again.
+- The viewport and its renderer exist only while a document is open; closing the last document
+  disposes them. Dispose can therefore come at any moment of a create, an upload or a
+  replacement, and ends all three.
 - Sizing (decided by SE-002 question 4): canvas backing size = the viewport element's size in
   device pixels (`devicePixelContentBoxSize`); a size or DPR change replaces the renderer
   after 120 ms of quiet, with the old canvas CSS-stretched until the swap. The fixed
@@ -396,25 +406,41 @@ Texture slots (IDs are fixed for the life of a renderer)
   are tinted on the CPU. The current frame (including a live stroke) and its onion neighbours
   are drawn from whichever slots hold them, so switching to a frame already in the cache needs
   no upload.
+- A history step uploads the keys on screen again into their slots, which show the previous
+  pixels until then. Every other cached key the step touches is given up and its slot replaced
+  by the 1×1 image; a step that changes the structure gives up all of them. While a wanted key
+  loads, the frame drawn last stays on screen.
 - Editor playback blits the playing range's composites into one grid image for `ed:play` (a
   plain grid local to the viewport, no padding; not the exporter's packer) when it fits
   8192×8192 and 64 MB, and draws UV sub-rectangles; otherwise it steps through the frame
   cache and shows the newest ready frame (frames may be skipped, never queued).
 
-Quad order (NGNE `layer` value): 1 checkerboard · 2 references placed behind · 3 onion skins
-behind · 4 current frame · 5 onion skins in front · 6 references placed in front. Tiled mode
-draws the current frame slot nine times.
+Quad order (NGNE `layer` value): 0 workspace colour · 1 checkerboard · 2 references placed
+behind · 3 onion skins behind · 4 current frame · 5 onion skins in front · 6 references placed
+in front. Tiled mode draws the current frame slot nine times. The workspace colour is a rect
+over the whole canvas, so every frame submits at least one sprite and the `sprites` check of
+the lifecycle can always tell a lost device from an empty frame.
 
 Upload queue (one per renderer instance)
-- One in-flight upload per slot; a newer request replaces the queued one.
+- One in-flight upload per slot; a newer request replaces the queued one. An upload starts no
+  earlier than the microtask after its request: of several requests made in one task only the
+  last is built, and it reads the CPU state after every listener of the change has run.
 - The source `ImageBitmap` is closed when its upload settles.
 - Rejections with "superseded", an abort, or from a disposed renderer instance are ignored. Any
-  other rejection is reported once; the slot is retried only on a fresh renderer.
+  other rejection is reported once; the slot is retried only on a fresh renderer. A frame slot
+  that failed is left out and its frame moves to another slot; a failed slot with no other to
+  move to (`ed:checker`) asks for that fresh renderer, once.
+- An image that could not be built (the composite or the bitmap) is reported once and does not
+  close the slot: the key is asked for again when it is next needed.
+- A disposed queue is not busy and publishes nothing; uploads already in flight settle in the
+  background and their bitmaps are still closed.
 - Slots that become unused (onion off, reference removed, playback stopped) are replaced by a
   1×1 transparent image.
 - A slot keeps showing its previous texture until a replacement is published. Therefore a
-  slot's key (and, for `ed:play` and `pv:atlas`, the UV metadata used for drawing) changes only
-  when the matching upload resolves; frame builders never pair new metadata with an old texture.
+  slot's key and the size of its image (and, for `ed:play` and `pv:atlas`, the UV metadata used
+  for drawing) change only when the matching upload resolves; frame builders never pair new
+  metadata with an old texture. A slot is drawn over the rectangle of the image it holds, so a
+  change of the document's size never stretches an old texture.
 
 ### 6.5 Preview panel (`NgnePreview`)
 
@@ -468,6 +494,12 @@ continuous stroke of at least 5 s and reports the longest gap beside the p95.
   NGNE's own tests do. This is backing-resolution and independent of DPR and colour profile.
 - Screenshots are used only where overlay and NGNE canvas alignment matters.
 - Chrome is launched with NGNE's SwiftShader flags in CI and `--force-color-profile=srgb`.
+- A test at a device pixel ratio other than 1 starts Chrome with
+  `--force-device-scale-factor=<ratio>` and sets the context's `deviceScaleFactor`;
+  `devicePixelContentBoxSize` follows the browser's own scale (SE-002 finding 7.1). Launch
+  options belong to the worker, so such tests have their own spec file.
+- A test that counts animation frames has `@alone` in its title: it runs after every other
+  test has finished, because beside other workers its frames come late and the count is wrong.
 
 ### 6.8 Engine gaps and workarounds
 
@@ -891,9 +923,11 @@ Export is accepted only when all three hold (SE-053):
    beginning with `Ready` with no error text, for every frame selected in turn (waiting for the
    page's details to name the selected frame).
 3. A fixture NGNE game importing `<name>.sprites.ts` draws every frame; in-page readback of its
-   canvas matches the CPU composite (opaque pixels exact, others ±1 per channel after blending
-   over the clear colour). Fixtures include odd document sizes, trimmed frames, merged
-   duplicates, an off-centre pivot, rotation by 90°, `flipX` and `scale: 2`.
+   canvas matches the CPU composite: opaque pixels exact; pixels of alpha 0 show the colour
+   beneath exactly; others within 1 per channel of the blend over the colour beneath, rounded to
+   8 bits. Fixtures include odd document sizes, trimmed frames, merged duplicates, an
+   off-centre pivot, rotation by 90°, 180° and 270° near the view origin as well as away from
+   it, `flipX` and `scale: 2`.
 
 ## 10. Project file and persistence
 

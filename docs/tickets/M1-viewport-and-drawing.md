@@ -44,7 +44,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-002, SE-006, SE-007, SE-010                           |
 | Blocks       | SE-012, SE-022, SE-024, SE-045, SE-054, SE-062           |
 | Blocked until | Gate G0 passed                                          |
@@ -115,6 +115,10 @@ Scope
 - Status bar: live cursor position in document pixels, document size, zoom.
 - The viewport container is the focusable viewport element (`tabindex="0"`) and a focus region
   for F6; wheel and middle-drag are handled by pointer location, independent of focus.
+- From the SE-011 review: the fit applies to a document whose view was never set. A view set
+  through the store before the viewport reports its first size is kept (SE-011's tests open a
+  session and set its view in the next step). Listeners and `tabindex` belong on the viewport
+  element, not on the NGNE canvas, which is replaced at every resize.
 
 Out of scope: Hand and Zoom tools and Space-pan (SE-014).
 
@@ -147,6 +151,9 @@ Scope
   handles and symmetry axes.
 - Redraw only when view, cursor or a registered layer requests it.
 - Grid toggles in the View menu, bound to `DocSettings.grid` and `pixelGrid`.
+- From the SE-011 review: `NgneViewport` appends and replaces its own canvas inside the
+  element it was given and expects to be alone there. The overlay canvas is a sibling of that
+  element, not a child of it.
 
 Acceptance
 - E2E at DPR 1 and 1.5 (screenshot of both canvases): grid lines fall exactly on texel
@@ -177,6 +184,11 @@ Scope
 - At stroke end the frame is not composited again in full: the live composite is handed to the
   composite cache. `CompositeCache` (SE-010) gains `adopt(frameId, buffer)` for this, which keeps
   the buffer only when the frame's layer stack matches the one it was composited from.
+- From the SE-011 review: the cache is `activeComposites.cache` (`app/state/composites`), the
+  object the viewport reads. During a stroke the pipeline keeps it current and calls
+  `viewportLink.invalidate` (`app/viewport/viewportLink`) with the frame's key; the viewport
+  copies the pixels when the upload starts, so the live buffer may be rewritten between
+  uploads. Neither module is edited for this.
 - Temporary tools while a key is held (Alt → eyedropper once SE-016 lands, Space → hand) with
   return to the previous tool.
 - Paint target resolution and guards: active layer must be a visible, unlocked pixel layer;

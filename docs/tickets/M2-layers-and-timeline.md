@@ -160,6 +160,10 @@ Scope
   (local grid, no dependency on the export packer), otherwise step through the frame cache
   showing the newest ready frame.
 - Starting playback applies a floating selection; any editing input stops playback first.
+- From the SE-011 review: the frame cache has 8 slots, so stepping in a cycle through 9 or
+  more frames gives up exactly the next frame at each step (one upload per step), and a second
+  switch inside the first upload can draw one frame with the checkerboard only. The fallback
+  path shows the newest ready frame and never the checkerboard alone.
 
 Acceptance
 - Unit tests of the playback clock with a controlled time source: frame at time t for mixed
@@ -190,6 +194,10 @@ Scope
 - Frame cache variants `before` and `after`: CPU-tinted composites (50% toward red / blue,
   alpha preserved) when tint is on; with tint off the `plain` slots are reused.
 - Onion quads drawn by NGNE with `alpha` (base opacity × falloff per step) at layer 3 or 5.
+- From the SE-011 review: a history step uploads again in place only the key of the current
+  frame and gives up every other key it touches. With onion skins on, the neighbours' keys are
+  on screen too and are uploaded in place like the current one (SPEC §6.4, "keys on screen"),
+  or the ghosts blank at every edit.
 - "Within tag" limits neighbours to the active tag's range.
 - Hidden during playback.
 - Toggle in the timeline transport (F3); settings popover per DESIGN §7.

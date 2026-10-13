@@ -128,6 +128,11 @@ Scope
   `too-many-frames`) and `PackError` (`atlas-size`); each is shown as a message in the dialog
   and as the error toast of "Export again". Different documents can share an export name
   ("Hero Walk" and "hero_walk"), so the overwrite confirmation names the files that exist.
+- From the SE-053 review: `core/export` cannot be imported by the Playwright process (the
+  sprites module reads the runtime with `?raw`), so the bytes expected of an export are taken
+  from the page (`tests/e2e/se-053-support.ts`). SE-053 proves `bundle()` for all frames and
+  the default options only: this ticket adds a conformance draw (SE-053's consumer fixture)
+  for an export of one tag, whose frame IDs do not start at 0.
 
 Acceptance
 - E2E (File System Access stubbed with an in-memory directory): export writes exactly the
@@ -212,6 +217,14 @@ Scope
   when the matching upload resolves.
 - From the SE-051 review: an `ExportError` or `PackError` of `atlasFor()` (`too-many-entries`,
   `atlas-size`) is shown in the panel in place of the preview.
+- From the SE-011 review: the upload queue is not busy once disposed and publishes nothing
+  after that; the atlas metadata travels in the upload's tag and is read from
+  `published("pv:atlas")`. The queue is disposed before the game.
+- From the SE-053 review: conformance runs with NGNE's default `pixelSnap` only. The readback
+  of this ticket is the first GPU check of the runtime with snapping off and of top-left
+  placement at the canvas origin; it passes the background colour to the comparison as the
+  colour beneath. Ages here are fractions of a millisecond (1/60 s ticks times the speed), so
+  one test steps across an entry boundary at the default tick.
 - Controls per DESIGN §5.5: animation select (all export animations + "All frames"),
   play/pause, speed, background (drawn as a rect).
 - Stopped while the panel is collapsed, the tab is hidden or no document is open; disposed on

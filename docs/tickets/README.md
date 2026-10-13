@@ -52,7 +52,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-008 | New sprite, sprite properties and empty state     | M    | 006, 007                           | —             | Done   |
 | **M1** | **[Viewport and drawing](M1-viewport-and-drawing.md)** |  |                                  |               |        |
 | SE-010 | CPU compositor                                    | M    | 003                                | —             | Done   |
-| SE-011 | NgneViewport                                      | L    | 002, 006, 007, 010                 | G0            | In progress |
+| SE-011 | NgneViewport                                      | L    | 002, 006, 007, 010                 | G0            | Done   |
 | SE-012 | View navigation and coordinate mapping            | M    | 007, 008, 011                      | —             | Ready  |
 | SE-013 | Overlay canvas                                    | M    | 012                                | —             | Ready  |
 | SE-014 | Tool framework and pointer pipeline               | L    | 004, 007, 012, 013                 | —             | Ready  |
