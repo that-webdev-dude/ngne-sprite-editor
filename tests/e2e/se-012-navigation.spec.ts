@@ -260,6 +260,11 @@ test("a middle-drag pans by the pointer's travel, also outside the viewport; oth
         window.addEventListener("mousedown", (event) =>
             presses.push([event.button, event.defaultPrevented]),
         );
+        const releases: unknown[] = [];
+        (window as unknown as { __se012Releases: unknown[] }).__se012Releases = releases;
+        window.addEventListener("mouseup", (event) =>
+            releases.push([event.button, event.defaultPrevented]),
+        );
     });
 
     const start = clientAt(layout, { x: 300, y: 200 });
@@ -324,6 +329,12 @@ test("a middle-drag pans by the pointer's travel, also outside the viewport; oth
         () => (window as unknown as { __se012Presses: [number, boolean][] }).__se012Presses,
     );
     expect(presses.filter(([button, prevented]) => button === 1 && !prevented)).toEqual([]);
+    // Nor does the default of its release: on Linux that pastes the selection of the window
+    // system into the field that has the focus.
+    const releases = await page.evaluate(
+        () => (window as unknown as { __se012Releases: [number, boolean][] }).__se012Releases,
+    );
+    expect(releases.filter(([button, prevented]) => button === 1 && !prevented)).toEqual([]);
     expect(errors).toEqual([]);
 });
 

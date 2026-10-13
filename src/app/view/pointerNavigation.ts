@@ -141,6 +141,12 @@ export function attachViewNavigation(element: HTMLElement): () => void {
         if (event.button === MIDDLE_BUTTON) event.preventDefault();
     };
 
+    // On Linux the release of the middle button pastes the selection of the window system
+    // into the field that has the focus, unless the `mouseup` is cancelled.
+    const onMouseUp = (event: MouseEvent) => {
+        if (event.button === MIDDLE_BUTTON) event.preventDefault();
+    };
+
     const onPointerMove = (event: PointerEvent) => {
         pointer = { x: event.clientX, y: event.clientY };
         if (pan && pan.pointerId === event.pointerId) {
@@ -175,6 +181,7 @@ export function attachViewNavigation(element: HTMLElement): () => void {
     element.addEventListener("wheel", onWheel, { passive: false });
     element.addEventListener("pointerdown", onPointerDown);
     element.addEventListener("mousedown", onMouseDown);
+    element.addEventListener("mouseup", onMouseUp);
     element.addEventListener("pointermove", onPointerMove);
     element.addEventListener("pointerup", onPointerEnd);
     element.addEventListener("pointercancel", onPointerEnd);
@@ -190,6 +197,7 @@ export function attachViewNavigation(element: HTMLElement): () => void {
         element.removeEventListener("wheel", onWheel);
         element.removeEventListener("pointerdown", onPointerDown);
         element.removeEventListener("mousedown", onMouseDown);
+        element.removeEventListener("mouseup", onMouseUp);
         element.removeEventListener("pointermove", onPointerMove);
         element.removeEventListener("pointerup", onPointerEnd);
         element.removeEventListener("pointercancel", onPointerEnd);
