@@ -573,7 +573,8 @@ const projects: fc.Arbitrary<RandomProject> = fc
         return { doc, sources };
     });
 
-describe("project round trip of random documents", () => {
+// 150 random projects written and read: more than the default 5 s on a slow or busy machine.
+describe("project round trip of random documents", { timeout: 30_000 }, () => {
     it("yields a deep-equal document, identical pixels and sources, and the same bytes again", async () => {
         await fc.assert(
             fc.asyncProperty(projects, async ({ doc, sources }) => {

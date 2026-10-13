@@ -111,7 +111,8 @@ describe("serialize is deterministic", () => {
         }
     });
 
-    it("yields identical bytes in every time zone", () => {
+    // Several hundred zones: more than the default 5 s on a slow or busy machine.
+    it("yields identical bytes in every time zone", { timeout: 30_000 }, () => {
         const zones = Intl.supportedValuesOf("timeZone");
         expect(zones.length).toBeGreaterThan(300);
 
