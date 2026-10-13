@@ -27,6 +27,7 @@ import {
     imageIdsOf,
     layer,
     layerIds,
+    made,
     pixels,
     redo,
     stateOf,
@@ -448,7 +449,6 @@ describe("reorder layer", () => {
         { id: C, to: 0, order: [C, A, B] },
         { id: B, to: 0, order: [B, A, C] },
         { id: B, to: 2, order: [A, C, B] },
-        { id: B, to: 1, order: [A, B, C] },
     ])("moves $id to position $to of the stack", ({ id, to, order }) => {
         const session = fixture();
         const target = history(session);
@@ -462,6 +462,24 @@ describe("reorder layer", () => {
         expect(target.undoLabel).toBe("Move Layer");
         undo(target);
         expect(layerIds(session.doc)).toEqual([A, B, C]);
+    });
+
+    it("makes no command when the layer is at that position already", () => {
+        const session = fixture();
+        const before = stateOf(session);
+        const target = history(session);
+
+        expect(reorderLayerCommand(session, A, 0)).toBeNull();
+        expect(reorderLayerCommand(session, B, 1)).toBeNull();
+        expect(reorderLayerCommand(session, C, 2)).toBeNull();
+        expect(stateOf(session)).toStrictEqual(before);
+
+        execute(target, reorderLayerCommand(session, B, 2));
+        expect(reorderLayerCommand(session, B, 2)).toBeNull();
+        expect(reorderLayerCommand(session, B, 1)).not.toBeNull();
+        expect(target.undoCount).toBe(1);
+        // A position outside the stack is an error, not a move that changes nothing.
+        expect(() => reorderLayerCommand(session, B, 3)).toThrow(LayerError);
     });
 
     it("moves the layer objects, not copies, and changes no cel", () => {
@@ -504,7 +522,7 @@ describe("reorder layer", () => {
     });
 
     it("touches the layer, the frames where it has a cel, and the structure", () => {
-        const command = reorderLayerCommand(fixture(), C, 0);
+        const command = made(reorderLayerCommand(fixture(), C, 0));
 
         expect(command.touched).toEqual({
             frameIds: [F1, F2, F3],

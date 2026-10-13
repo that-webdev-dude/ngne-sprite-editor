@@ -23,6 +23,7 @@ import {
     FRAMES,
     history,
     layer,
+    made,
     redo,
     stateOf,
     thrownBy,
@@ -83,7 +84,7 @@ describe("rename layer", () => {
         const target = history(session);
 
         for (const name of ["", "   ", "\t\n"]) {
-            const error = thrownBy(() => target.execute(renameLayerCommand(session, B, name)));
+            const error = thrownBy(() => execute(target, renameLayerCommand(session, B, name)));
             expect(error).toBeInstanceOf(LayerError);
             expect(error).toMatchObject({ name: "LayerError", code: "name" });
             expect(isLayerName(name)).toBe(false);
@@ -97,7 +98,22 @@ describe("rename layer", () => {
     });
 
     it("touches no pixels, layers or frames", () => {
-        expect(renameLayerCommand(fixture(), B, "x").touched).toEqual(NOTHING);
+        expect(made(renameLayerCommand(fixture(), B, "x")).touched).toEqual(NOTHING);
+    });
+
+    it("makes no command when the layer has the name already", () => {
+        const session = fixture();
+        const target = history(session);
+
+        expect(renameLayerCommand(session, B, B)).toBeNull();
+        // White space around the name does not make it another name.
+        expect(renameLayerCommand(session, B, `  ${B}\n`)).toBeNull();
+        expect(renameLayerCommand(session, B, A)).not.toBeNull();
+
+        execute(target, renameLayerCommand(session, B, "Outline"));
+        expect(renameLayerCommand(session, B, "Outline")).toBeNull();
+        expect(renameLayerCommand(session, B, B)).not.toBeNull();
+        expect(target.undoCount).toBe(1);
     });
 });
 
@@ -119,15 +135,32 @@ describe("set layer visible", () => {
         expect(composites(session.doc)).toStrictEqual(shown);
     });
 
-    it("undo restores the visibility the layer had, also when the command changed nothing", () => {
+    it("makes no command when the layer is shown or hidden already", () => {
         const session = fixture();
         const target = history(session);
+
+        expect(setLayerVisibleCommand(session, B, true)).toBeNull();
         execute(target, setLayerVisibleCommand(session, B, false));
-        execute(target, setLayerVisibleCommand(session, B, false));
+        // Hiding a hidden layer is no step: one undo shows the layer again.
+        expect(setLayerVisibleCommand(session, B, false)).toBeNull();
+        expect(target.undoCount).toBe(1);
 
         undo(target);
+        expect(layer(session.doc, B).visible).toBe(true);
+        expect(target.canUndo).toBe(false);
+    });
+
+    it("undo restores the visibility the layer has when the command is done, not when it was made", () => {
+        const session = fixture();
+        const target = history(session);
+        // Both made while the layer is visible; in one step the second finds it hidden.
+        const hide = made(setLayerVisibleCommand(session, B, false));
+        const hideAgain = made(setLayerVisibleCommand(session, B, false));
+        execute(target, compositeCommand("Hide Twice", [hide, hideAgain]));
         expect(layer(session.doc, B).visible).toBe(false);
+
         undo(target);
+
         expect(layer(session.doc, B).visible).toBe(true);
     });
 
@@ -142,7 +175,7 @@ describe("set layer visible", () => {
     it("touches the layer and the frames where it has a cel, not the structure", () => {
         const session = fixture();
 
-        expect(setLayerVisibleCommand(session, A, false).touched).toEqual({
+        expect(made(setLayerVisibleCommand(session, A, false)).touched).toEqual({
             frameIds: [F1, F2, F3],
             layerIds: [A],
             structure: false,
@@ -180,10 +213,21 @@ describe("set layer locked", () => {
     it("touches no pixels, layers or frames, and rejects an unknown layer", () => {
         const session = fixture();
 
-        expect(setLayerLockedCommand(session, A, true).touched).toEqual(NOTHING);
+        expect(made(setLayerLockedCommand(session, A, true)).touched).toEqual(NOTHING);
         expect(thrownBy(() => setLayerLockedCommand(session, "missing", true))).toMatchObject({
             code: "layer-not-found",
         });
+    });
+
+    it("makes no command when the layer is locked or unlocked already", () => {
+        const session = fixture();
+        const target = history(session);
+
+        expect(setLayerLockedCommand(session, A, false)).toBeNull();
+        execute(target, setLayerLockedCommand(session, A, true));
+        expect(setLayerLockedCommand(session, A, true)).toBeNull();
+        expect(setLayerLockedCommand(session, A, false)).not.toBeNull();
+        expect(target.undoCount).toBe(1);
     });
 });
 
@@ -230,11 +274,25 @@ describe("set layer opacity", () => {
     });
 
     it("touches the layer and the frames where it has a cel, not the structure", () => {
-        expect(setLayerOpacityCommand(fixture(), C, 10).touched).toEqual({
+        expect(made(setLayerOpacityCommand(fixture(), C, 10)).touched).toEqual({
             frameIds: [F1, F2, F3],
             layerIds: [C],
             structure: false,
         });
+    });
+
+    it("makes no command when the layer has the opacity already", () => {
+        const session = fixture();
+        const target = history(session);
+
+        expect(setLayerOpacityCommand(session, A, 255)).toBeNull();
+        expect(setLayerOpacityCommand(session, B, 128)).toBeNull();
+        execute(target, setLayerOpacityCommand(session, B, 0));
+        expect(setLayerOpacityCommand(session, B, 0)).toBeNull();
+        expect(setLayerOpacityCommand(session, B, 128)).not.toBeNull();
+        expect(target.undoCount).toBe(1);
+        // A value outside the range is an error, also when nothing else would change.
+        expect(() => setLayerOpacityCommand(session, B, 256)).toThrow(LayerError);
     });
 });
 
@@ -258,11 +316,15 @@ describe("set layer blend mode", () => {
         const session = fixture();
         const target = history(session);
 
-        for (const blend of Object.keys(BLEND_FUNCTIONS) as BlendMode[]) {
+        const modes = Object.keys(BLEND_FUNCTIONS) as BlendMode[];
+        expect(modes).toHaveLength(19);
+        // From the last mode on, so that the first of the list is a change as well.
+        execute(target, setLayerBlendModeCommand(session, A, modes[18]));
+        for (const blend of modes) {
             execute(target, setLayerBlendModeCommand(session, A, blend));
             expect(layer(session.doc, A)).toMatchObject({ blend });
         }
-        expect(target.undoCount).toBe(19);
+        expect(target.undoCount).toBe(20);
     });
 
     it("rejects a value that is not a blend mode, and an unknown layer", () => {
@@ -281,11 +343,22 @@ describe("set layer blend mode", () => {
     });
 
     it("touches the layer and the frames where it has a cel, not the structure", () => {
-        expect(setLayerBlendModeCommand(fixture(), B, "hue").touched).toEqual({
+        expect(made(setLayerBlendModeCommand(fixture(), B, "hue")).touched).toEqual({
             frameIds: [F1, F2, F3, F4],
             layerIds: [B],
             structure: false,
         });
+    });
+
+    it("makes no command when the layer has the blend mode already", () => {
+        const session = fixture();
+        const target = history(session);
+
+        expect(setLayerBlendModeCommand(session, B, "normal")).toBeNull();
+        execute(target, setLayerBlendModeCommand(session, B, "multiply"));
+        expect(setLayerBlendModeCommand(session, B, "multiply")).toBeNull();
+        expect(setLayerBlendModeCommand(session, B, "normal")).not.toBeNull();
+        expect(target.undoCount).toBe(1);
     });
 });
 
@@ -295,8 +368,8 @@ describe("property commands as one step", () => {
         const start = stateOf(session);
         const target = history(session);
         const command = compositeCommand("Layer Properties", [
-            renameLayerCommand(session, B, "Outline"),
-            setLayerOpacityCommand(session, B, 40),
+            made(renameLayerCommand(session, B, "Outline")),
+            made(setLayerOpacityCommand(session, B, 40)),
         ]);
 
         execute(target, command);
@@ -320,7 +393,7 @@ describe("property commands as one step", () => {
             target,
             compositeCommand(
                 "Hide Layers",
-                [A, B, C].map((id) => setLayerVisibleCommand(session, id, false)),
+                [A, B, C].map((id) => made(setLayerVisibleCommand(session, id, false))),
             ),
         );
         expect(session.doc.layers.map((entry) => entry.visible)).toEqual([false, false, false]);
@@ -339,7 +412,24 @@ describe("property commands as one step", () => {
                 setLayerLockedCommand(session, B, true),
                 setLayerOpacityCommand(session, B, 1),
                 setLayerBlendModeCommand(session, B, "color"),
-            ].map((command) => command.bytes),
+            ].map((command) => made(command).bytes),
         ).toEqual([0, 0, 0, 0, 0]);
+    });
+
+    it("a popover that changed one of two values makes its step from the command that is made", () => {
+        const session = fixture();
+        const target = history(session);
+        // The name is the one the layer has; only the opacity is a change.
+        const parts = [
+            renameLayerCommand(session, B, B),
+            setLayerOpacityCommand(session, B, 40),
+        ].filter((command) => command !== null);
+
+        expect(parts).toHaveLength(1);
+        execute(target, compositeCommand("Layer Properties", parts));
+
+        expect(layer(session.doc, B)).toMatchObject({ name: B, opacity: 40 });
+        undo(target);
+        expect(layer(session.doc, B).opacity).toBe(128);
     });
 });

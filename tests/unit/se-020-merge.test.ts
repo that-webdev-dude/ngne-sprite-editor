@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { compositeFrame } from "../../src/core/composite";
-import { AllocationError } from "../../src/core/history";
+import { AllocationError, compositeCommand } from "../../src/core/history";
 import {
     flattenCommand,
     LayerError,
     mergeDownCommand,
     mergeDownTarget,
+    renameLayerCommand,
+    setLayerLockedCommand,
+    setLayerOpacityCommand,
+    setLayerVisibleCommand,
 } from "../../src/core/layers";
 import { celAt, celKey, pixelMemoryBytes, sequentialIds } from "../../src/core/model";
 import type { DocSession, SpriteDoc } from "../../src/core/model";
@@ -17,6 +21,7 @@ import {
     celBytes,
     composites,
     compositesOf,
+    compositesShown,
     emptySession,
     execute,
     fixture,
@@ -29,9 +34,11 @@ import {
     layer,
     layerIds,
     linkCel,
+    made,
     pixelLayer,
     pixels,
     redo,
+    referenceLayer,
     stateOf,
     thrownBy,
     undo,
@@ -79,29 +86,39 @@ function ids() {
 
 describe("merge down, the acceptance on the fixture", () => {
     it.each([
-        { upper: B, lower: A, rest: [A, C] },
-        { upper: C, lower: B, rest: [A, B] },
+        { upper: B, lower: A, rest: [A, C], hidden: [] },
+        { upper: C, lower: B, rest: [A, B], hidden: [] },
+        { upper: B, lower: A, rest: [A, C], hidden: [B] },
+        { upper: B, lower: A, rest: [A, C], hidden: [A] },
+        { upper: B, lower: A, rest: [A, C], hidden: [A, B] },
+        { upper: C, lower: B, rest: [A, B], hidden: [C] },
+        { upper: C, lower: B, rest: [A, B], hidden: [B] },
+        { upper: C, lower: B, rest: [A, B], hidden: [B, C] },
     ])(
-        "$upper into $lower: the result equals compositeFrame restricted to the two layers, for every frame",
-        ({ upper, lower, rest }) => {
+        "$upper into $lower with $hidden hidden: the result equals compositeFrame restricted to the two layers, both taken as visible, for every frame",
+        ({ upper, lower, rest, hidden }) => {
             const session = fixture();
             const { doc } = session;
-            const expected = compositesOf(doc, [lower, upper]);
+            for (const id of hidden) layer(doc, id).visible = false;
+            const expected = compositesShown(doc, [lower, upper]);
             expect(expected).toHaveLength(4);
+            // Whatever is hidden, it is what the two layers give when both are shown.
+            expect(expected).toStrictEqual(compositesOf(fixture().doc, [lower, upper]));
 
             execute(history(session), mergeDownCommand(session, upper, ids()));
 
             expect(layerIds(doc)).toEqual(rest);
             // The merged layer by itself composites to what the two layers gave together…
-            expect(alone(doc, lower)).toStrictEqual(expected);
+            expect(compositesShown(doc, [lower])).toStrictEqual(expected);
             // …because its images are those composites, shown as they are.
             FRAMES.forEach((frame, index) => {
                 expect(celBytes(doc, lower, frame), frame).toStrictEqual(expected[index].data);
                 expect(celAt(doc, lower, frame)?.opacity, frame).toBe(255);
             });
+            // The target stays hidden or visible as it was.
             expect(layer(doc, lower)).toMatchObject({
                 kind: "pixel",
-                visible: true,
+                visible: !(hidden as string[]).includes(lower),
                 opacity: 255,
                 blend: "normal",
             });
@@ -337,52 +354,86 @@ describe("merge down, hidden layers", () => {
         return session;
     }
 
-    it("a hidden upper layer adds nothing: the result is the lower layer, baked", () => {
+    // Merge down follows Aseprite: the two layers are merged whatever their `visible` flag,
+    // and the target stays hidden or visible as it was. No pixel is lost.
+
+    it("a hidden upper layer is merged like a visible one, and its pixels show in the visible target", () => {
         const session = hidden([B]);
         const { doc } = session;
-        const expected = compositesOf(doc, [A, B]);
-        expect(expected).toStrictEqual(compositesOf(doc, [A]));
+        const start = stateOf(session);
+        const expected = compositesShown(doc, [A, B]);
+        // The hidden layer has pixels of its own to add.
+        expect(expected).not.toStrictEqual(compositesOf(doc, [A]));
         const shown = composites(doc);
+        const target = history(session);
 
-        execute(history(session), mergeDownCommand(session, B, ids()));
-
-        expect(alone(doc, A)).toStrictEqual(expected);
-        // Layer a has no cel at frame 4, and the hidden cel of layer b there is gone.
-        expect(imageIdsOf(doc, A)).toEqual(["new-1", "new-1", "new-3", null]);
-        expect(composites(doc)).toStrictEqual(shown);
-    });
-
-    it("a hidden lower layer adds nothing: the result is the upper layer, and it is visible", () => {
-        const session = hidden([A]);
-        const { doc } = session;
-        const expected = compositesOf(doc, [A, B]);
-        const shown = composites(doc);
-
-        execute(history(session), mergeDownCommand(session, B, ids()));
+        execute(target, mergeDownCommand(session, B, ids()));
 
         expect(layer(doc, A).visible).toBe(true);
         expect(alone(doc, A)).toStrictEqual(expected);
+        // A cel wherever one of the two layers had one: layer b alone had the one at frame 4.
         expect(imageIdsOf(doc, A)).toEqual(["new-1", "new-2", "new-3", "new-4"]);
-        expect(composites(doc)).toStrictEqual(shown);
+        expect(celBytes(doc, A, F4)).toStrictEqual(expected[3].data);
+        // What was hidden in layer b is on screen now, in layer a.
+        expect(composites(doc)).not.toStrictEqual(shown);
+        undo(target);
+        expect(stateOf(session)).toStrictEqual(start);
+        expect(layer(doc, B).visible).toBe(false);
     });
 
-    it("two hidden layers merge into one visible layer without cels", () => {
+    it("a hidden target keeps its pixels, takes those of the upper layer and stays hidden", () => {
+        const session = hidden([A]);
+        const { doc } = session;
+        const start = stateOf(session);
+        const expected = compositesShown(doc, [A, B]);
+        // Neither the pixels of the hidden target nor those of the upper layer are left out.
+        expect(expected).not.toStrictEqual(compositesOf(doc, [B]));
+        expect(expected).not.toStrictEqual(compositesShown(doc, [A]));
+        const target = history(session);
+
+        execute(target, mergeDownCommand(session, B, ids()));
+
+        expect(layer(doc, A)).toEqual(pixelLayer(A, { visible: false }));
+        expect(compositesShown(doc, [A])).toStrictEqual(expected);
+        expect(imageIdsOf(doc, A)).toEqual(["new-1", "new-2", "new-3", "new-4"]);
+        // Hidden, the target adds nothing: only layer c is on screen.
+        expect(composites(doc)).toStrictEqual(compositesOf(doc, [C]));
+        undo(target);
+        expect(stateOf(session)).toStrictEqual(start);
+    });
+
+    it("two hidden layers merge into one hidden layer that holds the pixels of both", () => {
         const session = hidden([A, B]);
         const { doc } = session;
         const start = stateOf(session);
+        const expected = compositesShown(doc, [A, B]);
         const shown = composites(doc);
         const target = history(session);
         const command = mergeDownCommand(session, B, ids());
 
         execute(target, command);
 
-        expect(layer(doc, A).visible).toBe(true);
-        expect(imageIdsOf(doc, A)).toEqual([null, null, null, null]);
-        expect([...doc.images.keys()]).toEqual(["c1"]);
+        expect(layer(doc, A).visible).toBe(false);
+        expect(compositesShown(doc, [A])).toStrictEqual(expected);
+        expect(imageIdsOf(doc, A)).toEqual(["new-1", "new-2", "new-3", "new-4"]);
+        expect([...doc.images.keys()]).toEqual(["c1", "new-1", "new-2", "new-3", "new-4"]);
+        // Hidden before and hidden after: nothing on screen changes.
         expect(composites(doc)).toStrictEqual(shown);
         expect(command.bytes).toBe(5 * IMAGE_BYTES);
         undo(target);
         expect(stateOf(session)).toStrictEqual(start);
+    });
+
+    it("keeps the name, the lock and the visibility of the target, and resets what was baked", () => {
+        const session = hidden([A]);
+        const { doc } = session;
+        Object.assign(layer(doc, A), { name: "Body", locked: true, opacity: 90, blend: "screen" });
+
+        execute(history(session), mergeDownCommand(session, B, ids()));
+
+        expect(layer(doc, A)).toEqual(
+            pixelLayer(A, { name: "Body", locked: true, visible: false, opacity: 255 }),
+        );
     });
 });
 
@@ -479,7 +530,7 @@ describe("flatten, the acceptance on the fixture", () => {
         const session = fixture();
         const start = stateOf(session);
         const target = history(session);
-        const command = flattenCommand(session, ids());
+        const command = made(flattenCommand(session, ids()));
 
         execute(target, command);
         // Frames 1 and 2 shared a1 in the target, under different images of layer b.
@@ -494,7 +545,7 @@ describe("flatten, the acceptance on the fixture", () => {
     });
 
     it("touches every pixel layer, the frames where one has a cel, and the structure", () => {
-        expect(flattenCommand(fixture()).touched).toEqual({
+        expect(made(flattenCommand(fixture())).touched).toEqual({
             frameIds: [F1, F2, F3, F4],
             layerIds: [A, B, C],
             structure: true,
@@ -569,7 +620,7 @@ describe("flatten, rules", () => {
         const before = stateOf(session);
         const target = history(session);
         const memory = flakyAllocator(3);
-        const command = flattenCommand(session, { ...ids(), allocate: memory.allocate });
+        const command = made(flattenCommand(session, { ...ids(), allocate: memory.allocate }));
 
         expect(() => target.execute(command)).toThrow(AllocationError);
 
@@ -587,5 +638,164 @@ describe("flatten, rules", () => {
         expect(memory.calls).toBe(FRAMES.length);
         expect(session.doc.images.size).toBe(4);
         expect(pixelMemoryBytes(session.doc)).toBe(4 * IMAGE_BYTES);
+    });
+});
+
+describe("flatten, nothing to flatten", () => {
+    /** One pixel layer with nothing to bake, and cels at two frames. */
+    function flat(): DocSession {
+        const session = emptySession([A]);
+        addCel(session.doc, A, F1, "a1", 1);
+        linkCel(session.doc, A, F2, "a1");
+        return session;
+    }
+
+    it("makes no command for one pixel layer that is visible, at opacity 255, blend mode normal, with every cel at opacity 255", () => {
+        const session = flat();
+        const before = stateOf(session);
+
+        expect(flattenCommand(session)).toBeNull();
+        expect(stateOf(session)).toStrictEqual(before);
+        // Without a cel as well.
+        expect(flattenCommand(emptySession([A]))).toBeNull();
+    });
+
+    it("makes no command when only reference layers are beside that layer, and leaves the active layer alone", () => {
+        const session = flat();
+        session.doc.layers.unshift(referenceLayer("ref-back"));
+        session.doc.layers.push(referenceLayer("ref-front"));
+        session.activeLayerId = "ref-front";
+
+        expect(flattenCommand(session)).toBeNull();
+        expect(session.activeLayerId).toBe("ref-front");
+    });
+
+    it.each([
+        {
+            what: "the layer is hidden",
+            change: (doc: SpriteDoc) => (layer(doc, A).visible = false),
+        },
+        {
+            what: "the layer has opacity 254",
+            change: (doc: SpriteDoc) => (layer(doc, A).opacity = 254),
+        },
+        {
+            what: "the layer has another blend mode",
+            change: (doc: SpriteDoc) => Object.assign(layer(doc, A), { blend: "multiply" }),
+        },
+        {
+            what: "a cel has opacity 254",
+            change: (doc: SpriteDoc) =>
+                doc.cels.set(celKey(A, F2), { imageId: "a1", opacity: 254 }),
+        },
+        {
+            what: "there is a second pixel layer, though it is empty",
+            change: (doc: SpriteDoc) => doc.layers.push(pixelLayer(B)),
+        },
+    ])("makes a command when $what", ({ change }) => {
+        const session = flat();
+        change(session.doc);
+        const before = composites(session.doc);
+        const target = history(session);
+
+        execute(target, flattenCommand(session, ids()));
+
+        expect(session.doc.layers).toEqual([pixelLayer(A)]);
+        expect(composites(session.doc)).toStrictEqual(before);
+        expect(target.undoCount).toBe(1);
+        // What it left is flat.
+        expect(flattenCommand(session)).toBeNull();
+    });
+
+    it("after a flatten there is nothing to flatten", () => {
+        const session = fixture();
+        const target = history(session);
+
+        execute(target, flattenCommand(session, ids()));
+
+        expect(flattenCommand(session)).toBeNull();
+        undo(target);
+        expect(flattenCommand(session)).not.toBeNull();
+    });
+});
+
+describe("merge down and flatten on the session they find when they are done", () => {
+    it("a rename of the target and a merge down made together keep the new name", () => {
+        const session = fixture();
+        const start = stateOf(session);
+        const expected = compositesOf(session.doc, [A, B]);
+        const target = history(session);
+        // Both are made from the same session; the merge is done after the rename.
+        const step = compositeCommand("Rename and Merge", [
+            made(renameLayerCommand(session, A, "Body")),
+            mergeDownCommand(session, B, ids()),
+        ]);
+
+        execute(target, step);
+
+        expect(layerIds(session.doc)).toEqual([A, C]);
+        expect(layer(session.doc, A).name).toBe("Body");
+        expect(compositesOf(session.doc, [A])).toStrictEqual(expected);
+        const done = stateOf(session);
+
+        undo(target);
+        expect(stateOf(session)).toStrictEqual(start);
+        redo(target);
+        expect(stateOf(session)).toStrictEqual(done);
+        expect(layer(session.doc, A).name).toBe("Body");
+    });
+
+    it("lock and visibility set in the same step are those the merged layer keeps", () => {
+        const session = fixture();
+        const target = history(session);
+
+        execute(
+            target,
+            compositeCommand("Lock, Hide and Merge", [
+                made(setLayerLockedCommand(session, A, true)),
+                made(setLayerVisibleCommand(session, A, false)),
+                mergeDownCommand(session, B, ids()),
+            ]),
+        );
+
+        expect(layer(session.doc, A)).toEqual(pixelLayer(A, { locked: true, visible: false }));
+    });
+
+    it("an opacity set in the same step is the opacity a merge down bakes", () => {
+        const session = fixture();
+        const target = history(session);
+        const opaque = fixture();
+        layer(opaque.doc, B).opacity = 255;
+        const expected = compositesOf(opaque.doc, [A, B]);
+
+        execute(
+            target,
+            compositeCommand("Opacity and Merge", [
+                made(setLayerOpacityCommand(session, B, 255)),
+                mergeDownCommand(session, B, ids()),
+            ]),
+        );
+
+        expect(compositesOf(session.doc, [A])).toStrictEqual(expected);
+    });
+
+    it("a layer hidden in the same step is a hidden layer to flatten: its pixels are dropped", () => {
+        const session = fixture();
+        const start = stateOf(session);
+        const withoutB = compositesOf(session.doc, [A, C]);
+        const target = history(session);
+
+        execute(
+            target,
+            compositeCommand("Hide and Flatten", [
+                made(setLayerVisibleCommand(session, B, false)),
+                made(flattenCommand(session, ids())),
+            ]),
+        );
+
+        expect(layerIds(session.doc)).toEqual([A]);
+        expect(composites(session.doc)).toStrictEqual(withoutB);
+        undo(target);
+        expect(stateOf(session)).toStrictEqual(start);
     });
 });

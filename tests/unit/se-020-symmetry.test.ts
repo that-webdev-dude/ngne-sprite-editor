@@ -23,6 +23,7 @@ import {
     fixture,
     history,
     IMAGE_BYTES,
+    made,
     redo,
     stateOf,
     undo,
@@ -34,7 +35,7 @@ import {
 
 interface Case {
     name: string;
-    make(session: DocSession): Command;
+    make(session: DocSession): Command | null;
     /** The active layer after the command; the fixture starts with `layer-b`. */
     active: string;
     /** Pixel memory the command keeps for undo. */
@@ -188,7 +189,7 @@ describe("layer commands, do/undo/redo symmetry on the 3-layer, 4-frame fixture"
     it.each(cases)("$name: the history retains the bytes the command states", (entry) => {
         const session = fixture();
         const target = history(session);
-        const command = entry.make(session);
+        const command = made(entry.make(session));
 
         expect(command.bytes).toBe(entry.bytes);
         execute(target, command);
@@ -218,7 +219,7 @@ describe("layer commands, do/undo/redo symmetry on the 3-layer, 4-frame fixture"
                 assertInvariants(session);
                 checked.push(`${change.kind} ${change.label}`);
             });
-            target.execute(make(session));
+            target.execute(made(make(session)));
             target.undo();
             target.redo();
             target.undo();
@@ -237,7 +238,7 @@ describe("layer commands, do/undo/redo symmetry on the 3-layer, 4-frame fixture"
         const target = history(session);
         const ids = sequentialIds("new-");
         const states = [stateOf(session)];
-        const steps: ((session: DocSession) => Command)[] = [
+        const steps: ((session: DocSession) => Command | null)[] = [
             (s) => addLayerCommand(s, { newId: ids }),
             (s) => renameLayerCommand(s, s.activeLayerId, "Shadow"),
             (s) => setLayerOpacityCommand(s, C, 200),

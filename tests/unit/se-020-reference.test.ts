@@ -29,6 +29,7 @@ import {
     history,
     layer,
     layerIds,
+    made,
     redo,
     referenceLayer,
     stateOf,
@@ -242,8 +243,8 @@ describe("reference layers and the property commands", () => {
         const session = withReferences();
         const touched = { frameIds: [], layerIds: [FRONT], structure: false };
 
-        expect(setLayerVisibleCommand(session, FRONT, false).touched).toEqual(touched);
-        expect(setLayerOpacityCommand(session, FRONT, 9).touched).toEqual(touched);
+        expect(made(setLayerVisibleCommand(session, FRONT, false)).touched).toEqual(touched);
+        expect(made(setLayerOpacityCommand(session, FRONT, 9)).touched).toEqual(touched);
     });
 });
 
@@ -252,7 +253,7 @@ describe("reference layers and reorder", () => {
         const session = withReferences();
         const before = composites(session.doc);
         const target = history(session);
-        const command = reorderLayerCommand(session, BACK, 5);
+        const command = made(reorderLayerCommand(session, BACK, 5));
 
         execute(target, command);
 
@@ -348,6 +349,6 @@ describe("reference layers and flatten", () => {
     });
 
     it("touches the pixel layers only", () => {
-        expect(flattenCommand(withReferences()).touched.layerIds).toEqual([A, B, C]);
+        expect(made(flattenCommand(withReferences())).touched.layerIds).toEqual([A, B, C]);
     });
 });

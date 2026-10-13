@@ -15,6 +15,10 @@ import { allocateImage, defaultAllocator, stackCommand, type BuiltCels } from ".
 
 // Add, delete, duplicate and reorder (SPEC §7.3). Each changes the list of layers, so each
 // reports `structure: true` (SPEC §5.2).
+//
+// A factory checks its guards and fixes what must be the same at every `do`: the IDs the
+// command creates, a name given to a new layer and its position. The change itself is worked
+// out by `change` from the session each `do` finds (`stackCommand`).
 
 /** A copy of `layers` with `layer` at `index`. */
 function insertedAt(layers: readonly Layer[], index: number, layer: Layer): Layer[] {
@@ -43,29 +47,38 @@ export interface LayerImageOptions {
  * layer is a reference layer the new layer goes on top of the stack: a reference layer is
  * drawn behind or in front of all pixel layers (SPEC §12, A7), so it has no place among them
  * that "above it" could mean. Throws the `name` error for an empty `options.name`.
+ *
+ * The position is the one found when the command is made: a redo puts the layer there
+ * again, whichever layer is active by then, so that it gives the document of the first do.
  */
 export function addLayerCommand(session: DocSession, options: AddLayerOptions = {}): Command {
     const { doc } = session;
     const { newId = randomId } = options;
-    const name = options.name === undefined ? nextLayerName(doc) : normalizeLayerName(options.name);
-    const layer: PixelLayer = {
-        id: newId(),
-        name,
-        kind: "pixel",
-        visible: true,
-        locked: false,
-        opacity: 255,
-        blend: "normal",
-    };
+    const given = options.name === undefined ? undefined : normalizeLayerName(options.name);
+    const id = newId();
     const active = doc.layers.find((candidate) => candidate.id === session.activeLayerId);
     const index = active?.kind === "pixel" ? layerIndex(doc, active.id) + 1 : doc.layers.length;
     return stackCommand(session, {
         label: "New Layer",
-        layers: insertedAt(doc.layers, index, layer),
-        activeLayerId: layer.id,
-        removedCels: new Set(),
         // An empty layer changes no composite.
-        touched: touchedByLayers(doc, [layer], true),
+        touched: { frameIds: [], layerIds: [id], structure: true },
+        change(current) {
+            // A layer object of its own at every do: the document's to change from then on.
+            const layer: PixelLayer = {
+                id,
+                name: given ?? nextLayerName(current.doc),
+                kind: "pixel",
+                visible: true,
+                locked: false,
+                opacity: 255,
+                blend: "normal",
+            };
+            return {
+                layers: insertedAt(current.doc.layers, index, layer),
+                activeLayerId: id,
+                removedCels: new Set(),
+            };
+        },
     });
 }
 
@@ -85,7 +98,8 @@ function activeAfterDelete(layers: readonly Layer[], index: number): string {
 /**
  * Deletes a layer with its cels; images left without a cel go with them and come back on
  * undo. Deleting the active layer makes the layer below it active (`activeAfterDelete`);
- * deleting another layer leaves the active layer as it is.
+ * deleting another layer leaves the active layer as it is. Which of the two it is, is seen
+ * at each do: the active layer can be switched between an undo and a redo.
  *
  * Throws the `layer-not-found` error, and the `last-pixel-layer` error for the only pixel
  * layer of the document: reference layers do not count as the layer that has to stay, and a
@@ -97,16 +111,21 @@ export function deleteLayerCommand(session: DocSession, layerId: string): Comman
     if (!canDeleteLayer(doc, layerId)) {
         throw new LayerError("last-pixel-layer", "The last pixel layer cannot be deleted.");
     }
-    const index = layerIndex(doc, layerId);
     return stackCommand(session, {
         label: "Delete Layer",
-        layers: doc.layers.filter((candidate) => candidate !== layer),
-        activeLayerId:
-            session.activeLayerId === layerId
-                ? activeAfterDelete(doc.layers, index)
-                : session.activeLayerId,
-        removedCels: celKeysOf(doc, [layerId]),
         touched: touchedByLayers(doc, [layer], true),
+        change(current) {
+            const { layers } = current.doc;
+            const index = layerIndex(current.doc, layerId);
+            return {
+                layers: layers.filter((candidate) => candidate.id !== layerId),
+                activeLayerId:
+                    current.activeLayerId === layerId
+                        ? activeAfterDelete(layers, index)
+                        : current.activeLayerId,
+                removedCels: celKeysOf(current.doc, [layerId]),
+            };
+        },
     });
 }
 
@@ -126,8 +145,9 @@ export function duplicateLayerCommand(
 ): Command {
     const { doc } = session;
     const { newId = randomId, allocate = defaultAllocator } = options;
-    const source = findPixelLayer(doc, layerId, "Duplicate Layer");
-    const copy: PixelLayer = { ...source, id: newId(), name: `${source.name} Copy` };
+    const label = "Duplicate Layer";
+    const source = findPixelLayer(doc, layerId, label);
+    const copyId = newId();
     // One new image per image of the layer, so that the links carry over.
     const copyOf = new Map<string, string>();
     for (const frame of doc.frames) {
@@ -135,38 +155,44 @@ export function duplicateLayerCommand(
         if (cel && !copyOf.has(cel.imageId)) copyOf.set(cel.imageId, newId());
     }
     return stackCommand(session, {
-        label: "Duplicate Layer",
-        layers: insertedAt(doc.layers, layerIndex(doc, layerId) + 1, copy),
-        activeLayerId: copy.id,
-        removedCels: new Set(),
-        build(current) {
-            const built: BuiltCels = { cels: [], images: [] };
-            for (const [imageId, copyId] of copyOf) {
-                const image = current.images.get(imageId);
-                if (!image) throw new Error(`"Duplicate Layer": no image "${imageId}".`);
-                const pixels = allocateImage(allocate, current);
-                pixels.data.set(image.data);
-                built.images.push([copyId, pixels]);
-            }
-            for (const frame of current.frames) {
-                const cel = celAt(current, layerId, frame.id);
-                const copyId = cel && copyOf.get(cel.imageId);
-                if (!cel || copyId === undefined) continue;
-                built.cels.push([celKey(copy.id, frame.id), { ...cel, imageId: copyId }]);
-            }
-            return built;
-        },
+        label,
         // The copy shows wherever the layer has a cel.
-        touched: { ...touchedByLayers(doc, [source], true), layerIds: [copy.id] },
+        touched: { ...touchedByLayers(doc, [source], true), layerIds: [copyId] },
+        change(current) {
+            const found = findPixelLayer(current.doc, layerId, label);
+            const copy: PixelLayer = { ...found, id: copyId, name: `${found.name} Copy` };
+            return {
+                layers: insertedAt(current.doc.layers, layerIndex(current.doc, layerId) + 1, copy),
+                activeLayerId: copyId,
+                removedCels: new Set(),
+                build() {
+                    const built: BuiltCels = { cels: [], images: [] };
+                    for (const [imageId, copiedId] of copyOf) {
+                        const image = current.doc.images.get(imageId);
+                        if (!image) throw new Error(`"${label}": no image "${imageId}".`);
+                        const pixels = allocateImage(allocate, current.doc);
+                        pixels.data.set(image.data);
+                        built.images.push([copiedId, pixels]);
+                    }
+                    for (const frame of current.doc.frames) {
+                        const cel = celAt(current.doc, layerId, frame.id);
+                        const copiedId = cel && copyOf.get(cel.imageId);
+                        if (!cel || copiedId === undefined) continue;
+                        built.cels.push([celKey(copyId, frame.id), { ...cel, imageId: copiedId }]);
+                    }
+                    return built;
+                },
+            };
+        },
     });
 }
 
 /**
  * Moves a layer to the position `toIndex` of the stack (0 is the bottom), which is where it
  * is found afterwards. The active layer stays the active layer. Reference layers move like
- * any other; where one sits does not change the composite. A move to the layer's own
- * position changes nothing but is still a step of the history: the caller leaves it out.
+ * any other; where one sits does not change the composite.
  *
+ * Returns null when the layer is at that position already: there is then no step to undo.
  * Throws the `layer-not-found` error, and the `index` error unless `toIndex` is an integer
  * from 0 to the number of layers minus one.
  */
@@ -174,7 +200,7 @@ export function reorderLayerCommand(
     session: DocSession,
     layerId: string,
     toIndex: number,
-): Command {
+): Command | null {
     const { doc } = session;
     const layer = findLayer(doc, layerId);
     const last = doc.layers.length - 1;
@@ -184,15 +210,18 @@ export function reorderLayerCommand(
             `Layer position ${toIndex} is not allowed: it must be an integer from 0 to ${last}.`,
         );
     }
+    if (layerIndex(doc, layerId) === toIndex) return null;
     return stackCommand(session, {
         label: "Move Layer",
-        layers: insertedAt(
-            doc.layers.filter((candidate) => candidate !== layer),
-            toIndex,
-            layer,
-        ),
-        activeLayerId: session.activeLayerId,
-        removedCels: new Set(),
         touched: touchedByLayers(doc, [layer], true),
+        change(current) {
+            const moved = findLayer(current.doc, layerId);
+            const others = current.doc.layers.filter((candidate) => candidate !== moved);
+            return {
+                layers: insertedAt(others, toIndex, moved),
+                activeLayerId: current.activeLayerId,
+                removedCels: new Set(),
+            };
+        },
     });
 }

@@ -1,10 +1,32 @@
+import fc from "fast-check";
 import { expect } from "vitest";
-import { compositeFrame } from "../../src/core/composite";
+import { BLEND_FUNCTIONS, compositeFrame } from "../../src/core/composite";
 import { History } from "../../src/core/history";
 import type { Command, HistoryOptions, PixelAllocator } from "../../src/core/history";
-import { assertInvariants, celAt, celKey, createDocument } from "../../src/core/model";
+import {
+    addLayerCommand,
+    deleteLayerCommand,
+    duplicateLayerCommand,
+    flattenCommand,
+    mergeDownCommand,
+    renameLayerCommand,
+    reorderLayerCommand,
+    setLayerBlendModeCommand,
+    setLayerLockedCommand,
+    setLayerOpacityCommand,
+    setLayerVisibleCommand,
+} from "../../src/core/layers";
+import {
+    assertInvariants,
+    celAt,
+    celKey,
+    createDocument,
+    sequentialIds,
+} from "../../src/core/model";
 import type {
+    BlendMode,
     DocSession,
+    IdGenerator,
     Layer,
     PixelBuffer,
     PixelLayer,
@@ -177,8 +199,15 @@ export function history(session: DocSession, options?: HistoryOptions): History 
     return new History(session, options);
 }
 
-export function execute(target: History, command: Command): void {
-    target.execute(command);
+/** The command a factory made; fails when the factory found nothing to change and made none. */
+export function made(command: Command | null): Command {
+    if (!command) throw new Error("made: the factory returned null, nothing would change");
+    return command;
+}
+
+/** Executes a command a factory made (`made`). */
+export function execute(target: History, command: Command | null): void {
+    target.execute(made(command));
     assertInvariants(target.session);
 }
 
@@ -235,6 +264,15 @@ export function compositesOf(doc: SpriteDoc, ids: readonly string[]): PixelBuffe
     return composites({ ...doc, layers: doc.layers.filter((entry) => ids.includes(entry.id)) });
 }
 
+/**
+ * The composite of every frame of the given layers alone, each taken as visible whatever its
+ * `visible` flag, in playback order.
+ */
+export function compositesShown(doc: SpriteDoc, ids: readonly string[]): PixelBuffer[] {
+    const layers = doc.layers.filter((entry) => ids.includes(entry.id));
+    return composites({ ...doc, layers: layers.map((entry) => ({ ...entry, visible: true })) });
+}
+
 /** What the platform throws when it cannot allocate a typed array. */
 function outOfMemory(): never {
     throw new RangeError("Array buffer allocation failed");
@@ -264,4 +302,244 @@ export function flakyAllocator(successes: number): {
             return calls;
         },
     };
+}
+
+// --- random documents and random layer commands -------------------------------------------------
+
+const MODES = Object.keys(BLEND_FUNCTIONS) as BlendMode[];
+export const LAYER_KINDS = [
+    "add",
+    "delete",
+    "duplicate",
+    "rename",
+    "reorder",
+    "visible",
+    "locked",
+    "opacity",
+    "blend",
+    "mergeDown",
+    "flatten",
+] as const;
+
+/** One cel of a random layer: which of the layer's images it shows, and how opaque. */
+interface RandomCel {
+    /** Cels of one layer with the same number are linked. */
+    image: number;
+    opacity: number;
+}
+
+interface RandomLayer {
+    reference: boolean;
+    visible: boolean;
+    opacity: number;
+    blend: BlendMode;
+    /** One entry per frame; null is an empty cel. */
+    cels: (RandomCel | null)[];
+    /** Bytes of the layer's images; a cel shows the image at its number. */
+    images: Uint8Array[];
+}
+
+export interface RandomDocument {
+    width: number;
+    height: number;
+    layers: RandomLayer[];
+    /** Picks the active layer. */
+    active: number;
+}
+
+/** One layer command of a sequence; `layer` and `to` pick from the stack as it is then. */
+export interface LayerStep {
+    kind: (typeof LAYER_KINDS)[number];
+    layer: number;
+    to: number;
+    flag: boolean;
+    value: number;
+    blend: BlendMode;
+}
+
+/** 255 and 0 often, since both take a path of their own in the compositor. */
+const opacities = fc.oneof(
+    { weight: 3, arbitrary: fc.constant(255) },
+    { weight: 1, arbitrary: fc.constant(0) },
+    { weight: 2, arbitrary: fc.nat({ max: 255 }) },
+);
+
+function layersOf(frames: number, bytes: number): fc.Arbitrary<RandomLayer> {
+    return fc.record({
+        reference: fc.oneof(
+            { weight: 4, arbitrary: fc.constant(false) },
+            { weight: 1, arbitrary: fc.constant(true) },
+        ),
+        visible: fc.oneof(
+            { weight: 4, arbitrary: fc.constant(true) },
+            { weight: 1, arbitrary: fc.constant(false) },
+        ),
+        opacity: opacities,
+        blend: fc.constantFrom(...MODES),
+        cels: fc.array(
+            fc.option(fc.record({ image: fc.nat({ max: 1 }), opacity: opacities }), {
+                nil: null,
+                freq: 4,
+            }),
+            { minLength: frames, maxLength: frames },
+        ),
+        // Few byte values, so that equal pixels and equal results are common.
+        images: fc.array(
+            fc
+                .uint8Array({ minLength: bytes, maxLength: bytes })
+                .map((data) => data.map((byte) => [0, 90, 255][byte % 3])),
+            { minLength: 2, maxLength: 2 },
+        ),
+    });
+}
+
+export const documents: fc.Arbitrary<RandomDocument> = fc
+    .tuple(
+        fc.integer({ min: 1, max: 3 }),
+        fc.integer({ min: 1, max: 3 }),
+        fc.integer({ min: 1, max: 4 }),
+    )
+    .chain(([width, height, frames]) =>
+        fc.record({
+            width: fc.constant(width),
+            height: fc.constant(height),
+            layers: fc.array(layersOf(frames, width * height * 4), { minLength: 1, maxLength: 5 }),
+            active: fc.nat({ max: 9 }),
+        }),
+    );
+
+export const layerStep: fc.Arbitrary<LayerStep> = fc.record({
+    kind: fc.constantFrom(...LAYER_KINDS),
+    layer: fc.nat({ max: 9 }),
+    to: fc.nat({ max: 9 }),
+    flag: fc.boolean(),
+    value: fc.nat({ max: 255 }),
+    blend: fc.constantFrom(...MODES),
+});
+
+/** The session of a random document. Layer `layer-0` is always a pixel layer. */
+export function sessionOf(random: RandomDocument): DocSession {
+    const session = createDocument(
+        { name: "random", width: random.width, height: random.height },
+        sequentialIds("start-"),
+    );
+    const { doc } = session;
+    const frames = random.layers[0].cels.length;
+    doc.frames = Array.from({ length: frames }, (_, index) => ({
+        id: `frame-${index}`,
+        durationMs: 100,
+    }));
+    let references = 0;
+    doc.layers = random.layers.map((spec, index) => {
+        const id = `layer-${index}`;
+        const { visible, opacity, blend } = spec;
+        // The model allows four reference layers and needs one pixel layer.
+        if (spec.reference && index > 0 && references < 4) {
+            references++;
+            return referenceLayer(id, { visible, opacity });
+        }
+        spec.cels.forEach((cel, frame) => {
+            if (!cel) return;
+            const imageId = `image-${index}-${cel.image}`;
+            doc.images.set(imageId, {
+                width: doc.width,
+                height: doc.height,
+                data: Uint8ClampedArray.from(spec.images[cel.image]),
+            });
+            doc.cels.set(celKey(id, doc.frames[frame].id), { imageId, opacity: cel.opacity });
+        });
+        return pixelLayer(id, { visible, opacity, blend });
+    });
+    session.activeLayerId = doc.layers[random.active % doc.layers.length].id;
+    session.activeFrameId = doc.frames[0].id;
+    assertInvariants(session);
+    return session;
+}
+
+/**
+ * The command of a step on the session as it is now; null when it would change nothing there.
+ * Throws `LayerError` when it is refused.
+ */
+export function layerCommandOf(
+    session: DocSession,
+    step: LayerStep,
+    newId: IdGenerator,
+): Command | null {
+    const { doc } = session;
+    const id = doc.layers[step.layer % doc.layers.length].id;
+    switch (step.kind) {
+        case "add":
+            return addLayerCommand(session, { newId });
+        case "delete":
+            return deleteLayerCommand(session, id);
+        case "duplicate":
+            return duplicateLayerCommand(session, id, { newId });
+        case "rename":
+            return renameLayerCommand(session, id, `name ${step.value}`);
+        case "reorder":
+            return reorderLayerCommand(session, id, step.to % doc.layers.length);
+        case "visible":
+            return setLayerVisibleCommand(session, id, step.flag);
+        case "locked":
+            return setLayerLockedCommand(session, id, step.flag);
+        case "opacity":
+            return setLayerOpacityCommand(session, id, step.value);
+        case "blend":
+            return setLayerBlendModeCommand(session, id, step.blend);
+        case "mergeDown":
+            return mergeDownCommand(session, id, { newId });
+        case "flatten":
+            return flattenCommand(session, { newId });
+    }
+}
+
+/**
+ * Whether a step asks for what the document has already, written out from the contract of
+ * the factories: then, and only then, `layerCommandOf` gives null.
+ */
+export function asksForNothing(doc: SpriteDoc, step: LayerStep): boolean {
+    const index = step.layer % doc.layers.length;
+    const named = doc.layers[index];
+    switch (step.kind) {
+        case "rename":
+            return named.name === `name ${step.value}`;
+        case "reorder":
+            return index === step.to % doc.layers.length;
+        case "visible":
+            return named.visible === step.flag;
+        case "locked":
+            return named.locked === step.flag;
+        case "opacity":
+            return named.opacity === step.value;
+        case "blend":
+            return named.kind === "pixel" && named.blend === step.blend;
+        case "flatten": {
+            const pixels = doc.layers.filter((entry) => entry.kind === "pixel");
+            const [only] = pixels;
+            return (
+                pixels.length === 1 &&
+                only.visible &&
+                only.opacity === 255 &&
+                only.blend === "normal" &&
+                doc.frames.every((frame) => (celAt(doc, only.id, frame.id)?.opacity ?? 255) === 255)
+            );
+        }
+        default:
+            // Add, delete, duplicate and merge down always change the document.
+            return false;
+    }
+}
+
+export function pixelLayerIds(doc: SpriteDoc): string[] {
+    return doc.layers.filter((layer) => layer.kind === "pixel").map((layer) => layer.id);
+}
+
+/** Every cel belongs to a pixel layer and a frame of the document. */
+export function expectNoStrayCel(doc: SpriteDoc): void {
+    const valid = new Set(
+        pixelLayerIds(doc).flatMap((layerId) =>
+            doc.frames.map((frame) => celKey(layerId, frame.id)),
+        ),
+    );
+    expect([...doc.cels.keys()].filter((key) => !valid.has(key))).toEqual([]);
 }

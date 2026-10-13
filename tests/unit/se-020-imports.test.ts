@@ -48,25 +48,27 @@ describe("core/layers imports", () => {
 });
 
 describe("core/layers exports", () => {
-    it("exports the command factories, the queries beside them and the error type", () => {
-        expect(Object.keys(layers).sort()).toEqual([
-            "LayerError",
-            "addLayerCommand",
-            "canDeleteLayer",
-            "deleteLayerCommand",
-            "duplicateLayerCommand",
-            "flattenCommand",
-            "isLayerName",
-            "mergeDownCommand",
-            "mergeDownTarget",
-            "nextLayerName",
-            "normalizeLayerName",
-            "renameLayerCommand",
-            "reorderLayerCommand",
-            "setLayerBlendModeCommand",
-            "setLayerLockedCommand",
-            "setLayerOpacityCommand",
-            "setLayerVisibleCommand",
-        ]);
+    // Every export the module documents is there. A later ticket may add to them.
+    it.each([
+        "LayerError",
+        "addLayerCommand",
+        "canDeleteLayer",
+        "deleteLayerCommand",
+        "duplicateLayerCommand",
+        "flattenCommand",
+        "isLayerName",
+        "mergeDownCommand",
+        "mergeDownTarget",
+        "nextLayerName",
+        "normalizeLayerName",
+        "renameLayerCommand",
+        "reorderLayerCommand",
+        "setLayerBlendModeCommand",
+        "setLayerLockedCommand",
+        "setLayerOpacityCommand",
+        "setLayerVisibleCommand",
+    ])("exports %s", (name) => {
+        expect(layers).toHaveProperty(name);
+        expect(typeof (layers as Record<string, unknown>)[name]).toBe("function");
     });
 });
