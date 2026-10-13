@@ -1,0 +1,154 @@
+{
+    "format": "ngne-sprite-atlas",
+    "version": 1,
+    "generator": "ngne-sprite-editor 0.0.0",
+    "image": "hero-walk.png",
+    "width": 22,
+    "height": 11,
+    "frames": {
+        "hero-walk-0": {
+            "x": 1,
+            "y": 1,
+            "w": 2,
+            "h": 2,
+            "sourceW": 5,
+            "sourceH": 3,
+            "offsetX": 0,
+            "offsetY": 0,
+            "pivot": [
+                0.5,
+                1
+            ]
+        },
+        "hero-walk-1": {
+            "x": 8,
+            "y": 1,
+            "w": 4,
+            "h": 2,
+            "sourceW": 5,
+            "sourceH": 3,
+            "offsetX": 2,
+            "offsetY": 1,
+            "pivot": [
+                0.5,
+                1
+            ]
+        },
+        "hero-walk-2": {
+            "x": 15,
+            "y": 1,
+            "w": 2,
+            "h": 4,
+            "sourceW": 5,
+            "sourceH": 3,
+            "offsetX": 1,
+            "offsetY": 0,
+            "pivot": [
+                0.5,
+                1
+            ]
+        },
+        "hero-walk-3": {
+            "x": 1,
+            "y": 6,
+            "w": 2,
+            "h": 2,
+            "sourceW": 5,
+            "sourceH": 3,
+            "offsetX": 0,
+            "offsetY": 0,
+            "pivot": [
+                0.5,
+                1
+            ]
+        },
+        "hero-walk-4": {
+            "x": 8,
+            "y": 6,
+            "w": 6,
+            "h": 4,
+            "sourceW": 5,
+            "sourceH": 3,
+            "offsetX": 0,
+            "offsetY": 0,
+            "pivot": [
+                0.5,
+                1
+            ]
+        },
+        "hero-walk-5": {
+            "x": 1,
+            "y": 1,
+            "w": 2,
+            "h": 2,
+            "sourceW": 5,
+            "sourceH": 3,
+            "offsetX": 0,
+            "offsetY": 0,
+            "pivot": [
+                0.5,
+                1
+            ]
+        }
+    },
+    "animations": {
+        "walk": {
+            "playback": "loop",
+            "durationMs": 200,
+            "entries": [
+                {
+                    "frame": "hero-walk-1",
+                    "ms": 80
+                },
+                {
+                    "frame": "hero-walk-2",
+                    "ms": 120
+                }
+            ]
+        },
+        "turn-around": {
+            "playback": "loop",
+            "durationMs": 65657,
+            "entries": [
+                {
+                    "frame": "hero-walk-2",
+                    "ms": 120
+                },
+                {
+                    "frame": "hero-walk-3",
+                    "ms": 1
+                },
+                {
+                    "frame": "hero-walk-4",
+                    "ms": 65535
+                },
+                {
+                    "frame": "hero-walk-3",
+                    "ms": 1
+                }
+            ]
+        },
+        "walk-2": {
+            "playback": "once",
+            "durationMs": 131072,
+            "entries": [
+                {
+                    "frame": "hero-walk-4",
+                    "ms": 65535
+                },
+                {
+                    "frame": "hero-walk-3",
+                    "ms": 1
+                },
+                {
+                    "frame": "hero-walk-4",
+                    "ms": 65535
+                },
+                {
+                    "frame": "hero-walk-3",
+                    "ms": 1
+                }
+            ]
+        }
+    }
+}

@@ -716,7 +716,10 @@ already read that shape.
 | `<name>.aseprite.json`       | Aseprite sprite-sheet JSON (array or hash) for the same PNG (§9.5) | yes, default off |
 
 `<name>` is the document name slugified to `[a-z0-9][a-z0-9-]*` (other characters become `-`,
-runs collapse, edges trimmed). An empty result becomes `sprite`.
+runs collapse, edges trimmed). An empty result becomes `sprite`. Only the letters A–Z are
+lowercased (no Unicode case mapping), the slug is cut to 64 characters, and a slug that is a
+device name of Windows (`con`, `nul`, `com1`, …) gets `-sprite` appended, since no file can
+have such a name there.
 
 ### 9.2 `ngne-sprite-atlas` version 1
 
@@ -756,8 +759,13 @@ runs collapse, edges trimmed). An empty result becomes `sprite`.
 - `pivot`: normalized within the **source** frame.
 - `animations[*].playback` is `"loop"` or `"once"`; `entries[*].ms` is a positive integer;
   `durationMs` is the sum of entry durations.
-- Frame and animation IDs match `[a-z0-9][a-z0-9_-]*` and are unique case-insensitively.
+- Frame and animation IDs match `[a-z0-9][a-z0-9_-]*`, are at most 80 characters long and are
+  unique case-insensitively.
 - Fully transparent pixels are written as `0,0,0,0`. Output is byte-deterministic.
+- Limits: 65 536 frames; 65 536 animation entries in all; `ms` at most 65 535.
+- [FORMAT.md](FORMAT.md) §2 specifies the file: every member with its range, what a reader
+  may rely on and what only this writer guarantees. A reader ignores members it does not know,
+  as NGNE's readers do. `validateAtlas` is that reader.
 
 Drawing a frame at anchor `A` with rotation `θ`, uniform scale `s` and flips `fx, fy ∈ {1, −1}`:
 
@@ -780,12 +788,16 @@ frame's corner.
 
 - Frame IDs: `<name>-<index>`, zero-based, in frame order.
 - Each tag becomes an animation named by the slugified tag name, expanded per §7.4.
-  `repeat = 0` → `"loop"`; `repeat = n` → `"once"` with the sequence written n times.
+  `repeat = 0` → `"loop"`; `repeat = n` → `"once"` with the sequence written n times: NGNE's
+  animation data is a list of entries that loops or plays once, without a repeat count. An
+  export whose animations would hold more than 65 536 entries together is refused with a typed
+  error that names the count, before any entry is written out.
 - Frames outside every tag are still exported as frames. A multi-frame document with no tags
   gets one `"loop"` animation named `<name>` covering all frames.
-- Duplicate tag slugs get `-2`, `-3` suffixes; the dialog shows the final IDs.
+- Duplicate tag slugs get `-2`, `-3` suffixes; the dialog shows the final IDs. A tag whose name
+  leaves an empty slug is named `tag`.
 - `exportSettings.frames = { tagId }` exports only that tag's frames and animation; frame IDs
-  keep their document indices.
+  keep their document indices, and the animation keeps the ID it has in the full export.
 
 ### 9.4 Packing
 
@@ -810,8 +822,12 @@ with a digit (`hero-walk` → `heroWalk`, `2d-hero` → `sprite2dHero`); `<Name>
 imported) and exports:
 
 - `<name>Image`: `imageAsset("<name>", new URL("./<name>.png", import.meta.url).href)`.
+- `<name>Atlas`: the content of `<name>.atlas.json`, and the types `<Name>FrameId` and
+  `<Name>AnimationId` of its IDs.
 - `draw<Name>(frame, id, x, y, options?)`: applies §9.2 and calls `frame.sprite`. Options:
   `rotation`, `scale`, `flipX`, `flipY`, `layer`, `depth`, `alpha`, `color`, `screen`.
+- `draw<Name>TopLeft(frame, id, x, y, options?)`: the top-left placement of §9.2; the options
+  work about that corner.
 - `<name>AnimationFrame(animation, ageMs)`: the frame ID at that age; start-inclusive,
   end-exclusive intervals; for `"once"` the last entry after the end.
 - `<name>AnimationDone(animation, ageMs)`: true for `"once"` animations at or after `durationMs`.
@@ -838,13 +854,19 @@ export default {
 
 `images[].src` must be a `file:` URL object (relative strings are rejected by `ngne-preview`);
 `frames` and `animations` are arrays; even rectangles keep the preview stage pixel-aligned.
+A frame's `width`, `height` and destination size are the even `w` and `h` of its rectangle.
+The adapter has no offset, so `ngne-preview` centres a trimmed frame on its rectangle.
 
 `<name>.aseprite.json` follows Aseprite's sprite-sheet data: per frame `filename` (the frame
-ID), `frame` (atlas `x, y` and the **unpadded** content size), `rotated: false`, `trimmed`,
-`spriteSourceSize` (`offsetX, offsetY` and the content size), `sourceSize`
-(`sourceW, sourceH`) and `duration`; `meta` holds `image`, `size`, `format`, `scale` and
-`frameTags` (name, from, to, direction, repeat). The even-size padding of §9.2 is not visible
-in this file.
+ID; in the hash form the member name), `frame` (atlas `x, y` and the content size of §9.2),
+`rotated: false`, `trimmed`, `spriteSourceSize` (`offsetX, offsetY` and the content size),
+`sourceSize` (`sourceW, sourceH`) and `duration`; `meta` holds `app`, `version`, `image`,
+`format`, `size`, `scale` and `frameTags` (name, from, to, direction, repeat, color). A frame
+tag is named by its animation ID; `from` and `to` are positions in the file's frame list; as in
+Aseprite, `repeat` is a string and is left out for a tag that plays without end. The
+even-size padding of §9.2 is not visible in this file where it lies past the source frame: a
+33×17 frame is 33×17. A trimmed rectangle of odd content that ends inside the frame keeps its
+even size, because its last column or row is a transparent one of the frame.
 
 ### 9.6 Delivery and other exports
 

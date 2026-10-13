@@ -1,0 +1,170 @@
+{
+    "frames": [
+        {
+            "filename": "hero-walk-0",
+            "frame": {
+                "x": 1,
+                "y": 1,
+                "w": 2,
+                "h": 2
+            },
+            "rotated": false,
+            "trimmed": true,
+            "spriteSourceSize": {
+                "x": 0,
+                "y": 0,
+                "w": 2,
+                "h": 2
+            },
+            "sourceSize": {
+                "w": 5,
+                "h": 3
+            },
+            "duration": 100
+        },
+        {
+            "filename": "hero-walk-1",
+            "frame": {
+                "x": 8,
+                "y": 1,
+                "w": 3,
+                "h": 2
+            },
+            "rotated": false,
+            "trimmed": true,
+            "spriteSourceSize": {
+                "x": 2,
+                "y": 1,
+                "w": 3,
+                "h": 2
+            },
+            "sourceSize": {
+                "w": 5,
+                "h": 3
+            },
+            "duration": 80
+        },
+        {
+            "filename": "hero-walk-2",
+            "frame": {
+                "x": 15,
+                "y": 1,
+                "w": 2,
+                "h": 3
+            },
+            "rotated": false,
+            "trimmed": true,
+            "spriteSourceSize": {
+                "x": 1,
+                "y": 0,
+                "w": 2,
+                "h": 3
+            },
+            "sourceSize": {
+                "w": 5,
+                "h": 3
+            },
+            "duration": 120
+        },
+        {
+            "filename": "hero-walk-3",
+            "frame": {
+                "x": 1,
+                "y": 6,
+                "w": 2,
+                "h": 2
+            },
+            "rotated": false,
+            "trimmed": true,
+            "spriteSourceSize": {
+                "x": 0,
+                "y": 0,
+                "w": 2,
+                "h": 2
+            },
+            "sourceSize": {
+                "w": 5,
+                "h": 3
+            },
+            "duration": 1
+        },
+        {
+            "filename": "hero-walk-4",
+            "frame": {
+                "x": 8,
+                "y": 6,
+                "w": 5,
+                "h": 3
+            },
+            "rotated": false,
+            "trimmed": false,
+            "spriteSourceSize": {
+                "x": 0,
+                "y": 0,
+                "w": 5,
+                "h": 3
+            },
+            "sourceSize": {
+                "w": 5,
+                "h": 3
+            },
+            "duration": 65535
+        },
+        {
+            "filename": "hero-walk-5",
+            "frame": {
+                "x": 1,
+                "y": 1,
+                "w": 2,
+                "h": 2
+            },
+            "rotated": false,
+            "trimmed": true,
+            "spriteSourceSize": {
+                "x": 0,
+                "y": 0,
+                "w": 2,
+                "h": 2
+            },
+            "sourceSize": {
+                "w": 5,
+                "h": 3
+            },
+            "duration": 100
+        }
+    ],
+    "meta": {
+        "app": "ngne-sprite-editor",
+        "version": "0.0.0",
+        "image": "hero-walk.png",
+        "format": "RGBA8888",
+        "size": {
+            "w": 22,
+            "h": 11
+        },
+        "scale": "1",
+        "frameTags": [
+            {
+                "name": "walk",
+                "from": 1,
+                "to": 2,
+                "direction": "forward",
+                "color": "#3cb371ff"
+            },
+            {
+                "name": "turn-around",
+                "from": 2,
+                "to": 4,
+                "direction": "pingpong",
+                "color": "#ff000080"
+            },
+            {
+                "name": "walk-2",
+                "from": 3,
+                "to": 4,
+                "direction": "reverse",
+                "repeat": "2"
+            }
+        ]
+    }
+}

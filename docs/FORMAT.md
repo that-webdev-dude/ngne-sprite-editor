@@ -7,6 +7,7 @@ content of a file, this document governs.
 | Format              | File                 | Version | Section |
 | ------------------- | -------------------- | ------- | ------- |
 | NGNE sprite project | `<name>.ngsprite`    | 1       | [1](#1-sprite-project-ngsprite-version-1) |
+| NGNE sprite atlas   | `<name>.atlas.json`  | 1       | [2](#2-sprite-atlas-ngne-sprite-atlas-version-1) |
 
 Stability (SPEC §10): a format may still change until the 1.0.0 release of the editor. From that
 release on, any change to a format needs a new version number and a migration from the version
@@ -500,3 +501,320 @@ cel and one tag. Its archive holds `manifest.json` (§1.3), this `doc.json`,
 
 The background has one image at both frames (linked cels); the body has a cel at the first
 frame only.
+
+## 2. Sprite atlas (`ngne-sprite-atlas`), version 1
+
+One JSON file describes one atlas image: where each frame of a sprite lies in the image, how a
+frame is placed when it is drawn, and which frames its animations show for how long. The editor
+exports it as `<name>.atlas.json` beside `<name>.png` (SPEC §9); a game reads it, or uses the
+module exported with it, which carries the same data. It holds no pixels, and of the document
+nothing else: no layers, no palette, no settings.
+
+- File: `<name>.atlas.json`. The image is the PNG file it names, in the same folder.
+- Implementation: `src/core/export` (`bundle` and `atlasFor` write, `validateAtlas` reads).
+- A file of this version, kept as a test fixture with its image:
+  `tests/unit/se-051-fixtures/hero-walk.atlas.json.golden` and `hero-walk.png`.
+
+Two kinds of statement are kept apart in this section. A **rule** holds for every file of this
+format, whoever wrote it: a reader may rely on it once it has checked the file (§2.8), and
+`validateAtlas` checks every rule that can be checked without the pixels. What **the editor
+writes** beyond the rules (§2.7) is a property of this writer: another writer need not do the
+same, and a reader must not count on it.
+
+### 2.1 The JSON text
+
+These are rules of this format, not of the others in this document.
+
+- Every member a table lists is **required**. Nothing has a default.
+- An object may hold **other members**. A reader ignores a member it does not know and does
+  not refuse the file for it, as NGNE's own readers do with the data they are given. A tool can
+  keep notes of its own in an atlas that way. It does not make room for a later version: a
+  member that changes what a reader must do is a change of the format (§2.9).
+- Member names are **unique** within an object, and a writer never repeats one. A reader need
+  not detect a repeated name; the editor's reader takes what its JSON parser gives it.
+- The order of members and white space carry no meaning. The text has no byte order mark.
+- An **ID** names a frame or an animation. It is a string of 1 to 80 characters from `a`–`z`,
+  `0`–`9`, `_` and `-`, of which the first is a letter or a digit
+  (`[a-z0-9][a-z0-9_-]*`). An ID has no upper-case letter, so no two IDs differ only in the
+  case of their letters: every ID can name a file or a member on a system that ignores case.
+  Frames and animations are two lists; a frame and an animation may have the same ID.
+
+### 2.2 The atlas
+
+```json
+{
+    "format": "ngne-sprite-atlas",
+    "version": 1,
+    "generator": "ngne-sprite-editor 1.0.0",
+    "image": "hero.png",
+    "width": 67,
+    "height": 34,
+    "frames": {
+        "hero-0": {
+            "x": 1, "y": 1, "w": 32, "h": 32,
+            "sourceW": 31, "sourceH": 32, "offsetX": 0, "offsetY": 0,
+            "pivot": [0.5, 1]
+        },
+        "hero-1": {
+            "x": 34, "y": 1, "w": 20, "h": 10,
+            "sourceW": 31, "sourceH": 32, "offsetX": 5, "offsetY": 22,
+            "pivot": [0.5, 1]
+        },
+        "hero-2": {
+            "x": 1, "y": 1, "w": 32, "h": 32,
+            "sourceW": 31, "sourceH": 32, "offsetX": 0, "offsetY": 0,
+            "pivot": [0.5, 1]
+        }
+    },
+    "animations": {
+        "walk": {
+            "playback": "loop",
+            "durationMs": 250,
+            "entries": [
+                { "frame": "hero-0", "ms": 100 },
+                { "frame": "hero-1", "ms": 150 }
+            ]
+        },
+        "wave": {
+            "playback": "once",
+            "durationMs": 500,
+            "entries": [
+                { "frame": "hero-2", "ms": 100 },
+                { "frame": "hero-1", "ms": 150 },
+                { "frame": "hero-2", "ms": 100 },
+                { "frame": "hero-1", "ms": 150 }
+            ]
+        }
+    }
+}
+```
+
+The atlas of a sprite of 31 × 32 pixels with three frames, exported with trim. Frame 0 fills
+the canvas; frame 1 is 20 × 10 pixels near its bottom; frame 2 has the pixels of frame 0 and
+shares its rectangle. The tag `walk` plays frames 0 and 1 without end; the tag `wave` plays
+frames 1 to 2 in reverse, twice.
+
+| Member       | Type    | Constraint                 | Meaning |
+| ------------ | ------- | -------------------------- | ------- |
+| `format`     | string  | `"ngne-sprite-atlas"`      | Names the format |
+| `version`    | integer | At least 1                 | The version of the format the file is written in. This section specifies 1 |
+| `generator`  | string  |                            | Name and version of the program that wrote the file. Informative only |
+| `image`      | string  | A file name: at least one character, no `/` and no `\` | The atlas image, a PNG file in the folder of the JSON file (§2.5) |
+| `width`      | integer | 1..8192                    | Width of the image in pixels |
+| `height`     | integer | 1..8192                    | Height of the image in pixels |
+| `frames`     | object  | At least one member; at most 65 536 | The frames: each member is a Frame (§2.3) under its ID |
+| `animations` | object  | May be empty               | The animations: each member is an Animation (§2.4) under its ID |
+
+`format` and `version` keep this meaning in every version of the format, and a reader checks
+them before anything else in the file:
+
+1. `format` is not `"ngne-sprite-atlas"`: the file is not a sprite atlas.
+2. `version` is above the newest version the reader knows: it refuses the file and says so,
+   naming both versions. It does not look at the rest of the file.
+
+`width` and `height` are those of the image. A reader that has the image compares them, and
+refuses an atlas that states another size: every texture coordinate is a fraction of them.
+
+### 2.3 Frame
+
+One frame of the sprite: a rectangle of the image, and where that rectangle lies in the frame
+as it was drawn, the **source frame**. All coordinates are in pixels, from the top-left corner.
+
+| Member       | Type    | Constraint                  | Meaning |
+| ------------ | ------- | --------------------------- | ------- |
+| `x`, `y`     | integer | 0..8192                     | Top-left corner of the rectangle in the image |
+| `w`, `h`     | integer | 2..8192, **even**           | Size of the rectangle. It is never rotated |
+| `sourceW`    | integer | 1..8192                     | Width of the source frame |
+| `sourceH`    | integer | 1..8192                     | Height of the source frame |
+| `offsetX`    | integer | 0..`sourceW` − 1            | Where the left edge of the rectangle lies in the source frame |
+| `offsetY`    | integer | 0..`sourceH` − 1            | Where its top edge lies in the source frame |
+| `pivot`      | array   | Two numbers, each 0..1      | The point of the source frame that is drawn on the anchor, as fractions of `sourceW` and `sourceH`: `[0, 0]` is the top-left corner, `[1, 1]` the bottom-right |
+
+- The rectangle lies inside the image: `x + w ≤ width` and `y + h ≤ height`.
+- `w` and `h` are even, so that a quad of that size centred on a whole pixel has its edges on
+  pixel boundaries (NGNE rounds the centre of a sprite, SPEC §6.2). A source frame of odd size
+  therefore has a rectangle one pixel larger: the rectangle may reach **one pixel past the
+  source frame** on the right and at the bottom, and no further:
+  `offsetX + w ≤ sourceW + 1` and `offsetY + h ≤ sourceH + 1`.
+- The **content** of a frame is the part of its rectangle inside the source frame:
+  `min(w, sourceW − offsetX)` by `min(h, sourceH − offsetY)` pixels from `x, y`. A column or
+  row of the rectangle past the source frame is transparent in the image, and so is all of
+  the source frame that the rectangle leaves out (§2.5): drawing the rectangle where the
+  offset puts it shows the whole frame.
+- Several frames may have the same rectangle (frames with the same pixels). Rectangles of
+  different size in one atlas are usual (trimmed frames), as are source frames larger than
+  their rectangles.
+
+In the example, `hero-0` is a whole source frame of 31 × 32 in a rectangle of 32 × 32
+(`0 + 32 = 31 + 1`): its content is 31 × 32 and the last column of the rectangle is
+transparent. `hero-1` is 20 × 10 pixels that start 5 pixels in and 22 pixels down.
+
+### 2.4 Animation
+
+A list of frames to show one after the other, each for its own time.
+
+| Member       | Type            | Constraint               | Meaning |
+| ------------ | --------------- | ------------------------ | ------- |
+| `playback`   | string          | `"loop"` or `"once"`     | `"loop"` starts over after the last entry; `"once"` stays on it |
+| `durationMs` | integer         | The sum of the `ms` of the entries | Length of one pass in milliseconds |
+| `entries`    | array of Entry  | At least one             | The steps, in the order they are shown |
+
+**Entry**
+
+| Member  | Type    | Constraint                | Meaning |
+| ------- | ------- | ------------------------- | ------- |
+| `frame` | ID      | The ID of a member of `frames` | The frame shown |
+| `ms`    | integer | 1..65535                  | How long it is shown, in milliseconds |
+
+- At an age of `t` milliseconds after its start, an animation shows the entry whose time span
+  holds `t`. A span includes its start and not its end: with entries of 100 and 150 ms, the
+  first shows for `0 ≤ t < 100` and the second for `100 ≤ t < 250`.
+- A `"loop"` animation shows at `t` what it shows at `t` modulo `durationMs`. A `"once"`
+  animation shows its last entry from `durationMs` on, and has then ended.
+- An animation is a plain list: there is **no repeat count** and no direction. NGNE's
+  animation data has neither, so a writer writes a sequence that plays several times, or
+  back and forth, out in full (the `wave` of the example is two frames, twice). The limit on
+  entries (§2.6) bounds what that can come to.
+- A frame may be shown by several entries and by several animations, or by none.
+
+### 2.5 The image
+
+The file `image` names is a PNG of `width` × `height` pixels with 8 bits each of red, green,
+blue and alpha, alpha not premultiplied, sRGB. A reader takes the samples as they are, without
+colour conversion and without premultiplying.
+
+- A pixel of a rectangle that lies past the source frame (§2.3) has alpha 0.
+- A rectangle holds every pixel of its source frame that has an alpha above 0: what it leaves
+  out of the source frame is transparent.
+- Pixels outside every rectangle have no meaning. A writer may leave space between
+  rectangles and may repeat the edge pixels of a rectangle around it, so that a renderer that
+  filters or rounds does not show a neighbour; the file does not say whether it did.
+
+### 2.6 Limits
+
+A writer does not exceed them, and a reader refuses a file that does. The implementation
+exports each as a constant (`src/core/export`).
+
+| What                                         | Limit |
+| -------------------------------------------- | ----- |
+| Width and height of the image                | 8192 px: the largest texture NGNE takes |
+| `sourceW`, `sourceH`                         | 8192 px |
+| Frames                                       | 65 536 |
+| Entries of all animations together           | 65 536 |
+| `ms` of an entry                             | 65 535 |
+| Length of an ID                              | 80 characters |
+
+The limit on entries is also the limit on animations, since each has an entry. With it,
+`durationMs` is at most 65 536 × 65 535 = 4 294 901 760, which every program holds as an exact
+number. The editor refuses to export a document whose animations, with every repeat written
+out, hold more entries (SPEC §9.3). A tag that repeats 255 times fits with up to 257 frames,
+or with up to 129 frames played back and forth (256 entries a pass).
+
+### 2.7 What the editor writes
+
+Beyond the rules, and not for a reader to rely on:
+
+- The members in the order of the tables and no other member, laid out as JavaScript's
+  `JSON.stringify` lays a value out with an indent of four spaces, in ASCII, with a line feed
+  at the end. The same document and export settings always give the same bytes, in this file
+  and in the image. That is a property of one version of the editor.
+- `image` is `<name>.png` and the IDs of the frames are `<name>-<index>`, where `<name>` is the
+  export name of the document (SPEC §9.1) and the index counts its frames from 0. The frames
+  stand in that order. Exporting one tag leaves the indices as they are in the document.
+- One animation for each tag, in the order of the tags (an ID that is a whole number stands
+  before the others, as in every JavaScript object), under the tag's name as a slug with
+  `-2`, `-3`, … where two tags have one slug. A tag that repeats `n` times is `"once"` with `n`
+  passes; a tag that plays without end is `"loop"` with one pass. A document of several frames
+  without a tag has one `"loop"` animation named `<name>` over all its frames. An `ms` is the
+  duration of its frame.
+- IDs of `a`–`z`, `0`–`9` and `-` only, without `_`; the ID of a frame at most 70 characters
+  long.
+- The same `sourceW`, `sourceH` (the canvas) and `pivot` (the document's) in every frame.
+- Frames with the same pixels on one rectangle when merging is on; otherwise no two
+  rectangles overlap. Rectangles on a grid with the padding and extrusion of the export
+  settings (SPEC §9.4), which the file does not record.
+- In the image: every pixel with alpha 0 as `0, 0, 0, 0`, and no chunk besides IHDR, IDAT and
+  IEND.
+
+### 2.8 Reading
+
+A file is untrusted. A reader checks everything before it uses it and returns a whole atlas or
+none. `validateAtlas(json, pngSize)` takes the parsed JSON and the size of the image, and
+makes these checks in this order:
+
+1. The value is an object, and `format` and `version` pass the two steps of §2.2.
+2. `generator`, `image`, `width` and `height` are present, of their type and in their range;
+   `width` and `height` are the size of the image.
+3. `frames`: an object with at least one member and no more than the limit; every member name
+   is an ID; every frame has its members, each of its type and in its range; every rectangle
+   lies inside the image and reaches at most one pixel past its source frame.
+4. `animations`: an object; every member name is an ID; every animation has its members;
+   `entries` is a list of at least one entry, and all lists together stay within the limit,
+   which is checked from the length of a list before its entries are read; every entry names
+   a frame of the atlas and has an `ms` in its range; `durationMs` is the sum.
+
+It reads a member only as a member of its own object: a name such as `__proto__` or
+`constructor` is a name like any other (the first is not an ID; the second is one). It returns
+a new object that holds the members of the tables and nothing else.
+
+A problem is reported as an `AtlasError` with the path of the member at fault and one of these
+codes (`src/core/export/errors.ts`); the reader throws nothing else.
+
+| Code              | The problem |
+| ----------------- | ----------- |
+| `format`          | The value is not an object, `format` is not `"ngne-sprite-atlas"`, or the value cannot be read |
+| `newer-version`   | `version` is above 1 |
+| `field`           | A member is missing, of the wrong type or outside its range: a coordinate that is not an integer, an odd `w` or `h`, an `ms` that is not a positive integer |
+| `id`              | A name in `frames` or `animations` is not an ID, or two names differ only by case |
+| `image-size`      | `width` and `height` are not the size of the image |
+| `bounds`          | A rectangle reaches outside the image, or more than one pixel past its source frame |
+| `frame-reference` | An entry names a frame the atlas does not have |
+| `duration`        | `durationMs` is not the sum of the entries |
+| `limit`           | More frames or more entries than §2.6 allows |
+
+After these checks a reader may rely on every rule of §2.1 to §2.4 and on the limits of §2.6.
+The rules of §2.5 are about pixels and are not checked here: that the image is a PNG of that
+kind, and which of its pixels are transparent. A reader must not rely on anything of §2.7:
+not on the order of the members, not on a frame having a rectangle to itself, not on an ID
+having more of a shape than that of an ID.
+
+The editor's writer puts the atlas it has made through the same checks before it hands it
+out, so a file it writes can be read.
+
+### 2.9 Versions
+
+A change to this format after it is frozen gets the next version number: a new member that a
+reader has to understand, a new value of `playback`, a wider range, a changed meaning. A
+reader of version N reads every version from 1 to N. Version 1 is the first.
+
+A file is always written in the newest version.
+
+### 2.10 Drawing a frame
+
+The members of a frame say where its pixels belong: the pivot of the source frame lies on the
+point the frame is drawn at, the **anchor** `A`. For a rotation `θ` (clockwise, about the
+anchor), a uniform scale `s` and mirroring `fx, fy` (1, or −1 to mirror), the rectangle is
+drawn as a quad with
+
+```text
+d      = (offsetX + w/2 − pivot[0]·sourceW,  offsetY + h/2 − pivot[1]·sourceH)
+centre = A + R(θ) · (fx·s·d.x, fy·s·d.y)        R(θ)·(x, y) = (x·cos θ − y·sin θ,
+size   = (fx·s·w, fy·s·h)                                      x·sin θ + y·cos θ)
+uv     = (x/width, y/height, w/width, h/height)
+```
+
+`d` leads from the pivot to the centre of the rectangle; a negative size mirrors the quad. To
+place a frame by the top-left corner of its source frame instead, take `[0, 0]` for the pivot.
+
+This much follows from the format. How a program rounds is its own matter. The module the
+editor exports rounds `s·d` to whole numbers, halves upwards, when `θ = 0` and `s` is a whole
+number, and before it mirrors: a pivot that falls between two pixels would otherwise put
+every pixel of the frame across two pixels of the screen. All frames of one sprite then move
+by the same amount, at most half a pixel. A rotated frame is not rounded.
+
+In the example, `hero-1` drawn at `A = (100, 80)` has
+`d = (5 + 10 − 15.5, 22 + 5 − 32) = (−0.5, −5)`, rounded `(0, −5)`: a quad of 20 × 10
+centred on `(100, 75)`, which covers 90..110 by 70..80, with
+`uv = (34/67, 1/34, 20/67, 10/34)`. `hero-0` has `d = (0.5, −16)`, rounded `(1, −16)`, and
+covers 85..117 by 48..80. Both put the source frame at 85, 48: its bottom edge is on the
+anchor.
