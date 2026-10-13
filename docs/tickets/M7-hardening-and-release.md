@@ -61,6 +61,10 @@ Scope
   type sizes, icon stroke, empty and error states; fix deviations or record deliberate ones in
   DESIGN.md.
 - Remaining raw colours, ad-hoc spacing or unlabelled icon buttons removed.
+- From the SE-064 review: one idiom for on/off settings (Preferences uses On/Off segments for
+  the two `enabled` flags and Toggle buttons for Tint and Within tag), recorded in DESIGN §4;
+  and a write to storage that fails (full or blocked) is reported once by a toast instead of
+  being lost silently (preferences, theme, layout, recent commands).
 
 Acceptance
 - Zero axe violations of level A/AA outside the canvas elements.

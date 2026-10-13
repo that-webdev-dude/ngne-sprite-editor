@@ -179,6 +179,9 @@ Scope
   reference layer aligned to the cropped region.
 - Palette handling choice: replace document palette, append new colours, leave unchanged.
 - Settings remembered per session; defaults from the preference store.
+- From the SE-064 review: the stored preference `import.dither` says `"ordered"` where
+  `core/import` says `"bayer"`; the dialog maps between them. The preference store has no fit
+  field: the default fit is "contain" (SPEC §8).
 
 Acceptance
 - E2E: import a 256×64 sheet as 4 frames of 32×32 with 8 colours → document has 4 frames, each

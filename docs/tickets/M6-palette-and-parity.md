@@ -122,7 +122,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Ready                                                    |
+| Status       | Done                                                     |
 | Depends on   | SE-007                                                   |
 | Blocks       | SE-071                                                   |
 | Blocked until | —                                                       |

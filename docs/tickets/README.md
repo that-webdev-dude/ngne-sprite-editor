@@ -93,7 +93,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-061 | Blend modes and cel opacity                       | M    | 010, 022                           | —             | Ready  |
 | SE-062 | Symmetry and tiled mode                           | M    | 011, 015, 017                      | —             | Ready  |
 | SE-063 | GIF export                                        | M    | 043, 052                           | —             | Ready  |
-| SE-064 | Preferences dialog, command palette and shortcut sheet | M | 007                              | —             | Ready  |
+| SE-064 | Preferences dialog, command palette and shortcut sheet | M | 007                              | —             | Done   |
 | SE-065 | Tools II: curve, contour, polygon, spray          | M    | 017                                | —             | Ready  |
 | SE-066 | Palette files, replace colour and sort            | M    | 030, 060                           | —             | Ready  |
 | **M7** | **[Hardening and release](M7-hardening-and-release.md)** | |                                    |               |        |

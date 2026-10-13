@@ -124,6 +124,10 @@ Scope
 - Other exports: current frame PNG (scale 1–16×, nearest), sprite sheet PNG alone, PNG
   sequence as zip.
 - Result toast: number of files and destination name; error toast on failure.
+- From the SE-051 review: `bundle()` refuses with `ExportError` (`too-many-entries`,
+  `too-many-frames`) and `PackError` (`atlas-size`); each is shown as a message in the dialog
+  and as the error toast of "Export again". Different documents can share an export name
+  ("Hero Walk" and "hero_walk"), so the overwrite confirmation names the files that exist.
 
 Acceptance
 - E2E (File System Access stubbed with an in-memory directory): export writes exactly the
@@ -134,6 +138,7 @@ Acceptance
 - Without File System Access, a zip containing the same files downloads.
 - Revoked folder permission triggers one re-prompt, then falls back to the dialog.
 - Frame PNG at 4× is an exact nearest-neighbour upscale of the composite.
+- An export whose animations pass the entry limit shows the error's message and writes no file.
 - Sprite sheet PNG alone equals the bundle's `<name>.png`; the PNG sequence zip holds one file
   per frame named `<name>-<index>.png`, each equal to that frame's composite.
 - Exporting one tag writes only that tag's frames and animation.
@@ -154,6 +159,10 @@ Acceptance
 Scope
 - Fixture documents built in code: (a) 32×32, 4 frames, no trim; (b) 33×17 with trim and
   extrude 1; (c) merged duplicate frames; (d) pivot `[0.5, 1]`.
+- From the SE-051 review: a rotated frame with a half-pixel pivot (odd size, centre pivot) is
+  on whole pixels only under NGNE's default `pixelSnap`, and quarter turns of a trimmed sheet
+  were 1 px apart near the view origin until SE-051's follow-up; the rotation checks draw at
+  small anchors as well as large ones.
 - `ngne-preview` check: write each bundle to a temp directory; spawn `process.execPath` with
   the absolute path of `node_modules/@ngne/core/dist/preview/cli.js` and the absolute config
   path; parse `NGNE preview: <url>` from stdout; open the URL in the E2E browser and keep that
@@ -201,6 +210,8 @@ Scope
   the last edit, fed with frame composites (changed frames only after the first pack);
   oversized documents fall back per SPEC §6.5. Atlas metadata used for drawing is swapped only
   when the matching upload resolves.
+- From the SE-051 review: an `ExportError` or `PackError` of `atlasFor()` (`too-many-entries`,
+  `atlas-size`) is shown in the panel in place of the preview.
 - Controls per DESIGN §5.5: animation select (all export animations + "All frames"),
   play/pause, speed, background (drawn as a rect).
 - Stopped while the panel is collapsed, the tab is hidden or no document is open; disposed on
