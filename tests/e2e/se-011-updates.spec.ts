@@ -231,6 +231,9 @@ test("while a slot is re-keyed to another frame, the viewport shows the old fram
         return window.__ngneTest!.viewport!.textureCalls;
     }, rect);
     await showFrame(page, document.id, frameIds[8] ?? "");
+    // The switch is drawn first. The viewport draws once per animation frame whatever asked
+    // for it, so a theme change made before that frame would share it.
+    await expect.poll(async () => (await captures(page)).length).toBeGreaterThan(0);
 
     // Draws made meanwhile show frame 8 in full: the slot that is being re-keyed still holds
     // frame 1's texture and is not drawn. The viewport is made to draw by changes of theme
