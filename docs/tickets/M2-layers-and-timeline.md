@@ -223,10 +223,15 @@ Scope
   unlink, clear, merge down, flatten, reverse frames, properties; new tag from selection, edit
   tag, delete tag).
 - Virtualized rendering of rows and columns.
+- From the SE-021 review: the cel commands of `core/cels` do not check `locked`. The timeline
+  leaves the cels of locked layers out of what it clears, moves, copies, links or unlinks, and
+  refuses a drop onto a locked layer.
 
 Acceptance
 - E2E: reorder a layer and a frame by drag; move and Ctrl-copy a cel by drag; each is one undo
   step and the model matches the expected order.
 - Every context menu item corresponds to a registry entry (test enumerates).
+- A cel dragged onto a locked layer, and Clear on a selection of locked layers only, change
+  nothing and add no undo step.
 - With 200 frames × 30 layers, at most the visible cells plus one screen of overscan are in the
   DOM, and a scripted scroll averages ≥ 50 fps on reference hardware (recorded).

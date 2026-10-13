@@ -232,6 +232,69 @@ Not decided here, left as they are:
 - The number field shows a size message when the value is applied (Enter, blur, arrows), not
   on each keystroke; no invalid size can be created.
 
+## Run 1 decisions (W2–W4)
+
+The owner asked for the rest of run 1 (SE-010, SE-043, SE-020, SE-021, SE-040, SE-050, SE-051,
+SE-064) to be carried out without questions, 2026-10-12 to 2026-10-13: where AGENTS.md says
+"stop and report", the agent or the orchestrator decided and recorded it here. Each row is a
+finding of an implementing agent, of a wave review, or of the orchestrator. Every ticket named
+is Done; one read-only review ran per wave.
+
+| #   | Source          | Finding | Decision | Applied in |
+| --- | --------------- | ------- | -------- | ---------- |
+| D1  | Start of run    | CI was red on the pushed `main` (aa924c1): 8 E2E tests failed, in CI only. The traces show two causes. Two worker Chrome instances shared one X display under xvfb and took the pointer grab and the hover from each other (a drag stopped half way, a submenu closed, a select closed). Three tests sent the next key or click before a timer that Radix defers its work to had run | CI runs the E2E suite on one worker. The xvfb screen is 4096×2304, so the X pointer (screen centre) stays outside the window. The tests await the state between two keys and let queued timers run before an outside click. The browser scale factor is fixed at 1. No assertion was removed. Not confirmed in CI: that needs the owner's push | `playwright.config.ts`, `.github/workflows/ci.yml`, `tests/e2e/se-006-*`, `se-007-menus`, `se-008-new-sprite` |
+| D2  | During the run  | Four more tests of the same kind failed once each under local load: a key sent before an opened menu held the focus, two Enter presses in a row, and a radio group that checks a radio only while the arrow key is down | Each waits for the focused item, or holds the key until the radio is checked | `tests/e2e/se-006-gallery.spec.ts`, `se-006-support.ts`, `se-007-menus.spec.ts`, `se-008-new-sprite.spec.ts`, `se-008-sprite-properties.spec.ts` |
+| D3  | Orchestrator    | The Node timing items of SE-010 and SE-043 had no common form | A benchmark is `tests/perf/se-0xx-*.perf.ts`, run with `vitest.perf.config.ts` outside `npm run check`. `tests/perf/record.ts` writes `docs/perf/<id>.json` only with `PERF_RECORD=1`. `docs/perf/README.md` lists the records | `AGENTS.md`, `tests/perf`, `docs/perf` |
+| D4  | Orchestrator    | SE-064 was started before W3 was Done | Accepted: it depends only on SE-007, and it was merged after SE-051, in ticket order | — |
+| D5  | SE-010          | SPEC silent on the colour of a result pixel with alpha 0 | Always `0,0,0,0`. Every result with alpha above 0 equals Aseprite's | SPEC §5.3 |
+| D6  | W2 review       | A stroke's composite cannot be handed to the cache, so each stroke end composites the whole frame again | `CompositeCache.adopt(frameId, buffer)`, added by the ticket that ends strokes | SE-014 scope and acceptance |
+| D7  | W2 review       | The 128 MB cache budget is per cache, so tabs multiply it | Per document, and only the active document keeps composites | SPEC §5.3; SE-047 scope and acceptance |
+| D8  | SE-043          | The smart default for alpha contradicted the acceptance: an opaque photo has binary alpha | Keep needs binary alpha and no resampling. The acceptance says "a photo larger than the target size" | SPEC §8; SE-043 acceptance |
+| D9  | SE-043          | SPEC silent on the default fit, on a crop with several files and on the palette returned for "keep" and "map" | Contain. The region applies to every file. "Keep" returns the frames' own colours (256 at most), "map" the palette mapped to | SPEC §8 |
+| D10 | W2 review       | The colour key was applied after the averaging resample and left an opaque halo of key colour | The key is applied before step 5, the threshold after it | SPEC §8; `core/import/runImport.ts` |
+| D11 | W2 review       | The fit geometry was private, and a reference layer has one scale, so it cannot follow "stretch" | `fitRect` is exported. The reference overlays the fitted image, and is placed as "contain" places it for a stretched one | SPEC §8; SE-044 acceptance; `core/import/fit.ts` |
+| D12 | W2 review       | The preset palette test compared the count and the first and last colour only; the number of k-means iterations was not pinned; the region error did not name the file | Every published colour is compared; a golden palette fails at 7 and at 9 iterations; the file is named | `tests/unit/se-043-*`, `core/import/cells.ts` |
+| D13 | SE-043          | Two Game Boy palettes are in common use | The BGB set, checked against Lospec. No primary source was found for the other | `core/palettes/presets.ts` |
+| D14 | W2 review       | `runImport` takes more than 300 ms for a 1024×1024 target with 256 colours (the reviewer's timing, not a reference measurement) | Not changed. SE-044's own measurement decides; the steps are exported so the dialog can keep earlier results | — |
+| D15 | Orchestrator    | The SE-043 timing was recorded before D10 changed the code | Measured again, alone: 62.4 ms against 500 ms (first record 56.9 ms) | `docs/perf` |
+| D16 | SE-021, W3 review | A layer stack command kept the cels, images and layer objects it removed from the moment it was made. After a redo that had made an image again, its undo put back the old buffer and lost pixels (about half of all random 40-step sequences) | Every stack command reads and records at each `do`, and refuses a document whose structure differs from the one it was made for | `core/layers/stackCommand.ts`; `tests/unit/se-020-redo.test.ts`, `se-020-interleaved.test.ts` |
+| D17 | SE-020, W3 review | Hidden layers in merge down and flatten; "flatten yields one layer" with reference layers present | Merge down takes both layers as shown and the target keeps its own flag, as Aseprite does. Flatten drops hidden layers, because the composite must stay identical, and leaves reference layers in the stack | SE-020 acceptance; `core/layers/merge.ts` |
+| D18 | W3 review       | A layer command that changes nothing became an undo step and set the dirty flag | The factories return `null` for a command that would change nothing, as SE-021's do | `core/layers` |
+| D19 | SE-020          | Ticket silent on reference layers, and on the active layer after a delete | A reference layer cannot be duplicated, merged or given a blend mode and never counts as the last pixel layer. After a delete, a layer of the same kind becomes active first | `core/layers/index.ts` |
+| D20 | SE-021          | The tag rule was defined for delete only | One rule for delete, reorder, reverse and add (`followFrames`); a frame added after a frame of a tag joins it, as in Aseprite. Accepted corner: reversing or moving frames across a tag's edge shrinks the tag to its unmoved frames | SE-021 scope; `core/tags/follow.ts` |
+| D21 | SE-021, W3 review | `Tag.repeat` was unbounded, and export writes every repeat out | Integer 0..255 | SPEC §5.1; `core/tags`; FORMAT.md §1 |
+| D22 | W3 review       | A cel offset counted reference layers, so rows could not move across one | Offsets count pixel layers only | `core/cels/commands.ts` |
+| D23 | W3 review       | One undo step from several planned commands needed `do` and `undo` outside the history | `chainedCommand(label, session, factories)`: each part is made after the one before it has run | `core/history/chained.ts` |
+| D24 | SE-021          | The cel commands do not check `locked` | The timeline leaves locked layers out | SE-026 scope and acceptance |
+| D25 | SE-040          | `decodePng` is asynchronous | `deserialize` returns a promise | SE-040 scope |
+| D26 | SE-040, W3 review | The format needed limits against hostile files, and the first set could not be reached together (the `doc.json` size refused documents inside the count limits) | The limits of FORMAT.md §1.8, with a cel limit (131 072) and an image limit, `doc.json` up to 64 MiB, names up to 255 code units, and bounds for a reference layer's position and scale. A test saves and opens a document at every limit at once | FORMAT.md §1.8; SPEC §10; `core/project` |
+| D27 | W3 review       | A JSON member given twice was accepted (the last won); checks that need no pixels ran after every image was decoded | Refused; the pixel-free checks run first | `core/project` |
+| D28 | W3 review       | Two tests pinned the exact export list of a module and one pinned the whole of FORMAT.md; each would have failed the next ticket that touched it | Corrected by the tickets' own agents: every documented export exists; the format test reads its own section. No behaviour is asserted less | `tests/unit/se-020-imports.test.ts`, `se-040-imports.test.ts`, `se-040-format-doc.test.ts` |
+| D29 | W3 review       | No command enforces the 1 GB refusal of SPEC §5.1 or the count and name limits of the format, and `assertInvariants` is quadratic in tags × frames | Assigned to SE-034, which lands before any interface reaches those commands. SE-034 is now size L and depends on SE-020 and SE-040 | SE-034; ticket index; EXECUTION.md |
+| D30 | SE-050          | SPEC §9.4 gave the atlas side but not the positions | Near-square is ⌈√r⌉ columns; cell positions are stated; a rect sits at the top-left of its cell; a transparent frame with trim is 2×2 at offset 0,0; the content size is the formula of §9.2 | SPEC §9.4; SE-050 scope |
+| D31 | SE-051          | NGNE's animation data is `loop` or `once` plus a flat list of entries; it has no repeat count | Repeats are written out, up to 65 536 entries per atlas, checked before expanding (`ExportError` `too-many-entries`) | SPEC §9.3; FORMAT.md §2 |
+| D32 | SE-051          | Details that NGNE 0.2.1 or Aseprite's writer decide: unknown members, where the preview draws a trimmed frame, the names the generated module exports, slugs and Windows device names, the fields of the Aseprite JSON | As NGNE and Aseprite do | SPEC §9.1, §9.2, §9.5; FORMAT.md §2 |
+| D33 | W4 review       | Frames of one trimmed sheet landed 1 px apart at quarter and half turns near the view origin (`Math.sin(Math.PI)` is not 0) | A sine or cosine below 1e-12 is taken as 0 and the other one as exactly 1 or −1 | `core/export/sprite-runtime.ts` |
+| D34 | W4 review       | `image` accepted `..`, `C:hero.png` and control characters; two golden tests would have failed at the first version bump; the PNG's bytes were not compared across runs | A plain file name is required (no folder, no `:`, no control character, no dots-only or Windows device name); the comparison leaves the version out; the PNG is compared byte for byte | `core/export/validateAtlas.ts`; FORMAT.md §2; `tests/unit/se-051-*` |
+| D35 | SE-064          | Choices the ticket and DESIGN left open: recent commands kept in `localStorage` (8); Preferences applies at once, with Close and Restore defaults; On/Off segments for the two `enabled` flags; hex text for the checkerboard colours; the three surfaces mounted at the app root in their own boundary (B11) | Accepted | DESIGN §4, §7 |
+| D36 | W4 review       | The stored dither value is `"ordered"` where core says `"bayer"`; there is no fit preference; Preferences uses two idioms for on/off; a write to storage that fails is lost without a message | SE-044 maps the value and supplies the fit. SE-071 picks one idiom and adds the message | SE-044, SE-071 |
+| D37 | W4 review       | The export errors and a shared export name need an interface | SE-052 and SE-054 show `too-many-entries`, `too-many-frames` and `atlas-size`; the overwrite confirmation names the files; SE-053 also draws at small anchors | SE-052, SE-053, SE-054 |
+| D38 | SE-051 agent    | A property test of SE-040 failed once in a few full runs. Cause: Node 24.15.0 (V8 13.6) gives an escaped member name the name an object parsed before it had in that place, when both are as long in the text | The test's generated names hold no escaped character; values keep every character. Project and atlas files have fixed member names and are not affected | `tests/unit/se-040-json-members.test.ts` |
+
+Measurements, taken by the orchestrator alone (`docs/perf`): SE-010 dirty rectangle 0.030 ms
+against 2 ms; SE-043 import 62.4 ms against 500 ms.
+
+Not decided here, left as they are:
+
+- The command factories of SE-020 and SE-021 differ in shape (a session and an options object
+  with one error class, against a document and positional arguments with one error class per
+  kind). The compiler catches a mix-up; both return `null` for a no-op.
+- Frame-list commands keep two copies of the frame list and the tag list that `bytes` does not
+  count (about 1 MB per command at 20 000 frames).
+- A trimmed animation moves by up to a pixel between frames in `ngne-preview`: NGNE's adapter
+  has no frame offset and centres each frame. The exported sprite module draws it correctly.
+- Merges into `main` in W3 and W4 waited for ticket order even where a later ticket was ready.
+
 ## Descoped tickets
 
 None.
