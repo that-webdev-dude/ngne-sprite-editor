@@ -8,9 +8,9 @@ import { viewportSize } from "./viewportSize";
 import { zoomStep } from "./zoom";
 
 // View navigation on the app's stores (SE-012): commands, tools and pointer handling change
-// the view of the active document through these functions (the first view of a document comes
-// from `autoFit`). Every change goes through `sessions.setView`, which the viewport follows
-// (`viewport/viewportController`), and every change keeps the pan limits.
+// the view of the active document through these functions (the views a document gets without
+// navigation come from `viewPolicy`). Every change goes through `sessions.setView`, which
+// the viewport follows (`viewport/viewportController`), and every change keeps the pan limits.
 //
 // Positions are device pixels of the viewport element unless a name says otherwise.
 

@@ -26,6 +26,7 @@ import {
     twoFrames,
     viewAtScale,
     viewportArea,
+    viewportSized,
     wheelBy,
     zoomField,
 } from "./se-012-support";
@@ -37,6 +38,27 @@ import type { View } from "./se-012-support";
 /** A wholly transparent image: the viewport shows the bare checkerboard. */
 const transparent = (width: number, height: number) =>
     Array.from({ length: width * height * 4 }, () => 0);
+
+/**
+ * Asserts that a view is centred to the device pixel: along each axis the space the document
+ * leaves is split in two, and when it is odd the one pixel over lies after the document (right,
+ * bottom). Returns the parity of the two leftovers, so a test can say which case it covered.
+ */
+function expectCentred(
+    view: View,
+    size: { width: number; height: number },
+    viewport: { width: number; height: number },
+): [number, number] {
+    const leftover = [
+        viewport.width - size.width * view.scale,
+        viewport.height - size.height * view.scale,
+    ] as const;
+    const before = [view.originX, view.originY] as const;
+    const after = [leftover[0] - before[0], leftover[1] - before[1]] as const;
+    const parity: [number, number] = [leftover[0] % 2, leftover[1] % 2];
+    expect([after[0] - before[0], after[1] - before[1]]).toEqual(parity);
+    return parity;
+}
 
 /** The views of the open documents, by document id. */
 function views(page: Page): Promise<Record<string, View>> {
@@ -71,13 +93,22 @@ test("a new sprite starts fitted and centred: the largest zoom step that fits", 
     expect(view.scale).toBeGreaterThan(1);
     expect(size.width * view.scale).toBeLessThanOrEqual(viewport.width);
     expect(size.height * view.scale).toBeLessThanOrEqual(viewport.height);
-    const right = viewport.width - (view.originX + size.width * view.scale);
-    const bottom = viewport.height - (view.originY + size.height * view.scale);
-    expect([right - view.originX, bottom - view.originY]).toEqual([0, 0]);
+    // 640 × 384 device pixels in 972 × 424: both leftovers are even.
+    expect(expectCentred(view, size, viewport)).toEqual([0, 0]);
     // The canvas shows the document there: the checkerboard in that rectangle, the workspace
     // around it.
     await expectImage(page, size, view, transparent(size.width, size.height));
     expect(await statusBar(page)).toMatchObject({ size: "40 × 24", zoom: `${view.scale}×` });
+
+    // A document whose leftovers are odd: 99 × 77 at 5× is 495 × 385 device pixels. The odd
+    // pixel goes to the right and to the bottom.
+    const odd = await openDocument(page, { width: 99, height: 77 });
+    await settle(page);
+    const oddView = await activeView(page);
+    expect(oddView).toEqual(fittedView(odd, viewport));
+    expect(oddView.scale).toBe(5);
+    expect(expectCentred(oddView, odd, viewport)).toEqual([1, 1]);
+    await expectImage(page, odd, oddView, transparent(odd.width, odd.height));
     expect(errors).toEqual([]);
 });
 
@@ -85,6 +116,9 @@ test("opened documents start fitted, each for its own size; a view that was set 
     page,
 }) => {
     await openViewportEditor(page);
+    // The fit in the task that opens a document needs the size of the viewport region, which
+    // the page measures a moment after the shell is on it: that state is waited for.
+    await viewportSized(page);
     // The first document, read in the task that opens it: no viewport is mounted yet, and the
     // document is fitted already. Nothing the stores hold changes after `open` has returned.
     const { first, atOpen, canvases } = await page.evaluate(() => {
@@ -94,7 +128,7 @@ test("opened documents start fitted, each for its own size; a view that was set 
         return {
             first,
             atOpen: { ...document!.view },
-            canvases: globalThis.document.querySelectorAll("[data-viewport] canvas").length,
+            canvases: globalThis.document.querySelectorAll("[data-viewport-canvas] canvas").length,
         };
     });
     expect(canvases).toBe(0);

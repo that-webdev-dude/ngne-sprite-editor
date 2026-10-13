@@ -1,9 +1,12 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
+// The page imports this module from the dev server; here it is needed for its types.
+import type * as CoreModel from "../../src/core/model";
 import { collectErrors, region } from "./se-006-support";
 import { addTextField } from "./se-007-support";
 import {
     DARK,
+    hostDeviceSize,
     openDocument,
     openViewportEditor,
     paint,
@@ -313,15 +316,14 @@ test("a middle-drag pans by the pointer's travel, also outside the viewport; oth
         await expect(area).not.toHaveAttribute("data-panning");
     }
 
-    // The middle button's own default (autoscroll) was prevented; the others' was not.
+    // The middle button's own default (the browser's autoscroll) never happens: no
+    // `mousedown` of that button reaches the window without its default prevented. Whether
+    // one arrives at all, and what becomes of the other buttons, is for the pointer pipeline
+    // to say (a cancelled `pointerdown` sends no `mousedown`).
     const presses = await page.evaluate(
         () => (window as unknown as { __se012Presses: [number, boolean][] }).__se012Presses,
     );
-    expect(presses).toEqual([
-        [1, true],
-        [0, false],
-        [2, false],
-    ]);
+    expect(presses.filter(([button, prevented]) => button === 1 && !prevented)).toEqual([]);
     expect(errors).toEqual([]);
 });
 
@@ -480,4 +482,231 @@ test("wheel and middle-drag act by pointer location, whatever has focus, and mov
     await wheel(page, 1);
     await twoFrames(page);
     expect(await activeView(page)).toEqual(panned);
+});
+
+test("wheel notches of less than a step's travel zoom every second notch, however far apart", async ({
+    page,
+}) => {
+    await openPainted(page);
+    const layout = await geometry(page);
+    const centre = clientAt(layout, {
+        x: Math.floor(layout.device.width / 2),
+        y: Math.floor(layout.device.height / 2),
+    });
+    await page.mouse.move(centre.x, centre.y);
+    expect((await activeView(page)).scale).toBe(12);
+    // The pause is part of what is tested: notches further apart than any pause after which
+    // travel could be forgotten. A longer pause, on a slow machine, changes nothing.
+    const pause = () => page.waitForTimeout(450);
+
+    // 40 px a notch, as a wheel gives at a page zoom of 250%.
+    await wheelBy(page, 0, -40);
+    expect((await activeView(page)).scale).toBe(12);
+    await pause();
+    await wheelBy(page, 0, -40);
+    await viewAtScale(page, 16);
+    await pause();
+    // 33.3 px a notch (300%), the other way.
+    await wheelBy(page, 0, 33.3);
+    expect((await activeView(page)).scale).toBe(16);
+    await pause();
+    await wheelBy(page, 0, 33.3);
+    await viewAtScale(page, 12);
+
+    // A turn the other way starts from zero: 40 in and 40 out are no step, 40 more out are one.
+    await wheelBy(page, 0, -40);
+    await wheelBy(page, 0, 40);
+    expect((await activeView(page)).scale).toBe(12);
+    await wheelBy(page, 0, 40);
+    await viewAtScale(page, 10);
+});
+
+test("the pan limit is kept when the viewport shrinks: the document comes back inside", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await page.setViewportSize({ width: 1500, height: 900 });
+    const document = await openPainted(page);
+    const large = await hostDeviceSize(page);
+    expect(large).toEqual({ width: 1192, height: 604 });
+    expect((await activeView(page)).scale).toBe(16);
+
+    // Panned to the bottom-right limit of the large viewport.
+    const layout = await geometry(page);
+    for (let drag = 0; drag < 3; drag++) {
+        await middleDrag(
+            page,
+            layout,
+            { x: 40, y: 40 },
+            { x: large.width - 40, y: large.height - 40 },
+        );
+    }
+    const corner = {
+        scale: 16,
+        originX: large.width - MIN_VISIBLE,
+        originY: large.height - MIN_VISIBLE,
+    };
+    await expect.poll(() => activeView(page)).toEqual(corner);
+
+    // The window shrinks: where the view is, nothing of the document would be left.
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await settle(page);
+    const small = await hostDeviceSize(page);
+    expect(small).toEqual({ width: 972, height: 424 });
+    expect(visible(corner, document, small)).toEqual({ width: 0, height: 0 });
+    const inside = {
+        scale: 16,
+        originX: small.width - MIN_VISIBLE,
+        originY: small.height - MIN_VISIBLE,
+    };
+    // Moved back to the limit, not fitted: the zoom is the user's.
+    await expect.poll(() => activeView(page)).toEqual(inside);
+    await expectDocumentOnlyIn(page, {
+        x: inside.originX,
+        y: inside.originY,
+        width: MIN_VISIBLE,
+        height: MIN_VISIBLE,
+    });
+
+    // The timeline at its tallest takes more: the viewport is shorter, and narrower by the
+    // rail's second column.
+    const rail = region(page, "tool-rail");
+    await page.getByRole("separator", { name: "Resize timeline" }).focus();
+    await page.keyboard.press("End");
+    await expect(rail).toHaveAttribute("data-columns", "2");
+    await settle(page);
+    const smaller = await hostDeviceSize(page);
+    expect(smaller.width).toBeLessThan(small.width);
+    expect(smaller.height).toBeLessThan(small.height);
+    const again = {
+        scale: 16,
+        originX: smaller.width - MIN_VISIBLE,
+        originY: smaller.height - MIN_VISIBLE,
+    };
+    await expect.poll(() => activeView(page)).toEqual(again);
+    await expectDocumentOnlyIn(page, {
+        x: again.originX,
+        y: again.originY,
+        width: MIN_VISIBLE,
+        height: MIN_VISIBLE,
+    });
+
+    // A viewport that grows again (the timeline at its lowest) moves nothing: the view is
+    // inside its limits, and more of the document shows.
+    await page.keyboard.press("Home");
+    await expect(rail).toHaveAttribute("data-columns", "1");
+    await settle(page);
+    await twoFrames(page);
+    const grown = await hostDeviceSize(page);
+    expect(grown.width).toBeGreaterThan(smaller.width);
+    expect(grown.height).toBeGreaterThan(smaller.height);
+    expect(await activeView(page)).toEqual(again);
+    await expectDocumentOnlyIn(page, {
+        x: again.originX,
+        y: again.originY,
+        width: grown.width - again.originX,
+        height: grown.height - again.originY,
+    });
+    expect(errors).toEqual([]);
+});
+
+test("a document that becomes the active one is moved back inside the viewport, and so is a view passed to open", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await page.setViewportSize({ width: 1500, height: 900 });
+    await openViewportEditor(page);
+    const a = await openDocument(page, { name: "a", width: 32, height: 32 });
+    await paint(page, a.id, pattern(32, 32, 5));
+    await settle(page);
+    const large = await hostDeviceSize(page);
+    // Where the user left `a`: at the bottom-right limit of the large viewport.
+    const corner = {
+        scale: 16,
+        originX: large.width - MIN_VISIBLE,
+        originY: large.height - MIN_VISIBLE,
+    };
+    await setView(page, a.id, corner);
+    const b = await openDocument(page, { name: "b", width: 8, height: 8 });
+    await paint(page, b.id, pattern(8, 8, 7));
+    await settle(page);
+    const fittedB = await activeView(page);
+    const viewOf = (id: string) =>
+        page.evaluate((id) => {
+            const { documents } = window.__ngneTest!.sessions.getState();
+            return { ...documents.find((entry) => entry.id === id)!.view };
+        }, id);
+
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await settle(page);
+    await twoFrames(page);
+    const small = await hostDeviceSize(page);
+    // `b` is on show and inside its limits; `a` is not on show. Neither is touched.
+    expect(await activeView(page)).toEqual(fittedB);
+    expect(await viewOf(a.id)).toEqual(corner);
+    expect(visible(corner, a, small)).toEqual({ width: 0, height: 0 });
+
+    // The user switches to `a`: it is inside the viewport in the task that activates it.
+    const switched = await page.evaluate((id) => {
+        const sessions = window.__ngneTest!.sessions;
+        sessions.getState().activate(id);
+        const state = sessions.getState();
+        const active = state.documents.find((entry) => entry.id === state.activeId)!;
+        return { id: active.id, view: { ...active.view }, viewSet: active.viewSet };
+    }, a.id);
+    const inside = {
+        scale: 16,
+        originX: small.width - MIN_VISIBLE,
+        originY: small.height - MIN_VISIBLE,
+    };
+    expect(switched).toEqual({ id: a.id, view: inside, viewSet: true });
+    await expectDocumentOnlyIn(page, {
+        x: inside.originX,
+        y: inside.originY,
+        width: MIN_VISIBLE,
+        height: MIN_VISIBLE,
+    });
+    // `b` kept the view it had.
+    expect(await viewOf(b.id)).toEqual(fittedB);
+
+    // A view passed to `open` that lies outside the viewport: 512 device pixels a side, far
+    // off to the right and above. The document opens with 32 of them inside.
+    const opened = await page.evaluate(async () => {
+        const path = "/src/core/model/index.ts";
+        const core = (await import(/* @vite-ignore */ path)) as typeof CoreModel;
+        const sessions = window.__ngneTest!.sessions;
+        const returned = sessions
+            .getState()
+            .open(core.createDocument({ name: "c", width: 32, height: 32 }), {
+                view: { scale: 16, originX: 5000, originY: -5000 },
+            });
+        const stored = sessions.getState().documents.find((entry) => entry.id === returned.id)!;
+        return { id: returned.id, returned: { ...returned.view }, stored: { ...stored.view } };
+    });
+    const atTop = { scale: 16, originX: small.width - MIN_VISIBLE, originY: MIN_VISIBLE - 512 };
+    expect(opened.returned).toEqual(atTop);
+    expect(opened.stored).toEqual(atTop);
+    await paint(page, opened.id, pattern(32, 32, 7));
+    await expectDocumentOnlyIn(page, {
+        x: atTop.originX,
+        y: 0,
+        width: MIN_VISIBLE,
+        height: MIN_VISIBLE,
+    });
+
+    // A document smaller than 32 device pixels is shown in full: 8 × 8 at 1×.
+    const dot = await page.evaluate(async () => {
+        const path = "/src/core/model/index.ts";
+        const core = (await import(/* @vite-ignore */ path)) as typeof CoreModel;
+        const document = window
+            .__ngneTest!.sessions.getState()
+            .open(core.createDocument({ name: "dot", width: 8, height: 8 }), {
+                view: { scale: 1, originX: -400, originY: 9000 },
+            });
+        return { id: document.id, view: { ...document.view } };
+    });
+    expect(dot.view).toEqual({ scale: 1, originX: 0, originY: small.height - 8 });
+    await paint(page, dot.id, pattern(8, 8, 7));
+    await expectDocumentOnlyIn(page, { x: 0, y: small.height - 8, width: 8, height: 8 });
+    expect(errors).toEqual([]);
 });

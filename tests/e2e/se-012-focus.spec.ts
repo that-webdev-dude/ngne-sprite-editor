@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { boxOf, collectErrors, region } from "./se-006-support";
+import { readSpecKeyTable } from "./se-007-spec-keys";
 import { openSession } from "./se-007-support";
 import { audit, emptyState, startInTheme, THEMES } from "./se-008-support";
 import type { Theme } from "./se-008-support";
@@ -28,6 +29,23 @@ import {
 // SE-012: the viewport element — the focusable container of the NGNE canvas, the F6 target of
 // the viewport region, and the place of the pointer listeners. NGNE replaces its canvas at
 // every resize, so none of this is on a canvas.
+
+/**
+ * The keys a focused control may consume itself (SPEC §7.8, focus rules), in the notation of
+ * the key table. A `canvas` binding of one of them acts only while the viewport is focused.
+ */
+const NATIVE_KEYS = [
+    "Home",
+    "End",
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "Enter",
+    "Space",
+    "Escape",
+    "Tab",
+];
 
 /** Presses F6 until the viewport element has focus. */
 async function focusViewportWithF6(page: Page): Promise<void> {
@@ -76,22 +94,21 @@ test("the viewport element is the focusable container of the NGNE canvas and fil
     await expect(area).toHaveAttribute("role", "application");
     await expect(area).toHaveAttribute("aria-label", "Canvas");
 
-    // It holds the element NGNE fills, and that holds NGNE's canvas alone. The canvas itself
-    // takes no focus and carries none of the marks.
-    const structure = await area.evaluate((element) => ({
-        inRegion: element.closest("[data-region]")?.getAttribute("data-region"),
-        children: Array.from(element.children, (child) => child.className),
-        canvases: element.querySelectorAll("canvas").length,
-        hostChildren: Array.from(
-            element.querySelector("[data-viewport-canvas]")?.children ?? [],
-            (child) => child.tagName,
-        ),
-        canvasTabindex: element.querySelector("canvas")?.getAttribute("tabindex") ?? null,
-    }));
+    // It holds the element NGNE fills as a child of its own, and that element holds NGNE's
+    // canvas alone. The canvas itself takes no focus. What else the viewport element holds
+    // beside the NGNE element (the overlay of SE-013) is not this ticket's to say.
+    const structure = await area.evaluate((element) => {
+        const host = element.querySelector("[data-viewport-canvas]");
+        return {
+            inRegion: element.closest("[data-region]")?.getAttribute("data-region"),
+            hostIsChild: host !== null && host.parentElement === element,
+            hostChildren: Array.from(host?.children ?? [], (child) => child.tagName),
+            canvasTabindex: host?.querySelector("canvas")?.getAttribute("tabindex") ?? null,
+        };
+    });
     expect(structure).toEqual({
         inRegion: "viewport",
-        children: ["viewport-canvas"],
-        canvases: 1,
+        hostIsChild: true,
         hostChildren: ["CANVAS"],
         canvasTabindex: null,
     });
@@ -146,54 +163,86 @@ test("F6 enters the viewport region at the viewport element; a click on the canv
         width: "2px",
         colour: accent,
     });
+    // The ring lies inside the element's edge, where the region does not clip it: a frame
+    // over the whole box with its border inside. It takes no pointer events, so the canvas
+    // under it stays the pointer target.
     expect(
         await area.evaluate((element) => {
             const frame = getComputedStyle(element, "::after");
-            return [frame.position, frame.pointerEvents, frame.zIndex];
+            return {
+                position: frame.position,
+                inset: [frame.top, frame.right, frame.bottom, frame.left],
+                boxSizing: frame.boxSizing,
+                pointerEvents: frame.pointerEvents,
+            };
         }),
-    ).toEqual(["absolute", "none", "1"]);
+    ).toEqual({
+        position: "absolute",
+        inset: ["0px", "0px", "0px", "0px"],
+        boxSizing: "border-box",
+        pointerEvents: "none",
+    });
+    // On the ring itself, a pointer still hits what the element holds, not the element.
+    const edge = clientAt(layout, { x: 1, y: 1 });
+    expect(
+        await area.evaluate((element, { x, y }) => {
+            const hit = document.elementFromPoint(x, y);
+            return hit !== null && hit !== element && element.contains(hit);
+        }, edge),
+    ).toBe(true);
 
-    // Tab moves on from the element (it is an ordinary stop in the tab order) …
-    await page.keyboard.press("Tab");
+    // Keyboard focus only: gone when the element loses focus, and when it is focused again
+    // with the pointer.
+    await page.keyboard.press("Shift+F6");
     await expect(area).not.toBeFocused();
-    // … and Shift+Tab comes back to it.
-    await page.keyboard.press("Shift+Tab");
+    expect((await ring(page)).content).toBe("none");
+    await page.mouse.click(point.x, point.y);
     await expect(area).toBeFocused();
+    expect((await ring(page)).content).toBe("none");
 });
 
 test("the keymap takes the element for the viewport: its native keys reach canvas bindings", async ({
     page,
 }) => {
+    // A canvas binding of a native key acts only while the viewport itself is focused
+    // (SPEC §7.8): this is how the keymap recognises the element. The probe takes a native
+    // key that the key table of SPEC §7.8 leaves unbound in the canvas context, so no
+    // command of a later ticket answers the key before the probe does.
+    const bound = readSpecKeyTable()
+        .bindings.filter((binding) => binding.context === "canvas")
+        .map((binding) => binding.chord);
+    expect(bound).toEqual(expect.arrayContaining(["ArrowLeft", "Enter", "Escape", "Tab"]));
+    const key = NATIVE_KEYS.find((candidate) => !bound.includes(candidate));
+    if (!key) throw new Error("SPEC §7.8 binds every native key in the canvas context");
+
     await openViewportEditor(page);
     await openDocument(page, { width: 32, height: 32 });
     await settle(page);
-    // A canvas binding of a native key acts only while the viewport itself is focused
-    // (SPEC §7.8): this is how the keymap recognises the element.
-    await page.evaluate(() => {
+    await page.evaluate((key) => {
         const calls: string[] = [];
         (window as unknown as { __se012Calls: string[] }).__se012Calls = calls;
         window.__ngneTest!.commands.register({
-            id: "se012.arrow",
-            title: "SE-012 arrow",
-            shortcut: "ArrowLeft",
+            id: "se012.native",
+            title: "SE-012 native key",
+            shortcut: key,
             context: "canvas",
-            run: () => void calls.push("arrow"),
+            run: () => void calls.push("native"),
         });
-    });
+    }, key);
     const calls = () =>
         page.evaluate(() => (window as unknown as { __se012Calls: string[] }).__se012Calls);
 
     await viewportArea(page).focus();
-    await page.keyboard.press("ArrowLeft");
-    expect(await calls()).toEqual(["arrow"]);
+    await page.keyboard.press(key);
+    expect(await calls()).toEqual(["native"]);
 
-    // On another control the arrow is the control's own key.
+    // With another control focused the key is not the canvas's.
     await fitButton(page).focus();
-    await page.keyboard.press("ArrowLeft");
-    expect(await calls()).toEqual(["arrow"]);
+    await page.keyboard.press(key);
+    expect(await calls()).toEqual(["native"]);
     await viewportArea(page).focus();
-    await page.keyboard.press("ArrowLeft");
-    expect(await calls()).toEqual(["arrow", "arrow"]);
+    await page.keyboard.press(key);
+    expect(await calls()).toEqual(["native", "native"]);
 });
 
 test("focus and listeners stay on the element when NGNE replaces its canvas at a resize", async ({
@@ -205,8 +254,10 @@ test("focus and listeners stay on the element when NGNE replaces its canvas at a
     await settle(page);
     const area = viewportArea(page);
     await area.focus();
+    // NGNE's canvas is the one inside the element NGNE fills; the viewport element may hold
+    // other canvases beside it.
     await area.evaluate((element) => {
-        const canvas = element.querySelector("canvas");
+        const canvas = element.querySelector("[data-viewport-canvas] canvas");
         (window as unknown as { __se012Canvas: unknown }).__se012Canvas = canvas;
         (window as unknown as { __se012Area: unknown }).__se012Area = element;
     });
@@ -216,13 +267,14 @@ test("focus and listeners stay on the element when NGNE replaces its canvas at a
     await settle(page);
     const after = await area.evaluate((element) => {
         const kept = window as unknown as { __se012Canvas: unknown; __se012Area: unknown };
+        const host = element.querySelector("[data-viewport-canvas]");
         return {
             sameElement: element === kept.__se012Area,
-            sameCanvas: element.querySelector("canvas") === kept.__se012Canvas,
-            canvases: element.querySelectorAll("canvas").length,
+            sameCanvas: host?.querySelector("canvas") === kept.__se012Canvas,
+            canvases: host?.querySelectorAll("canvas").length,
         };
     });
-    // A new canvas in the same element, which still has the focus.
+    // A new NGNE canvas in the same element, which still has the focus.
     expect(after).toEqual({ sameElement: true, sameCanvas: false, canvases: 1 });
     await expect(area).toBeFocused();
 

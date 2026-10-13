@@ -32,9 +32,10 @@ export interface OpenDocument {
     readonly history: History;
     readonly view: ViewState;
     /**
-     * Whether the view was ever given: by the `view` option of `open`, or by `setView`. A
-     * document whose view was never set is fitted and centred once the viewport knows its
-     * size (SPEC §6.4, `app/view/autoFit`); a view that was set is kept.
+     * Whether the view was ever given: by the `view` option of `open`, by `setView`, or by the
+     * view policy when the document was opened. A document whose view was never set is fitted
+     * and centred once the viewport knows its size (SPEC §6.4, `app/view/viewPolicy`); a view
+     * that was set is never fitted again.
      */
     readonly viewSet: boolean;
     /** Original bytes of the reference images, by `ReferenceLayer.sourceId`. */
@@ -47,9 +48,29 @@ export interface OpenDocument {
     readonly revision: number;
 }
 
+/**
+ * How a document gets a view it was not given (SPEC §6.4). View navigation supplies the
+ * policy (`app/view/viewPolicy`); the store applies it while it opens or activates a
+ * document, so the document is stored once, with its view, and subscribers are told once. A
+ * store without a policy leaves every view as it is.
+ */
+export interface ViewPolicy {
+    /**
+     * The first view of a document opened without one (fitted and centred), or null while
+     * that cannot be said: the size of the viewport is not known.
+     */
+    first(doc: { width: number; height: number }): ViewState | null;
+    /**
+     * The view of a document whose view was set, as the document becomes the active one:
+     * `view` itself, or the view moved back inside the pan limits.
+     */
+    arrive(view: ViewState, doc: { width: number; height: number }): ViewState;
+}
+
 export interface OpenOptions {
     /** Make the document the active one; the default is true. */
     activate?: boolean;
+    /** The view to open with; it is kept, apart from the pan limits of the view policy. */
     view?: Partial<ViewState>;
     /** Reference source bytes read from the project file (SE-041). */
     referenceSources?: Iterable<readonly [string, Uint8Array]>;
@@ -62,9 +83,15 @@ export interface SessionsState {
     /** Id of the active document, or null when none is open. */
     activeId: string | null;
 
-    /** Opens a session with a new history. Throws when a document with its id is open. */
+    /**
+     * Opens a session with a new history and returns the document as the store holds it.
+     * Throws when a document with its id is open.
+     */
     open(session: DocSession, options?: OpenOptions): OpenDocument;
-    /** Closes the active document, if any, and opens `session` in its place. */
+    /**
+     * Closes the active document, if any, opens `session` in its place and returns the
+     * document as the store holds it.
+     */
     replaceActive(session: DocSession, options?: OpenOptions): OpenDocument;
     /** Closes a document; when it was active, its neighbour becomes active. */
     close(id: string): void;
@@ -83,6 +110,11 @@ export interface SessionsState {
      * field, or pixels written by an open transaction.
      */
     touch(id: string): void;
+    /**
+     * Makes `policy` the view policy of the store. Returns the function that removes it, if
+     * it is still the one in use.
+     */
+    setViewPolicy(policy: ViewPolicy): () => void;
 }
 
 function snapshot(settings: ExportSettings): string {
@@ -109,6 +141,8 @@ export function isDirty(document: OpenDocument): boolean {
 export function createSessionsStore(): StoreApi<SessionsState> {
     /** Stops the history subscription of each open document. */
     const subscriptions = new Map<string, () => void>();
+    /** The view policy in use (`setViewPolicy`). */
+    let policy: ViewPolicy | null = null;
 
     return createStore<SessionsState>((set, get) => {
         const find = (id: string): OpenDocument => {
@@ -146,18 +180,36 @@ export function createSessionsStore(): StoreApi<SessionsState> {
                     if (import.meta.env.DEV) assertInvariants(session);
                 }),
             );
+            // Without a view of its own the document starts with the policy's first view.
+            const first = options.view === undefined ? (policy?.first(session.doc) ?? null) : null;
             return {
                 id,
                 session,
                 history,
-                view: { ...DEFAULT_VIEW, ...options.view },
-                viewSet: options.view !== undefined,
+                view: first ?? { ...DEFAULT_VIEW, ...options.view },
+                viewSet: options.view !== undefined || first !== null,
                 referenceSources: new Map(options.referenceSources),
                 savedPosition: history.position,
                 savedExportSettings: snapshot(session.doc.exportSettings),
                 revision: 0,
             };
         };
+        /**
+         * `document` as it becomes the active one under the view policy: with its first view
+         * if it never had one, otherwise with its view inside the pan limits. The record
+         * itself when nothing changes. `created`: the record is not in the store yet.
+         */
+        const arriving = (document: OpenDocument, created = false): OpenDocument => {
+            if (!policy) return document;
+            const { doc } = document.session;
+            const view = document.viewSet ? policy.arrive(document.view, doc) : policy.first(doc);
+            if (!view || view === document.view) return document;
+            const revision = document.revision + (created ? 0 : 1);
+            return { ...document, view, viewSet: true, revision };
+        };
+        /** The record the store holds for a document just put there: what callers are given. */
+        const stored = (document: OpenDocument): OpenDocument =>
+            get().documents.find((entry) => entry.id === document.id) ?? document;
         const forget = (id: string) => {
             subscriptions.get(id)?.();
             subscriptions.delete(id);
@@ -170,12 +222,14 @@ export function createSessionsStore(): StoreApi<SessionsState> {
             open(session, options = {}) {
                 const { documents, activeId } = get();
                 assertNotOpen(session.doc.id, documents);
-                const document = create(session, options);
+                const created = create(session, options);
+                const activates = options.activate !== false;
+                const document = activates ? arriving(created, true) : created;
                 set({
                     documents: [...documents, document],
-                    activeId: options.activate === false ? activeId : document.id,
+                    activeId: activates ? document.id : activeId,
                 });
-                return document;
+                return stored(document);
             },
 
             replaceActive(session, options = {}) {
@@ -187,12 +241,12 @@ export function createSessionsStore(): StoreApi<SessionsState> {
                 const rest = documents.filter((entry) => entry !== outgoing);
                 assertNotOpen(session.doc.id, rest);
                 forget(outgoing.id);
-                const document = create(session, options);
+                const document = arriving(create(session, options), true);
                 set({
                     documents: [...rest.slice(0, index), document, ...rest.slice(index)],
                     activeId: document.id,
                 });
-                return document;
+                return stored(document);
             },
 
             close(id) {
@@ -201,17 +255,29 @@ export function createSessionsStore(): StoreApi<SessionsState> {
                 if (index === -1) return;
                 forget(id);
                 const rest = documents.filter((entry) => entry.id !== id);
+                if (activeId !== id) {
+                    set({ documents: rest });
+                    return;
+                }
+                // The neighbour becomes the active document.
+                const next = rest[index] ?? rest[index - 1] ?? null;
                 set({
-                    documents: rest,
-                    activeId:
-                        activeId === id
-                            ? (rest[index]?.id ?? rest[index - 1]?.id ?? null)
-                            : activeId,
+                    documents: rest.map((entry) => (entry === next ? arriving(entry) : entry)),
+                    activeId: next?.id ?? null,
                 });
             },
 
             activate(id) {
-                set({ activeId: find(id).id });
+                const target = find(id);
+                const arrived = get().activeId === id ? target : arriving(target);
+                if (arrived === target) {
+                    set({ activeId: id });
+                    return;
+                }
+                set({
+                    documents: get().documents.map((entry) => (entry === target ? arrived : entry)),
+                    activeId: id,
+                });
             },
 
             markSaved(id) {
@@ -250,6 +316,13 @@ export function createSessionsStore(): StoreApi<SessionsState> {
             touch(id) {
                 find(id);
                 change(id);
+            },
+
+            setViewPolicy(next) {
+                policy = next;
+                return () => {
+                    if (policy === next) policy = null;
+                };
             },
         };
     });

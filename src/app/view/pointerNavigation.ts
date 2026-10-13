@@ -104,10 +104,7 @@ export function attachViewNavigation(element: HTMLElement): () => void {
             // As a scroll would: wheel down moves the view right, the document left.
             if (distance !== 0) panBy(-distance, 0);
         } else if (mapping) {
-            const direction = wheelZoom(
-                wheelPixels(event.deltaY, event.deltaMode),
-                event.timeStamp,
-            );
+            const direction = wheelZoom(wheelPixels(event.deltaY, event.deltaMode));
             if (direction !== 0) {
                 zoomBy(direction, mapping.clientToDevice(pointer.x, pointer.y));
             }

@@ -19,6 +19,7 @@ import {
     fittedView,
     geometry,
     pixelAt,
+    screen,
     texel,
     viewAtScale,
     wheel,
@@ -28,10 +29,18 @@ import type { Point } from "./se-012-support";
 // SE-012: what depends on the mapping between the pointer and the document — the zoom about
 // the cursor and the cursor readout. The tests are declared by `pointerTests`, once per
 // device pixel ratio: a ratio other than the configured one needs its own Chrome, so it has
-// its own spec file (se-012-pointer-*). At 1.25 and 1.5 a whole device pixel is a fraction of
-// a CSS pixel, which is where a mapping goes wrong: Chrome reports the position of a mouse on
-// a device pixel as a 32-bit float of CSS pixels, at 1.25 often just short of that pixel, and
-// a wheel event reports whole CSS pixels only.
+// its own spec file (se-012-pointer-*). Each ratio is where a mapping goes wrong in its own
+// way:
+//
+//   1.25, 1.5  A whole device pixel is a fraction of a CSS pixel. Chrome reports the position
+//              of a mouse on a device pixel as a 32-bit float of CSS pixels, at 1.25 often
+//              just short of that pixel, and a wheel event reports whole CSS pixels only.
+//   1.1        The viewport element itself starts between device pixels: the tracks of the
+//              shell (44 and 72 CSS px) are 48.4 and 79.2 device pixels. The browser puts the
+//              element's box on whole device pixels; the mapping has to round as it does.
+//
+// A readback of the canvas cannot tell where on the screen the browser put the canvas, so the
+// last test compares the mapping with a screenshot (SPEC §6.7).
 
 const WIDTH = 64;
 const HEIGHT = 48;
@@ -77,7 +86,8 @@ export function pointerTests(ratio: number): void {
             const pixels = pattern(WIDTH, HEIGHT, 3);
             await paint(page, document.id, pixels);
             await settle(page);
-            expect(await page.evaluate(() => devicePixelRatio)).toBe(ratio);
+            // Chrome keeps the ratio as a 32-bit float: 1.1 reads 1.100000023841858.
+            expect(await page.evaluate(() => devicePixelRatio)).toBe(Math.fround(ratio));
 
             const layout = await geometry(page);
             const start = await activeView(page);
@@ -241,6 +251,65 @@ export function pointerTests(ratio: number): void {
                 const client = clientAt(layout, { x: originX + x * 3, y: originY + y * 3 });
                 await page.mouse.move(client.x, client.y);
                 await expect(field, `pixel ${x} at 3×`).toHaveText(`${x}, ${y}`);
+            }
+        });
+
+        test("the pixel the readout names is the one the screen shows under the mouse", async ({
+            page,
+        }) => {
+            await openViewportEditor(page);
+            const document = await openDocument(page, { width: WIDTH, height: HEIGHT });
+            const pixels = pattern(WIDTH, HEIGHT, 3);
+            await paint(page, document.id, pixels);
+            await settle(page);
+            const layout = await geometry(page);
+            const { ratio } = layout;
+            const field = cursorField(page);
+            // Every texel has a colour of its own, so a colour on the screen names its texel.
+            const texels = new Map<string, Point>();
+            for (let y = 0; y < HEIGHT; y++) {
+                for (let x = 0; x < WIDTH; x++) {
+                    texels.set(texel(pixels, WIDTH, x, y).join(), { x, y });
+                }
+            }
+            expect(texels.size).toBe(WIDTH * HEIGHT);
+
+            const originX = 101;
+            const originY = 61;
+            for (const scale of [1, 3]) {
+                await setView(page, document.id, { scale, originX, originY });
+                // The mouse rests outside the viewport while the screen is read, so nothing
+                // drawn at the pointer is in the picture.
+                await page.mouse.move(2, 2);
+                await settle(page);
+                const shown = await screen(page);
+
+                // Device pixels of the page, taken without the mapping: a pixel inside the
+                // document's rectangle whichever way the browser rounds the element's corner
+                // (44 and 72 CSS px are 48.4 and 79.2 device pixels at a ratio of 1.1).
+                const left = Math.ceil(layout.left * ratio) + originX + 1;
+                const top = Math.ceil(layout.top * ratio) + originY + 1;
+                const rows = HEIGHT * scale - 3;
+                let named = 0;
+                for (let step = 0; step < 60; step++) {
+                    const x = left + step;
+                    const y = top + ((step * 7) % rows);
+                    const colour = shown.at(x, y);
+                    const onScreen = texels.get(colour.join());
+                    if (!onScreen) {
+                        // Not a texel's colour: the canvas is not on whole device pixels.
+                        expect({ scale, x, y, colour }).toBe("the colour of a texel");
+                        continue;
+                    }
+                    // A mouse on device pixel x, y of the page: what the readout names is
+                    // the texel that pixel of the screen shows.
+                    await page.mouse.move(x / ratio, y / ratio);
+                    await expect(field, `${scale}×, screen pixel ${x}, ${y}`).toHaveText(
+                        `${onScreen.x}, ${onScreen.y}`,
+                    );
+                    named++;
+                }
+                expect(named).toBe(60);
             }
         });
     });

@@ -1,5 +1,8 @@
 import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
+// The page imports this module from the dev server; here it is needed for its types.
+import type * as ViewportSizeModule from "../../src/app/view/viewportSize";
+import { decodePng } from "../../src/core/png";
 import { boxOf, region } from "./se-006-support";
 import { hostDeviceSize, viewportHost } from "./se-011-support";
 
@@ -69,6 +72,20 @@ export function activeView(page: Page): Promise<View> {
     });
 }
 
+/**
+ * Waits until the page knows the size of its viewport region (`app/view/viewportSize`): the
+ * state in which a document is fitted in the task that opens it. The page measures the region
+ * a moment after the shell is on it, and `openEditor` does not wait for that.
+ */
+export async function viewportSized(page: Page): Promise<void> {
+    await page.waitForFunction(async () => {
+        const path = "/src/app/view/viewportSize.ts";
+        const module = (await import(/* @vite-ignore */ path)) as typeof ViewportSizeModule;
+        const { width, height } = module.viewportSize.size;
+        return width > 0 && height > 0;
+    });
+}
+
 /** Waits until the active document's scale is `scale`; returns the view. */
 export async function viewAtScale(page: Page, scale: number): Promise<View> {
     await expect.poll(async () => (await activeView(page)).scale).toBe(scale);
@@ -93,14 +110,17 @@ export async function geometry(page: Page): Promise<Geometry> {
 }
 
 /**
- * The device pixel of the viewport element under a client position. The element's corner
- * lies on a whole device pixel (the browser lays boxes out so); a mouse position in whole CSS
- * pixels is a whole or a half device pixel at the ratios tested.
+ * The device position of the viewport element under a client position. The element's corner
+ * lies on a whole device pixel: the browser lays boxes out so, also when the corner falls
+ * between two (se-012-pointer-dpr11 checks that against the screen). The specs place the
+ * mouse on whole device pixels, or on halves; the arithmetic's noise is taken out, so a
+ * position on a texel's first device pixel is not read as the texel before it.
  */
 export function deviceAt(geometry: Geometry, client: Point): Point {
+    const exact = (value: number) => Math.round(value * 1e6) / 1e6;
     return {
-        x: client.x * geometry.ratio - Math.round(geometry.left * geometry.ratio),
-        y: client.y * geometry.ratio - Math.round(geometry.top * geometry.ratio),
+        x: exact(client.x * geometry.ratio - Math.round(geometry.left * geometry.ratio)),
+        y: exact(client.y * geometry.ratio - Math.round(geometry.top * geometry.ratio)),
     };
 }
 
@@ -215,6 +235,29 @@ export function devicePixel(page: Page, at: Point): Promise<number[]> {
         if (!image) throw new Error("se-012: the viewport has no ready renderer");
         return window.__se011.crop(image, { x: at.x, y: at.y, width: 1, height: 1 }).data;
     }, at);
+}
+
+/** What the window shows, in device pixels: a screenshot of the whole page (SPEC §6.7). */
+export interface Screen {
+    width: number;
+    height: number;
+    /** The RGBA of the device pixel `x, y` of the page. */
+    at(x: number, y: number): number[];
+}
+
+/**
+ * A screenshot of the page at device resolution. Unlike a readback of the canvas it shows
+ * where on the screen the browser put each canvas pixel, which is what a pointer position has
+ * to be mapped against.
+ */
+export async function screen(page: Page): Promise<Screen> {
+    const shot = await decodePng(await page.screenshot());
+    const { width, height, data } = shot;
+    return {
+        width,
+        height,
+        at: (x, y) => Array.from(data.slice((y * width + x) * 4, (y * width + x) * 4 + 4)),
+    };
 }
 
 /** The RGBA of texel `x, y` of an image of `width` pixels a row. */
