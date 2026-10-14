@@ -358,6 +358,22 @@ All symbols are exported from the package root.
 - **A Canvas2D overlay draws editor chrome**: pixel/tile grid lines, selection marching ants,
   transform handles, brush cursor outline, symmetry axes. It is stacked above the NGNE canvas at
   the same device-pixel size and receives all pointer input.
+- The overlay canvas is the second child of the viewport element, a sibling of the element NGNE
+  owns. It stops no event and cancels no default; a pointer down with any button but the middle
+  one focuses the viewport element.
+- Its backing size and box are those of the NGNE canvas on screen, also while NGNE stretches
+  its old canvas after a resize (§6.4). It then draws with the mapping NGNE drew with (the
+  view, in that canvas's pixels) and maps the pointer through the stretch.
+- Draw layers register from their own module (`*.overlay.ts`, found by a glob) with an order:
+  outline 100, pixel grid 200, tile grid 300. A layer asks for a redraw through its `watch`.
+  The overlay redraws only when the active document, its size or view, the canvas size or the
+  theme changes, when the cursor moves to another device pixel or enters or leaves the
+  viewport, or when a layer asks; at most once per animation frame.
+- A grid line is the first device pixel of every texel (pixel grid) and of every tile (tile
+  grid), texel 0 included; the outline is 1 px outside the bounds. Where a tile line runs it
+  alone shows. The tile grid is drawn on an axis while a tile is at least 4 device pixels.
+- View menu: Show/Hide Grid and Show/Hide Pixel Grid, titled by what choosing them does. They
+  change `DocSettings` with no history entry and do not set the dirty flag; no key is bound.
 
 ### 6.4 Viewport (`NgneViewport`)
 

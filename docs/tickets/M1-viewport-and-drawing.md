@@ -137,7 +137,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-012                                                   |
 | Blocks       | SE-014, SE-030                                           |
 | Blocked until | —                                                       |
@@ -208,6 +208,13 @@ Scope
   `pointerdown` is left to SE-012's panning. At the overview steps (1/2, 1/4, 1/8)
   `clientToDoc` names the first texel of a device pixel, which need not be the one NGNE
   shows: this ticket decides whether a paint tool works below 1× and tests what it decides.
+- From the SE-013 review: the pointer target is `canvas[data-viewport-overlay]`. Pointer events
+  are not stopped there: the overlay follows the cursor and SE-012 navigates from listeners on
+  the viewport element. The right button paints with the background colour (DESIGN §4), so the
+  pipeline cancels `contextmenu` over the viewport; nothing does yet. For about 120 ms after a
+  resize (NGNE's quiet, SPEC §6.4) the overlay's `frame.cursor.pixel` names the texel shown under
+  the pointer and `currentViewMapping().clientToDoc` the texel by the host box: this ticket
+  decides which a stroke uses in that window.
 
 Acceptance
 - Unit tests with synthetic pointer sequences: one down–moves–up yields exactly one history
@@ -245,6 +252,13 @@ Scope
 - Pencil (left = FG, right = BG) and eraser (transparent; right = BG colour).
 - Shift-click draws a straight line from the last stroke end.
 - Brush cursor outline registered on the overlay (footprint of the current brush).
+- From the SE-013 review: a draw layer is a module `*.overlay.ts` with an order above 300 that
+  touches no DOM global at top level and imports neither `overlayLayers` nor `mountOverlay`.
+  "Inverted against content" (DESIGN §6) cannot be drawn with Canvas2D composite modes on the
+  overlay, which does not hold NGNE's pixels, and `mix-blend-mode` on the overlay canvas would
+  change the grid colours: use an element of its own (a third child of `[data-viewport]`) or a
+  two-tone outline, and record which. The overlay redraws every grid at each device-pixel move
+  of the cursor: the latency benchmark runs with the pixel grid shown.
 - Scripted latency benchmark page for the stroke budget of SPEC §6.6.
 - Conditional: if SE-002 question 1 was a no-go, or this ticket's benchmark misses the stroke
   budget, implement the overlay stroke echo of SPEC §6.6 and record the before/after numbers.

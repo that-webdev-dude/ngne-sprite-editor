@@ -203,7 +203,8 @@ transient tool feedback in `--warn`.
 
 - Workspace is `--bg-workspace`; the document has a 1 px `--border-strong` outline outside its
   bounds and no drop shadow.
-- Pixel grid appears at ≥ 8× as 1 px lines at 12% white/black; tile grid at 25%.
+- Pixel grid appears at ≥ 8× as 1 px lines at 12% white/black; tile grid at 25%. White in the
+  dark theme, black in the light theme; a line is the first device pixel of each texel or tile.
 - Selection: 1 px marching ants, black and white dashes, 4 px period, 8 steps per second.
 - Brush cursor: 1 px outline of the brush footprint snapped to pixels, inverted against content;
   the system cursor is hidden over the canvas while a paint tool is active.

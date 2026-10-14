@@ -22,6 +22,12 @@ Scope
   by frame and layer switches).
 - Boundary extraction to axis-aligned edge segments for drawing.
 - Overlay layer: marching ants per DESIGN §6; static dashes under `prefers-reduced-motion`.
+- From the SE-013 review: a grid line is the first device pixel inside a texel and the document
+  outline lies 1 px outside the bounds. This ticket decides where the ants lie (the mockup puts
+  them 1 px outside on every side, as the outline) and records it. Alignment is tested as
+  `se-013-grid-cases` does: positions taken from NGNE's image, the whole canvas compared. The
+  animation runs from the layer's `watch` on a timer that exists only while there is a
+  selection and motion is allowed, so SE-013's idle test (no redraw for 2 s) still holds.
 - Paint clipping: the tool framework passes the selection as the transaction clip mask (SE-004).
 - Commands: Select All, Deselect, Invert with the keys of SPEC §7.8.
 - Status bar shows the selection size.

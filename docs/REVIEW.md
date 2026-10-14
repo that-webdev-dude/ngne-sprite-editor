@@ -368,6 +368,19 @@ Not decided here, left as they are:
   under `test-results`, so two Playwright runs of them at once in one checkout disturb each
   other.
 
+### Leg 2 (2026-10-14): SE-013
+
+| #   | Source | Finding | Decision | Applied in |
+| --- | ------ | ------- | -------- | ---------- |
+| E31 | Start of the leg | `main` equalled `origin/main` (0abc01c) and CI was green on it (run 38564395391). No ticket was In progress | SE-013 started alone, the only ticket of W6 (5-hour limit 3% used) | — |
+| E32 | SE-013 | Choices the ticket and the documents left open: grid ink white in the dark theme and black in the light one (the mockup's `--grid`), supplied by the interface from the theme; where a tile line runs it alone shows; the tile grid is drawn on an axis while a tile is at least 4 device pixels, at any zoom; the redraw triggers; draw layers found by a glob over `*.overlay.ts`; a pointer down with any button but the middle one focuses the viewport element, because a tool may cancel the default that would | Accepted | SPEC §6.3; DESIGN §6 |
+| E33 | SE-013 review | The cursor's redraw key was `floor(client × ratio)`, without SE-012's 1/128 snap: at 1.25 one position in five named the device pixel before the one `clientToDoc` names, so a move onto it drew nothing and the overlay's cursor named the wrong texel | The key is taken from the view mapping. A unit case at 1.25 fails without the change | `src/app/overlay/overlayController.ts` |
+| E34 | SE-013 review | The grid test compared the document rectangle only: lines drawn across the whole canvas, or a layer over the outline, passed | Every device pixel outside the document is compared with the screenshot with the grids off, byte for byte, the outline included. Nothing was asserted less | `tests/e2e/se-013-grid-cases.ts` |
+| E35 | SE-013 review | The overlay took the size of its own box at once, while NGNE keeps its old canvas stretched for 120 ms and a create after a resize: the grid lay off the image for that time (about 50 device pixels at the middle of a splitter drag) | The overlay follows the NGNE canvas on screen: its size and box, and the mapping NGNE draws with (NGNE places its quads by the view in the canvas's own pixels, so only the pointer mapping goes through the stretch). An E2E at 1 and 1.5 reads both canvases in every animation frame of a resize and fails without the change. No SE-011 or SE-012 module was edited | `src/app/overlay/mountOverlay.ts`, `stretchedMapping.ts`; SPEC §6.3 |
+| E36 | SE-013 review | No line on texel 0: the first column showed one more clean device pixel than the others. DESIGN §6 is silent; the mockup draws a line at the start of every cell | As the mockup: a line on the first device pixel of every texel and tile, texel 0 included | `src/app/overlay/gridLines.ts`; SPEC §6.3; DESIGN §6 |
+| E37 | SE-013 review | SE-007's registry has no checked state, and a Radix checkbox item would break SE-007's test that every menu item is a registry entry. The grid toggles are titled Show/Hide Grid and Show/Hide Pixel Grid, which the shortcut sheet shows as they stand | Kept. Later View toggles (onion skin, symmetry, tiled, timeline) follow it unless a ticket adds a checked state to the registry. SE-071's audit may revisit | SPEC §6.3 |
+| E38 | SE-013 review | What later tickets must know of the overlay | SE-014: the pointer target, no stopped events, `contextmenu`, the texel under the pointer during NGNE's resize quiet. SE-015: how a layer registers, the inverted brush cursor, the benchmark with the grid shown. SE-030: where the ants lie, how to test them, a timer that leaves the idle test passing | SE-014, SE-015, SE-030 scope |
+
 ## Descoped tickets
 
 None.
