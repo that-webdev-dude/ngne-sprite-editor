@@ -230,6 +230,9 @@ Scope
 - Stopped while the panel is collapsed, the tab is hidden or no document is open; disposed on
   unmount.
 - NGNE diagnostics other than dropped-tick notices are shown in the panel.
+- From the SE-014 review: the composite of the frame being stroked is one buffer rewritten in
+  place until the commit (SPEC §5.3). The preview learns of changes from the cache's
+  notifications, not from a buffer's identity, and copies what it keeps across an `await`.
 
 Acceptance
 - E2E readback (in `afterFrame`): paused on frame k, the preview canvas equals the composite of

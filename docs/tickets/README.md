@@ -55,7 +55,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-011 | NgneViewport                                      | L    | 002, 006, 007, 010                 | G0            | Done   |
 | SE-012 | View navigation and coordinate mapping            | M    | 007, 008, 011                      | —             | Done   |
 | SE-013 | Overlay canvas                                    | M    | 012                                | —             | Done   |
-| SE-014 | Tool framework and pointer pipeline               | L    | 004, 007, 012, 013                 | —             | In progress |
+| SE-014 | Tool framework and pointer pipeline               | L    | 004, 007, 012, 013                 | —             | Done   |
 | SE-015 | Pencil and eraser                                 | L    | 014                                | —             | Ready  |
 | SE-016 | Colour state, picker and eyedropper               | M    | 006, 014                           | —             | Ready  |
 | SE-017 | Bucket, line, rectangle and ellipse (gate G1)     | M    | 015, 016                           | —             | Ready  |

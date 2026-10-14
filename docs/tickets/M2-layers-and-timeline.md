@@ -201,6 +201,9 @@ Scope
 - "Within tag" limits neighbours to the active tag's range.
 - Hidden during playback.
 - Toggle in the timeline transport (F3); settings popover per DESIGN §7.
+- From the SE-014 review: during a stroke on a linked cel, the composites of the other frames
+  that show the image are dropped at each animation frame; linked neighbours on screen are then
+  composited and uploaded again at that rate. Readers follow SPEC §5.3 on the stroke's buffer.
 
 Acceptance
 - E2E readback: with one frame before at 50% and tint off, a known pixel shows the expected

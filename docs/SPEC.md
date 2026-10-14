@@ -311,6 +311,15 @@ preview, thumbnails, the eyedropper and every export read its output. It:
   viewport. Every reader takes composites from it and hears of changes from it, after it has
   been brought up to date for a history step, so no reader is served a composite from before
   the step.
+- A stroke composites its frame once at the press and hands the buffer to the cache
+  (`CompositeCache.adopt`, kept only while the frame's layer stack is the one it was composited
+  from). The stroke then rewrites that buffer by dirty rectangles and adopts it again at each
+  animation frame and at the commit, so the frame is not composited again in full. This is the
+  one buffer the cache hands out that is rewritten. Readers therefore: learn that a composite
+  changed from the cache's notifications, never from the buffer's identity; copy a buffer they
+  keep across an `await`, or wait while a transaction is open; and do not call `get` for the
+  stroked frame synchronously inside a notification (the viewport defers to a microtask), or
+  the frame is composited in full before the stroke's buffer is adopted again.
 
 Reference layers, onion skins, symmetry axes and tiled copies are never part of this composite.
 
@@ -575,6 +584,32 @@ with Bresenham lines.
 
 A locked or hidden layer, or a reference layer, rejects paint with a status-bar message.
 Paint is clipped to the selection when one exists. Keys are in §7.8.
+
+Tool framework (SE-014):
+
+- A tool is a module `*.tools.ts`, found by a glob. The 13 rail slots of DESIGN §5.1 are
+  planned with their key and icon; a registered tool with a slot's id takes the slot, and an
+  unclaimed slot is a disabled button. Each tool gets a key command `tool.<id>` in the `canvas`
+  context and, when it can be held, `tool.<id>.hold`.
+- Paint tools do not paint below 1× (the overview steps of §6.4): the press is refused with
+  "Zoom in to 1× or more to paint", because NGNE's sampling decides which texel a device pixel
+  shows there. A stroke under way is not cut off by a zoom. Other tools work at every step.
+- During NGNE's resize quiet (§6.4) a stroke uses the texel shown under the pointer, which the
+  overlay's mapping names (§6.3); the status-bar readout may name its neighbour for that time.
+- One stroke at a time; left paints the foreground, right the background; the middle button is
+  navigation's. The overlay captures the pointer and passes every coalesced sample. A stroke
+  ends at the release, or at a move whose buttons no longer include its button. It is cancelled
+  by `pointercancel`, a lost capture, Escape, the active document closing or changing, or a
+  tool that throws; a cancelled stroke restores the pixels and records nothing. A stroke that
+  changes nothing records nothing. The tool chosen at the press keeps the stroke.
+- Holding a key (Space → Hand) changes the active tool, not the selected one, and returns to it
+  on release. A hold acts only while the viewport element has the focus, so the palette lists it
+  disabled.
+- Tool options are stored per tool id; an invalid stored value reads as the nearest valid one or
+  the default. The context bar shows the active tool's name and its options in order.
+- Refusal messages ("Layer is locked", "Layer is hidden", "Reference layers cannot be painted
+  on", the zoom message above) clear at the next press or after 4 s, and never clear a message
+  set by someone else.
 
 ### 7.2 Selection
 

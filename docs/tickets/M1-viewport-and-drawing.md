@@ -172,7 +172,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-004, SE-007, SE-012, SE-013                           |
 | Blocks       | SE-015, SE-016, SE-030, SE-031                           |
 | Blocked until | —                                                       |
@@ -259,6 +259,15 @@ Scope
   change the grid colours: use an element of its own (a third child of `[data-viewport]`) or a
   two-tone outline, and record which. The overlay redraws every grid at each device-pixel move
   of the cursor: the latency benchmark runs with the pixel grid shown.
+- From the SE-014 review: delete `src/app/tools/dot/` with its own tests; SE-014's other tests
+  use a fixture tool of their own. The assertions of `se-014-tools.spec.ts` that no tool is
+  active at start (no rail button pressed, empty context bar) are placeholders this ticket
+  updates. With the pencil registered as the default tool, a click on the canvas in an earlier
+  test paints: check SE-012's and SE-013's tests. Options are stored per tool id, while SPEC
+  §7.1 calls brush size, shape, pixel-perfect, ink and opacity shared: decide whether pencil,
+  eraser and the shape tools share them, and record it. The press composites the frame in full
+  and snapshots the image, and a second sample in one animation frame can wait up to two
+  frames: the benchmark measures the first sample too.
 - Scripted latency benchmark page for the stroke budget of SPEC §6.6.
 - Conditional: if SE-002 question 1 was a no-go, or this ticket's benchmark misses the stroke
   budget, implement the overlay stroke echo of SPEC §6.6 and record the before/after numbers.
@@ -298,6 +307,15 @@ Scope
   temporary tool from paint tools.
 - Palette section as a read-only swatch grid of the document palette (left-click FG,
   right-click BG).
+- From the SE-014 review: the temporary eyedropper is the eyedropper's `hold` (`key: "Alt"`,
+  while the selected tool paints). SE-014 lets a hold act only while the viewport element has
+  the focus, which was made for Space, a key controls consume; Alt is not one and acts in the
+  whole `canvas` context of SPEC §7.8. An enabled hold command in the command palette would run
+  without its release, and SE-064's palette test spies only `run`: decide whether hold commands
+  leave the palette (they stay on the shortcut sheet) or the test also records `release`
+  (asserting more), and record it. The paint guard refuses paint tools below 1×; at the overview
+  steps `clientToDoc` names the first texel of a device pixel, not always the one shown: decide
+  what the eyedropper samples there. The colour chips go in the rail (`ToolRail.tsx`).
 
 Acceptance
 - Unit tests: `hsv→rgb→hsv` keeps RGB identical for all 8-bit greys and a 4096-colour sample;
@@ -329,6 +347,9 @@ Scope
   outlines.
 - Modifiers: Shift (45° / square / circle), Ctrl (from centre).
 - Bucket tool with tolerance and contiguous options.
+- From the SE-014 review: a stroke exposes no snapshot of the image at its start; the rubber
+  band keeps its own copy from `onDown` and marks the previous preview rectangle dirty so the
+  live composite clears it. The bucket is a paint tool, refused below 1×.
 
 Acceptance
 - Golden tests: ellipses for bounding boxes 1×1 through 9×9 and a 16×7; flood fill on a spiral

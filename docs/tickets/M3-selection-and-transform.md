@@ -28,6 +28,8 @@ Scope
   `se-013-grid-cases` does: positions taken from NGNE's image, the whole canvas compared. The
   animation runs from the layer's `watch` on a timer that exists only while there is a
   selection and motion is allowed, so SE-013's idle test (no redraw for 2 s) still holds.
+- From the SE-014 review: the selection is passed as `clip` where the pipeline begins the
+  transaction (`src/app/tools/pipeline.ts`, a comment marks the place).
 - Paint clipping: the tool framework passes the selection as the transaction clip mask (SE-004).
 - Commands: Select All, Deselect, Invert with the keys of SPEC §7.8.
 - Status bar shows the selection size.
@@ -62,6 +64,11 @@ Scope
 - Live preview of the pending shape on the overlay.
 - Variant switching in the tool rail (hold, or repeat the key).
 - `gesture` keymap context for the polygon lasso.
+- From the SE-014 review: the pointer pipeline delivers moves only while a button is held, and
+  nothing drops a gesture when the tool changes; the polygon lasso needs both. Rail variants
+  (corner mark, hold or repeat the key) are not in SE-014's registry or rail. This ticket
+  extends `src/app/tools/types.ts`, `planned.tools.ts`, `pipeline.ts` and
+  `src/ui/shell/regions/ToolRail.tsx` for them.
 
 Acceptance
 - E2E per tool: the resulting mask equals the expected mask for a scripted gesture.
