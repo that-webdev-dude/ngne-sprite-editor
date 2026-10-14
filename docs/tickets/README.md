@@ -54,7 +54,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-010 | CPU compositor                                    | M    | 003                                | —             | Done   |
 | SE-011 | NgneViewport                                      | L    | 002, 006, 007, 010                 | G0            | Done   |
 | SE-012 | View navigation and coordinate mapping            | M    | 007, 008, 011                      | —             | Done   |
-| SE-013 | Overlay canvas                                    | M    | 012                                | —             | Ready  |
+| SE-013 | Overlay canvas                                    | M    | 012                                | —             | In progress |
 | SE-014 | Tool framework and pointer pipeline               | L    | 004, 007, 012, 013                 | —             | Ready  |
 | SE-015 | Pencil and eraser                                 | L    | 014                                | —             | Ready  |
 | SE-016 | Colour state, picker and eyedropper               | M    | 006, 014                           | —             | Ready  |
