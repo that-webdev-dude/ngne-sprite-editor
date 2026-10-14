@@ -12,7 +12,7 @@ import {
     rename,
     snapshot,
 } from "./se-007-support";
-import { documentName, newSpriteButton, newSpriteDialog } from "./se-008-support";
+import { documentName, nameField, newSpriteButton, newSpriteDialog } from "./se-008-support";
 import {
     activeOption,
     calls,
@@ -499,6 +499,7 @@ test("a chosen command runs after the palette has closed, where focus was; a dia
     await expect(activeOption(page)).toHaveAttribute("data-command", "file.new");
     await page.keyboard.press("Enter");
     await expect(dialog).toBeVisible();
+    await expect(nameField(dialog)).toBeFocused();
     await page.keyboard.type("hero");
     await page.keyboard.press("Enter");
     await expect(dialog).toBeHidden();

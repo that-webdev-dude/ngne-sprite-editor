@@ -434,6 +434,7 @@ test("the dialog returns focus to what opened it: the empty-state button, the Fi
     await expect(menuItem(page, "file.new")).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(dialog).toBeVisible();
+    await expect(nameField(dialog)).toBeFocused();
     await page.keyboard.type("hero");
     await page.keyboard.press("Enter");
     await expect(dialog).toBeHidden();
@@ -481,9 +482,11 @@ test("creating a document replaces the open one after a discard confirmation", a
     await expect(create(dialog)).toBeFocused();
     expect((await activeDocument(page)).id).toBe(first);
 
-    // Escape closes the question only.
+    // Escape closes the question only. It is pressed once the question holds the focus: before,
+    // the New sprite dialog is still the top layer and Escape would close that instead.
     await page.keyboard.press("Enter");
     await expect(confirm).toBeVisible();
+    await expect(dialogButton(confirm, "Cancel")).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(confirm).toBeHidden();
     await expect(dialog).toBeVisible();

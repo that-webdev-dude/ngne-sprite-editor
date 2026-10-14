@@ -6,7 +6,7 @@ import {
     isCharacterChord,
     isTextEditingChord,
 } from "../../src/app/keymap/keyClasses";
-import { region } from "./se-006-support";
+import { region, settleTimers } from "./se-006-support";
 import { CHROME_RESERVED_CHORDS, readSpecKeyTable } from "./se-007-spec-keys";
 import type { SpecBinding } from "./se-007-spec-keys";
 
@@ -354,6 +354,8 @@ test("no chord acts while a menu or a dialog is open", async ({ page }) => {
     ]);
     await page.keyboard.press("Escape");
     await expect(page.getByRole("menu")).toBeHidden();
+    // Radix moves the focus back one timer after the menu has gone.
+    await settleTimers(page);
     await page.keyboard.press("KeyB");
     expect(await calls()).toEqual([spy("B")]);
 

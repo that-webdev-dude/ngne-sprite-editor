@@ -570,6 +570,9 @@ test("the dialog works from the keyboard and returns focus to the Edit menu", as
     await menuTrigger(page, "Edit").focus();
     await page.keyboard.press("Enter");
     await expect(page.getByRole("menu", { name: "Edit" })).toBeVisible();
+    // Radix focuses the first enabled item one timer after the menu opens; End acts on the
+    // focus.
+    await expect(page.getByRole("menu", { name: "Edit" }).locator(":focus")).toHaveCount(1);
     await page.keyboard.press("End");
     await expect(menuItem(page, PREFERENCES_COMMAND)).toBeFocused();
     await page.keyboard.press("Enter");

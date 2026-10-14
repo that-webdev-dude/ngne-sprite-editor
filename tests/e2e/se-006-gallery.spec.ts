@@ -577,6 +577,8 @@ test.describe("keyboard operation", () => {
         await page.keyboard.press("Escape");
         await expect(list).toBeHidden();
         await expect(select).toHaveText("Alpha compositing");
+        // Radix returns the focus one timer after the list has gone; Enter needs it there.
+        await expect(select).toBeFocused();
 
         // Typeahead comes from Radix.
         await page.keyboard.press("Enter");

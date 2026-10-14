@@ -71,6 +71,8 @@ test("with the menu bar region failed, the palette, Preferences and the shortcut
     await expect(activeOption(page)).toHaveAttribute("data-command", "edit.preferences");
     await page.keyboard.press("Enter");
     await expect(preferencesDialog(page)).toBeVisible();
+    // Escape closes the dialog once it holds the focus.
+    await expect(preferencesDialog(page).locator(":focus")).toHaveCount(1);
     await page.keyboard.press("Escape");
     await expect(preferencesDialog(page)).toBeHidden();
     await openShortcutSheet(page);
