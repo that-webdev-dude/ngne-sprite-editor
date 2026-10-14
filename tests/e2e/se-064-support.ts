@@ -2,7 +2,7 @@ import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 // Declares `window.__ngneTest`, the development-only test hook of the app.
 import type {} from "../../src/app/testing/testHooks";
-import { region } from "./se-006-support";
+import { region, settleTimers } from "./se-006-support";
 import { menuItem, openEditor, openMenu } from "./se-007-support";
 import { startInTheme } from "./se-008-support";
 import type { Theme } from "./se-008-support";
@@ -53,11 +53,16 @@ export function paletteIds(page: Page): Promise<string[]> {
     );
 }
 
-/** Opens the palette, picks the row of a command with the pointer and waits for it to close. */
+/**
+ * Opens the palette, picks the row of a command with the pointer, waits for it to close and for
+ * the command to have run. The palette runs it where the focus returns, which Radix does one
+ * timer after the palette has left the page.
+ */
 export async function runFromPalette(page: Page, commandId: string): Promise<void> {
     await openPalette(page);
     await paletteOption(page, commandId).click();
     await expect(palette(page)).toBeHidden();
+    await settleTimers(page);
 }
 
 // --- Preferences and shortcut sheet -------------------------------------------------------
