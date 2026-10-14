@@ -5,10 +5,11 @@ import type { GridSettings } from "../../core/model";
 // Where the overlay's lines go, in device pixels of the overlay canvas (SE-013). Pure: no DOM
 // and no store, so the placement is unit-tested in Node.
 //
-// A grid line is 1 device pixel wide and lies on the first device pixel of the texel after
-// the boundary it marks, inside the document: at a zoom step of 1 or above that is exactly
-// where NGNE starts the texel (`documentRect`, SPEC §6.4). The document's own edges are not
-// grid lines; the outline marks them, outside the document.
+// A grid line is 1 device pixel wide and lies on the first device pixel of a texel (of a
+// tile, for the tile grid): at a zoom step of 1 or above that is exactly where NGNE starts the
+// texel (`documentRect`, SPEC §6.4). As in the design mockup, every texel has its line, the
+// first one included, so every cell shows the same width of clear pixels; the outline lies
+// outside the document.
 
 /** The pixel grid is drawn from this zoom up (DESIGN §6). */
 export const PIXEL_GRID_MIN_SCALE = 8;
@@ -52,14 +53,15 @@ export function devicePosition(axis: Axis, position: number): number {
 
 /**
  * The device pixels (columns or rows) of the lines at the document positions
- * `start + n × step` strictly inside the document, that lie on the canvas; ascending, each
- * once. `start` and `step` are whole document pixels, `step` at least 1.
+ * `start + n × step` from 0 up to the document's far edge (not included), that lie on the
+ * canvas; ascending, each once. `start` and `step` are whole document pixels, `step` at
+ * least 1.
  */
 export function axisLines(axis: Axis, start: number, step: number): number[] {
     const lines: number[] = [];
-    if (!(step >= 1) || axis.length < 2 || axis.extent <= 0) return lines;
+    if (!(step >= 1) || axis.length < 1 || axis.extent <= 0) return lines;
     // The document positions on the canvas, widened by one so that rounding loses none.
-    const first = Math.max(1, Math.floor((-axis.origin * axis.length) / axis.extent));
+    const first = Math.max(0, Math.floor((-axis.origin * axis.length) / axis.extent));
     const last = Math.min(
         axis.length - 1,
         Math.ceil(((axis.canvas - axis.origin) * axis.length) / axis.extent),
@@ -67,8 +69,8 @@ export function axisLines(axis: Axis, start: number, step: number): number[] {
     for (let n = Math.ceil((first - start) / step); start + n * step <= last; n++) {
         const device = devicePosition(axis, start + n * step);
         if (device < 0 || device >= axis.canvas) continue;
-        // Inside the rectangle and off its edges, also where the overview steps round.
-        if (device <= axis.origin || device >= axis.origin + axis.extent) continue;
+        // Inside the rectangle, also where the overview steps round.
+        if (device < axis.origin || device >= axis.origin + axis.extent) continue;
         // At the overview steps two positions can start on the same device pixel.
         if (lines[lines.length - 1] !== device) lines.push(device);
     }
@@ -81,7 +83,7 @@ export interface GridLines {
     rows: number[];
 }
 
-/** The pixel grid: a line at every texel boundary; none below `PIXEL_GRID_MIN_SCALE`. */
+/** The pixel grid: a line at the start of every texel; none below `PIXEL_GRID_MIN_SCALE`. */
 export function pixelGridLines(axes: { x: Axis; y: Axis }, scale: number): GridLines {
     if (!(scale >= PIXEL_GRID_MIN_SCALE)) return { columns: [], rows: [] };
     return { columns: axisLines(axes.x, 0, 1), rows: axisLines(axes.y, 0, 1) };

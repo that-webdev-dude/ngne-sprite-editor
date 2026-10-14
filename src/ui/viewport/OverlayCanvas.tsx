@@ -24,7 +24,7 @@ function readOverlayTheme(theme: Theme): OverlayTheme {
 
 /**
  * The overlay canvas of the viewport (SPEC §6.3, SE-013): stacked over the NGNE canvas at the
- * same device-pixel size, it draws the editor's chrome and is the pointer target of the
+ * same backing size and box, it draws the editor's chrome and is the pointer target of the
  * viewport. It is the second child of the viewport element, beside the element NGNE fills
  * (never inside it: NGNE replaces its canvas there).
  */
@@ -36,8 +36,10 @@ export function OverlayCanvas() {
     useEffect(() => {
         const element = canvas.current;
         const container = element?.parentElement;
-        if (!element || !container) return;
-        const overlay = mountOverlay(element, container);
+        // The element NGNE fills, the first child of the viewport element (`ViewportCanvas`).
+        const ngne = container?.querySelector<HTMLElement>(":scope > [data-viewport-canvas]");
+        if (!element || !container || !ngne) return;
+        const overlay = mountOverlay(element, container, ngne);
         mounted.current = overlay;
         return () => {
             mounted.current = null;

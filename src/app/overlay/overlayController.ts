@@ -4,15 +4,22 @@ import type { DeviceSize } from "../../engine/viewport/types";
 import { activeDocument } from "../state/sessions";
 import type { SessionsState } from "../state/sessions";
 import type { Point, ViewMapping } from "../view/coordinates";
+import { stretchedMapping } from "./stretchedMapping";
 import { DEFAULT_OVERLAY_THEME } from "./types";
 import type { OverlayCursor, OverlayFrame, OverlayLayer, OverlayTheme } from "./types";
 
-// When and how the overlay redraws (SPEC §6.3, SE-013). No DOM here: the canvas, its size
-// and the pointer are reported by `mountOverlay`, so the policy is unit-tested in Node.
+// When and how the overlay redraws (SPEC §6.3, SE-013). No DOM here: the sizes and the pointer
+// are reported by `mountOverlay`, so the policy is unit-tested in Node.
+//
+// The canvas's backing size is that of the NGNE canvas on screen (`resize`), which may differ
+// from the device size of the element both fill (`setBox`) while NGNE stretches its old canvas
+// during a resize; the overlay is then stretched alike and maps the pointer accordingly
+// (`stretchedMapping`).
 //
 // A redraw clears the canvas and runs every draw layer bottom to top. It happens only when
 //
-//   - the view changed: the active document, its size or its view (scale, origin);
+//   - the view changed: the active document, its size or its view (scale, origin), or the
+//     size of the element;
 //   - the cursor moved to another device pixel, or entered or left the viewport;
 //   - a layer asked for it (`OverlayLayer.watch`), or the theme changed;
 //
@@ -48,8 +55,16 @@ export interface OverlayController {
     readonly pending: boolean;
     /** The canvas's backing size. */
     readonly size: Readonly<DeviceSize>;
-    /** The canvas's element was measured: a new size is set and drawn at once. */
+    /**
+     * The NGNE canvas on screen has this backing size: the overlay's canvas takes it and is
+     * drawn again at once.
+     */
     resize(size: DeviceSize): void;
+    /**
+     * The element the canvases fill has this size in device pixels. While it differs from the
+     * backing size, the canvases are stretched over it.
+     */
+    setBox(size: DeviceSize): void;
     /** The pointer moved over the viewport to `client` (CSS pixels), or left it (null). */
     setCursor(client: Point | null): void;
     setTheme(theme: OverlayTheme): void;
@@ -68,10 +83,17 @@ function viewKey(state: SessionsState): string {
     return `${document.id}|${width}x${height}|${view.scale}@${view.originX},${view.originY}`;
 }
 
-/** The device pixel a client position lies in, as a key. */
-function devicePixelKey(client: Point | null, ratio: number): string {
+/**
+ * The canvas pixel a client position lies in, as a key: from the mapping, which takes a
+ * position within 1/128 of a device pixel as that pixel, as the readout and the tools do
+ * (Chrome reports device pixel 102 at a ratio of 1.25 as 81.5999984741211 CSS pixels). Only
+ * without a mapping (no document) from the ratio alone.
+ */
+function devicePixelKey(client: Point | null, mapping: ViewMapping | null, ratio: number): string {
     if (!client) return "";
-    return `${Math.floor(client.x * ratio)},${Math.floor(client.y * ratio)}`;
+    if (!mapping) return `~${Math.floor(client.x * ratio)},${Math.floor(client.y * ratio)}`;
+    const device = mapping.clientToDevice(client.x, client.y);
+    return `${Math.floor(device.x)},${Math.floor(device.y)}`;
 }
 
 /**
@@ -88,6 +110,8 @@ export function createOverlayController(
     let theme: OverlayTheme = { ...DEFAULT_OVERLAY_THEME };
     let cursor: Point | null = null;
     let cursorKey = "";
+    /** The device size of the element the canvases fill; 0 × 0 until it is reported. */
+    let box: DeviceSize = { width: 0, height: 0 };
     let shownView = viewKey(sessions.getState());
     let cancelFrame: (() => void) | null = null;
     let redraws = 0;
@@ -104,6 +128,16 @@ export function createOverlayController(
         } catch {
             // Reporting is best effort.
         }
+    };
+
+    /**
+     * The mapping of the image on screen, in the canvas's backing pixels; null while there is
+     * no document or no viewport element.
+     */
+    const onScreen = (): ViewMapping | null => {
+        const base = activeDocument(sessions.getState()) ? sources.mapping() : null;
+        if (!base) return null;
+        return stretchedMapping(base, { width: canvas.width, height: canvas.height }, box);
     };
 
     const cursorFor = (mapping: ViewMapping): OverlayCursor | null =>
@@ -123,7 +157,7 @@ export function createOverlayController(
         context.clearRect(0, 0, size.width, size.height);
         if (size.width === 0 || size.height === 0) return;
         const document = activeDocument(sessions.getState());
-        const mapping = document ? sources.mapping() : null;
+        const mapping = onScreen();
         if (!document || !mapping) return;
         const frame: OverlayFrame = {
             context,
@@ -189,9 +223,15 @@ export function createOverlayController(
             canvas.height = size.height;
             draw();
         },
+        setBox(size) {
+            if (disposed || (size.width === box.width && size.height === box.height)) return;
+            box = { width: size.width, height: size.height };
+            // What is drawn stays where it is on the stretched canvas; the pointer maps anew.
+            requestRedraw();
+        },
         setCursor(client) {
             cursor = client ? { x: client.x, y: client.y } : null;
-            const key = devicePixelKey(cursor, sources.ratio());
+            const key = devicePixelKey(cursor, cursor ? onScreen() : null, sources.ratio());
             if (key === cursorKey) return;
             cursorKey = key;
             requestRedraw();

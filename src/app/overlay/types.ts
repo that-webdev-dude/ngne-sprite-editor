@@ -24,9 +24,9 @@ export const DEFAULT_OVERLAY_THEME: Readonly<OverlayTheme> = {
 export interface OverlayCursor {
     /** Client position, CSS pixels, as the pointer event reported it. */
     client: Point;
-    /** Device position in the overlay canvas, with its fraction. */
+    /** Position in the overlay canvas's pixels, with its fraction. */
     device: Point;
-    /** The document pixel under it: whole numbers, also outside the document. */
+    /** The document pixel shown under it: whole numbers, also outside the document. */
     pixel: Point;
 }
 
@@ -37,13 +37,18 @@ export interface OverlayFrame {
      * it sets does not reach the next layer. Coordinates are device pixels of the canvas.
      */
     readonly context: CanvasRenderingContext2D;
-    /** The canvas backing size in device pixels: the NGNE canvas's size (SPEC §6.3). */
+    /**
+     * The canvas backing size: that of the NGNE canvas on screen (SPEC §6.3). It is the
+     * viewport element's size in device pixels, except while NGNE stretches its old canvas
+     * after a resize; the overlay is then stretched alike.
+     */
     readonly size: Readonly<DeviceSize>;
     /** The active document, as the session store holds it. */
     readonly document: OpenDocument;
     /**
-     * Its mapping as it is on screen now (`currentViewMapping`, read at this redraw).
-     * `mapping.rect` is the document rectangle in canvas pixels.
+     * Its mapping as the image is on screen now (`currentViewMapping`, read at this redraw),
+     * in canvas pixels: `mapping.rect` is the document rectangle NGNE drew, and client
+     * positions map to the canvas pixel under them, also while the canvases are stretched.
      */
     readonly mapping: ViewMapping;
     /** The pointer over the viewport; null when it is not over it. */

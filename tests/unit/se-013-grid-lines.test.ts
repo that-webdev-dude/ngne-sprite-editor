@@ -19,8 +19,9 @@ import { documentRect } from "../../src/engine/viewport/geometry";
 import type { DeviceRect } from "../../src/engine/viewport/geometry";
 
 // SE-013: where the overlay's lines go, in device pixels of the overlay canvas. A line lies on
-// the first device pixel of the texel after the boundary it marks; NGNE starts that texel
-// there (`documentRect`, the rectangle the engine draws the frame over).
+// the first device pixel of a texel (of a tile), the document's first one included, as in the
+// design mockup; NGNE starts that texel there (`documentRect`, the rectangle the engine draws
+// the frame over).
 
 const CANVAS = { width: 900, height: 500 };
 
@@ -46,14 +47,11 @@ function pixels(rects: readonly DeviceRect[]): Map<string, number> {
 }
 
 describe("pixel grid", () => {
-    it("puts a line on the first device pixel of every texel but the first, at 8×, 12× and 16×", () => {
+    it("puts a line on the first device pixel of every texel, the first included, at 8×, 12× and 16×", () => {
         for (const scale of [8, 12, 16]) {
             for (const origin of [0, 37, 40, 101]) {
                 const along = axis(origin, scale, 12);
-                const expected = Array.from(
-                    { length: 11 },
-                    (_, index) => origin + (index + 1) * scale,
-                );
+                const expected = Array.from({ length: 12 }, (_, index) => origin + index * scale);
                 expect(axisLines(along, 0, 1), `${scale}× at ${origin}`).toEqual(expected);
                 // The same pixel the mapping names as the start of that texel.
                 const mapping = createViewMapping({
@@ -65,10 +63,12 @@ describe("pixel grid", () => {
                     top: 72,
                 });
                 for (const [index, column] of expected.entries()) {
-                    expect(mapping.docToDevice(index + 1, 0).x).toBe(column);
-                    expect(mapping.deviceToDoc(column, 0).x).toBe(index + 1);
-                    expect(mapping.deviceToDoc(column - 1, 0).x).toBeLessThan(index + 1);
+                    expect(mapping.docToDevice(index, 0).x).toBe(column);
+                    expect(mapping.deviceToDoc(column, 0).x).toBe(index);
+                    expect(mapping.deviceToDoc(column - 1, 0).x).toBeLessThan(index);
                 }
+                // Nothing at the document's far edge: that pixel is the outline's.
+                expect(expected).not.toContain(origin + 12 * scale);
             }
         }
     });
@@ -81,8 +81,10 @@ describe("pixel grid", () => {
             const view = { scale, originX: 20, originY: 10 };
             const lines = pixelGridLines(axesOf(documentRect(view, 12, 9), doc, canvas), scale);
             if (scale >= PIXEL_GRID_MIN_SCALE) {
-                expect(lines.columns, `${scale}×`).toHaveLength(11);
-                expect(lines.rows, `${scale}×`).toHaveLength(8);
+                expect(lines.columns, `${scale}×`).toHaveLength(12);
+                expect(lines.rows, `${scale}×`).toHaveLength(9);
+                expect(lines.columns[0], `${scale}×`).toBe(20);
+                expect(lines.rows[0], `${scale}×`).toBe(10);
             } else {
                 expect(lines, `${scale}×`).toEqual({ columns: [], rows: [] });
             }
@@ -103,27 +105,35 @@ describe("pixel grid", () => {
         // Wholly off the canvas, on either side.
         expect(axisLines(axis(-5000, 8, 32), 0, 1)).toEqual([]);
         expect(axisLines(axis(CANVAS.width, 8, 32), 0, 1)).toEqual([]);
-        // A boundary at the canvas's first pixel is drawn; one at its last pixel too.
-        expect(axisLines(axis(-8, 8, 4), 0, 1)[0]).toBe(0);
-        expect(axisLines(axis(CANVAS.width - 9, 8, 4), 0, 1)).toEqual([CANVAS.width - 1]);
+        // A texel that starts at the canvas's first pixel has its line; one that starts at its
+        // last pixel too.
+        expect(axisLines(axis(-8, 8, 4), 0, 1)).toEqual([0, 8, 16]);
+        expect(axisLines(axis(CANVAS.width - 9, 8, 4), 0, 1)).toEqual([
+            CANVAS.width - 9,
+            CANVAS.width - 1,
+        ]);
     });
 
-    it("has no line in a document one pixel wide", () => {
-        expect(axisLines(axis(10, 16, 1), 0, 1)).toEqual([]);
+    it("has one line in a document one pixel wide, on its first device pixel", () => {
+        expect(axisLines(axis(10, 16, 1), 0, 1)).toEqual([10]);
     });
 });
 
 describe("tile grid", () => {
     it("puts a line at offset + n × size inside the document, for offsets on either side", () => {
         const along = axis(30, 8, 20);
-        expect(axisLines(along, 0, 5)).toEqual([30 + 5 * 8, 30 + 10 * 8, 30 + 15 * 8]);
+        // With no offset the first tile starts at the document's corner, and has its line.
+        expect(axisLines(along, 0, 5)).toEqual([0, 5, 10, 15].map((x) => 30 + x * 8));
         expect(axisLines(along, 2, 5)).toEqual([2, 7, 12, 17].map((x) => 30 + x * 8));
         expect(axisLines(along, -1, 5)).toEqual([4, 9, 14, 19].map((x) => 30 + x * 8));
         expect(axisLines(along, 23, 5)).toEqual([3, 8, 13, 18].map((x) => 30 + x * 8));
         expect(axisLines(along, -21, 5)).toEqual([4, 9, 14, 19].map((x) => 30 + x * 8));
-        // A cell larger than the document: only the line inside it.
+        // A cell larger than the document: only the line inside it, or none.
         expect(axisLines(along, 7, 64)).toEqual([30 + 7 * 8]);
-        expect(axisLines(along, 0, 64)).toEqual([]);
+        expect(axisLines(along, 0, 64)).toEqual([30]);
+        expect(axisLines(along, 64, 64)).toEqual([30]);
+        expect(axisLines(along, 20, 64)).toEqual([]);
+        expect(axisLines(along, -44, 64)).toEqual([]);
     });
 
     it("is drawn along an axis while a cell is at least 4 device pixels on screen", () => {
@@ -143,14 +153,15 @@ describe("tile grid", () => {
         const along = axis(10, 1 / 4, 256);
         expect(along.extent).toBe(64);
         expect(axisLines(along, 0, 16)).toEqual(
-            Array.from({ length: 15 }, (_, index) => 10 + (index + 1) * 4),
+            Array.from({ length: 16 }, (_, index) => 10 + index * 4),
         );
         // 1/8 of a 37-pixel document is 5 device pixels (rounded): positions are rounded.
         const odd = axis(0, 1 / 8, 37);
         expect(odd.extent).toBe(5);
-        expect(axisLines(odd, 0, 8)).toEqual([1, 2, 3, 4]);
-        // Positions that round onto the document's edges are left to the outline.
-        expect(axisLines(odd, 0, 1)).toEqual([1, 2, 3, 4]);
+        expect(axisLines(odd, 0, 8)).toEqual([0, 1, 2, 3, 4]);
+        // A position that rounds onto the document's far edge is left to the outline.
+        expect(axisLines(odd, 0, 1)).toEqual([0, 1, 2, 3, 4]);
+        expect(axisLines(odd, 36, 37)).toEqual([]);
     });
 });
 

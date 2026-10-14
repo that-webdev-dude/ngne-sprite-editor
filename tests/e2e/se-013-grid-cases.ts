@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { boxOf, collectErrors } from "./se-006-support";
 import {
     hostDeviceSize,
@@ -6,11 +7,19 @@ import {
     openViewportEditor,
     paint,
     setView,
+    settle,
     viewportHost,
 } from "./se-011-support";
-import { geometry, screen, viewportArea } from "./se-012-support";
-import type { Screen } from "./se-012-support";
-import { overlayCanvas, overlaySettled, setGrids } from "./se-013-support";
+import { geometry, viewportArea } from "./se-012-support";
+import {
+    overlayCanvas,
+    overlaySettled,
+    setGrids,
+    shot,
+    startSampling,
+    stopSampling,
+} from "./se-013-support";
+import type { Shot } from "./se-013-support";
 
 // SE-013: the overlay's lines against the image NGNE draws, on the screen (SPEC §6.7: where
 // overlay and NGNE canvas alignment matters, a screenshot of both canvases). The tests are
@@ -19,8 +28,9 @@ import { overlayCanvas, overlaySettled, setGrids } from "./se-013-support";
 //
 // Every texel of the test document has a colour of its own, so the screenshot without the
 // grids shows where NGNE starts each texel. With the grids, the pixels of a line must be
-// exactly the boundary pixels — the first device pixel of each texel after a boundary —
-// tinted by the grid's ink, and every other pixel must be untouched.
+// exactly the first device pixels of the texels (of the tiles), the document's first texel
+// included, tinted by the grid's ink; every other pixel of the canvases, inside the document
+// and outside it, must be untouched.
 
 const WIDTH = 12;
 const HEIGHT = 8;
@@ -40,6 +50,8 @@ const TILE_ALPHA = 0.25;
  * changes each channel by at least 11.
  */
 const TOLERANCE = 2;
+/** At most this many differing pixels are listed. */
+const LIMIT = 8;
 
 /** Opaque, one colour per texel, every channel at most 160. */
 function texels(): number[] {
@@ -63,41 +75,196 @@ const blend = (colour: readonly number[], alpha: number) =>
 
 /** What kind of line covers a device pixel of the document, at `scale`. */
 function lineAt(dx: number, dy: number, scale: number, tiles: boolean): "tile" | "pixel" | null {
-    const column = dx % scale === 0 && dx > 0 ? dx / scale : null;
-    const row = dy % scale === 0 && dy > 0 ? dy / scale : null;
+    // The first device pixel of every texel, the first texel's included (the mockup's grid).
+    const column = dx % scale === 0 ? dx / scale : null;
+    const row = dy % scale === 0 ? dy / scale : null;
     if (tiles && (TILE_COLUMNS.includes(column ?? -1) || TILE_ROWS.includes(row ?? -1))) {
         return "tile";
     }
     return column !== null || row !== null ? "pixel" : null;
 }
 
+type View = { scale: number; originX: number; originY: number };
+
+/** Where the canvases are on the screen and where the document is on them. */
 interface Placement {
     /** The device pixel of the screen at the viewport element's corner. */
     left: number;
     top: number;
-    view: { scale: number; originX: number; originY: number };
+    /** The canvases' size in device pixels. */
+    device: { width: number; height: number };
+    view: View;
 }
 
 /** The screen pixel of a device pixel of the canvases. */
-function at(shown: Screen, place: Placement, x: number, y: number): number[] {
+function at(shown: Shot, place: Placement, x: number, y: number): number[] {
     return shown.at(place.left + x, place.top + y);
 }
 
-/** Device pixels of the document rectangle where `test` fails, at most `limit` of them. */
-function mismatches(
-    place: Placement,
-    test: (dx: number, dy: number) => string | null,
-    limit = 8,
-): string[] {
+/** Whether a device pixel of the canvases lies inside the document rectangle. */
+function inDocument(place: Placement, x: number, y: number): boolean {
+    const { scale, originX, originY } = place.view;
+    return (
+        x >= originX && x < originX + WIDTH * scale && y >= originY && y < originY + HEIGHT * scale
+    );
+}
+
+/** Device pixels of the document rectangle where `test` fails, at most `LIMIT` of them. */
+function mismatches(place: Placement, test: (dx: number, dy: number) => string | null): string[] {
     const { scale } = place.view;
     const found: string[] = [];
-    for (let dy = 0; dy < HEIGHT * scale && found.length < limit; dy++) {
-        for (let dx = 0; dx < WIDTH * scale && found.length < limit; dx++) {
+    for (let dy = 0; dy < HEIGHT * scale && found.length < LIMIT; dy++) {
+        for (let dx = 0; dx < WIDTH * scale && found.length < LIMIT; dx++) {
             const problem = test(dx, dy);
             if (problem) found.push(`(${dx}, ${dy}) ${problem}`);
         }
     }
     return found;
+}
+
+/**
+ * Device pixels of the canvases outside the document rectangle, the outline included, that
+ * differ between two screenshots; at most `LIMIT` of them.
+ */
+function outsideMismatches(place: Placement, shown: Shot, plain: Shot): string[] {
+    const found: string[] = [];
+    const { width, height } = place.device;
+    for (let y = 0; y < height && found.length < LIMIT; y++) {
+        for (let x = 0; x < width && found.length < LIMIT; x++) {
+            if (inDocument(place, x, y)) continue;
+            const index = ((place.top + y) * shown.width + place.left + x) * 4;
+            for (let channel = 0; channel < 4; channel++) {
+                if (shown.data[index + channel] !== plain.data[index + channel]) {
+                    found.push(
+                        `(${x}, ${y}) ${at(plain, place, x, y)} shows ${at(shown, place, x, y)}`,
+                    );
+                    break;
+                }
+            }
+        }
+    }
+    return found;
+}
+
+/** The ring 1 device pixel outside the document, as far as it lies on the canvases. */
+function outlinePixels(place: Placement): [number, number][] {
+    const { scale, originX, originY } = place.view;
+    const right = originX + WIDTH * scale;
+    const bottom = originY + HEIGHT * scale;
+    const ring: [number, number][] = [];
+    for (let x = originX - 1; x <= right; x++) ring.push([x, originY - 1], [x, bottom]);
+    for (let y = originY; y < bottom; y++) ring.push([originX - 1, y], [right, y]);
+    return ring.filter(
+        ([x, y]) => x >= 0 && y >= 0 && x < place.device.width && y < place.device.height,
+    );
+}
+
+/**
+ * Takes the screen without grids, with the pixel grid and with both grids, for a document
+ * painted with `PIXELS` at `view`, and checks every device pixel of the canvases: NGNE's
+ * texels at their places, the outline all round, the lines on the first device pixel of each
+ * texel and tile with their ink, and nothing else changed anywhere on the canvases.
+ */
+async function expectGridsOnScreen(page: Page, id: string, view: View): Promise<void> {
+    const { scale } = view;
+    await setGrids(page, id, { pixelGrid: false, grid: { ...TILES, visible: false } });
+    // Nothing at the pointer is in the picture.
+    await page.mouse.move(1, 1);
+    await overlaySettled(page);
+    const layout = await geometry(page);
+    const place: Placement = {
+        left: Math.round(layout.left * layout.ratio),
+        top: Math.round(layout.top * layout.ratio),
+        device: layout.device,
+        view,
+    };
+
+    // No grid: NGNE's texels, each `scale` × `scale` device pixels from the view's origin,
+    // and the outline just outside them, all round.
+    const plain = await shot(page);
+    const texel = (dx: number, dy: number) =>
+        texelColour(Math.floor(dx / scale), Math.floor(dy / scale));
+    const screenAt = (shown: Shot, dx: number, dy: number) =>
+        at(shown, place, view.originX + dx, view.originY + dy);
+    expect(
+        mismatches(place, (dx, dy) => {
+            const shown = screenAt(plain, dx, dy);
+            const expected = texel(dx, dy);
+            return shown.join() === expected.join() ? null : `shows ${shown} for texel ${expected}`;
+        }),
+    ).toEqual([]);
+    const ring = outlinePixels(place);
+    expect(ring.length).toBe(2 * (WIDTH * scale + 2) + 2 * HEIGHT * scale);
+    expect(
+        ring
+            .filter(([x, y]) => at(plain, place, x, y).join() !== OUTLINE.join())
+            .slice(0, LIMIT)
+            .map(([x, y]) => `outline at ${x}, ${y}: ${at(plain, place, x, y)}`),
+    ).toEqual([]);
+    const right = WIDTH * scale;
+    const bottom = HEIGHT * scale;
+    for (const [dx, dy] of [
+        [-1, -1],
+        [-1, 5],
+        [right, 0],
+        [right, bottom],
+        [7, -1],
+        [3, bottom],
+    ] as const) {
+        expect(screenAt(plain, dx, dy), `outline at ${dx}, ${dy}`).toEqual(OUTLINE);
+    }
+    for (const [dx, dy] of [
+        [-2, 0],
+        [right + 1, 4],
+        [0, -2],
+        [9, bottom + 1],
+    ] as const) {
+        expect(screenAt(plain, dx, dy), `workspace at ${dx}, ${dy}`).toEqual(WORKSPACE);
+    }
+
+    /** Compares the document's pixels of a screenshot with the plain one. */
+    const check = (shown: Shot, tiles: boolean) =>
+        mismatches(place, (dx, dy) => {
+            const under = screenAt(plain, dx, dy);
+            const actual = screenAt(shown, dx, dy);
+            const line = lineAt(dx, dy, scale, tiles);
+            if (!line) {
+                return actual.join() === under.join() ? null : `untouched ${under} shows ${actual}`;
+            }
+            const expected = blend(under, line === "tile" ? TILE_ALPHA : PIXEL_ALPHA);
+            const close =
+                actual[3] === 255 &&
+                expected.every(
+                    (value, channel) => Math.abs((actual[channel] ?? -99) - value) <= TOLERANCE,
+                );
+            return close
+                ? null
+                : `${line} line over ${under} shows ${actual}, not ${expected.map(Math.round)}`;
+        });
+
+    // The pixel grid: lines inside the document only; outside it, the outline included,
+    // every pixel of the canvases as without grids.
+    await setGrids(page, id, { pixelGrid: true });
+    await overlaySettled(page);
+    const pixelGrid = await shot(page);
+    expect(check(pixelGrid, false)).toEqual([]);
+    expect(outsideMismatches(place, pixelGrid, plain)).toEqual([]);
+
+    // The pixel grid and the tile grid: a tile line shows its own strength, also where it
+    // crosses a line of the pixel grid.
+    await setGrids(page, id, { grid: { visible: true } });
+    await overlaySettled(page);
+    const both = await shot(page);
+    expect(check(both, true)).toEqual([]);
+    expect(outsideMismatches(place, both, plain)).toEqual([]);
+
+    // The outline is the same with the grids.
+    for (const [dx, dy] of [
+        [-1, -1],
+        [right, bottom],
+    ] as const) {
+        expect(screenAt(both, dx, dy)).toEqual(OUTLINE);
+    }
 }
 
 /** Declares the grid tests; the calling spec file has set Chrome up for `ratio`. */
@@ -161,104 +328,80 @@ export function gridTests(ratio: number): void {
                 await openViewportEditor(page);
                 const view = { scale, originX: 37, originY: 23 };
                 const document = await openDocument(page, { width: WIDTH, height: HEIGHT }, view);
-                await setGrids(page, document.id, {
-                    pixelGrid: false,
-                    grid: { ...TILES, visible: false },
-                });
                 await paint(page, document.id, PIXELS);
                 await setView(page, document.id, view);
-                // Nothing at the pointer is in the picture.
-                await page.mouse.move(1, 1);
-                const layout = await geometry(page);
-                const place: Placement = {
-                    left: Math.round(layout.left * layout.ratio),
-                    top: Math.round(layout.top * layout.ratio),
-                    view,
-                };
-
-                // No grid: NGNE's texels, each `scale` × `scale` device pixels from the
-                // view's origin, and the outline just outside them.
-                await overlaySettled(page);
-                const plain = await screen(page);
-                const texel = (dx: number, dy: number) =>
-                    texelColour(Math.floor(dx / scale), Math.floor(dy / scale));
-                const screenAt = (shown: Screen, dx: number, dy: number) =>
-                    at(shown, place, view.originX + dx, view.originY + dy);
-                expect(
-                    mismatches(place, (dx, dy) => {
-                        const shown = screenAt(plain, dx, dy);
-                        const expected = texel(dx, dy);
-                        return shown.join() === expected.join()
-                            ? null
-                            : `shows ${shown} for texel ${expected}`;
-                    }),
-                ).toEqual([]);
-                const right = WIDTH * scale;
-                const bottom = HEIGHT * scale;
-                for (const [dx, dy] of [
-                    [-1, -1],
-                    [-1, 5],
-                    [right, 0],
-                    [right, bottom],
-                    [7, -1],
-                    [3, bottom],
-                ] as const) {
-                    expect(screenAt(plain, dx, dy), `outline at ${dx}, ${dy}`).toEqual(OUTLINE);
-                }
-                for (const [dx, dy] of [
-                    [-2, 0],
-                    [right + 1, 4],
-                    [0, -2],
-                    [9, bottom + 1],
-                ] as const) {
-                    expect(screenAt(plain, dx, dy), `workspace at ${dx}, ${dy}`).toEqual(WORKSPACE);
-                }
-
-                /** Compares a screenshot with the plain one, pixel by pixel. */
-                const check = (shown: Screen, tiles: boolean) =>
-                    mismatches(place, (dx, dy) => {
-                        const under = screenAt(plain, dx, dy);
-                        const actual = screenAt(shown, dx, dy);
-                        const line = lineAt(dx, dy, scale, tiles);
-                        if (!line) {
-                            return actual.join() === under.join()
-                                ? null
-                                : `untouched ${under} shows ${actual}`;
-                        }
-                        const expected = blend(under, line === "tile" ? TILE_ALPHA : PIXEL_ALPHA);
-                        const close =
-                            actual[3] === 255 &&
-                            expected.every(
-                                (value, channel) =>
-                                    Math.abs((actual[channel] ?? -99) - value) <= TOLERANCE,
-                            );
-                        return close
-                            ? null
-                            : `${line} line over ${under} shows ${actual}, not ${expected.map(Math.round)}`;
-                    });
-
-                // The pixel grid.
-                await setGrids(page, document.id, { pixelGrid: true });
-                await overlaySettled(page);
-                const pixelGrid = await screen(page);
-                expect(check(pixelGrid, false)).toEqual([]);
-
-                // The pixel grid and the tile grid: a tile line shows its own strength, also
-                // where it crosses a line of the pixel grid.
-                await setGrids(page, document.id, { grid: { visible: true } });
-                await overlaySettled(page);
-                const both = await screen(page);
-                expect(check(both, true)).toEqual([]);
-
-                // The outline is the same with the grids.
-                for (const [dx, dy] of [
-                    [-1, -1],
-                    [right, bottom],
-                ] as const) {
-                    expect(screenAt(both, dx, dy)).toEqual(OUTLINE);
-                }
+                await expectGridsOnScreen(page, document.id, view);
                 expect(errors).toEqual([]);
             });
         }
+
+        test("while NGNE stretches its old canvas after a resize, the overlay has that canvas's size and box; after the swap the grids line up", async ({
+            page,
+        }) => {
+            const errors = collectErrors(page);
+            await openViewportEditor(page);
+            const view = { scale: 8, originX: 37, originY: 23 };
+            const document = await openDocument(page, { width: WIDTH, height: HEIGHT }, view);
+            await paint(page, document.id, PIXELS);
+            await setView(page, document.id, view);
+            await setGrids(page, document.id, { pixelGrid: true, grid: { visible: true } });
+            await page.mouse.move(1, 1);
+            await overlaySettled(page);
+            const before = await hostDeviceSize(page);
+
+            // Every animation frame from before the resize until NGNE has its new canvas:
+            // the sizes and boxes of both canvases, and the overlay's pixel on the outline
+            // (1 device pixel left of the document), read together.
+            await startSampling(page, { x: view.originX - 1, y: view.originY + 1 });
+            await page.setViewportSize({ width: 1400, height: 800 });
+            await settle(page);
+            const samples = await stopSampling(page);
+            const after = await hostDeviceSize(page);
+            expect(after).not.toEqual(before);
+
+            // NGNE kept its old canvas, stretched over the new box, for some frames; the CI
+            // runner may show fewer of them than a fast machine, but not none (120 ms of quiet
+            // and a renderer creation).
+            const stretched = samples.filter(
+                (sample) =>
+                    sample.ngne !== null &&
+                    (sample.ngne[0] !== sample.host[0] || sample.ngne[1] !== sample.host[1]),
+            );
+            expect(stretched.length).toBeGreaterThan(0);
+            expect(
+                stretched.some(
+                    (sample) => sample.ngne?.join() === `${before.width},${before.height}`,
+                ),
+            ).toBe(true);
+            // In every frame the overlay had the backing size of the NGNE canvas on screen,
+            // filled its box, and showed the outline where NGNE's canvas has the document's
+            // edge.
+            for (const [index, sample] of samples.entries()) {
+                expect(sample.overlay, `frame ${index}`).toEqual(sample.ngne);
+                expect(sample.sameBox, `frame ${index}`).toBe(true);
+                expect(sample.probe, `frame ${index}`).toEqual(OUTLINE);
+            }
+
+            // After the swap both have the new size, and the grids line up on the screen.
+            await overlaySettled(page);
+            const sizes = await viewportArea(page).evaluate((element) => {
+                const ngne = element.querySelector<HTMLCanvasElement>(
+                    "[data-viewport-canvas] canvas",
+                );
+                const overlay = element.querySelector<HTMLCanvasElement>(
+                    ":scope > canvas[data-viewport-overlay]",
+                );
+                return {
+                    ngne: [ngne?.width, ngne?.height],
+                    overlay: [overlay?.width, overlay?.height],
+                };
+            });
+            expect(sizes).toEqual({
+                ngne: [after.width, after.height],
+                overlay: [after.width, after.height],
+            });
+            await expectGridsOnScreen(page, document.id, view);
+            expect(errors).toEqual([]);
+        });
     });
 }

@@ -188,8 +188,9 @@ describe("the layers of SE-013", () => {
     it("draws the pixel grid from 8× up, in 12% of the ink, on the first device pixel of each texel", () => {
         for (const scale of [8, 12, 16]) {
             const document = open({ scale, originX: 37, originY: 23 });
-            const columns = Array.from({ length: 11 }, (_, index) => 37 + (index + 1) * scale);
-            const rows = Array.from({ length: 7 }, (_, index) => 23 + (index + 1) * scale);
+            // Every texel's first device pixel, the first texel's included.
+            const columns = Array.from({ length: 12 }, (_, index) => 37 + index * scale);
+            const rows = Array.from({ length: 8 }, (_, index) => 23 + index * scale);
             const area = { x: 37, y: 23, width: 12 * scale, height: 8 * scale };
             expect(draw("pixel-grid", document), `${scale}×`).toEqual([
                 {
@@ -238,14 +239,32 @@ describe("the layers of SE-013", () => {
         ]);
         expect(TILE_GRID_ALPHA).toBe(0.25);
         // The pixel grid is drawn outside the tile grid's lines only: each pixel has one ink.
-        const columns = Array.from({ length: 11 }, (_, index) => 37 + (index + 1) * 8);
-        const rows = Array.from({ length: 7 }, (_, index) => 23 + (index + 1) * 8);
+        const columns = Array.from({ length: 12 }, (_, index) => 37 + index * 8);
+        const rows = Array.from({ length: 8 }, (_, index) => 23 + index * 8);
         expect(draw("pixel-grid", active())).toEqual([
             { kind: "clip", style: "", rects: cellsBetween(tiles, area) },
             {
                 kind: "fill",
                 style: `rgb(255 255 255 / ${PIXEL_GRID_ALPHA})`,
                 rects: lineRects({ columns, rows }, area),
+            },
+        ]);
+
+        // With no offset the first tile starts at the document's corner, and has its line.
+        settings((value) => {
+            Object.assign(value.grid, { offsetX: 0, offsetY: 0 });
+        });
+        expect(draw("tile-grid", active())).toEqual([
+            {
+                kind: "fill",
+                style: `rgb(255 255 255 / ${TILE_GRID_ALPHA})`,
+                rects: lineRects(
+                    {
+                        columns: [0, 5, 10].map((x) => 37 + x * 8),
+                        rows: [0, 3, 6].map((y) => 23 + y * 8),
+                    },
+                    area,
+                ),
             },
         ]);
     });

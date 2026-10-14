@@ -13,7 +13,7 @@ export interface OverlayProbe {
     readonly redraws: number;
     /** True while a redraw is scheduled and has not run. */
     readonly pending: boolean;
-    /** The canvas's backing size. */
+    /** The canvas's backing size: that of the NGNE canvas on screen. */
     readonly canvasSize: DeviceSize;
     /** The ids of the draw layers, bottom first. */
     readonly layers: readonly string[];
@@ -36,21 +36,26 @@ const MIDDLE_BUTTON = 1;
 
 /**
  * Makes `canvas` the overlay of the viewport element `container` (SPEC §6.3, SE-013): it is
- * drawn by the registered draw layers and kept at its own size in device pixels, which is
- * the NGNE canvas's (both fill the viewport element). It is the pointer target of the
- * viewport: a pointer down on it focuses `container`, except with the middle button, which
- * pans and moves no focus (SE-012). It stops no event: wheel and pointer events reach the
- * listeners of view navigation on `container` by bubbling. In development builds its probe is
- * put on `window.__ngneTest`.
+ * drawn by the registered draw layers over the NGNE canvas that `ngne`, the element NGNE
+ * fills, holds. It is the pointer target of the viewport: a pointer down on it focuses
+ * `container`, except with the middle button, which pans and moves no focus (SE-012). It stops
+ * no event: wheel and pointer events reach the listeners of view navigation on `container` by
+ * bubbling. In development builds its probe is put on `window.__ngneTest`.
+ *
+ * Its backing size is always that of the NGNE canvas on screen, and both fill the same box.
+ * After a resize NGNE keeps its old canvas, stretched over the new box, until the replacement
+ * has drawn (SPEC §6.4); the overlay keeps that canvas's size meanwhile, so the two stay
+ * stretched alike, and takes the new size in the task NGNE swaps its canvases.
  */
 export function mountOverlay(
     canvas: HTMLCanvasElement,
     container: HTMLElement,
+    ngne: HTMLElement,
     layers: readonly OverlayLayer[] = overlayLayers,
 ): MountedOverlay {
     const context = canvas.getContext("2d");
     if (!context) throw new Error("The overlay canvas has no 2D context.");
-    // No pixels until the element is measured, rather than the default 300 × 150 stretched.
+    // No pixels until NGNE has a canvas on screen, rather than the default 300 × 150 stretched.
     canvas.width = 0;
     canvas.height = 0;
     const controller = createOverlayController(canvas, context, layers, {
@@ -63,13 +68,31 @@ export function mountOverlay(
         },
     });
 
-    // The size the NGNE viewport gives its canvas (SPEC §6.4): the element's content box in
-    // device pixels, with the same rounding.
+    // The NGNE canvas on screen. NGNE inserts a canvas only once it has drawn on it, and
+    // swaps the old one for it in the same task (SPEC §6.4); the mutation is reported in a
+    // microtask of that task, before the browser paints, so both change in the same frame.
+    const followNgne = () => {
+        const shown = ngne.querySelector("canvas");
+        controller.resize(
+            shown ? { width: shown.width, height: shown.height } : { width: 0, height: 0 },
+        );
+    };
+    const swaps = new MutationObserver(followNgne);
+    swaps.observe(ngne, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["width", "height"],
+    });
+    followNgne();
+
+    // The device size of the box both canvases fill (the viewport element's), measured as the
+    // NGNE viewport measures it: it tells how far the canvases are stretched.
     const observer = new ResizeObserver((entries) => {
         const entry = entries[entries.length - 1];
         if (!entry) return;
         const box = entry.devicePixelContentBoxSize?.[0];
-        controller.resize(
+        controller.setBox(
             box
                 ? backingSize(box.inlineSize, box.blockSize)
                 : backingSize(
@@ -120,6 +143,7 @@ export function mountOverlay(
         setTheme: (theme) => controller.setTheme(theme),
         dispose() {
             if (hooks?.overlay === probe) delete hooks.overlay;
+            swaps.disconnect();
             observer.disconnect();
             canvas.removeEventListener("pointerdown", onPointerDown);
             container.removeEventListener("pointerdown", onPointer);

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createOverlayController } from "../../src/app/overlay/overlayController";
 import type { OverlaySources } from "../../src/app/overlay/overlayController";
+import { stretchedMapping } from "../../src/app/overlay/stretchedMapping";
 import { DEFAULT_OVERLAY_THEME } from "../../src/app/overlay/types";
 import type { OverlayFrame, OverlayLayer } from "../../src/app/overlay/types";
 import { activeDocument, createSessionsStore } from "../../src/app/state/sessions";
@@ -64,7 +65,17 @@ function clientAt(x: number, y: number) {
     return { x: (x + LEFT * RATIO) / RATIO, y: (y + TOP * RATIO) / RATIO };
 }
 
-function setup(layers: OverlayLayer[] = []) {
+/** Where the viewport element lies: device pixels per CSS pixel and its corner, CSS pixels. */
+interface Placement {
+    ratio: number;
+    left: number;
+    top: number;
+}
+
+function setup(
+    layers: OverlayLayer[] = [],
+    { ratio, left, top }: Placement = { ratio: RATIO, left: LEFT, top: TOP },
+) {
     const sessions = createSessionsStore();
     const canvas = { width: 0, height: 0 };
     const context = recordingContext();
@@ -81,12 +92,12 @@ function setup(layers: OverlayLayer[] = []) {
                 view: document.view,
                 docWidth: width,
                 docHeight: height,
-                ratio: RATIO,
-                left: LEFT,
-                top: TOP,
+                ratio,
+                left,
+                top,
             });
         },
-        ratio: () => RATIO,
+        ratio: () => ratio,
         nextFrame(callback) {
             frames.push(callback);
             return () => {
@@ -300,6 +311,118 @@ describe("overlay redraws", () => {
         controller.resize({ width: 10, height: 10 });
         expect(frame()).toBe(0);
         expect(controller.redraws).toBe(0);
+    });
+});
+
+describe("the cursor's device pixel", () => {
+    it("is the one the mapping names, with Chrome's float noise settled (ratio 1.25)", () => {
+        const log: string[] = [];
+        const { layer, frames: drawn } = recordingLayer("a", 1, log);
+        const ratio = 1.25;
+        const { controller, frame, open } = setup([layer], { ratio, left: 0, top: 0 });
+        open();
+        controller.resize({ width: 300, height: 200 });
+        // A mouse on device pixel n, as Chrome reports it at 1.25: n times the 32-bit
+        // reciprocal of the ratio, as a 32-bit float. Device pixel 102 arrives just short of
+        // 81.6 CSS pixels, which the ratio alone puts in device pixel 101.
+        const client = (n: number) => Math.fround(n * Math.fround(1 / ratio));
+        expect(client(102)).toBe(81.5999984741211);
+        expect(Math.floor(client(102) * ratio)).toBe(101);
+        controller.setCursor({ x: client(101), y: client(40) });
+        expect(frame()).toBe(1);
+        expect(drawn.at(-1)?.cursor?.device).toEqual({ x: 101, y: 40 });
+        const before = controller.redraws;
+
+        // 101 → 102: another device pixel, so a redraw, which names 102.
+        controller.setCursor({ x: client(102), y: client(40) });
+        expect(controller.pending).toBe(true);
+        expect(frame()).toBe(1);
+        expect(controller.redraws).toBe(before + 1);
+        expect(drawn.at(-1)?.cursor?.device.x).toBe(102);
+        expect(drawn.at(-1)?.cursor?.pixel).toEqual({ x: 7, y: 2 });
+    });
+
+    it("comes from the ratio alone while no document is open", () => {
+        const { controller, frame } = setup([], { ratio: 2, left: 0, top: 0 });
+        frame();
+        controller.setCursor({ x: 10, y: 10 });
+        expect(frame()).toBe(1);
+        // 10.2 and 10.4 CSS pixels are device pixel 20 at a ratio of 2; 10.5 is 21.
+        controller.setCursor({ x: 10.2, y: 10.4 });
+        expect(controller.pending).toBe(false);
+        controller.setCursor({ x: 10.5, y: 10.4 });
+        expect(frame()).toBe(1);
+    });
+});
+
+describe("a canvas stretched over its box", () => {
+    // After a resize NGNE keeps its old canvas on screen, stretched over the new box, and
+    // keeps drawing the view on it: the document rectangle is the view's, in that canvas's
+    // backing pixels. The overlay has the same backing size and box.
+
+    it("draws the document rectangle as NGNE drew it and maps the pointer to the canvas pixel under it", () => {
+        const log: string[] = [];
+        const { layer, frames: drawn } = recordingLayer("a", 1, log);
+        const { controller, frame, open } = setup([layer], { ratio: 1, left: 0, top: 0 });
+        open({ scale: 8, originX: 40, originY: 24 });
+        // A box of 400 × 400 device pixels, a canvas of 200 × 100: stretched 2× and 4×.
+        controller.setBox({ width: 400, height: 400 });
+        controller.resize({ width: 200, height: 100 });
+        controller.setCursor({ x: 100, y: 120 });
+        frame();
+        const stretched = drawn.at(-1)!;
+        expect(stretched.size).toEqual({ width: 200, height: 100 });
+        expect(stretched.mapping.rect).toEqual({ x: 40, y: 24, width: 40, height: 24 });
+        expect(stretched.mapping.docToDevice(1, 1)).toEqual({ x: 48, y: 32 });
+        expect(stretched.cursor?.device).toEqual({ x: 50, y: 30 });
+        expect(stretched.cursor?.pixel).toEqual({ x: 1, y: 0 });
+        expect(stretched.mapping.clientToDoc(100, 120)).toEqual({ x: 1, y: 0 });
+        expect(stretched.mapping.docToClient(1, 0)).toEqual({ x: 96, y: 96 });
+        expect(stretched.mapping.deviceToClient(50, 30)).toEqual({ x: 100, y: 120 });
+
+        // NGNE's new canvas has the box's size: the mapping of the viewport itself.
+        controller.resize({ width: 400, height: 400 });
+        const swapped = drawn.at(-1)!;
+        expect(swapped.size).toEqual({ width: 400, height: 400 });
+        expect(swapped.mapping.rect).toEqual({ x: 40, y: 24, width: 40, height: 24 });
+        expect(swapped.cursor?.device).toEqual({ x: 100, y: 120 });
+        expect(swapped.cursor?.pixel).toEqual({ x: 7, y: 12 });
+    });
+
+    it("redraws when the box changes, and not for the same box", () => {
+        const { controller, frame, open } = setup();
+        open();
+        controller.resize({ width: 200, height: 100 });
+        frame();
+        const before = controller.redraws;
+        controller.setBox({ width: 200, height: 100 });
+        expect(frame()).toBe(1);
+        controller.setBox({ width: 200, height: 100 });
+        expect(controller.pending).toBe(false);
+        controller.setBox({ width: 240, height: 100 });
+        expect(frame()).toBe(1);
+        expect(controller.redraws).toBe(before + 2);
+        // The canvas keeps its size: it follows NGNE's canvas, not the box.
+        expect(controller.size).toEqual({ width: 200, height: 100 });
+    });
+
+    it("is the viewport's own mapping while the sizes agree or one is not known", () => {
+        const base = createViewMapping({
+            view: { scale: 4, originX: 3, originY: 5 },
+            docWidth: 10,
+            docHeight: 10,
+            ratio: 1.5,
+            left: 44,
+            top: 72,
+        });
+        const same = { width: 640, height: 480 };
+        expect(stretchedMapping(base, same, { ...same })).toBe(base);
+        expect(stretchedMapping(base, same, { width: 0, height: 0 })).toBe(base);
+        expect(stretchedMapping(base, { width: 0, height: 0 }, same)).toBe(base);
+        const stretched = stretchedMapping(base, same, { width: 1280, height: 480 });
+        expect(stretched).not.toBe(base);
+        expect(stretched.rect).toBe(base.rect);
+        expect(stretched.clientToDevice(44 + 20, 72 + 20)).toEqual({ x: 15, y: 30 });
     });
 });
 
