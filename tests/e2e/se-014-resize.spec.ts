@@ -11,7 +11,7 @@ import {
 } from "./se-011-support";
 import { clientAt, geometry } from "./se-012-support";
 import type { View } from "./se-012-support";
-import { celPixel, historyOf, selectTool, withTexels } from "./se-014-support";
+import { celPixel, historyOf, selectDot, withTexels } from "./se-014-support";
 
 // SE-014 decides which texel a stroke paints during NGNE's resize quiet: after the viewport
 // element changes size NGNE keeps its old canvas on screen, stretched over the new box, until
@@ -34,7 +34,7 @@ test("while NGNE stretches its old canvas after a resize, a stroke paints the te
     const document = await openDocument(page, { width: WIDTH, height: HEIGHT }, VIEW);
     const pixels = pattern(WIDTH, HEIGHT, 7);
     await paint(page, document.id, pixels);
-    await selectTool(page, "dot");
+    await selectDot(page);
     await settle(page);
 
     // A larger window: the element grows, NGNE's replacement waits for its device.

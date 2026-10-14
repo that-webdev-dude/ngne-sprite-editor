@@ -17,7 +17,7 @@ import {
     setCel,
     sprite,
 } from "./se-010-support";
-import { at, harness, plainMapping, rgbaAt, stroke } from "./se-014-support";
+import { at, DOT, harness, plainMapping, rgbaAt, stroke } from "./se-014-support";
 
 // SE-014: the pointer pipeline, driven by synthetic pointer sequences (SPEC §5.2, §7.1). The
 // dot tool writes one pixel per sample in the colour of its button; strokes are transactions
@@ -357,8 +357,8 @@ describe("handlers and samples", () => {
         h.open(blank());
         h.tools.select("recorder");
         h.pipeline.down(at(h, { x: 0, y: 0 }, { button: 0 }));
-        h.tools.hold("dot");
-        expect(h.tools.activeId()).toBe("dot");
+        h.tools.hold(DOT);
+        expect(h.tools.activeId()).toBe(DOT);
         h.pipeline.move([at(h, { x: 1, y: 0 })]);
         expect(h.pipeline.strokeTool?.id).toBe("recorder");
         h.pipeline.up(at(h, { x: 1, y: 0 }, { button: 0, buttons: 0 }));
@@ -384,7 +384,7 @@ describe("handlers and samples", () => {
         h.editor.getState().setTool("pencil");
         expect(h.tools.active()).toBeNull();
         expect(h.pipeline.down(at(h, { x: 0, y: 0 }, { button: 0 }))).toBe(false);
-        h.tools.select("dot");
+        h.tools.select(DOT);
         h.mapping = () => null;
         expect(h.pipeline.down(at(h, { x: 0, y: 0 }, { button: 0 }))).toBe(false);
     });
@@ -556,14 +556,34 @@ describe("the live-stroke display path", () => {
             h.pipeline.down(at(h, { x: 1, y: 1 }, { button: 0 }));
             const live = cache.get(frameId);
             h.pipeline.move([at(h, { x: 2, y: 1 }), at(h, { x: 2, y: 2 })]);
+            h.frames.run();
             h.pipeline.move([at(h, { x: 3, y: 3 })]);
+            // A sentinel: one pixel written into an image of the frame and reported to nobody,
+            // at a texel the stroke never touches. A full composite of the frame would show
+            // it; compositing the stroke's dirty rectangles does not.
+            const planted =
+                session.doc.layers.length > 1
+                    ? celImage(session.doc, layerId(0), frameId)
+                    : celImage(session.doc, session.activeLayerId, frameId);
+            const sentinel = { x: 6, y: 4 };
+            const at64 = (sentinel.y * planted.width + sentinel.x) * 4;
+            const original = planted.data.slice(at64, at64 + 4);
+            planted.data.set([9, 99, 199, 255], at64);
+            const shown = rgbaAt(live, sentinel.x, sentinel.y);
+
             h.pipeline.up(at(h, { x: 3, y: 3 }, { button: 0, buttons: 0 }));
             expect(history.undoCount).toBe(1);
             // The history step dropped the frame's composite; the stroke handed its own back.
             expect(h.compositeChanges.at(-1)).toEqual([frameId]);
             expect(cache.has(frameId)).toBe(true);
-            // Not composited again: a composite of the cache's own would be a new buffer.
+            // Not composited again: a composite of the cache's own would be a new buffer, and
+            // a full composite into the live one would show the sentinel.
             expect(cache.get(frameId)).toBe(live);
+            expect(rgbaAt(live, sentinel.x, sentinel.y)).toEqual(shown);
+            expect(
+                rgbaAt(compositeFrame(session.doc, frameId), sentinel.x, sentinel.y),
+            ).not.toEqual(shown);
+            planted.data.set(original, at64);
             expect(firstDifference(live, compositeFrame(session.doc, frameId))).toBeNull();
 
             // Undo is an ordinary history step: the frame is composited anew from the pixels.
@@ -573,6 +593,61 @@ describe("the live-stroke display path", () => {
             expect(firstDifference(undone, compositeFrame(session.doc, frameId))).toBeNull();
         });
     }
+
+    it("hands the live composite back to the cache when the cache let it go during the stroke", () => {
+        const h = harness();
+        const session = layered();
+        addFrame(session.doc, "frame-1");
+        setCel(session.doc, layerId(0), "frame-1", fill([5, 5, 5, 255]));
+        h.open(session);
+        const cache = h.composites.cache!;
+        // Room for one composite.
+        Object.defineProperty(cache, "budgetBytes", { value: WIDTH * HEIGHT * 4 });
+        h.pipeline.down(at(h, { x: 1, y: 1 }, { button: 0 }));
+        const live = cache.get(FRAME);
+        // Another reader asks for frame 1: the live composite is the least recently used.
+        cache.get("frame-1");
+        expect(cache.has(FRAME)).toBe(false);
+        // The viewport asks for the stroked frame again: the cache composites one of its own.
+        const own = cache.get(FRAME);
+        expect(own).not.toBe(live);
+
+        h.pipeline.move([at(h, { x: 2, y: 1 })]);
+        h.frames.run();
+        h.pipeline.move([at(h, { x: 3, y: 1 })]);
+        h.frames.run();
+        // The stroke goes on showing: the live composite is the frame's again, up to date.
+        expect(cache.get(FRAME)).toBe(live);
+        expect(firstDifference(cache.get(FRAME), compositeFrame(session.doc, FRAME))).toBeNull();
+        h.pipeline.up(at(h, { x: 3, y: 1 }, { button: 0, buttons: 0 }));
+        expect(firstDifference(cache.get(FRAME), compositeFrame(session.doc, FRAME))).toBeNull();
+    });
+
+    it("takes the stroke back, with one error, when the frame cannot be composited at the release", () => {
+        const h = harness();
+        const session = layered();
+        const { history } = h.open(session);
+        const image = celImage(session.doc, layerId(1), FRAME);
+        const before = image.data.slice();
+        h.pipeline.down(at(h, { x: 1, y: 1 }, { button: 0 }));
+        // Shown in the next animation frame: pending at the release.
+        h.pipeline.move([at(h, { x: 2, y: 1 })]);
+        // The painted layer turns into a reference layer under the stroke.
+        Object.assign(session.doc.layers[1]!, {
+            kind: "reference",
+            sourceId: "source",
+            x: 0,
+            y: 0,
+            scale: 1,
+            placement: "behind",
+        });
+        h.pipeline.up(at(h, { x: 2, y: 1 }, { button: 0, buttons: 0 }));
+        expect(history.transaction).toBeNull();
+        expect(h.pipeline.stroking).toBe(false);
+        expect(h.errors).toHaveLength(1);
+        expect(history.undoCount).toBe(0);
+        expect(image.data).toEqual(before);
+    });
 
     it("drops the live composite after an abort, so the restored pixels are composited", () => {
         const h = harness();

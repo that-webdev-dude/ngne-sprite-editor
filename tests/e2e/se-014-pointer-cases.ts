@@ -13,7 +13,7 @@ import {
     viewAtScale,
 } from "./se-012-support";
 import type { Point } from "./se-012-support";
-import { celPixel, historyOf, selectTool, texelClient } from "./se-014-support";
+import { celPixel, historyOf, selectDot, selectTool, texelClient } from "./se-014-support";
 
 // SE-014: where a stroke lands and what the zoom tool keeps under the pointer, at the device
 // pixel ratios of SPEC §6.7 (each in a spec file of its own, se-014-pointer-*: a ratio needs a
@@ -37,7 +37,7 @@ export function toolPointerTests(ratio: number): void {
             const document = await openDocument(page, { width: WIDTH, height: HEIGHT });
             const pixels = pattern(WIDTH, HEIGHT, 6);
             await paint(page, document.id, pixels);
-            await selectTool(page, "dot");
+            await selectDot(page);
             await settle(page);
             expect(await page.evaluate(() => devicePixelRatio)).toBe(Math.fround(ratio));
             const layout = await geometry(page);

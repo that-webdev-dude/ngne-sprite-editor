@@ -1,0 +1,19 @@
+/*
+ * SE-014: the viewport element as the tools' pointer surface.
+ *
+ * The cursor of the active tool, which the pointer pipeline sets as a custom property of the
+ * viewport element; the canvases inherit it. The cursor of a middle-drag (`[data-panning]`,
+ * viewportArea.css) is more specific and wins while it pans.
+ */
+.viewport-area {
+    cursor: var(--shell-tool-cursor, default);
+}
+
+/*
+ * A touch or pen stroke is the tool's, not a pan or a zoom of the page: without this the
+ * browser takes over the gesture and cancels the stroke's pointer (`pointercancel`).
+ */
+.viewport-area,
+.viewport-area > [data-viewport-overlay] {
+    touch-action: none;
+}

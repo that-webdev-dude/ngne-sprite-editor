@@ -10,9 +10,10 @@ import type { ViewportLink } from "../viewport/viewportLink";
 // paints is composited with the in-progress image (`compositeFrame` overrides) into one live
 // buffer, which the composite cache of the active document holds (`CompositeCache.adopt`): the
 // viewport reads its frames from that cache, so it shows the stroke without a full composite.
-// Each change is composited into the live buffer over its dirty rectangle only, and the
-// viewport is told with `viewportLink.invalidate` at most once per animation frame; it copies
-// the pixels when the upload starts, so the buffer may be rewritten afterwards (SE-011).
+// Each change is composited into the live buffer over its dirty rectangle only, the buffer is
+// handed to the cache again (it may have been let go meanwhile), and the viewport is told with
+// `viewportLink.invalidate` at most once per animation frame; it copies the pixels when the
+// upload starts, so the buffer may be rewritten afterwards (SE-011).
 //
 //   pointer sample → tool writes the cel image → dirty rectangle
 //     → composited into the live buffer → viewport told (≤ 1 per animation frame) → upload
@@ -108,6 +109,10 @@ export function startLiveComposite(
 
     const show = () => {
         compositePending();
+        // Handed to the cache again each time: the cache may have let it go since (its least
+        // recently used composite, or a frame reported changed), and a composite it made in
+        // its place would not follow the stroke.
+        adopted = sources.composites.cacheOf(session)?.adopt(frameId, buffer) ?? false;
         if (adopted) {
             sources.viewport.invalidate([frameKey(frameId)]);
         } else {

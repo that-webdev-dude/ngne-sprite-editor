@@ -1,11 +1,10 @@
 import { createToolState } from "../../src/app/tools/activeTool";
 import type { ToolState } from "../../src/app/tools/activeTool";
-import { dotTool } from "../../src/app/tools/dot/dot.tools";
 import { createToolPipeline } from "../../src/app/tools/pipeline";
 import type { PointerInput, ToolPipeline } from "../../src/app/tools/pipeline";
 import { createToolRegistry } from "../../src/app/tools/registry";
 import type { ToolRegistry } from "../../src/app/tools/registry";
-import type { ToolSpec } from "../../src/app/tools/types";
+import type { ToolContext, ToolPointer, ToolSpec } from "../../src/app/tools/types";
 import { createActiveComposites } from "../../src/app/state/composites";
 import type { ActiveComposites } from "../../src/app/state/composites";
 import { createEditorStore } from "../../src/app/state/editor";
@@ -20,7 +19,39 @@ import type { DocSession } from "../../src/core/model";
 import type { StoreApi } from "zustand/vanilla";
 
 // Shared by the SE-014 unit tests: a pointer pipeline on stores of its own, with recorded
-// animation frames, timers and viewport invalidations, driven by synthetic pointer input.
+// animation frames, timers and viewport invalidations, driven by synthetic pointer input, and
+// a painting tool of the tests' own.
+
+/** The id of `dotFixture`. */
+export const DOT = "se014.dot";
+
+function writeDot(context: ToolContext, pointer: ToolPointer): void {
+    const { paint } = context;
+    if (!paint || !pointer.inside) return;
+    const { x, y } = pointer.pixel;
+    const at = (y * paint.image.width + x) * 4;
+    const alpha = Number(context.options.alpha);
+    paint.image.data[at] = context.colour >>> 24;
+    paint.image.data[at + 1] = (context.colour >>> 16) & 0xff;
+    paint.image.data[at + 2] = (context.colour >>> 8) & 0xff;
+    paint.image.data[at + 3] = Math.round(((context.colour & 0xff) * alpha) / 255);
+    paint.markDirty({ x, y, width: 1, height: 1 });
+}
+
+/**
+ * A painting tool that writes one pixel per pointer sample, in the colour of the button with
+ * its alpha scaled by its Alpha option: the strokes of the SE-014 tests. It is the tests' own,
+ * so the development dot tool of `src/app/tools/dot` can go without touching them (SE-015).
+ */
+export const dotFixture: ToolSpec = {
+    id: DOT,
+    label: "Dot",
+    paints: true,
+    cursor: "crosshair",
+    options: [{ kind: "number", key: "alpha", label: "Alpha", min: 0, max: 255, default: 255 }],
+    onDown: writeDot,
+    onMove: writeDot,
+};
 
 /** Animation frames that run only when the test says so. */
 export function manualFrames() {
@@ -102,7 +133,7 @@ export function plainMapping(sessions: StoreApi<SessionsState>): ViewMapping | n
 }
 
 /**
- * A pipeline with the dot tool (and `extra` tools) registered and the dot tool selected, on
+ * A pipeline with `dotFixture` (and `extra` tools) registered and `dotFixture` selected, on
  * stores of its own; the viewport element sits at the client origin at a ratio of 1.
  */
 export function harness(extra: readonly ToolSpec[] = []): Harness {
@@ -111,10 +142,10 @@ export function harness(extra: readonly ToolSpec[] = []): Harness {
     const editor = createEditorStore();
     const status = createStatusStore();
     const registry = createToolRegistry();
-    registry.register(dotTool, "dot.tools.ts");
+    registry.register(dotFixture, "se-014-support.ts");
     for (const tool of extra) registry.register(tool, "test");
     const tools = createToolState(editor, registry);
-    tools.select("dot");
+    tools.select(DOT);
     const frames = manualFrames();
     const timers = manualTimers();
     const invalidated: (readonly string[] | "all")[] = [];

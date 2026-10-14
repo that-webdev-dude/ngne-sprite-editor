@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
-// The page imports this module from the dev server; here it is needed for its types.
+// The page imports these modules from the dev server; here they are needed for their types.
+import type * as PlannedToolsModule from "../../src/app/tools/planned.tools";
 import type * as ToolRegistryModule from "../../src/app/tools/toolRegistry";
 import { collectErrors, region, settleTimers } from "./se-006-support";
 import { menuTrigger } from "./se-007-support";
@@ -14,7 +15,15 @@ import {
 } from "./se-011-support";
 import { activeView, geometry, pixelAt, viewAtScale, viewportArea } from "./se-012-support";
 import type { View } from "./se-012-support";
-import { historyOf, railButton, selectTool, texelClient, toolsState } from "./se-014-support";
+import {
+    DOT,
+    historyOf,
+    railButton,
+    selectDot,
+    selectTool,
+    texelClient,
+    toolsState,
+} from "./se-014-support";
 
 // SE-014: the tools as the interface offers them — the rail and the keys select them, the
 // context bar shows the active tool's options, a held Space is a temporary hand, the zoom
@@ -82,16 +91,70 @@ function storedOptions(page: Page, tool: string): Promise<Record<string, unknown
     return page.evaluate((tool) => window.__ngneTest!.editor.getState().toolOptions[tool], tool);
 }
 
+/** The planned rail slots, in order, and whether the registry has a tool of each of `ids`. */
+function railState(page: Page, ids: readonly string[]) {
+    return page.evaluate(async (ids) => {
+        const registryPath = "/src/app/tools/toolRegistry.ts";
+        const plannedPath = "/src/app/tools/planned.tools.ts";
+        const registry = (await import(
+            /* @vite-ignore */ registryPath
+        )) as typeof ToolRegistryModule;
+        const planned = (await import(/* @vite-ignore */ plannedPath)) as typeof PlannedToolsModule;
+        return {
+            planned: planned.plannedTools.map((plan) => plan.id),
+            registered: ids.map((id) => registry.toolRegistry.get(id) !== undefined),
+        };
+    }, ids);
+}
+
+/**
+ * Records what Ctrl+S runs while a text field has the focus: the commands bound to it in the
+ * `text` context record instead of running (once Save exists, SE-041), or a probe bound there
+ * records while none is.
+ */
+function recordSave(page: Page): Promise<void> {
+    return page.evaluate(() => {
+        const calls: string[] = [];
+        (window as unknown as { __se014Saves: string[] }).__se014Saves = calls;
+        const { commands } = window.__ngneTest!;
+        const bound = commands.bindings("text", "Ctrl+S");
+        const record = () => void calls.push("save");
+        if (bound.length > 0) {
+            for (const command of bound) command.run = record;
+            return;
+        }
+        commands.register({
+            id: "se014.save",
+            title: "SE-014 save probe",
+            shortcut: "Ctrl+S",
+            context: ["global", "text"],
+            run: record,
+        });
+    });
+}
+
 test("the rail shows the tools of the registry: Hand and Zoom work, later tools are disabled slots", async ({
     page,
 }) => {
     const errors = collectErrors(page);
     await openPainted(page);
     const rail = region(page, "tool-rail");
-    await expect(rail.getByRole("button")).toHaveCount(13);
-    for (const name of ["Hand", "Zoom"]) await expect(railButton(page, name)).toBeEnabled();
-    for (const name of ["Pencil", "Eraser", "Paint bucket", "Eyedropper", "Move"]) {
-        await expect(railButton(page, name)).toBeDisabled();
+    const slots = rail.locator("[data-tool]");
+    await expect(slots).toHaveCount(13);
+    const ids = await slots.evaluateAll((buttons) =>
+        buttons.map((button) => button.getAttribute("data-tool") ?? ""),
+    );
+    const { planned, registered } = await railState(page, ids);
+    // Hand and Zoom are registered, in their planned slots.
+    for (const id of ["hand", "zoom"]) {
+        expect(registered[ids.indexOf(id)], id).toBe(true);
+        expect(ids.indexOf(id), id).toBe(planned.indexOf(id));
+    }
+    // A slot's button is enabled exactly when the registry has a tool of its id.
+    for (const [index, id] of ids.entries()) {
+        const button = rail.locator(`[data-tool="${id}"]`);
+        if (registered[index]) await expect(button, id).toBeEnabled();
+        else await expect(button, id).toBeDisabled();
     }
     // The default tool (the pencil) is not registered yet: no button is pressed, no options.
     await expect(rail.locator('[aria-pressed="true"]')).toHaveCount(0);
@@ -124,26 +187,16 @@ test("click a rail tool button, then press H: the hand is active with no click o
     await page.keyboard.press("KeyZ");
     await expect(railButton(page, "Zoom")).toHaveAttribute("aria-pressed", "true");
 
-    // The dot tool has a number option in the context bar.
-    await selectTool(page, "dot");
+    // The tests' dot tool has a number option in the context bar.
+    await selectDot(page);
     const field = region(page, "context-bar").getByRole("spinbutton", { name: "Alpha" });
     await expect(field).toHaveValue("255");
-    await page.evaluate(() => {
-        const calls: string[] = [];
-        (window as unknown as { __se014Saves: string[] }).__se014Saves = calls;
-        window.__ngneTest!.commands.register({
-            id: "se014.save",
-            title: "SE-014 save probe",
-            shortcut: "Ctrl+S",
-            context: ["global", "text"],
-            run: () => void calls.push("save"),
-        });
-    });
+    await recordSave(page);
     await field.click();
     await expect(field).toBeFocused();
     await page.keyboard.press("KeyH");
     await expect(field).toHaveValue("255h");
-    expect((await toolsState(page)).selected).toBe("dot");
+    expect((await toolsState(page)).selected).toBe(DOT);
     await expect(region(page, "context-bar").locator("[data-context-tool]")).toHaveText("Dot");
     await page.keyboard.press("Control+KeyS");
     expect(
@@ -195,7 +248,8 @@ test("the context bar renders the active tool's option schema and sets its optio
     await expect(circle).toBeChecked();
     await expect(viewportArea(page)).toBeFocused();
 
-    // A select opens its list, which takes the focus; the choice is made there.
+    // A select opens its list, which takes the focus; the choice is made there. Opened and
+    // chosen with the pointer, the focus goes back to the viewport once the list has gone.
     await ink.click();
     const option = page.getByRole("option", { name: "Alpha compositing" });
     await expect(option).toBeVisible();
@@ -203,8 +257,7 @@ test("the context bar renders the active tool's option schema and sets its optio
     await option.click();
     await expect(ink).toHaveText("Alpha compositing");
     await expect(page.getByRole("listbox")).toHaveCount(0);
-    // Radix gives the focus back to the trigger once the list has gone.
-    await expect(ink).toBeFocused();
+    await expect(viewportArea(page)).toBeFocused();
 
     expect(await storedOptions(page, "se014.options")).toEqual({
         size: 8,
@@ -220,6 +273,22 @@ test("the context bar renders the active tool's option schema and sets its optio
     await expect(perfect).toHaveAttribute("aria-pressed", "true");
     await settleTimers(page);
     await expect(perfect).toBeFocused();
+
+    // Opened and chosen with the keyboard, a select keeps the focus.
+    await ink.focus();
+    await expect(ink).toBeFocused();
+    await page.keyboard.press("Enter");
+    const simple = page.getByRole("option", { name: "Simple" });
+    await expect(page.getByRole("option", { name: "Alpha compositing" })).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(simple).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("listbox")).toHaveCount(0);
+    await expect(ink).toHaveText("Simple");
+    await expect(ink).toBeFocused();
+    await settleTimers(page);
+    await expect(ink).toBeFocused();
+    expect((await storedOptions(page, "se014.options"))?.ink).toBe("simple");
     expect(errors).toEqual([]);
 });
 
@@ -261,13 +330,14 @@ test("focus returns to the viewport after pointer activation of a control outsid
     expect(errors).toEqual([]);
 });
 
-for (const tool of ["dot", "zoom"]) {
+for (const tool of [DOT, "zoom"]) {
     test(`holding Space pans with the ${tool} tool active, and the tool is back on release`, async ({
         page,
     }) => {
         const errors = collectErrors(page);
         const { document, pixels } = await openPainted(page);
-        await selectTool(page, tool);
+        if (tool === DOT) await selectDot(page);
+        else await selectTool(page, tool);
         const layout = await geometry(page);
         const start = texelClient(layout, VIEW, { x: 5, y: 5 });
         await page.mouse.move(start.x, start.y);
@@ -375,5 +445,20 @@ test("the cursor over the viewport is the active tool's, by the modifiers and wh
     await expect.poll(cursorOf).toBe("grabbing");
     await page.mouse.up({ button: "middle" });
     await expect.poll(cursorOf).toBe("crosshair");
+    expect(errors).toEqual([]);
+});
+
+test("a touch or pen stroke is the tool's: the viewport element and the overlay take no browser panning", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openPainted(page);
+    const touchAction = (selector: string) =>
+        page.evaluate(
+            (selector) => getComputedStyle(document.querySelector(selector)!).touchAction,
+            selector,
+        );
+    expect(await touchAction("[data-viewport]")).toBe("none");
+    expect(await touchAction("[data-viewport] > canvas[data-viewport-overlay]")).toBe("none");
     expect(errors).toEqual([]);
 });

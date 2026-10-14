@@ -5,7 +5,7 @@ import { attachViewNavigation } from "../../app/view/pointerNavigation";
 import { returnFocusToViewport } from "../focus/returnFocus";
 import { OverlayCanvas } from "./OverlayCanvas";
 import { ViewportCanvas } from "./ViewportCanvas";
-import "./toolCursor.css";
+import "./toolPointer.css";
 import "./viewportArea.css";
 
 /** Marks the viewport element. */

@@ -19,16 +19,18 @@ import type { Point, View } from "./se-012-support";
 import {
     expectFeedback,
     historyOf,
-    selectTool,
+    DOT,
+    selectDot,
     setLayerFlag,
     texelClient,
     toolsState,
     withTexels,
 } from "./se-014-support";
 
-// SE-014: strokes of the development "dot" tool through the pointer pipeline, as the user
-// makes them: a stroke shows in the viewport while the button is held, is one undo step after
-// the release, goes on outside the canvas, and is refused on a locked layer.
+// SE-014: strokes of a one-pixel-per-sample tool (the tests' own) through the pointer
+// pipeline, as the user makes them: a stroke shows in the viewport while the button is held,
+// is one undo step after the release, goes on outside the canvas, and is refused on a locked
+// layer.
 
 const WIDTH = 12;
 const HEIGHT = 8;
@@ -41,13 +43,13 @@ interface Painted {
     before: number[];
 }
 
-/** A painted document at `VIEW` with the dot tool selected and the viewport at rest. */
+/** A painted document at `VIEW` with the tests' dot tool selected and the viewport at rest. */
 async function openPainted(page: Page): Promise<Painted> {
     await openViewportEditor(page);
     const document = await openDocument(page, { width: WIDTH, height: HEIGHT }, VIEW);
     const before = pattern(WIDTH, HEIGHT, 1);
     await paint(page, document.id, before);
-    await selectTool(page, "dot");
+    await selectDot(page);
     await settle(page);
     await expectImage(page, document, VIEW, before);
     return { document, before };
@@ -80,7 +82,7 @@ test("a stroke shows in the viewport while the button is held; after the release
     await page.mouse.down();
     await moveOver(page, path.slice(1));
     // Held: the stroke is on screen, and still an open transaction, not an entry.
-    expect(await toolsState(page)).toMatchObject({ active: "dot", stroking: true });
+    expect(await toolsState(page)).toMatchObject({ active: DOT, stroking: true });
     expect(await historyOf(page, document.id)).toEqual({ undo: 1, open: true });
     await settle(page);
     await expectImage(page, document, VIEW, stroked);
@@ -142,7 +144,10 @@ test("with the active layer locked through the store, a stroke changes no pixel 
     await page.mouse.down();
     await page.mouse.up();
     expect(await historyOf(page, document.id)).toEqual({ undo: 2, open: false });
-    await expect(region(page, "status-bar").locator('[data-status="message"]')).toHaveCount(0);
+    // The refusal's feedback is gone: the press of the stroke cleared it.
+    await expect(
+        region(page, "status-bar").locator('[data-status="message"][data-kind="feedback"]'),
+    ).toHaveCount(0);
     await settle(page);
     await expectImage(page, document, VIEW, withTexels(before, WIDTH, [{ x: 5, y: 4 }], BLACK));
     expect(errors).toEqual([]);
@@ -256,3 +261,70 @@ test("the right button paints the background colour, and the canvas has no conte
     );
     expect(errors).toEqual([]);
 });
+
+for (const where of ["timeline", "dock"] as const) {
+    test(`a right-button stroke released over the ${where} opens no context menu`, async ({
+        page,
+    }) => {
+        const errors = collectErrors(page);
+        const { document } = await openPainted(page);
+        await page.evaluate(() => {
+            const seen: { prevented: boolean; target: string }[] = [];
+            (window as unknown as { __se014Menus: unknown }).__se014Menus = seen;
+            // After every listener of the page: whether the menu's default was cancelled.
+            window.addEventListener("contextmenu", (event) => {
+                const target = event.target instanceof Element ? event.target : null;
+                seen.push({
+                    prevented: event.defaultPrevented,
+                    target: target?.closest("[data-region]")?.getAttribute("data-region") ?? "",
+                });
+            });
+        });
+        const box = await region(page, where).boundingBox();
+        if (!box) throw new Error(`no ${where}`);
+
+        await moveOver(page, [{ x: 4, y: 4 }]);
+        await page.mouse.down({ button: "right" });
+        await moveOver(page, [{ x: 5, y: 4 }]);
+        // Out of the viewport with the button held, and released there.
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 });
+        await page.mouse.up({ button: "right" });
+        expect(await historyOf(page, document.id)).toEqual({ undo: 2, open: false });
+
+        const menus = await page.evaluate(
+            () =>
+                (window as unknown as { __se014Menus: { prevented: boolean; target: string }[] })
+                    .__se014Menus,
+        );
+        // Whichever element the browser sent it to (Chrome on Windows sends it at the
+        // release, on Linux at the press), no context menu event was left to the browser.
+        expect(menus.filter((menu) => !menu.prevented)).toEqual([]);
+        await expect(page.getByRole("menu")).toHaveCount(0);
+        // Only the stroke's own: a right click afterwards, on an element of the test's own
+        // over that place, keeps its menu.
+        await page.evaluate((box) => {
+            const probe = window.document.createElement("div");
+            probe.dataset.region = "se014-probe";
+            Object.assign(probe.style, {
+                position: "fixed",
+                left: `${box.x + box.width / 2 - 20}px`,
+                top: `${box.y + box.height / 2 - 20}px`,
+                width: "40px",
+                height: "40px",
+                zIndex: "1000",
+            });
+            window.document.body.append(probe);
+        }, box);
+        const before = menus.length;
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, {
+            button: "right",
+        });
+        const after = await page.evaluate(
+            () =>
+                (window as unknown as { __se014Menus: { prevented: boolean; target: string }[] })
+                    .__se014Menus,
+        );
+        expect(after.slice(before)).toEqual([{ prevented: false, target: "se014-probe" }]);
+        expect(errors).toEqual([]);
+    });
+}

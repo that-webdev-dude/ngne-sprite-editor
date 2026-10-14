@@ -32,6 +32,8 @@ declare module "../testing/testHooks" {
 export const TOOL_CURSOR_PROPERTY = "--shell-tool-cursor";
 
 const NO_MODIFIERS: ToolModifiers = { shift: false, ctrl: false, alt: false, meta: false };
+/** `PointerEvent.button` of the right button. */
+const RIGHT = 2;
 
 /** The fields of a pointer event the pipeline reads. */
 function pointerInput(event: PointerEvent): PointerInput {
@@ -67,6 +69,8 @@ export function attachToolPointer(
 ): () => void {
     const disconnect = connectToolMapping(mapping);
     let modifiers: ToolModifiers = NO_MODIFIERS;
+    /** A right-button stroke began, and the context menu that follows it has not come yet. */
+    let strokeMenu = false;
     /** Where the pointer is over the viewport, in client coordinates; null when it is not. */
     let pointer: { x: number; y: number } | null = null;
     let cursor = "";
@@ -110,6 +114,8 @@ export function attachToolPointer(
     const onPointerDown = (event: PointerEvent) => {
         takeModifiers(event);
         if (!toolPipeline.down(pointerInput(event))) return;
+        // The context menu of a right-button stroke is the stroke's, wherever it comes up.
+        if (event.button === RIGHT) strokeMenu = true;
         // No text selection or native drag from a stroke.
         event.preventDefault();
         try {
@@ -152,9 +158,27 @@ export function attachToolPointer(
     // Over the viewport the right button means the background colour (DESIGN §4).
     const onContextMenu = (event: Event) => event.preventDefault();
 
+    // The browser sends a right-button stroke's context menu at the press (Linux, macOS) or
+    // at the release (Windows), to the element under the pointer then: a stroke released over
+    // another region would open the menu there. The one menu that follows a right-button
+    // stroke is cancelled wherever it goes, in the capture phase; any later press, or the
+    // keyboard's menu key, ends that.
+    const onAnyContextMenu = (event: Event) => {
+        if (!strokeMenu) return;
+        strokeMenu = false;
+        event.preventDefault();
+    };
+    const onAnyPointerDown = () => {
+        strokeMenu = false;
+    };
+
     // In the capture phase: before the keymap, which leaves a key whose default is prevented.
     const onKey = (event: KeyboardEvent) => {
         takeModifiers(event);
+        // A menu asked for from the keyboard is not a stroke's.
+        if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) {
+            strokeMenu = false;
+        }
         const used = toolPipeline.key({
             type: event.type === "keyup" ? "up" : "down",
             key: eventKey(event),
@@ -183,6 +207,9 @@ export function attachToolPointer(
     container.addEventListener("pointermove", onPointerAt, true);
     container.addEventListener("pointerleave", onPointerLeave);
     container.addEventListener("contextmenu", onContextMenu);
+    window.addEventListener("contextmenu", onAnyContextMenu, true);
+    // Before the canvas's own listener, which arms the cancel for the stroke it begins.
+    window.addEventListener("pointerdown", onAnyPointerDown, true);
     window.addEventListener("keydown", onKey, true);
     window.addEventListener("keyup", onKey, true);
     window.addEventListener("blur", onBlur);
@@ -217,6 +244,8 @@ export function attachToolPointer(
         container.removeEventListener("pointermove", onPointerAt, true);
         container.removeEventListener("pointerleave", onPointerLeave);
         container.removeEventListener("contextmenu", onContextMenu);
+        window.removeEventListener("contextmenu", onAnyContextMenu, true);
+        window.removeEventListener("pointerdown", onAnyPointerDown, true);
         window.removeEventListener("keydown", onKey, true);
         window.removeEventListener("keyup", onKey, true);
         window.removeEventListener("blur", onBlur);

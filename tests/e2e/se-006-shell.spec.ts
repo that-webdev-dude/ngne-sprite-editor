@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
+// The page imports this module from the dev server; here it is needed for its types.
+import type * as ToolRegistryModule from "../../src/app/tools/toolRegistry";
 import {
     boxOf,
     contains,
@@ -355,11 +357,19 @@ test("regions carry their landmarks and the placeholders are empty", async ({ pa
         await expect(region(page, id)).toBeEmpty();
     }
     await expect(region(page, "timeline").locator(".shell-timeline__content")).toBeEmpty();
-    // Rail tools are placeholders until their tickets register them; SE-014 registers Hand and
-    // Zoom.
-    for (const button of await toolButtons(page).all()) {
-        const tool = await button.getAttribute("data-tool");
-        if (tool === "hand" || tool === "zoom") await expect(button).toBeEnabled();
+    // Rail tools are placeholders until their tickets register them (SE-014): a tool's button
+    // is enabled exactly when the tool registry has a tool of its id.
+    const toolSlots = region(page, "tool-rail").locator("[data-tool]");
+    const tools = await toolSlots.evaluateAll((buttons) =>
+        buttons.map((button) => button.getAttribute("data-tool") ?? ""),
+    );
+    const registered = await page.evaluate(async (ids) => {
+        const path = "/src/app/tools/toolRegistry.ts";
+        const module = (await import(/* @vite-ignore */ path)) as typeof ToolRegistryModule;
+        return ids.map((id) => module.toolRegistry.get(id) !== undefined);
+    }, tools);
+    for (const [index, button] of (await toolSlots.all()).entries()) {
+        if (registered[index]) await expect(button).toBeEnabled();
         else await expect(button).toBeDisabled();
     }
 });

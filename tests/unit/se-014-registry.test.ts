@@ -52,7 +52,6 @@ describe("discovery", () => {
                 "app/tools/planned.tools.ts",
                 "app/tools/hand/hand.tools.ts",
                 "app/tools/zoom/zoom.tools.ts",
-                "app/tools/dot/dot.tools.ts",
             ]),
         );
         const fromRegistry = (path: string) => {
@@ -77,27 +76,22 @@ describe("discovery", () => {
         ]);
     });
 
-    it("holds the tools of this ticket: hand and zoom in their slots, the dot tool outside the rail", () => {
+    it("holds the tools of this ticket, hand and zoom, in their slots; a slot has its tool exactly when one is registered", () => {
         const slots = toolRegistry.railSlots();
         expect(slots.map((slot) => slot.id)).toEqual(RAIL.map(([id]) => id));
-        expect(slots.filter((slot) => slot.tool !== null).map((slot) => slot.id)).toEqual([
-            "hand",
-            "zoom",
-        ]);
+        for (const slot of slots) {
+            expect(slot.tool, slot.id).toBe(toolRegistry.get(slot.id) ?? null);
+        }
         for (const id of ["hand", "zoom"]) {
             const registered = toolRegistry.get(id);
             const plan = plannedTools.find((entry) => entry.id === id);
+            expect(registered, id).toBeDefined();
+            expect(slots.find((slot) => slot.id === id)?.tool, id).toBe(registered);
             expect(registered?.shortcut, id).toBe(plan?.shortcut);
             expect(registered?.railOrder, id).toBe(plan?.railOrder);
             expect(registered?.icon, id).toBe(plan?.icon);
         }
         expect(toolRegistry.get("hand")?.hold?.key).toBe("Space");
-        // Development builds only (Vitest runs as one): no slot, no key.
-        expect(import.meta.env.DEV).toBe(true);
-        const dot = toolRegistry.get("dot");
-        expect(dot).toMatchObject({ paints: true, railOrder: undefined, shortcut: undefined });
-        expect(dot?.options.map((option) => option.key)).toEqual(["alpha"]);
-        expect(slots.map((slot) => slot.id)).not.toContain("dot");
     });
 });
 

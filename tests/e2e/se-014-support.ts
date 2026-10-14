@@ -2,12 +2,61 @@ import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 // Declares the tools probe on `window.__ngneTest` (SE-014).
 import type {} from "../../src/app/tools/attachToolPointer";
+// The page imports these modules from the dev server; here they are needed for their types.
+import type * as ToolRegistryModule from "../../src/app/tools/toolRegistry";
+import type { ToolContext, ToolPointer } from "../../src/app/tools/types";
 import { region } from "./se-006-support";
 import { clientAt } from "./se-012-support";
 import type { Geometry, Point, View } from "./se-012-support";
 
 // Shared helpers of the SE-014 specs: the active tool, the stroke in progress, the history and
-// the pixels of the active cel, read through the test hooks.
+// the pixels of the active cel, read through the test hooks; and a painting tool of the
+// tests' own.
+
+/** The id of the tests' painting tool (`registerDotFixture`). */
+export const DOT = "se014.dot";
+
+/**
+ * Registers the tests' painting tool in the page: one pixel per pointer sample, in the colour
+ * of the button with its alpha scaled by its Alpha option (a number field in the context bar).
+ * It is the tests' own, so the development dot tool of `src/app/tools/dot` can go without
+ * touching them (SE-015).
+ */
+export function registerDotFixture(page: Page): Promise<void> {
+    return page.evaluate(async (id) => {
+        const path = "/src/app/tools/toolRegistry.ts";
+        const module = (await import(/* @vite-ignore */ path)) as typeof ToolRegistryModule;
+        const write = (context: ToolContext, pointer: ToolPointer) => {
+            const { paint } = context;
+            if (!paint || !pointer.inside) return;
+            const { x, y } = pointer.pixel;
+            const at = (y * paint.image.width + x) * 4;
+            const alpha = Number(context.options.alpha);
+            paint.image.data[at] = context.colour >>> 24;
+            paint.image.data[at + 1] = (context.colour >>> 16) & 0xff;
+            paint.image.data[at + 2] = (context.colour >>> 8) & 0xff;
+            paint.image.data[at + 3] = Math.round(((context.colour & 0xff) * alpha) / 255);
+            paint.markDirty({ x, y, width: 1, height: 1 });
+        };
+        module.toolRegistry.register({
+            id,
+            label: "Dot",
+            paints: true,
+            cursor: "crosshair",
+            options: [
+                { kind: "number", key: "alpha", label: "Alpha", min: 0, max: 255, default: 255 },
+            ],
+            onDown: write,
+            onMove: write,
+        });
+    }, DOT);
+}
+
+/** Registers the tests' painting tool and selects it. */
+export async function selectDot(page: Page): Promise<void> {
+    await registerDotFixture(page);
+    await selectTool(page, DOT);
+}
 
 /** What the tools probe reports. */
 export interface ToolsState {

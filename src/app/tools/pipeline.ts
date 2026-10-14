@@ -177,7 +177,16 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
             live?.aborted();
             return;
         }
-        live?.flush();
+        try {
+            live?.flush();
+        } catch (error) {
+            // The frame cannot be composited as it is now (its layers changed under the
+            // stroke): the stroke is taken back rather than left open.
+            transaction.abort();
+            live?.aborted();
+            onError(error);
+            return;
+        }
         let recorded: boolean;
         try {
             recorded = transaction.commit(ended.tool.label) !== null;

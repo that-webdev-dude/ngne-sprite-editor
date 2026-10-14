@@ -9,6 +9,7 @@ import { activeDocument, sessionsStore } from "../../src/app/state/sessions";
 import { toolState } from "../../src/app/tools/activeTool";
 import { connectToolMapping, toolPipeline } from "../../src/app/tools/appPipeline";
 import type { PointerInput } from "../../src/app/tools/pipeline";
+import { toolRegistry } from "../../src/app/tools/toolRegistry";
 import { holdCommandId, selectCommandId } from "../../src/app/tools/tools.commands";
 import { createViewMapping } from "../../src/app/view/coordinates";
 import { setViewSurface } from "../../src/app/view/viewNavigation";
@@ -16,7 +17,7 @@ import { viewportLink } from "../../src/app/viewport/viewportLink";
 import type { ViewportMount } from "../../src/app/viewport/viewportLink";
 import { celAt, createDocument } from "../../src/core/model";
 import { readSpecKeyTable } from "../e2e/se-007-spec-keys";
-import { rgbaAt } from "./se-014-support";
+import { DOT, dotFixture, rgbaAt } from "./se-014-support";
 
 // SE-014: the tools on the app's own stores — their keys in the command registry and the
 // keymap, the temporary tools of held keys, Escape, and the hand and zoom tools driven
@@ -54,6 +55,7 @@ function focus(next: KeyEnvironment): void {
 }
 const target = new EventTarget();
 let uninstall: (() => void) | null = null;
+let unregisterDot: (() => void) | null = null;
 
 beforeEach(() => {
     // The live-stroke path asks for animation frames; Node has none.
@@ -75,9 +77,12 @@ beforeEach(() => {
     setViewSurface(surface as unknown as HTMLElement);
     focus(VIEWPORT);
     uninstall = installKeymap({ registry: appCommands, target, environment: () => environment });
+    // The tests' own painting tool, registered at run time.
+    unregisterDot = toolRegistry.register(dotFixture, "se-014-support.ts");
 });
 
 afterEach(() => {
+    unregisterDot?.();
     uninstall?.();
     disconnect?.();
     for (const document of sessionsStore.getState().documents) {
@@ -128,6 +133,36 @@ function pointer(x: number, y: number, fields: Partial<PointerInput> = {}): Poin
     };
 }
 
+/**
+ * Records what Ctrl+S runs in the `text` context: the commands bound to it there record
+ * instead of running (once Save exists, SE-041), or a probe bound there does while none is.
+ */
+function recordSave(): { calls: string[]; restore(): void } {
+    const calls: string[] = [];
+    const record = () => void calls.push("save");
+    const bound = appCommands.bindings("text", "Ctrl+S");
+    if (bound.length === 0) {
+        const remove = appCommands.register({
+            id: "se014.save",
+            title: "Save probe",
+            shortcut: "Ctrl+S",
+            context: ["global", "text"],
+            run: record,
+        });
+        return { calls, restore: remove };
+    }
+    const runs = bound.map((command) => command.run);
+    for (const command of bound) command.run = record;
+    return {
+        calls,
+        restore() {
+            bound.forEach((command, index) => {
+                command.run = runs[index] ?? command.run;
+            });
+        },
+    };
+}
+
 function view() {
     const document = activeDocument(sessionsStore.getState());
     if (!document) throw new Error("no document");
@@ -146,8 +181,6 @@ describe("tool commands in the registry", () => {
             shortcuts: ["Z"],
             contexts: ["canvas"],
         });
-        // The development tool has a command for the palette and no key.
-        expect(appCommands.get("tool.dot")?.shortcuts).toEqual([]);
         const hold = appCommands.get(holdCommandId({ id: "hand" }));
         expect(hold).toMatchObject({ shortcuts: ["Space"], contexts: ["canvas"] });
         expect(hold?.release).not.toBeNull();
@@ -168,7 +201,7 @@ describe("tool commands in the registry", () => {
     it("leaves no two enabled commands on one chord, with and without a stroke", () => {
         open();
         expect(findChordConflicts(appCommands)).toEqual([]);
-        toolState.select("dot");
+        toolState.select(DOT);
         toolPipeline.down(pointer(50, 30, { button: 0 }));
         expect(toolPipeline.stroking).toBe(true);
         expect(appCommands.get("tool.cancel")?.enabled()).toBe(true);
@@ -190,24 +223,17 @@ describe("keys", () => {
 
     it("leaves the tool alone with a text field focused, where Ctrl+S still reaches the registry", () => {
         open();
-        toolState.select("dot");
-        const saves: string[] = [];
-        const remove = appCommands.register({
-            id: "se014.save",
-            title: "Save probe",
-            shortcut: "Ctrl+S",
-            context: ["global", "text"],
-            run: () => void saves.push("save"),
-        });
+        toolState.select(DOT);
+        const saves = recordSave();
         focus(TEXT);
         expect(key("keydown", "h")).toBe(false);
-        expect(toolState.selectedId()).toBe("dot");
+        expect(toolState.selectedId()).toBe(DOT);
         expect(key("keydown", "s", { ctrlKey: true })).toBe(true);
-        expect(saves).toEqual(["save"]);
-        remove();
+        expect(saves.calls).toEqual(["save"]);
+        saves.restore();
     });
 
-    for (const selected of ["dot", "zoom", "hand"]) {
+    for (const selected of [DOT, "zoom", "hand"]) {
         it(`holding Space pans with the ${selected} tool selected and gives it back on release`, () => {
             const { session, history } = open();
             toolState.select(selected);
@@ -258,7 +284,7 @@ describe("keys", () => {
 
     it("Escape cancels the stroke in progress: no entry, the pixels as before", () => {
         const { session, history } = open();
-        toolState.select("dot");
+        toolState.select(DOT);
         toolPipeline.down(pointer(40 + 8 * 3 + 4, 20 + 8 * 2 + 4, { button: 0 }));
         toolPipeline.move([pointer(40 + 8 * 4 + 4, 20 + 8 * 2 + 4)]);
         const image = session.doc.images.get(
