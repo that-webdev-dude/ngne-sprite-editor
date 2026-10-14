@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { VIEWPORT_FOCUS_ATTRIBUTE } from "../../app/keymap/environment";
 import { REGION_FOCUS_ATTRIBUTE } from "../../app/keymap/regions";
 import { attachViewNavigation } from "../../app/view/pointerNavigation";
+import { OverlayCanvas } from "./OverlayCanvas";
 import { ViewportCanvas } from "./ViewportCanvas";
 import "./viewportArea.css";
 
@@ -18,12 +19,13 @@ const MARKS = {
 
 /**
  * The viewport element (SE-012, DESIGN §6): the focusable container of the editing viewport.
- * It holds the element the NGNE viewport fills with its canvas; the overlay canvas of SE-013
- * joins that element here as its sibling, never inside it.
+ * It holds the element the NGNE viewport fills with its canvas and, as its second child, the
+ * overlay canvas of SE-013: a sibling of that element, never inside it.
  *
  * Keyboard focus, the F6 focus region and the pointer listeners of view navigation are on
  * this element and not on a canvas: NGNE replaces its canvas at every resize. Wheel and
- * middle-drag act by pointer location, whatever has focus (`app/view/pointerNavigation`).
+ * middle-drag act by pointer location, whatever has focus (`app/view/pointerNavigation`);
+ * their events reach this element from the overlay, the pointer target, by bubbling.
  */
 export function ViewportArea() {
     const element = useRef<HTMLDivElement>(null);
@@ -45,6 +47,7 @@ export function ViewportArea() {
             {...MARKS}
         >
             <ViewportCanvas />
+            <OverlayCanvas />
         </div>
     );
 }

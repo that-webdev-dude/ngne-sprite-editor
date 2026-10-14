@@ -1,0 +1,13 @@
+/*
+ * SE-013: the overlay canvas. It fills the viewport element above the element NGNE fills, so
+ * one backing pixel is one device pixel of both canvases (SPEC §6.3). It takes the pointer;
+ * the cursor is the viewport element's, which it inherits. No z-index: the focus ring of the
+ * viewport element is drawn above it.
+ */
+.viewport-overlay {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+}
