@@ -25,7 +25,7 @@ A ticket may start only when every dependency is Done **and** its "Blocked until
 | ---- | -------------------------------------------------------------------------------------------------- | ------- | ------------------------------ | ------- |
 | G0   | Engine feasibility: every SE-002 question meets its go threshold, or SPEC §6/§9 is amended with the fallback and the amendment is recorded in REVIEW.md | SE-002 | SE-011, SE-053, SE-054 | Passed 2026-10-12 |
 | G1   | Drawing loop: SE-015 and SE-017 Done, including the recorded stroke latency budget (with or without the echo fallback) | SE-017 | SE-022, SE-041, SE-054 | Pending |
-| G2   | Export conformance: the three conditions of SPEC §9.7 pass locally and in CI                       | SE-053  | SE-052, SE-070 (as dependencies) | Pending |
+| G2   | Export conformance: the three conditions of SPEC §9.7 pass locally and in CI                       | SE-053  | SE-052, SE-070 (as dependencies) | Passed 2026-10-14 |
 | G3   | Release readiness: every v1 ticket other than SE-073 is Done, or descoped by the owner in writing in REVIEW.md. `.ngsprite` v1 and `ngne-sprite-atlas` v1 are frozen at this point | — | SE-073 | Pending |
 
 Why G1 gates interface work that does not technically depend on drawing: the stroke latency
@@ -86,7 +86,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-050 | Atlas packer                                      | M    | 005, 010                           | A2            | Done   |
 | SE-051 | NGNE bundle writers                               | L    | 003, 021, 050                      | —             | Done   |
 | SE-052 | Export dialog and delivery                        | L    | 006, 041, 051, 053                 | —             | Ready  |
-| SE-053 | Export conformance against NGNE (gate G2)         | L    | 002, 051                           | G0            | In progress |
+| SE-053 | Export conformance against NGNE (gate G2)         | L    | 002, 051                           | G0            | Done   |
 | SE-054 | Preview panel (NGNE `BrowserGame`)                | L    | 002, 006, 007, 011, 051            | G0, G1        | Ready  |
 | **M6** | **[Palette and parity extras](M6-palette-and-parity.md)** | |                                   |               |        |
 | SE-060 | Palette panel                                     | M    | 016, 043                           | —             | Ready  |

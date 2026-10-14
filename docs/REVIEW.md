@@ -305,9 +305,9 @@ and recorded it here. One read-only review ran per ticket.
 
 ### Leg 1 (2026-10-13): SE-011, SE-053, SE-012
 
-SE-011 and SE-012 are Done. SE-053 is merged, reviewed and fixed; its tests passed in CI
-(E25) and it waits for a green run of the whole suite (E2). The owner pushed once during the
-leg (df62375) and stopped the leg after SE-012.
+SE-011, SE-012 and SE-053 are Done; gate G2 passed on 2026-10-14 (E30). The owner pushed
+during the leg and stopped it after SE-012; the CI runs of those pushes were red four times,
+for one or two tests each (E25, E27–E29), before the fifth was green.
 
 | #   | Source | Finding | Decision | Applied in |
 | --- | ------ | ------- | -------- | ---------- |
@@ -340,12 +340,13 @@ leg (df62375) and stopped the leg after SE-012.
 | E27 | CI run 38464120668 | The run on the pushed d62f3e6 failed: 276 of 277 E2E tests passed, the 48 of SE-053 among them, and one SE-012 test failed (`se-012-navigation.spec.ts`, "wheel and middle-drag act by pointer location, whatever has focus, and move no focus": the focused field held "abhero" where "ab" was expected). On Linux the release of the middle button pastes the selection of the window system into the field that has the focus; a pan over the viewport did that. Windows has no such selection, so no local run shows it | The viewport cancels the `mouseup` of the middle button, as it already cancelled the `mousedown`; a test asserts that no such `mouseup` reaches the window with its default left in place, and fails without the change. Whether that stops the paste is shown only by the next CI run. G2 stays unmarked until a run is green | `src/app/view/pointerNavigation.ts`; `tests/e2e/se-012-navigation.spec.ts` |
 | E28 | CI run 38516395494 | The run on the pushed dc80986 failed: 276 of 277 E2E tests passed, the 48 of SE-053 and both middle-button tests of E27 among them, and one SE-064 test failed ("recent commands come first, newest first, and are remembered across a reload": the palette listed `se064.first` second right after it had run). The palette runs its chosen command where the focus returns, which Radix does one timer after the palette has left the page; the test helper `runFromPalette` returned once the palette was hidden, and on the slow runner the next Ctrl+K opened the palette before the command had run and been recorded | `runFromPalette` lets the queued timers run before it returns (the rule of D1). No assertion changed | `tests/e2e/se-064-support.ts` |
 | E29 | CI run 38520525291 | The run on the pushed 0a4d5ed failed: 275 of 277 E2E tests passed, the 48 of SE-053 among them, and two tests of earlier tickets failed, both of the kind of D1 and D2: in SE-006's select test Enter was pressed after Escape before the focus was back on the select, and in SE-008's discard test Escape was pressed before the question held the focus, so the New sprite dialog was still the top layer and closed instead. A search of the E2E files for a key pressed right after a surface opened or closed found six more places of that shape (SE-007 keymap, SE-008 twice, SE-064 three times) | Each of the eight now waits for the focus where the next key acts (or, in SE-007, for the queued timers) before it presses the key. No assertion changed; eight were added. The search covers one shape only, so CI may still find others | `tests/e2e/se-006-gallery.spec.ts`, `se-007-keymap.spec.ts`, `se-008-*.spec.ts`, `se-064-*.spec.ts` |
+| E30 | CI run 38523935488 | The run on the pushed 8c4b146 passed: 2782 unit tests and all 277 E2E tests, the 48 of SE-053 among them, on SwiftShader. The three conditions of SPEC §9.7 had passed on Intel UHD and RTX 4060 (SE-053's agent) | Gate G2 passed; SE-053 Done | Ticket index |
 
 Checks at the end of the leg, on this machine: `npm run check` passes (2782 unit tests);
 `npm run test:e2e` passes on the hardware adapter (277 tests) and, with `CI=1`, on SwiftShader
 with one worker (277 tests in 22.8 min). The test changed by E25 was then repeated alone, 8
-times on hardware and 4 times with `CI=1`. CI ran four times on pushed commits and was red each
-time, for one or two tests (E25, E27, E28, E29); it has not run on the change of E29.
+times on hardware and 4 times with `CI=1`. CI ran five times on pushed commits: red four times,
+for one or two tests each (E25, E27, E28, E29), then green on 8c4b146 (E30).
 
 Not decided here, left as they are:
 
