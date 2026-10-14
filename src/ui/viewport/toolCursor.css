@@ -1,0 +1,8 @@
+/*
+ * SE-014: the cursor of the active tool over the viewport, which the pointer pipeline sets as
+ * a custom property of the viewport element; the canvases inherit it. The cursor of a
+ * middle-drag (`[data-panning]`, viewportArea.css) is more specific and wins while it pans.
+ */
+.viewport-area {
+    cursor: var(--shell-tool-cursor, default);
+}

@@ -1,6 +1,12 @@
 import type { PixelBuffer, SpriteDoc, Touched } from "../model";
 import { createPixelBuffer } from "../pixels";
-import { blendStack, layerStack, sameStack, type LayerStack } from "./compositeFrame";
+import {
+    blendStack,
+    compositeOrigin,
+    layerStack,
+    sameStack,
+    type LayerStack,
+} from "./compositeFrame";
 
 /** Memory budget of a composite cache unless another is given: 128 MB (SPEC §5.3). */
 export const DEFAULT_COMPOSITE_CACHE_BUDGET_BYTES = 128 * 1024 * 1024;
@@ -33,6 +39,12 @@ interface Entry {
  *
  * The kept buffers never take more than `budgetBytes`: the least recently used are dropped
  * first, and a composite larger than the whole budget is returned without being kept.
+ *
+ * A composite made outside the cache is handed to it with `adopt`, so that the frame is not
+ * composited again (REVIEW.md D6). A stroke keeps the cache current that way while it is
+ * drawn: its live composite is adopted, and the stroke goes on bringing it up to date in place
+ * and reports each change itself (SE-014). That buffer is the one exception to "never a
+ * rewritten one": a reader that keeps pixels of a frame while it is stroked copies them.
  */
 export class CompositeCache {
     /** The document whose frames this cache composites. */
@@ -83,6 +95,28 @@ export class CompositeCache {
         blendStack(stack, whole, buffer.data, false);
         this.#keep(frameId, { buffer, stack });
         return buffer;
+    }
+
+    /**
+     * Keeps `buffer` as the composite of `frameId` in place of the one kept: a composite that
+     * `compositeFrame` made outside the cache, such as the live composite of a stroke. It is
+     * kept only when the frame's layer stack now is the one the buffer was composited from
+     * (`compositeOrigin`: the same images, blended the same way, on a canvas of the same
+     * size). Pixels written into those images since are the caller's to have composited into
+     * it, as `invalidate` leaves pixel writes to its caller. Returns whether the buffer is
+     * kept: not when its origin differs or is unknown, nor when it alone exceeds the budget;
+     * a refused buffer leaves the kept composite as it was. The buffer then belongs to the
+     * cache. Throws `RangeError` when the document has no such frame.
+     */
+    adopt(frameId: string, buffer: PixelBuffer): boolean {
+        const stack = layerStack(this.doc, frameId);
+        const origin = compositeOrigin(buffer);
+        if (!origin || !sameStack(origin, stack)) return false;
+        if (buffer.data.byteLength > this.budgetBytes) return false;
+        const kept = this.#entries.get(frameId);
+        if (kept) this.#drop(frameId, kept);
+        this.#keep(frameId, { buffer, stack });
+        return true;
     }
 
     /**

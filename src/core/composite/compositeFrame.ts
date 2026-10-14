@@ -205,6 +205,9 @@ function clipToCanvas(rect: Rect, width: number, height: number): Rect | null {
  * to date after a change inside the rectangle, with the same bytes as a new composite of
  * the frame. Without `into` the rest of the new buffer stays transparent.
  *
+ * The result remembers what it was composited from (`compositeOrigin`), which
+ * `CompositeCache.adopt` checks.
+ *
  * Throws `RangeError` when the document has no such frame, `rect` is not made of integers,
  * `into` or an override has other dimensions than the document, `into` is one of the images
  * being blended, or an override names no pixel layer or a layer named before.
@@ -228,5 +231,42 @@ export function compositeFrame(
     const target = into ?? createPixelBuffer(doc.width, doc.height);
     // A new buffer is transparent already.
     if (area) blendStack(stack, area, target.data, into !== undefined);
+    recordOrigin(target, stack, area);
     return target;
+}
+
+/**
+ * What each composite written by `compositeFrame` was composited from, by its pixel array.
+ * Weak: a composite nobody holds any more takes its entry with it.
+ */
+const origins = new WeakMap<Uint8ClampedArray, LayerStack>();
+
+/**
+ * Keeps the origin of `target` after `stack` was blended over `area` of it. A composite of
+ * the whole canvas has `stack` as its origin. A rectangle brought up to date from the stack
+ * it already had keeps it; from another stack, part of the buffer is of one and part of the
+ * other, and it has none. A rectangle of a new buffer is no composite of the frame.
+ */
+function recordOrigin(target: PixelBuffer, stack: LayerStack, area: Rect | null): void {
+    if (!area) return;
+    if (
+        area.x === 0 &&
+        area.y === 0 &&
+        area.width === stack.width &&
+        area.height === stack.height
+    ) {
+        origins.set(target.data, stack);
+        return;
+    }
+    const origin = origins.get(target.data);
+    if (origin && !sameStack(origin, stack)) origins.delete(target.data);
+}
+
+/**
+ * The layer stack a buffer was composited from by `compositeFrame`, or null when it was not
+ * (or not wholly) composited by it. Pixels written into the stack's images since are not
+ * seen here: a caller that wrote them composites them again, as for `CompositeCache`.
+ */
+export function compositeOrigin(buffer: PixelBuffer): LayerStack | null {
+    return origins.get(buffer.data) ?? null;
 }

@@ -2,8 +2,10 @@ import { useEffect, useRef } from "react";
 import { VIEWPORT_FOCUS_ATTRIBUTE } from "../../app/keymap/environment";
 import { REGION_FOCUS_ATTRIBUTE } from "../../app/keymap/regions";
 import { attachViewNavigation } from "../../app/view/pointerNavigation";
+import { returnFocusToViewport } from "../focus/returnFocus";
 import { OverlayCanvas } from "./OverlayCanvas";
 import { ViewportCanvas } from "./ViewportCanvas";
+import "./toolCursor.css";
 import "./viewportArea.css";
 
 /** Marks the viewport element. */
@@ -25,7 +27,8 @@ const MARKS = {
  * Keyboard focus, the F6 focus region and the pointer listeners of view navigation are on
  * this element and not on a canvas: NGNE replaces its canvas at every resize. Wheel and
  * middle-drag act by pointer location, whatever has focus (`app/view/pointerNavigation`);
- * their events reach this element from the overlay, the pointer target, by bubbling.
+ * their events reach this element from the overlay, the pointer target, by bubbling. While it
+ * is on the page, a control activated with the pointer returns the focus to it (SE-014).
  */
 export function ViewportArea() {
     const element = useRef<HTMLDivElement>(null);
@@ -33,6 +36,12 @@ export function ViewportArea() {
     useEffect(() => {
         if (!element.current) return;
         return attachViewNavigation(element.current);
+    }, []);
+
+    // SPEC §7.8: a control activated with the pointer gives the focus back to this element.
+    useEffect(() => {
+        if (!element.current) return;
+        return returnFocusToViewport(element.current);
     }, []);
 
     return (

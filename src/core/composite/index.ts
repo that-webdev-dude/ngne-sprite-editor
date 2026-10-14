@@ -6,5 +6,5 @@ export { BLEND_FUNCTIONS } from "./blend";
 export type { BlendFunction } from "./blend";
 export { CompositeCache, DEFAULT_COMPOSITE_CACHE_BUDGET_BYTES } from "./cache";
 export type { CompositeCacheOptions } from "./cache";
-export { compositeFrame } from "./compositeFrame";
+export { compositeFrame, compositeOrigin } from "./compositeFrame";
 export type { CelOverride, CompositeOptions } from "./compositeFrame";

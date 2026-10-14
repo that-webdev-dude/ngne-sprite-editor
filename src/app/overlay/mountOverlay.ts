@@ -2,6 +2,7 @@ import { backingSize } from "../../engine/viewport/geometry";
 import type { DeviceSize } from "../../engine/viewport/types";
 import type {} from "../../import-meta";
 import { sessionsStore } from "../state/sessions";
+import type { ViewMapping } from "../view/coordinates";
 import { currentViewMapping } from "../view/viewNavigation";
 import { createOverlayController } from "./overlayController";
 import { overlayLayers } from "./overlayLayers";
@@ -29,6 +30,12 @@ declare module "../testing/testHooks" {
 /** The overlay of the app, mounted on its canvas. */
 export interface MountedOverlay {
     setTheme(theme: OverlayTheme): void;
+    /**
+     * The mapping of the image on screen, which client positions go through (see
+     * `OverlayController.mapping`): the texel a stroke paints is the one shown under the
+     * pointer, also during NGNE's resize quiet (SE-014).
+     */
+    mapping(): ViewMapping | null;
     dispose(): void;
 }
 
@@ -141,6 +148,7 @@ export function mountOverlay(
 
     return {
         setTheme: (theme) => controller.setTheme(theme),
+        mapping: () => controller.mapping(),
         dispose() {
             if (hooks?.overlay === probe) delete hooks.overlay;
             swaps.disconnect();

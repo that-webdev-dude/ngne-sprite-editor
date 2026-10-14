@@ -70,6 +70,13 @@ export interface OverlayController {
     setTheme(theme: OverlayTheme): void;
     /** Asks for a redraw in the next animation frame. */
     requestRedraw(): void;
+    /**
+     * The mapping of the image on screen, in the canvas's backing pixels, as a redraw would
+     * draw with it now: client positions map to the texel shown under them, also while the
+     * canvases are stretched. Null while no document is open or no viewport element is on the
+     * page. The pointer pipeline of SE-014 maps strokes with it.
+     */
+    mapping(): ViewMapping | null;
     /** Stops following the stores and the layers. The canvas keeps what it shows. */
     dispose(): void;
 }
@@ -242,6 +249,7 @@ export function createOverlayController(
             requestRedraw();
         },
         requestRedraw,
+        mapping: onScreen,
         dispose() {
             if (disposed) return;
             disposed = true;

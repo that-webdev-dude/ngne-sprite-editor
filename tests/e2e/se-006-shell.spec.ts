@@ -355,6 +355,11 @@ test("regions carry their landmarks and the placeholders are empty", async ({ pa
         await expect(region(page, id)).toBeEmpty();
     }
     await expect(region(page, "timeline").locator(".shell-timeline__content")).toBeEmpty();
-    // Rail tools are placeholders until the tool framework exists.
-    for (const button of await toolButtons(page).all()) await expect(button).toBeDisabled();
+    // Rail tools are placeholders until their tickets register them; SE-014 registers Hand and
+    // Zoom.
+    for (const button of await toolButtons(page).all()) {
+        const tool = await button.getAttribute("data-tool");
+        if (tool === "hand" || tool === "zoom") await expect(button).toBeEnabled();
+        else await expect(button).toBeDisabled();
+    }
 });

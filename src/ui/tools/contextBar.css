@@ -1,0 +1,6 @@
+/* SE-014: the active tool's name, first in the context bar (DESIGN §2, §5.2). */
+.context-tool {
+    margin-right: var(--space-4);
+    font-weight: var(--font-weight-strong);
+    white-space: nowrap;
+}

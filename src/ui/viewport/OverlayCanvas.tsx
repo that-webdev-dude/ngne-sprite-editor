@@ -3,6 +3,7 @@ import { mountOverlay } from "../../app/overlay/mountOverlay";
 import type { MountedOverlay } from "../../app/overlay/mountOverlay";
 import { DEFAULT_OVERLAY_THEME } from "../../app/overlay/types";
 import type { OverlayTheme } from "../../app/overlay/types";
+import { attachToolPointer } from "../../app/tools/attachToolPointer";
 import { parseHexColour } from "../preferences/hexColour";
 import { useTheme } from "../theme/theme";
 import type { Theme } from "../theme/theme";
@@ -26,7 +27,8 @@ function readOverlayTheme(theme: Theme): OverlayTheme {
  * The overlay canvas of the viewport (SPEC §6.3, SE-013): stacked over the NGNE canvas at the
  * same backing size and box, it draws the editor's chrome and is the pointer target of the
  * viewport. It is the second child of the viewport element, beside the element NGNE fills
- * (never inside it: NGNE replaces its canvas there).
+ * (never inside it: NGNE replaces its canvas there). The tools take their pointer input from
+ * it (SE-014).
  */
 export function OverlayCanvas() {
     const canvas = useRef<HTMLCanvasElement>(null);
@@ -41,7 +43,10 @@ export function OverlayCanvas() {
         if (!element || !container || !ngne) return;
         const overlay = mountOverlay(element, container, ngne);
         mounted.current = overlay;
+        // The pointer pipeline of the tools (SE-014) maps strokes as the overlay maps the cursor.
+        const detachTools = attachToolPointer(element, container, () => overlay.mapping());
         return () => {
+            detachTools();
             mounted.current = null;
             overlay.dispose();
         };
