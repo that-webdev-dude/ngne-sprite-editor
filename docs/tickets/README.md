@@ -58,7 +58,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-014 | Tool framework and pointer pipeline               | L    | 004, 007, 012, 013                 | —             | Done   |
 | SE-015 | Pencil and eraser                                 | L    | 014                                | —             | Done   |
 | SE-016 | Colour state, picker and eyedropper               | M    | 006, 014                           | —             | Done   |
-| SE-017 | Bucket, line, rectangle and ellipse (gate G1)     | M    | 015, 016                           | —             | Ready  |
+| SE-017 | Bucket, line, rectangle and ellipse (gate G1)     | M    | 015, 016                           | —             | In progress |
 | **M2** | **[Layers and timeline](M2-layers-and-timeline.md)** |   |                                    |               |        |
 | SE-020 | Layer commands                                    | M    | 004, 010                           | —             | Done   |
 | SE-021 | Frame, cel and tag commands                       | L    | 004, 010                           | —             | Done   |
@@ -89,7 +89,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-053 | Export conformance against NGNE (gate G2)         | L    | 002, 051                           | G0            | Done   |
 | SE-054 | Preview panel (NGNE `BrowserGame`)                | L    | 002, 006, 007, 011, 051            | G0, G1        | Ready  |
 | **M6** | **[Palette and parity extras](M6-palette-and-parity.md)** | |                                   |               |        |
-| SE-060 | Palette panel                                     | M    | 016, 043                           | —             | Ready  |
+| SE-060 | Palette panel                                     | M    | 016, 043                           | —             | In progress |
 | SE-061 | Blend modes and cel opacity                       | M    | 010, 022                           | —             | Ready  |
 | SE-062 | Symmetry and tiled mode                           | M    | 011, 015, 017                      | —             | Ready  |
 | SE-063 | GIF export                                        | M    | 043, 052                           | —             | Ready  |

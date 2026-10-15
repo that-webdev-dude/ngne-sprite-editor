@@ -11,7 +11,7 @@ each to be Done or descoped by the owner in writing.
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Ready                                                    |
+| Status       | In progress                                              |
 | Depends on   | SE-016, SE-043                                           |
 | Blocks       | SE-066                                                   |
 | Blocked until | —                                                       |
