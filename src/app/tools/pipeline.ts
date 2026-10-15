@@ -291,8 +291,12 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
                     return false;
                 }
                 try {
-                    // The selection becomes the clip mask here with SE-030 (SPEC §7.1).
-                    transaction = document.history.begin(target);
+                    // Paint is clipped to the selection (SPEC §7.1, SE-030): its mask is the
+                    // transaction's clip, so a pixel outside it gets its value back at each
+                    // `markDirty`, before the live composite reads it. The selection cannot
+                    // change while the transaction is open (the history takes no command).
+                    const clip = document.session.selection?.mask;
+                    transaction = document.history.begin(clip ? { ...target, clip } : target);
                     const { image, imageId } = transaction;
                     live = startLiveComposite(
                         document.session,

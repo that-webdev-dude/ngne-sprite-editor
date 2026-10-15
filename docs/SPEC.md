@@ -722,6 +722,34 @@ Colours and eyedropper (SE-016):
   a floating selection at the viewport centre.
 - Transforms use nearest-neighbour sampling. Pixels moved off the canvas are clipped on apply.
 
+Selection model (SE-030):
+
+- `core/selection` holds the masks and the operations set (replace), add, subtract,
+  intersect, invert, all and none. A selection is a value: an operation or a command puts a
+  new `Selection` in the session and never changes the one there, so a transaction's clip and
+  undo keep the very mask they were given. An operation that leaves no pixel selected gives no
+  selection (`null`), never an empty mask.
+- Selection changes are commands labelled with their menu titles ("Select All", "Deselect",
+  "Invert Selection"; a tool gives its own label). They touch no composite (`touched` is
+  empty). A change that would leave the same pixels selected makes no command and records
+  nothing, as a stroke that changes nothing (§7.1). While a transaction is open they are
+  disabled, as undo and redo are.
+- Invert with no selection selects every pixel, as in Aseprite; inverting a selection of every
+  pixel leaves none.
+- Shape masks, clipped to the canvas: a rectangle; the filled ellipse that fits a rectangle
+  (Zingl's `plotEllipseRect` with the tips finished while y0 − y1 ≤ b, which for a square
+  gives the circle brush of §7.1); a polygon as its outline (the Bresenham line of each side,
+  the last vertex joined to the first) and the pixels whose centres lie inside it by the
+  even-odd rule, as Aseprite's lasso; fewer than 3 vertices enclose nothing. A flood mask, or
+  any mask of the document's size, becomes a selection with its bounds as it is.
+- The boundary for drawing is a list of axis-aligned edge segments on the document's grid
+  lines, each a maximal run with the selected side on one hand, and the outer corners (grid
+  points with exactly one of their four pixels selected); the canvas edge counts as boundary.
+  The ants are drawn from it (DESIGN §6).
+- Paint is clipped where the pointer pipeline begins a paint stroke: the selection's mask is
+  the transaction's clip (§5.2), so a pixel outside it gets its value at `begin` back at each
+  report, before the live composite and the stroke echo read it.
+
 ### 7.3 Layers
 
 Add, delete, duplicate, rename, reorder (drag), visibility, lock, opacity, merge down, flatten.

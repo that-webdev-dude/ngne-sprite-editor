@@ -225,6 +225,15 @@ transient tool feedback in `--warn`.
 - Pixel grid appears at ≥ 8× as 1 px lines at 12% white/black; tile grid at 25%. White in the
   dark theme, black in the light theme; a line is the first device pixel of each texel or tile.
 - Selection: 1 px marching ants, black and white dashes, 4 px period, 8 steps per second.
+  They lie on the device pixels outside the selection that touch a selected texel, diagonally
+  too: a 1 px ring just outside the selected texels on every side, around a hole as well, as
+  the document outline lies outside the document; where the selection reaches the document's
+  edge they lie over the outline. A dash is 2 device pixels by the sum x + y of the overlay
+  pixel (black where (x + y − phase) mod 4 < 2), so every row and column of the ring repeats
+  every 4 px, round corners too; a step moves the phase on by one. Below 1× a run that rounds
+  to nothing keeps 1 px. A draw layer of order 500, over the grids and under the brush cursor;
+  its timer exists only while the active document has a selection and motion is allowed
+  (SE-030).
 - Brush cursor: 1 px outline of the brush footprint snapped to pixels, two-tone so it shows on
   any content (black just outside the footprint, white outside that; an inverted outline cannot
   be drawn on the overlay, which does not hold NGNE's pixels); the system cursor is hidden over
