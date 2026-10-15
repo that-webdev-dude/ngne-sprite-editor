@@ -19,16 +19,24 @@ import type { FocusedElement } from "../../app/keymap/environment";
 // the select has the focus again, the focus moves on to the viewport. Opened or chosen with
 // the keyboard, it keeps the focus.
 
-/** Elements a pointer activates. */
+/** Elements a pointer activates; a `gridcell` is a palette swatch (SE-016). */
 export const CONTROL_SELECTOR = [
     "button",
     "input",
     "select",
     "summary",
     "a[href]",
-    ...["button", "checkbox", "switch", "radio", "tab", "slider", "separator", "option"].map(
-        (role) => `[role="${role}"]`,
-    ),
+    ...[
+        "button",
+        "checkbox",
+        "switch",
+        "radio",
+        "tab",
+        "slider",
+        "separator",
+        "option",
+        "gridcell",
+    ].map((role) => `[role="${role}"]`),
 ].join(", ");
 
 /** Controls that open a surface of their own, which takes the focus. */

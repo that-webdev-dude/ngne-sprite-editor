@@ -56,9 +56,9 @@ function expectSoundLayout(boxes: Record<Region, Box>, window: { width: number; 
 }
 
 /**
- * Every tool button is 28 px and every button of the rail — the tools and, at its bottom,
- * the colour chips and their reset button (SE-016) — is entirely inside the rail; no two
- * buttons overlap.
+ * The rail holds the 13 tool buttons (28 px) and, at its bottom, the colour chips (28 px) and
+ * their reset button (24 px, DESIGN §4; SE-016) and nothing else; every one of them is
+ * entirely inside the rail and no two overlap.
  */
 async function expectToolsVisible(page: Page) {
     const rail = await boxOf(region(page, "tool-rail"));
@@ -70,7 +70,15 @@ async function expectToolsVisible(page: Page) {
         expect(box.height).toBe(28);
     }
     const buttons = await railButtons(page).all();
-    expect(buttons.length).toBeGreaterThan(tools.length);
+    expect(buttons).toHaveLength(tools.length + 2);
+    const chips = await boxOf(
+        region(page, "tool-rail").getByRole("button", { name: "Swap colours" }),
+    );
+    expect([chips.width, chips.height]).toEqual([28, 28]);
+    const reset = await boxOf(
+        region(page, "tool-rail").getByRole("button", { name: "Reset colours" }),
+    );
+    expect([reset.width, reset.height]).toEqual([24, 24]);
     const boxes: Box[] = [];
     for (const button of buttons) {
         await expect(button).toBeVisible();

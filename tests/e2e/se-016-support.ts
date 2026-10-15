@@ -65,7 +65,7 @@ export const resetColours = (page: Page): Locator =>
     region(page, "tool-rail").getByRole("button", { name: "Reset colours", exact: true });
 
 export const swatches = (page: Page): Locator =>
-    region(page, "dock").locator('[data-dock-panel="palette"] [role="option"]');
+    region(page, "dock").locator('[data-dock-panel="palette"] [role="gridcell"]');
 
 /** The colour 0xRRGGBBAA as "#RRGGBBAA", as the chips and swatches carry it. */
 export function hex8(colour: number): string {

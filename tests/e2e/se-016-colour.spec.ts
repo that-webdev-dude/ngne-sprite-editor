@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { hsvToRgb, packRgba } from "../../src/core/color";
-import { railOneColumnHeight } from "../../src/ui/shell/layout";
+import { RAIL, railOneColumnHeight } from "../../src/ui/shell/layout";
 import { arrowToRadio, boxOf, collectErrors, openShell, region, tabTo } from "./se-006-support";
 import { openEditor, openSession } from "./se-007-support";
 import { audit, startInTheme, THEMES } from "./se-008-support";
@@ -95,7 +95,9 @@ test("the picker is fully keyboard-operable: arrow keys on the field and the str
     await page.keyboard.press("Tab");
     await expect(hexField(page)).toBeFocused();
     await page.keyboard.press("Control+A");
-    await page.keyboard.type("#12ab9f80");
+    // White space around the digits, as pasted text often has: no length limit cuts it.
+    await page.keyboard.type("  #12ab9f80 ");
+    await expect(hexField(page)).toHaveValue("  #12ab9f80 ");
     await page.keyboard.press("Enter");
     expect((await colourState(page)).foreground).toBe(0x12ab9f80);
     await expect(hexField(page)).toHaveValue("#12AB9F80");
@@ -170,6 +172,15 @@ test("held down in the field or a strip, the right button edits the background, 
     // To the top-right corner and beyond, released over the dock's padding.
     await page.mouse.move(box.x + box.width + 6, box.y - 6);
     await expect.poll(async () => (await colourState(page)).background).toBe(fromHsv(0, 1, 1, 200));
+    // A key pressed during the drag edits the colour the panel shows: the background.
+    await expect(svField(page)).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    expect(await colourState(page)).toMatchObject({
+        foreground: 0x00ff00ff,
+        foregroundHsv: { h: 120, s: 1, v: 1 },
+        background: fromHsv(0, 0.99, 1, 200),
+        backgroundHsv: { h: 0, s: 0.99, v: 1 },
+    });
     await page.mouse.up({ button: "right" });
     await expect(colourPanel(page)).toHaveAttribute("data-editing", "foreground");
     await expect(hueStrip(page)).toHaveAttribute("aria-valuenow", "120");
@@ -180,8 +191,23 @@ test("held down in the field or a strip, the right button edits the background, 
     await page.mouse.click(hue.x + hue.width * 0.5, hue.y + hue.height / 2, { button: "right" });
     const after = await colourState(page);
     expect(Math.abs(after.backgroundHsv.h - 180)).toBeLessThan(3);
-    expect(after.backgroundHsv).toMatchObject({ s: 1, v: 1 });
+    // Saturation and value as the key during the drag left them.
+    expect(after.backgroundHsv).toMatchObject({ s: 0.99, v: 1 });
     expect(after.foreground).toBe(0x00ff00ff);
+    await expect(colourPanel(page)).toHaveAttribute("data-editing", "foreground");
+
+    // Held on the alpha strip, the arrow keys move the background's alpha, not the foreground's.
+    const alpha = await boxOf(alphaStrip(page));
+    await page.mouse.move(alpha.x + alpha.width * 0.5, alpha.y + alpha.height / 2);
+    await page.mouse.down({ button: "right" });
+    await expect(alphaStrip(page)).toBeFocused();
+    const held = (await colourState(page)).background & 0xff;
+    await page.keyboard.press("Shift+ArrowRight");
+    expect((await colourState(page)).background & 0xff).toBe(held + 10);
+    await page.keyboard.press("ArrowLeft");
+    expect((await colourState(page)).background & 0xff).toBe(held + 9);
+    expect((await colourState(page)).foreground).toBe(0x00ff00ff);
+    await page.mouse.up({ button: "right" });
     await expect(colourPanel(page)).toHaveAttribute("data-editing", "foreground");
 
     const menus = await contextMenus(page);
@@ -229,7 +255,7 @@ test("the rail chips show the colours; a click swaps them, as X does; the reset 
     expect(errors).toEqual([]);
 });
 
-test("clicking a palette swatch sets the foreground to exactly that colour; a right click sets the background; the keyboard does both", async ({
+test("clicking a palette swatch sets the foreground to exactly that colour; a right click sets the background; the keyboard does both, and the canvas keys act from a focused swatch", async ({
     page,
 }) => {
     const errors = collectErrors(page);
@@ -291,8 +317,13 @@ test("clicking a palette swatch sets the foreground to exactly that colour; a ri
     expect((await colourState(page)).background).toBe(colors[4 + columns]);
     await page.keyboard.press("End");
     await expect(swatches(page).nth(colors.length - 1)).toBeFocused();
-    await page.keyboard.press(" ");
-    expect((await colourState(page)).foreground).toBe(0);
+    // X still swaps the colours (SPEC §7.8): a focused swatch takes no letter for itself.
+    await page.keyboard.press("x");
+    expect(await colourState(page)).toMatchObject({
+        foreground: colors[4 + columns],
+        background: colors[4],
+    });
+    await expect(swatches(page).nth(colors.length - 1)).toBeFocused();
     expect(errors).toEqual([]);
 });
 
@@ -309,7 +340,7 @@ test("the rail is in one column exactly when the chips fit under the tools there
         const heights = [...element.children].map((child) => (child as HTMLElement).offsetHeight);
         return heights.reduce((sum, height) => sum + height, 0) + 2 * (heights.length - 1);
     });
-    expect(footer).toBeGreaterThan(28);
+    expect(footer).toBe(RAIL.footer);
     const needed = railOneColumnHeight(groups, footer);
     const splitter = page.getByRole("separator", { name: "Resize timeline" });
     await splitter.focus();

@@ -74,7 +74,8 @@
     margin-top: auto;
 }
 
-/* In two columns the footer's children stand side by side (RailFrame measures them stacked). */
+/* In two columns the footer's children stand side by side; the column count plans them
+   stacked (RAIL.footer in layout.ts). */
 .shell-rail[data-columns="2"] .shell-rail__footer {
     flex-direction: row;
 }

@@ -7,29 +7,29 @@ import type { Hsv } from "../../core/color";
 import { NumberField } from "../primitives/NumberField";
 import { SegmentedControl } from "../primitives/SegmentedControl";
 import { cancelNextContextMenu } from "./cancelContextMenu";
-import { alphaAfterKey, cssColour, fractionAlong, hueAfterKey, svAfterKey } from "./pickerMath";
+import {
+    changeHsv,
+    keyAlpha,
+    keyHue,
+    keySaturationValue,
+    pickAlpha,
+    pickHue,
+    pickSaturationValue,
+} from "./pickerEdits";
+import type { Box, EditorStore } from "./pickerEdits";
+import { cssColour } from "./pickerMath";
 import "./colourPicker.css";
 
 // The colour panel (DESIGN §5.3): a saturation/value field, a hue strip and an alpha strip,
 // a hex field, and H S V or R G B fields chosen with a segmented control. It edits the
 // foreground. Held down in the field or a strip, the right button edits the background
 // instead: the panel shows the background from the press to the release. Every control
-// works from the keyboard (arrow keys on the field and the strips, `pickerMath.ts`).
-//
-// The panel edits HSV as the editor store keeps it (`EditorState.foregroundHsv`), so a drag
-// to the bottom or the left edge of the field, where the colour turns black or grey, keeps
-// the hue and brings it back when the drag returns.
+// works from the keyboard (arrow keys on the field and the strips). Keys act on the colour
+// the panel shows, so during a right-button drag they edit the background as well. What each
+// control does to the colour is in `pickerEdits.ts`.
 
+const store: EditorStore = editorStore;
 const editor = () => editorStore.getState();
-
-function storedHsv(slot: ColourSlot): Hsv {
-    return slot === "foreground" ? editor().foregroundHsv : editor().backgroundHsv;
-}
-
-/** Changes part of a colour's HSV, and its alpha, keeping the rest as stored. */
-function changeHsv(slot: ColourSlot, change: Partial<Hsv>, alpha = editor()[slot] & 0xff): void {
-    editor().setColourHsv(slot, { ...storedHsv(slot), ...change }, alpha);
-}
 
 /** Whether a key comes with a modifier that leaves it to the shortcuts. */
 function chorded(event: KeyboardEvent): boolean {
@@ -37,7 +37,7 @@ function chorded(event: KeyboardEvent): boolean {
 }
 
 /** The inner box of an element in client pixels: inside its border. */
-function innerBox(element: Element) {
+function innerBox(element: Element): Box {
     const rect = element.getBoundingClientRect();
     return {
         left: rect.left + element.clientLeft,
@@ -99,19 +99,18 @@ function useColourDrag(pick: Pick, editing: (slot: ColourSlot) => void) {
 }
 
 interface ControlProps {
+    /** The colour the panel shows, which the keys edit. */
+    slot: ColourSlot;
     hsv: Hsv;
     editing(slot: ColourSlot): void;
 }
 
 /** The saturation/value square: saturation from left to right, value from bottom to top. */
-function SaturationValueField({ hsv, editing }: ControlProps) {
-    const drag = useColourDrag((slot, x, y, element) => {
-        const box = innerBox(element);
-        changeHsv(slot, {
-            s: fractionAlong(x, box.left, box.width),
-            v: 1 - fractionAlong(y, box.top, box.height),
-        });
-    }, editing);
+function SaturationValueField({ slot, hsv, editing }: ControlProps) {
+    const drag = useColourDrag(
+        (target, x, y, element) => pickSaturationValue(store, target, innerBox(element), x, y),
+        editing,
+    );
     const pure = hsvToRgb(hsv.h, 1, 1);
     const saturation = Math.round(hsv.s * 100);
     const value = Math.round(hsv.v * 100);
@@ -131,10 +130,9 @@ function SaturationValueField({ hsv, editing }: ControlProps) {
             }}
             onKeyDown={(event) => {
                 if (chorded(event)) return;
-                const next = svAfterKey(storedHsv("foreground"), event.key, event.shiftKey);
-                if (!next) return;
-                event.preventDefault();
-                changeHsv("foreground", next);
+                if (keySaturationValue(store, slot, event.key, event.shiftKey)) {
+                    event.preventDefault();
+                }
             }}
             {...drag}
         >
@@ -149,15 +147,17 @@ function SaturationValueField({ hsv, editing }: ControlProps) {
 interface StripProps {
     kind: "hue" | "alpha";
     label: string;
+    /** The colour the panel shows, which the keys edit. */
+    slot: ColourSlot;
     value: number;
     max: number;
     valueText: string;
     /** Background of the track. */
     fill: string;
-    /** The new value at `fraction` (0..1) along the track. */
-    pick(slot: ColourSlot, fraction: number): void;
-    step(value: number, key: string, shift: boolean): number | null;
-    set(value: number): void;
+    /** Sets the colour `target` from client `x` over the track's box. */
+    pick(editor: EditorStore, target: ColourSlot, box: Box, x: number): void;
+    /** Applies a key to the colour `target`; returns whether the strip took it. */
+    step(editor: EditorStore, target: ColourSlot, key: string, shift: boolean): boolean;
     editing(slot: ColourSlot): void;
 }
 
@@ -165,20 +165,20 @@ interface StripProps {
 function ColourStrip({
     kind,
     label,
+    slot,
     value,
     max,
     valueText,
     fill,
     pick,
     step,
-    set,
     editing,
 }: StripProps) {
-    const drag = useColourDrag((slot, x, _y, element) => {
-        const track = element.firstElementChild ?? element;
-        const box = innerBox(track);
-        pick(slot, fractionAlong(x, box.left, box.width));
-    }, editing);
+    const drag = useColourDrag(
+        (target, x, _y, element) =>
+            pick(store, target, innerBox(element.firstElementChild ?? element), x),
+        editing,
+    );
     return (
         <div
             role="slider"
@@ -192,10 +192,7 @@ function ColourStrip({
             data-colour-control={kind}
             onKeyDown={(event) => {
                 if (chorded(event)) return;
-                const next = step(value, event.key, event.shiftKey);
-                if (next === null) return;
-                event.preventDefault();
-                set(next);
+                if (step(store, slot, event.key, event.shiftKey)) event.preventDefault();
             }}
             {...drag}
         >
@@ -212,7 +209,10 @@ const HUES = [0, 60, 120, 180, 240, 300, 360].map((hue) => {
     return `rgb(${r} ${g} ${b})`;
 });
 
-/** The colour as hex text; what is typed applies on Enter or when the field is left. */
+/**
+ * The colour as hex text; what is typed applies on Enter or when the field is left. No length
+ * limit: pasted text with white space around the digits is taken (`parseHex` trims it).
+ */
 function HexField({ colour, onChange }: { colour: number; onChange(colour: number): void }) {
     const [draft, setDraft] = useState<string | null>(null);
     const commit = () => {
@@ -228,7 +228,6 @@ function HexField({ colour, onChange }: { colour: number; onChange(colour: numbe
             aria-label="Hex"
             autoComplete="off"
             spellCheck={false}
-            maxLength={9}
             value={draft ?? formatHex(colour)}
             onChange={(event) => setDraft(event.target.value)}
             onBlur={commit}
@@ -262,29 +261,29 @@ export function ColourPicker() {
     };
     return (
         <div className="colour-panel" data-colour-panel="" data-editing={slot}>
-            <SaturationValueField hsv={hsv} editing={setSlot} />
+            <SaturationValueField slot={slot} hsv={hsv} editing={setSlot} />
             <ColourStrip
                 kind="hue"
                 label="Hue"
+                slot={slot}
                 value={hsv.h}
                 max={360}
                 valueText={`${Math.round(hsv.h)}°`}
                 fill={`linear-gradient(to right, ${HUES.join(", ")})`}
-                pick={(target, fraction) => changeHsv(target, { h: fraction * 360 })}
-                step={hueAfterKey}
-                set={(h) => changeHsv("foreground", { h })}
+                pick={pickHue}
+                step={keyHue}
                 editing={setSlot}
             />
             <ColourStrip
                 kind="alpha"
                 label="Alpha"
+                slot={slot}
                 value={rgba.a}
                 max={255}
                 valueText={`${rgba.a} of 255`}
                 fill={`linear-gradient(to right, ${cssColour(colour, 0)}, ${cssColour(colour, 1)})`}
-                pick={(target, fraction) => changeHsv(target, {}, Math.round(fraction * 255))}
-                step={alphaAfterKey}
-                set={(alpha) => changeHsv("foreground", {}, alpha)}
+                pick={pickAlpha}
+                step={keyAlpha}
                 editing={setSlot}
             />
             <div className="colour-panel__row">
@@ -305,7 +304,7 @@ export function ColourPicker() {
                             min={0}
                             max={360}
                             value={Math.round(hsv.h)}
-                            onChange={(h) => changeHsv(slot, { h })}
+                            onChange={(h) => changeHsv(store, slot, { h })}
                         />
                         <NumberField
                             label="S"
@@ -313,7 +312,7 @@ export function ColourPicker() {
                             min={0}
                             max={100}
                             value={Math.round(hsv.s * 100)}
-                            onChange={(s) => changeHsv(slot, { s: s / 100 })}
+                            onChange={(s) => changeHsv(store, slot, { s: s / 100 })}
                         />
                         <NumberField
                             label="V"
@@ -321,7 +320,7 @@ export function ColourPicker() {
                             min={0}
                             max={100}
                             value={Math.round(hsv.v * 100)}
-                            onChange={(v) => changeHsv(slot, { v: v / 100 })}
+                            onChange={(v) => changeHsv(store, slot, { v: v / 100 })}
                         />
                     </>
                 ) : (

@@ -360,8 +360,13 @@ test("a resize of the viewport region is followed without a ResizeObserver loop,
 
     // The tallest timeline leaves the rail too short for one column: in one delivery the rail
     // changes its columns and the viewport region its size, twice over.
+    // At 1280×720 the rail starts in two columns (its colour chips, SE-016): Home first gives
+    // it one, so End switches it from one to two in the same delivery as the resize.
     const squeeze = async () => {
         await splitter.focus();
+        await page.keyboard.press("Home");
+        await expect(rail).toHaveAttribute("data-columns", "1");
+        await twoFrames(page);
         await page.keyboard.press("End");
         await expect(rail).toHaveAttribute("data-columns", "2");
         await twoFrames(page);

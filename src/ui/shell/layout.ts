@@ -23,6 +23,11 @@ export const RAIL = {
     padding: 8,
     /** A separator: 1 px line with 4 px margin on both sides. */
     separator: 9,
+    /**
+     * The footer in one column (SE-016): the colour chips (28 px) over their reset button
+     * (24 px, DESIGN §4), with the gap between them.
+     */
+    footer: 28 + 2 + 24,
 } as const;
 
 /** Sizes the user chose with the splitters; null means the default. */

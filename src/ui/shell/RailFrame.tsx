@@ -1,20 +1,13 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
+import { railGroups } from "../../app/tools/registry";
+import { toolRegistry } from "../../app/tools/toolRegistry";
 import { RAIL, railColumns } from "./layout";
 import { RegionBoundary } from "./RegionBoundary";
 
-/**
- * The height the footer takes in one column: its children stacked with the rail's gap. Two
- * columns may lay them out side by side, so the footer's own height then is less; measuring
- * that would let the rail switch back and forth (SE-016).
- */
-function footerHeight(footer: HTMLElement | null): number {
-    if (!footer) return 0;
-    const children = Array.from(footer.children, (child) =>
-        child instanceof HTMLElement ? child.offsetHeight : 0,
-    );
-    if (children.length === 0) return footer.offsetHeight;
-    return children.reduce((sum, height) => sum + height, 0) + (children.length - 1) * RAIL.gap;
+/** The number of buttons in each group of the rail, as the tool registry plans them. */
+function plannedGroups(): readonly number[] {
+    return railGroups(toolRegistry.railSlots()).map((group) => group.length);
 }
 
 /**
@@ -22,32 +15,28 @@ function footerHeight(footer: HTMLElement | null): number {
  * do not fit its height; it never scrolls and never clips a tool (DESIGN §2). The content is
  * built from `RailGroup` and, at the bottom, an optional `RailFooter`; separators between
  * groups are drawn by the rail.
+ *
+ * The column count follows the planned content, not what is rendered (SE-016): the groups of
+ * the tool registry's rail slots and the footer of the colour chips (`RAIL.footer`). A rail
+ * whose content failed to render keeps the healthy layout, and the footer, which two columns
+ * lay out side by side, cannot make the rail switch back and forth.
  */
 export function RailFrame({ children }: { children: ReactNode }) {
     const ref = useRef<HTMLElement>(null);
-    const [columns, setColumns] = useState<1 | 2>(1);
+    const [height, setHeight] = useState<number | null>(null);
+    // Renders again when the registry's slots change.
+    useSyncExternalStore(toolRegistry.subscribe, toolRegistry.version);
 
     useLayoutEffect(() => {
         const rail = ref.current;
         if (!rail) return;
-        const measure = () => {
-            const groups = Array.from(
-                rail.querySelectorAll("[data-rail-group]"),
-                (group) => group.childElementCount,
-            );
-            const footer = rail.querySelector<HTMLElement>("[data-rail-footer]");
-            setColumns(railColumns(groups, footerHeight(footer), rail.clientHeight));
-        };
         // The resize observer reports once when it starts, before the first paint.
-        const resize = new ResizeObserver(measure);
+        const resize = new ResizeObserver(() => setHeight(rail.clientHeight));
         resize.observe(rail);
-        const mutation = new MutationObserver(measure);
-        mutation.observe(rail, { childList: true, subtree: true });
-        return () => {
-            resize.disconnect();
-            mutation.disconnect();
-        };
+        return () => resize.disconnect();
     }, []);
+
+    const columns = height === null ? 1 : railColumns(plannedGroups(), RAIL.footer, height);
 
     return (
         <nav

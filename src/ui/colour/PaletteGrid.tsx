@@ -11,8 +11,11 @@ import "./paletteGrid.css";
 // The palette section (DESIGN §5.4) until SE-060 lands: a read-only grid of the active
 // document's palette. A left press on a swatch sets the foreground to its colour, a right
 // press the background; the swatch of the foreground colour is marked. From the keyboard the
-// grid is one tab stop: arrow keys move through it, Enter or Space takes the colour into the
-// foreground, with Shift into the background (DESIGN §8).
+// grid is one tab stop: arrow keys, Home and End move through it, Enter takes the colour into
+// the foreground and Shift+Enter into the background (DESIGN §8). It is an ARIA grid, not a
+// listbox: a listbox takes typed letters for typeahead, and the keymap would then keep the
+// `canvas` letter and digit keys (X, B, 1…) from a focused swatch (SPEC §7.8). The keys the
+// grid uses it takes itself, so the keymap leaves them alone.
 
 /** A swatch is 16 px; the grid has a 1 px border. */
 const SWATCH = 16;
@@ -21,6 +24,15 @@ const BORDER = 1;
 /** The palette of the active document as text, so the grid renders only when it changes. */
 function paletteText(name: string, colors: readonly number[]): string {
     return JSON.stringify({ name, colors });
+}
+
+/** The swatch indices of each row of a grid of `count` swatches, `columns` to a row. */
+function rowsOf(count: number, columns: number): number[][] {
+    const rows: number[][] = [];
+    for (let start = 0; start < count; start += columns) {
+        rows.push(Array.from({ length: Math.min(columns, count - start) }, (_, at) => start + at));
+    }
+    return rows;
 }
 
 function pick(slot: ColourSlot, colour: number): void {
@@ -89,8 +101,7 @@ export function PaletteGrid() {
             case "End":
                 next = last;
                 break;
-            case "Enter":
-            case " ": {
+            case "Enter": {
                 event.preventDefault();
                 const colour = colors[index];
                 if (colour !== undefined) {
@@ -113,34 +124,35 @@ export function PaletteGrid() {
         pick(event.button === 2 ? "background" : "foreground", colour);
     };
 
+    const swatch = (index: number) => {
+        const colour = colors[index] ?? 0;
+        return (
+            <div
+                key={index}
+                role="gridcell"
+                aria-selected={index === selected}
+                aria-label={formatHex(colour)}
+                title={formatHex(colour)}
+                tabIndex={index === stop ? 0 : -1}
+                className="palette-grid__swatch"
+                data-swatch={index}
+                data-colour={formatHex(colour, true)}
+                onPointerDown={(event) => onPointerDown(event, index)}
+                onContextMenu={(event) => event.preventDefault()}
+                onKeyDown={(event) => onKeyDown(event, index)}
+            >
+                <span className="palette-grid__fill" style={{ background: cssColour(colour) }} />
+            </div>
+        );
+    };
+
     return (
         <div ref={container} className="palette-panel" data-palette-panel="">
             {palette && colors.length > 0 ? (
-                <div
-                    role="listbox"
-                    aria-label={`Palette ${palette.name}`}
-                    className="palette-grid"
-                    style={{ gridTemplateColumns: `repeat(${columns}, ${SWATCH}px)` }}
-                >
-                    {colors.map((colour, index) => (
-                        <div
-                            key={index}
-                            role="option"
-                            aria-selected={index === selected}
-                            aria-label={formatHex(colour)}
-                            title={formatHex(colour)}
-                            tabIndex={index === stop ? 0 : -1}
-                            className="palette-grid__swatch"
-                            data-swatch={index}
-                            data-colour={formatHex(colour, true)}
-                            onPointerDown={(event) => onPointerDown(event, index)}
-                            onContextMenu={(event) => event.preventDefault()}
-                            onKeyDown={(event) => onKeyDown(event, index)}
-                        >
-                            <span
-                                className="palette-grid__fill"
-                                style={{ background: cssColour(colour) }}
-                            />
+                <div role="grid" aria-label={`Palette ${palette.name}`} className="palette-grid">
+                    {rowsOf(colors.length, columns).map((row) => (
+                        <div key={row[0]} role="row" className="palette-grid__row">
+                            {row.map(swatch)}
                         </div>
                     ))}
                 </div>

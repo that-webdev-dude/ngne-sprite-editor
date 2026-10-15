@@ -559,12 +559,13 @@ test("the pan limit is kept when the viewport shrinks: the document comes back i
     };
     await expect.poll(() => activeView(page)).toEqual(corner);
 
-    // The window shrinks: where the view is, nothing of the document would be left.
-    await page.setViewportSize({ width: 1280, height: 720 });
+    // The window shrinks: where the view is, nothing of the document would be left. At this
+    // height the rail, with the colour chips at its bottom (SE-016), still has one column.
+    await page.setViewportSize({ width: 1280, height: 760 });
     await settle(page);
     const small = await hostDeviceSize(page);
-    // The rail is in two columns here: its colour chips (SE-016) do not fit one at 460 px.
-    expect(small).toEqual({ width: 944, height: 424 });
+    expect(small).toEqual({ width: 972, height: 464 });
+    await expect(region(page, "tool-rail")).toHaveAttribute("data-columns", "1");
     expect(visible(corner, document, small)).toEqual({ width: 0, height: 0 });
     const inside = {
         scale: 16,
@@ -580,15 +581,15 @@ test("the pan limit is kept when the viewport shrinks: the document comes back i
         height: MIN_VISIBLE,
     });
 
-    // The timeline at its tallest takes more: the viewport is shorter; the rail keeps its
-    // second column, so the width stays.
+    // The timeline at its tallest takes more: the viewport is shorter, and narrower by the
+    // rail's second column.
     const rail = region(page, "tool-rail");
     await page.getByRole("separator", { name: "Resize timeline" }).focus();
     await page.keyboard.press("End");
     await expect(rail).toHaveAttribute("data-columns", "2");
     await settle(page);
     const smaller = await hostDeviceSize(page);
-    expect(smaller.width).toBe(small.width);
+    expect(smaller.width).toBeLessThan(small.width);
     expect(smaller.height).toBeLessThan(small.height);
     const again = {
         scale: 16,

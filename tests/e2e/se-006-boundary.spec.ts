@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
+// The page imports this module from the dev server; here it is needed for its types.
+import type * as ToolRegistryModule from "../../src/app/tools/toolRegistry";
 import { boxOf, region, regionBoxes, REGIONS } from "./se-006-support";
 import type { Region } from "./se-006-support";
 
@@ -43,10 +45,19 @@ async function expectOthersWork(page: Page, failed: Region | "dock-panel") {
         await expect(palette).not.toHaveAttribute("aria-expanded", expanded ?? "");
     }
     if (failed !== "tool-rail") {
+        // A button per rail slot of the tool registry, and the colour chips and their reset
+        // button (SE-016).
+        const slots = await page.evaluate(async () => {
+            const path = "/src/app/tools/toolRegistry.ts";
+            const module = (await import(/* @vite-ignore */ path)) as typeof ToolRegistryModule;
+            return module.toolRegistry.railSlots().length;
+        });
+        expect(slots).toBe(13);
         const rail = region(page, "tool-rail");
-        await expect(rail.locator("button[data-tool]")).toHaveCount(13);
-        // At its bottom, the colour chips (SE-016).
-        await expect(rail.getByRole("button", { name: "Swap colours" })).toBeVisible();
+        await expect(rail.getByRole("button")).toHaveCount(slots + 2);
+        await expect(
+            rail.getByRole("button", { name: "Reset colours", exact: true }),
+        ).toBeVisible();
     }
     if (failed !== "viewport") {
         await expect(region(page, "viewport")).toHaveText("New sprite");
@@ -76,20 +87,8 @@ for (const id of REGIONS) {
         await expect(reload).toBeVisible();
         await expect(page.getByRole("alert")).toHaveCount(1);
 
-        // The layout holds: every region is where it is without the failure. A failed rail
-        // holds only its Reload button, so it takes one column (DESIGN §2) where the healthy
-        // rail, with the colour chips at its bottom (SE-016), may need two; the regions beside
-        // it follow by that difference.
-        const expected = structuredClone(healthy);
-        if (id === "tool-rail") {
-            const shift = healthy["tool-rail"].width - 44;
-            expected["tool-rail"].width = 44;
-            for (const beside of ["context-bar", "viewport"] as const) {
-                expected[beside].x -= shift;
-                expected[beside].width += shift;
-            }
-        }
-        expect(await regionBoxes(page)).toEqual(expected);
+        // The layout holds: every region is where it is without the failure.
+        expect(await regionBoxes(page)).toEqual(healthy);
         await expectOthersWork(page, id);
 
         // Reload mounts the content again: it fails while broken, recovers once repaired.

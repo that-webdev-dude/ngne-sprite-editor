@@ -154,8 +154,10 @@ the key to switch. Foreground/background chips sit at the bottom with swap (X) a
 button; these are the only FG/BG chips in the interface. The chips are one 28 px button, the
 foreground over the upper left of the background as in the mockup, that swaps them as X does;
 the reset button (24 px icon) restores black on white. One column stacks them, two columns put
-them side by side. With them the one-column rail is 493 px tall, so at 1280×720 with the default
-timeline the rail has two columns (SE-016).
+them side by side. The rail has one column when the planned content stacked in one column fits
+its height — every tool slot of the registry in its groups, the separators, and the chips over
+the reset button — and two columns otherwise, whatever is rendered (a rail whose content
+failed keeps the layout). At 1280×720 with the default timeline it does not fit (SE-016).
 
 ### 5.2 Context bar
 
@@ -171,7 +173,8 @@ the foreground colour; holding the right button or pressing X first edits the ba
 colour-wheel variants, no harmony tools.
 
 - While the right button is held in the field or a strip, the panel shows the background and
-  the drag edits it; at the release the panel shows the foreground again (SE-016).
+  the drag, and any key pressed meanwhile, edits it; at the release the panel shows the
+  foreground again (SE-016).
 - Fields: H in degrees (0–360), S and V in percent, or R G B (0–255); the hex field shows
   "#RRGGBB", or "#RRGGBBAA" for a colour that is not opaque, and takes 3, 4, 6 or 8 digits.
   Alpha is set with its strip or the hex field.
@@ -189,9 +192,10 @@ foreground colour has a 2 px accent outline. Header: palette name (menu of prese
 colour, and an overflow menu (remove, edit, import, export, from sprite, sort, replace colour).
 Before SE-060 lands the panel is a read-only grid of the document palette (SE-016): a press
 picks (left foreground, right background); the grid is one tab stop where the arrow keys move,
-Home and End go to the ends, Enter or Space sets the foreground and Shift+Enter or Shift+Space
-the background. The outline lies inside the swatch, as in the mockup, on the first swatch of
-the foreground's colour. With no document open the section is empty.
+Home and End go to the ends, Enter sets the foreground and Shift+Enter the background; the
+`canvas` letter and digit keys still act from a focused swatch. The outline lies inside the
+swatch, as in the mockup, on the first swatch of the foreground's colour. With no document open
+the section is empty.
 
 ### 5.5 Preview
 

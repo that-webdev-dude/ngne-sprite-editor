@@ -4,7 +4,7 @@ import type { Page } from "@playwright/test";
 import type * as CompositesModule from "../../src/app/state/composites";
 import { collectErrors, region } from "./se-006-support";
 import { openDocument, openViewportEditor, paint, settle, setView } from "./se-011-support";
-import { clientAt, geometry, viewportArea } from "./se-012-support";
+import { clientAt, cursorField, geometry, viewportArea } from "./se-012-support";
 import type { View } from "./se-012-support";
 import { historyOf, railButton, texelClient, toolsState } from "./se-014-support";
 import { celBytes, setColours } from "./se-015-support";
@@ -220,23 +220,21 @@ test("Alt held with the pencil makes the eyedropper active until it is released,
     expect(errors).toEqual([]);
 });
 
-test("below 1× the eyedropper still picks: the pixel under the pointer, never a blend", async ({
+test("below 1× the eyedropper still picks: exactly the texel the pointer names, never a neighbour or a blend", async ({
     page,
 }) => {
     const errors = collectErrors(page);
     await openViewportEditor(page);
-    // 2 × 2 blocks of one colour each: at 1/2 every device pixel shows one block.
+    // Every texel a colour of its own: a neighbour or a blend of four gives another colour.
     const size = 64;
     const document = await openDocument(page, { width: size, height: size });
     const pixels: number[] = [];
     for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-            const bx = x >> 1;
-            const by = y >> 1;
-            pixels.push(bx * 8, by * 8, 255 - bx * 4, (bx + by) % 3 === 0 ? 255 : 160);
-        }
+        for (let x = 0; x < size; x++)
+            pixels.push(x * 4, y * 4, 255 - x * 2, (x + y) % 2 ? 160 : 255);
     }
     await paint(page, document.id, pixels);
+    // At 1/2 a device pixel shows one of its four texels (bx·2 … bx·2 + 1, by·2 … by·2 + 1).
     const view: View = { scale: 0.5, originX: 40, originY: 30 };
     await setView(page, document.id, view);
     await settle(page);
@@ -250,10 +248,16 @@ test("below 1× the eyedropper still picks: the pixel under the pointer, never a
         { x: 20, y: 11 },
         { x: 31, y: 31 },
     ]) {
-        // The device pixel of the block, which holds its four texels.
+        // The pointer on the device pixel of the block, at a whole device position.
         const client = clientAt(layout, { x: view.originX + block.x, y: view.originY + block.y });
-        await page.mouse.click(client.x, client.y);
-        const at = (block.y * 2 * size + block.x * 2) * 4;
+        await page.mouse.move(client.x, client.y);
+        // The texel `clientToDoc` names there, as the status bar reads it out: the first of
+        // the four.
+        await expect(cursorField(page)).toHaveText(`${block.x * 2}, ${block.y * 2}`);
+        const [x, y] = (await cursorField(page).innerText()).split(",").map(Number);
+        await page.mouse.down();
+        await page.mouse.up();
+        const at = (y! * size + x!) * 4;
         const expected =
             ((pixels[at]! << 24) |
                 (pixels[at + 1]! << 16) |
