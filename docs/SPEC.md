@@ -713,6 +713,53 @@ Colours and eyedropper (SE-016):
   the release; a right press on a swatch sets it. The context menu that follows such a press
   is cancelled wherever it comes up, as for a right-button stroke.
 
+Shape tools and paint bucket (SE-017):
+
+- Line, rectangle and ellipse are rubber bands drawn into the stroke's transaction
+  (`core/raster/shapeStroke.ts`). The press fixes the first point and keeps a copy of the image;
+  every pointer sample, and every press or release of Shift or Ctrl while the button is held,
+  draws the whole shape again: the pixels the previous shape covered and the new one does not
+  get their value at the press back, and are reported dirty with the new ones, so the live
+  composite and the stroke echo clear them. Each covered pixel is inked once, from its value at
+  the press. The release keeps the shape drawn last: the preview is the result. Escape takes it
+  back; a shape that changes nothing (over pixels of its own colour, or off the document) records
+  nothing.
+- The brush (size and shape, placed as for the pencil) is stamped at every pixel of the outline:
+  the Bresenham line, the four sides of the rectangle (both corners included), the ellipse's
+  outline. Filled covers every pixel inside the outline as well, the outline still stamped, so a
+  filled shape covers what its outline does and its inside.
+- The ellipse fits the rectangle of its corners exactly, odd and even sides alike: Zingl's
+  `plotEllipseRect` with the tips finished while y0 − y1 ≤ b, a midpoint algorithm on the
+  corners (`core/raster/ellipse.ts`). Its filled form is the selection's ellipse mask of §7.2,
+  so the ellipse tool and the elliptical marquee cover one shape; for a square it is the circle
+  brush. Aseprite's ellipse is the same algorithm with extra straight pixels for some sizes,
+  which this editor does not add.
+- Shift: a line's end snaps to the nearest of the eight 45° directions (an axis when the drag
+  lies within 22.5° of it, otherwise the diagonal as long as the drag's larger side); a
+  rectangle or an ellipse becomes a square or a circle as large as the drag's larger side,
+  towards the pointer. Ctrl: from the centre — the press is the shape's centre, which reaches as
+  far on its other side (odd sides only); a line extends as far the other way. Both may change
+  while the button is held. The hints: "Shift: 45° steps · Ctrl: from the centre", "Shift:
+  square · …", "Shift: circle · …".
+- Options, values per tool id as for the brush tools: line — size, shape, ink, opacity;
+  rectangle and ellipse — size, shape, Filled (off by default), ink, opacity. No pixel-perfect.
+  Listing size and shape gives them the brush cursor.
+- Paint bucket: the press fills the area of the pixel under the pointer with the button's
+  colour in the chosen ink and opacity; the drag after it does nothing more, and a press outside
+  the document fills nothing. Options in order: Contiguous (on), Sample (Active layer by default,
+  or Composite), Tolerance (0–255, 0 by default), ink, opacity. Active layer samples the active
+  cel as the stroke found it (an empty cel is transparent); Composite samples the frame's
+  composite as the cache holds it. The bucket has no brush outline, so its cursor is a crosshair
+  over the document too (DESIGN §6 hides the system cursor for the tools that draw one).
+- Flood fill (`core/raster/flood.ts`) returns a 1-bit mask of the source's size, which the magic
+  wand makes a selection (§7.2). A pixel matches the seed when both are transparent (alpha 0,
+  whatever their RGB) or when each of the four channels differs by at most the tolerance: 0 is
+  the exact colour, 255 every pixel (Aseprite's `color_equal_32`, checked against its source).
+  Contiguous takes the matching pixels joined to the seed by their edges (4-connected), by a
+  scanline fill with an explicit stack of spans, never recursion; otherwise every matching
+  pixel. With a selection the fill neither takes nor crosses an unselected pixel, as Aseprite's
+  contiguous fill does; the transaction's clip keeps every other pixel.
+
 ### 7.2 Selection
 
 - A selection is a 1-bit mask plus bounds in the `DocSession`. Changing it is undoable.

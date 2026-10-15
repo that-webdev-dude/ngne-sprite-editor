@@ -26,8 +26,8 @@ export interface BrushStrokeOptions {
     pixelPerfect?: boolean;
 }
 
-/** The bounding rectangle of the pixels changed by one call. */
-class Changes {
+/** The bounding rectangle of the pixels changed by one call (also `shapeStroke.ts`'s). */
+export class Changes {
     #minX = Infinity;
     #minY = Infinity;
     #maxX = -Infinity;
