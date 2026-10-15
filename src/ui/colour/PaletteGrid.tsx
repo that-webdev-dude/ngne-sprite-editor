@@ -3,7 +3,7 @@ import type { KeyboardEvent, PointerEvent } from "react";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import type { StoreApi } from "zustand/vanilla";
-import { EDIT_COLOUR, MOVE_COLOUR } from "../../app/palette/palette.commands";
+import { EDIT_COLOUR, MOVE_COLOUR } from "../../app/palette/paletteCommandIds";
 import {
     currentSwatch,
     paletteStore,
@@ -24,6 +24,7 @@ import {
     swatchElement,
     useActivePalette,
 } from "./paletteUi";
+import { GRID_BORDER, SWATCH, gridColumns, gridScrolls } from "./gridColumns";
 import { cssColour } from "./pickerMath";
 import "./paletteGrid.css";
 
@@ -42,12 +43,6 @@ import "./paletteGrid.css";
 // The swatch the keys and the presses reach is the current swatch of `app/palette`, which the
 // overflow menu's commands act on. Every change of the palette is a registered command.
 
-/** A swatch is 16 px; the grid has a 1 px border. */
-const SWATCH = 16;
-const BORDER = 1;
-/** Rows shown before the grid scrolls. */
-const VISIBLE_ROWS = 8;
-
 /** The swatch indices of each row of a grid of `count` swatches, `columns` to a row. */
 function rowsOf(count: number, columns: number): number[][] {
     const rows: number[][] = [];
@@ -57,15 +52,8 @@ function rowsOf(count: number, columns: number): number[][] {
     return rows;
 }
 
-/**
- * Columns of a grid of `count` swatches in `width` px: as many as fit, less the scroll bar's
- * `gutter` when there are more rows than the grid shows, so it never overflows sideways.
- */
-function gridColumns(width: number, count: number, gutter: number): number {
-    const inner = width - 2 * BORDER;
-    const fit = (space: number) => Math.max(1, Math.min(count, Math.floor(space / SWATCH)));
-    const columns = fit(inner);
-    return Math.ceil(count / columns) > VISIBLE_ROWS ? fit(inner - gutter) : columns;
+function sameColours(a: readonly number[], b: readonly number[]): boolean {
+    return a.length === b.length && a.every((colour, index) => colour === b[index]);
 }
 
 /**
@@ -88,9 +76,21 @@ interface Drag {
     pointerId: number;
     /** The swatch pressed, which the drag moves. */
     from: number;
-    /** Escape ended the move; the release does nothing. */
+    /** The document and its palette at the press: a change of either ends the move. */
+    documentId: string;
+    colours: readonly number[];
+    /** Escape or a change of the palette ended the move; the release does nothing. */
     cancelled: boolean;
     stop(): void;
+}
+
+/** Whether the active document's palette is still the one `drag` began on. */
+function unchangedSince(drag: Drag): boolean {
+    const document = activeDocument(sessionsStore.getState());
+    return (
+        document?.id === drag.documentId &&
+        sameColours(document.session.doc.palette.colors, drag.colours)
+    );
 }
 
 export function PaletteGrid() {
@@ -107,17 +107,33 @@ export function PaletteGrid() {
 
     useLayoutEffect(() => {
         const element = container.current;
-        if (!element) return;
-        // The width of a vertical scroll bar here: the grid gives it room when it scrolls.
         const scroller = probe.current;
-        if (scroller) setGutter(scroller.offsetWidth - scroller.clientWidth);
-        const observer = new ResizeObserver(() => setWidth(element.clientWidth));
+        if (!element || !scroller) return;
+        // The section's width, and the width of a vertical scroll bar here: the grid gives
+        // it room when it scrolls. The probe's content box narrows with its scroll bar, so a
+        // change of the scroll bar's style is seen as well.
+        const measure = () => {
+            setWidth(element.clientWidth);
+            setGutter(scroller.offsetWidth - scroller.clientWidth);
+        };
+        measure();
+        const observer = new ResizeObserver(measure);
         observer.observe(element);
+        observer.observe(scroller);
         return () => observer.disconnect();
     }, []);
 
     // A drag that the panel outlives (the document closed) leaves nothing behind.
     useEffect(() => () => drag.current?.stop(), []);
+
+    // A palette that changes under a drag (undo, redo, another document) ends the move: the
+    // order the drag shows would no longer be the one a drop makes.
+    useEffect(() => {
+        const current = drag.current;
+        if (!current || current.cancelled || unchangedSince(current)) return;
+        current.cancelled = true;
+        setMoveTarget(null);
+    }, [palette]);
 
     const stored = palette?.colors ?? [];
     const count = stored.length;
@@ -126,9 +142,10 @@ export function PaletteGrid() {
     const showsMove = target !== null && current >= 0 && target >= 0 && target < count;
     const colors = showsMove ? movedColours(stored, current, target) : stored;
     const columns = gridColumns(width, count, gutter);
-    const rows = Math.ceil(count / columns);
-    const scrolls = rows > VISIBLE_ROWS;
+    const scrolls = gridScrolls(count, columns);
     const selected = colors.indexOf(foreground);
+    // The current swatch is marked where it is shown: during a move, at the place it goes to.
+    const marked = showsMove ? target : current;
     const editing =
         edit && palette && edit.documentId === palette.documentId && !showsMove ? edit : null;
     // The swatch being edited shows the picker's colour. Only its fill's colour changes, never
@@ -247,9 +264,12 @@ export function PaletteGrid() {
             setMoveTarget(null);
         };
         window.addEventListener("keydown", onKey, true);
+        const active = activeDocument(sessionsStore.getState());
         drag.current = {
             pointerId,
             from: index,
+            documentId: active?.id ?? "",
+            colours: [...(active?.session.doc.palette.colors ?? [])],
             cancelled: false,
             stop: () => {
                 window.removeEventListener("keydown", onKey, true);
@@ -275,7 +295,9 @@ export function PaletteGrid() {
         if (!current || current.pointerId !== event.pointerId) return;
         const to = paletteStore.getState().target;
         current.stop();
-        if (!current.cancelled && to !== null) moveTo(current.from, to, false);
+        if (!current.cancelled && to !== null && unchangedSince(current)) {
+            moveTo(current.from, to, false);
+        }
     };
 
     const endDrag = (event: PointerEvent<HTMLElement>) => {
@@ -296,7 +318,7 @@ export function PaletteGrid() {
                 className="palette-grid__swatch"
                 data-swatch={index}
                 data-colour={formatHex(colour, true)}
-                data-current={index === current ? "" : undefined}
+                data-current={index === marked ? "" : undefined}
                 onPointerDown={(event) => onPointerDown(event, index)}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
@@ -326,7 +348,9 @@ export function PaletteGrid() {
                     aria-label={`Palette ${palette.name}`}
                     className="palette-grid"
                     data-moving={showsMove ? "" : undefined}
-                    style={{ width: columns * SWATCH + 2 * BORDER + (scrolls ? gutter : 0) }}
+                    style={{
+                        width: columns * SWATCH + 2 * GRID_BORDER + (scrolls ? gutter : 0),
+                    }}
                     {...{ [PALETTE_GRID_ATTRIBUTE]: "" }}
                 >
                     {rowsOf(count, columns).map((row) => (

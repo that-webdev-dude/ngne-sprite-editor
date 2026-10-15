@@ -2,18 +2,19 @@ import { afterEach, describe, expect, it } from "vitest";
 import { appCommands } from "../../src/app/commands/appCommands";
 import { invokeCommand } from "../../src/app/commands/invoke";
 import { buildContextMenu, menuCommands } from "../../src/app/commands/menuModel";
+import { finishSwatchEdit } from "../../src/app/palette/palette.commands";
 import {
     ADD_COLOUR,
+    APPLY_EDIT,
     EDIT_COLOUR,
     MOVE_COLOUR,
     PALETTE_FROM_SPRITE,
     PALETTE_MENU,
     PRESET_MENU,
     REMOVE_COLOUR,
-    finishSwatchEdit,
     presetCommandId,
     presetOfCommand,
-} from "../../src/app/palette/palette.commands";
+} from "../../src/app/palette/paletteCommandIds";
 import {
     currentSwatch,
     paletteStore,
@@ -65,7 +66,14 @@ afterEach(() => {
 
 describe("registration", () => {
     it("registers the commands from app/palette, without keys", () => {
-        const ids = [ADD_COLOUR, REMOVE_COLOUR, EDIT_COLOUR, MOVE_COLOUR, PALETTE_FROM_SPRITE];
+        const ids = [
+            ADD_COLOUR,
+            REMOVE_COLOUR,
+            EDIT_COLOUR,
+            APPLY_EDIT,
+            MOVE_COLOUR,
+            PALETTE_FROM_SPRITE,
+        ];
         const presets = PRESET_PALETTES.map(presetCommandId);
         for (const id of [...ids, ...presets]) {
             const found = command(id);
@@ -77,7 +85,18 @@ describe("registration", () => {
         expect(command(ADD_COLOUR).title()).toBe("Add Current Colour");
         expect(command(REMOVE_COLOUR).title()).toBe("Remove Colour");
         expect(command(EDIT_COLOUR).title()).toBe("Edit Colour…");
+        expect(command(APPLY_EDIT).title()).toBe("Apply Colour Edit");
         expect(command(PALETTE_FROM_SPRITE).title()).toBe("Palette from Sprite");
+    });
+
+    it("tells open menus when the palette state changes, as for the app's other stores", () => {
+        open();
+        const before = appCommands.version();
+        setCurrentSwatch(3);
+        expect(appCommands.version()).toBeGreaterThan(before);
+        const after = appCommands.version();
+        setMoveTarget(1);
+        expect(appCommands.version()).toBeGreaterThan(after);
     });
 
     it("puts remove, edit and the palette from the sprite in the overflow menu, in DESIGN's order", () => {
@@ -98,7 +117,9 @@ describe("registration", () => {
 
     it("lists every preset of core/palettes in the preset menu, in their order", () => {
         const items = menuCommands(buildContextMenu(appCommands.list(), PRESET_MENU));
-        expect(items.map((entry) => presetOfCommand(entry.id)?.id)).toEqual(
+        // SE-060's items only: a later ticket may add others to the menu.
+        const presets = items.flatMap((entry) => presetOfCommand(entry.id) ?? []);
+        expect(presets.map((preset) => preset.id)).toEqual(
             PRESET_PALETTES.map((preset) => preset.id),
         );
         for (const preset of PRESET_PALETTES) {
@@ -244,6 +265,43 @@ describe("one undo step each", () => {
         expect(document.history.undoCount).toBe(0);
     });
 
+    it("Apply Colour Edit records the edit through the registry, in the edit's own document", () => {
+        const first = open();
+        expect(command(APPLY_EDIT).enabled()).toBe(false);
+        setCurrentSwatch(3);
+        run(EDIT_COLOUR);
+        expect(command(APPLY_EDIT).enabled()).toBe(true);
+        paletteStore.getState().edit?.draft.getState().setColour("foreground", 0x13579bdf);
+        // Another document becomes the active one: the edit still goes to the first.
+        const second = open();
+        expect(sessionsStore.getState().activeId).toBe(second.id);
+        expect(run(APPLY_EDIT)).toBe(true);
+        expect(paletteStore.getState().edit).toBeNull();
+        expect(first.session.doc.palette.colors[3]).toBe(0x13579bdf);
+        expect(first.history.undoCount).toBe(1);
+        expect(first.history.undoLabel).toBe("Edit Colour");
+        expect(second.history.undoCount).toBe(0);
+        expect(second.session.doc.palette.colors).toEqual(COLOURS);
+        expect(command(APPLY_EDIT).enabled()).toBe(false);
+    });
+
+    it("Apply Colour Edit is disabled while the edit's document is in a stroke, or closed", () => {
+        const document = open();
+        run(EDIT_COLOUR);
+        const { session } = document;
+        const transaction = document.history.begin({
+            layerId: session.activeLayerId,
+            frameId: session.activeFrameId,
+        });
+        expect(command(APPLY_EDIT).enabled()).toBe(false);
+        expect(run(APPLY_EDIT)).toBe(false);
+        expect(paletteStore.getState().edit).not.toBeNull();
+        transaction.abort();
+        expect(command(APPLY_EDIT).enabled()).toBe(true);
+        sessionsStore.getState().close(document.id);
+        expect(command(APPLY_EDIT).enabled()).toBe(false);
+    });
+
     it("loading a preset replaces the palette in one undo step; the same preset again records nothing", () => {
         const document = open();
         const { session, history } = document;
@@ -295,5 +353,27 @@ describe("palette from sprite", () => {
         document.history.undo();
         expect(session.doc.palette.name).toBe("DawnBringer 32");
         expect(session.doc.palette.colors).toHaveLength(32);
+    });
+
+    it("reads the composites the cache holds and puts no other frame in it", () => {
+        const session = createDocument({ name: "frames", width: 4, height: 2 });
+        paintCel(session, session.activeFrameId, [0x102030ff, 0, 0, 0, 0, 0, 0, 0]);
+        for (const id of ["frame-2", "frame-3"]) {
+            session.doc.frames.push({ id, durationMs: 100 });
+        }
+        paintCel(session, "frame-3", [0x405060ff, 0, 0, 0, 0, 0, 0, 0]);
+        sessionsStore.getState().open(session);
+        const cache = activeComposites.cacheOf(session);
+        if (!cache) throw new Error("no composite cache");
+        // The viewport would hold the active frame.
+        const held = cache.get(session.activeFrameId);
+        expect(cache.has("frame-2")).toBe(false);
+        expect(cache.has("frame-3")).toBe(false);
+        expect(run(PALETTE_FROM_SPRITE)).toBe(true);
+        expect(session.doc.palette.colors).toEqual([0x102030ff, 0x405060ff]);
+        expect(cache.has(session.activeFrameId)).toBe(true);
+        expect(cache.get(session.activeFrameId)).toBe(held);
+        expect(cache.has("frame-2")).toBe(false);
+        expect(cache.has("frame-3")).toBe(false);
     });
 });

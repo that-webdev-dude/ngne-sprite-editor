@@ -12,7 +12,7 @@ import {
     PALETTE_MENU,
     PRESET_MENU,
     presetOfCommand,
-} from "../../app/palette/palette.commands";
+} from "../../app/palette/paletteCommandIds";
 import { currentSwatch, paletteStore } from "../../app/palette/paletteState";
 import { activeDocument, sessionsStore } from "../../app/state/sessions";
 import { reportCommandError, runCommand } from "../commands/runCommand";

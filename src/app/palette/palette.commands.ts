@@ -11,42 +11,40 @@ import {
     paletteFromSpriteCommand,
     removeColourCommand,
 } from "../../core/palettes";
-import type { PresetPalette } from "../../core/palettes";
+import type { CompositeSource, PresetPalette } from "../../core/palettes";
+import { appCommands } from "../commands/appCommands";
 import type { CommandSpec } from "../commands/types";
 import { activeComposites } from "../state/composites";
 import { createEditorStore, editorStore } from "../state/editor";
 import { activeDocument, sessionsStore } from "../state/sessions";
 import type { OpenDocument } from "../state/sessions";
+import {
+    ADD_COLOUR,
+    APPLY_EDIT,
+    EDIT_COLOUR,
+    MOVE_COLOUR,
+    PALETTE_FROM_SPRITE,
+    PALETTE_MENU,
+    PRESET_MENU,
+    REMOVE_COLOUR,
+    presetCommandId,
+} from "./paletteCommandIds";
 import { currentSwatch, paletteStore, setCurrentSwatch } from "./paletteState";
 
 // The commands of the palette panel (DESIGN §5.4, SE-060). Each changes the active document's
 // palette in one undo step (`core/palettes`); one that would change nothing records nothing.
-// Remove, Edit and Move act on the current swatch (`paletteState.ts`). The panel's overflow
-// menu is the context menu `PALETTE_MENU` and its preset menu `PRESET_MENU`, both generated
-// from the commands that list them, so a later ticket adds its items (import, export, sort,
-// replace colour: SE-066) from its own module. While a transaction is open (a stroke) the
-// history takes no command, so the commands are disabled then, as undo and redo are.
+// Remove, Edit and Move act on the current swatch (`paletteState.ts`); Apply Colour Edit ends
+// the swatch edit Edit Colour… opened. The panel's overflow menu is the context menu
+// `PALETTE_MENU` and its preset menu `PRESET_MENU`, both generated from the commands that list
+// them, so a later ticket adds its items (import, export, sort, replace colour: SE-066) from
+// its own module. While a transaction is open (a stroke) the history takes no command, so the
+// commands are disabled then, as undo and redo are.
+//
+// The registry loads this module (appCommands.ts); everything else takes the ids from
+// `paletteCommandIds.ts`, so this module never loads before the registry.
 
-export const ADD_COLOUR = "palette.addColour";
-export const REMOVE_COLOUR = "palette.removeColour";
-export const EDIT_COLOUR = "palette.editColour";
-export const MOVE_COLOUR = "palette.moveColour";
-export const PALETTE_FROM_SPRITE = "palette.fromSprite";
-
-/** The overflow menu of the palette header (DESIGN §5.4). */
-export const PALETTE_MENU = "palette";
-/** The menu of the palette name in the header: the presets of `core/palettes`. */
-export const PRESET_MENU = "palette-presets";
-
-/** The command that loads a preset palette. */
-export function presetCommandId(preset: Pick<PresetPalette, "id">): string {
-    return `palette.preset.${preset.id}`;
-}
-
-/** The preset a preset command loads; undefined for any other command. */
-export function presetOfCommand(commandId: string): PresetPalette | undefined {
-    return PRESET_PALETTES.find((preset) => presetCommandId(preset) === commandId);
-}
+// `enabled` reads the palette state too: an open menu follows its changes.
+paletteStore.subscribe(() => appCommands.refresh());
 
 /** The active document when its history can take a command now. */
 function idleDocument(): OpenDocument | null {
@@ -131,31 +129,47 @@ function editColour(): void {
     paletteStore.setState({ edit: { documentId: document.id, index, colour, draft } });
 }
 
-/**
- * Ends the swatch edit: the swatch takes the picker's colour in one undo step, or nothing is
- * recorded when the colour did not change. The interface calls it as the popover closes, and
- * before a press outside the popover does anything else, so a stroke that press begins comes
- * after the edit.
- */
-export function finishSwatchEdit(): void {
+/** The document of the open swatch edit, when its history can take the edit now. */
+function editedDocument(): OpenDocument | null {
     const { edit } = paletteStore.getState();
-    if (!edit) return;
-    paletteStore.setState({ edit: null });
+    if (!edit) return null;
     const document = sessionsStore
         .getState()
         .documents.find((entry) => entry.id === edit.documentId);
-    if (!document || document.history.transaction) return;
+    return document && !document.history.transaction ? document : null;
+}
+
+/**
+ * Apply Colour Edit, the run of `APPLY_EDIT`: ends the swatch edit, and the swatch takes the
+ * picker's colour in one undo step of its own document (active or not), or nothing is
+ * recorded when the colour did not change. The interface runs the command as the popover
+ * closes, before a press outside the popover does anything else (so a stroke that press
+ * begins comes after the edit), and when the edit's document stops being the active one.
+ */
+export function finishSwatchEdit(): void {
+    const { edit } = paletteStore.getState();
+    const document = editedDocument();
+    if (!edit) return;
+    paletteStore.setState({ edit: null });
+    if (!document) return;
     const colour = edit.draft.getState().foreground;
     execute(document, editColourCommand(document.session, edit.index, colour));
 }
 
-/** The composite of every frame of the active document, one at a time (SPEC §5.3). */
-function* frameComposites(document: OpenDocument): Generator<PixelBuffer> {
-    const { doc } = document.session;
-    for (const frame of doc.frames) {
-        yield activeComposites.cacheOf(document.session)?.get(frame.id) ??
-            compositeFrame(doc, frame.id);
-    }
+/**
+ * The composite of every frame of the active document, one at a time, read anew at each call
+ * (SPEC §5.3). A frame the composite cache holds is read from it; any other is composited
+ * without being put there, so reading the whole sprite does not push out the composites the
+ * viewport and the preview use.
+ */
+function frameComposites(document: OpenDocument): CompositeSource {
+    return function* (): Generator<PixelBuffer> {
+        const { doc } = document.session;
+        const cache = activeComposites.cacheOf(document.session);
+        for (const frame of doc.frames) {
+            yield cache?.has(frame.id) ? cache.get(frame.id) : compositeFrame(doc, frame.id);
+        }
+    };
 }
 
 function paletteFromSprite(): void {
@@ -192,6 +206,12 @@ export const commands: CommandSpec[] = [
         enabled: () => hasCurrent() && paletteStore.getState().edit === null,
         run: editColour,
         contextMenus: [{ menu: PALETTE_MENU, order: 110 }],
+    },
+    {
+        id: APPLY_EDIT,
+        title: "Apply Colour Edit",
+        enabled: () => editedDocument() !== null,
+        run: finishSwatchEdit,
     },
     {
         id: MOVE_COLOUR,

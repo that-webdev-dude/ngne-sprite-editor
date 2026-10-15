@@ -19,6 +19,7 @@ import {
     removeColourCommand,
     setPaletteCommand,
 } from "../../src/core/palettes";
+import type { CompositeSource } from "../../src/core/palettes";
 import { deserialize, serialize } from "../../src/core/project";
 import { FRAME, addFrame, layerId, setCel, sprite } from "./se-010-support";
 import type { Rgba } from "./se-010-support";
@@ -203,6 +204,11 @@ function compositesOf(doc: SpriteDoc): PixelBuffer[] {
     return doc.frames.map((frame) => compositeFrame(doc, frame.id));
 }
 
+/** The composites of every frame, read anew at each call. */
+function sourceOf(doc: SpriteDoc): CompositeSource {
+    return () => compositesOf(doc);
+}
+
 /** A session on a document made by `sprite` (se-010-support). */
 function sessionOf(doc: SpriteDoc): DocSession {
     return {
@@ -231,30 +237,53 @@ describe("palette from sprite", () => {
                 ]),
             },
         ]);
-        const palette = paletteFromSprite(compositesOf(doc));
+        const palette = paletteFromSprite(sourceOf(doc));
         expect(palette).toHaveLength(5);
         expect([...palette].sort((a, b) => a - b)).toEqual([...colours].sort((a, b) => a - b));
-        // Dark to light (`buildPalette`): black first, white last.
+        // Dark to light: black first, white last.
         expect(palette[0]).toBe(0x000000ff);
         expect(palette[4]).toBe(0xffffffff);
 
         const target = sessionOf(doc);
-        expectOneStep(target, paletteFromSpriteCommand(target, compositesOf(doc)), {
+        expectOneStep(target, paletteFromSpriteCommand(target, sourceOf(doc)), {
             name: doc.name,
             colors: palette,
         });
-        expect(paletteFromSpriteCommand(target, compositesOf(doc))).toBeNull();
+        expect(paletteFromSpriteCommand(target, sourceOf(doc))).toBeNull();
     });
 
-    it("reads what every frame shows: hidden layers left out, colours by R, G and B", () => {
+    it("keeps the alpha of at most 256 colours, dark to light with lower alpha first", () => {
+        const colours = [0xff000040, 0xff000080, 0xff0000ff, 0x00000080, 0x000000ff];
+        const doc = sprite(4, 2, [
+            {
+                pixels: pixelsOf([...colours, 0xff000040, 0x000000ff, 0x00000000]),
+            },
+        ]);
+        expect(paletteFromSprite(sourceOf(doc))).toEqual([
+            0x00000080, 0x000000ff, 0xff000040, 0xff000080, 0xff0000ff,
+        ]);
+    });
+
+    it("counts no pixel of alpha 0, whatever colour it stores", () => {
+        const stored = {
+            width: 3,
+            height: 1,
+            data: Uint8ClampedArray.from([
+                0xff, 0x00, 0x00, 0x00, 0x12, 0x34, 0x56, 0x00, 0x12, 0x34, 0x56, 0x01,
+            ]),
+        };
+        expect(paletteFromSprite(() => [stored])).toEqual([0x12345601]);
+    });
+
+    it("reads what every frame shows: hidden layers left out, alpha kept", () => {
         const doc = sprite(2, 1, [
             { pixels: pixelsOf([0x112233ff, 0x00000000]) },
             { pixels: pixelsOf([0xaabbccff, 0xaabbccff]), visible: false },
         ]);
         addFrame(doc, "frame-1");
-        // A colour that is not opaque counts as its opaque colour.
+        // A colour that is not opaque keeps its alpha.
         setCel(doc, layerId(0), "frame-1", pixelsOf([0x44556680, 0x112233ff]));
-        expect(paletteFromSprite(compositesOf(doc))).toEqual([0x112233ff, 0x445566ff]);
+        expect(paletteFromSprite(sourceOf(doc))).toEqual([0x112233ff, 0x44556680]);
         expect(compositesOf(doc)).toHaveLength(2);
         expect(doc.frames.map((frame) => frame.id)).toEqual([FRAME, "frame-1"]);
     });
@@ -266,24 +295,39 @@ describe("palette from sprite", () => {
             (_, index) => (((index * 2654435761) & 0xffffff00) | 0xff) >>> 0,
         );
         const doc = sprite(width, 16, [{ pixels: pixelsOf(colors) }]);
+        // Two more frames: the first alone holds more than 256 colours.
+        addFrame(doc, "frame-1");
+        setCel(doc, layerId(0), "frame-1", pixelsOf(colors.map((colour) => colour ^ 0x0100)));
+        addFrame(doc, "frame-2");
         expect(new Set(colors).size).toBeGreaterThan(256);
         let read = 0;
         function* lazily(): Generator<PixelBuffer> {
-            for (const buffer of compositesOf(doc)) {
+            for (const frame of doc.frames) {
                 read++;
-                yield buffer;
+                yield compositeFrame(doc, frame.id);
             }
         }
-        const palette = paletteFromSprite(lazily());
-        expect(read).toBe(1);
+        const palette = paletteFromSprite(lazily);
+        // The count stops at the first frame; the reduction reads all three.
+        expect(read).toBe(4);
         expect(palette).toHaveLength(256);
         expect(palette).toEqual(buildPalette(compositesOf(doc), 256));
+    });
+
+    it("reduces more than 256 colours told apart by alpha alone to opaque colours", () => {
+        const rgb = Array.from({ length: 160 }, (_, index) => (index * 0x010203) << 8);
+        const colors = [...rgb.map((c) => (c | 0x80) >>> 0), ...rgb.map((c) => (c | 0xff) >>> 0)];
+        const doc = sprite(32, 10, [{ pixels: pixelsOf(colors) }]);
+        const palette = paletteFromSprite(sourceOf(doc));
+        expect(palette).toEqual(buildPalette(compositesOf(doc), 256));
+        expect(palette).toHaveLength(160);
+        expect(palette.every((colour) => (colour & 0xff) === 0xff)).toBe(true);
     });
 
     it("gives an empty palette for a sprite with no visible pixel", () => {
         const doc = sprite(2, 2, [{}]);
         const target = sessionOf(doc);
-        expectOneStep(target, paletteFromSpriteCommand(target, compositesOf(doc)), {
+        expectOneStep(target, paletteFromSpriteCommand(target, sourceOf(doc)), {
             name: doc.name,
             colors: [],
         });

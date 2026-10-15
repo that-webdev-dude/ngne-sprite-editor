@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { Locator, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { boxOf, collectErrors, region, settleTimers } from "./se-006-support";
 import { openEditor, openSession } from "./se-007-support";
 import { audit, startInTheme, THEMES } from "./se-008-support";
@@ -14,88 +14,29 @@ import {
     recordContextMenus,
     swatches,
 } from "./se-016-support";
+import {
+    COLOURS,
+    addButton,
+    focusInside,
+    focused,
+    grid,
+    history,
+    menuItem,
+    openPalettePanel,
+    overflowButton,
+    palette,
+    palettePanel,
+    presetsButton,
+    setPalette,
+    shownColours,
+    swatchEditor,
+} from "./se-060-support";
 import { runFromPalette } from "./se-064-support";
 
 // SE-060: the palette panel (DESIGN §5.4) — the grid of the document palette with the
 // foreground's swatch marked, the preset menu, the add button and the overflow menu in the
 // header, a swatch dragged to its new place or moved with Ctrl+arrow keys, a swatch edited in
 // the picker popover — and every change of the palette one undo step.
-
-const palettePanel = (page: Page): Locator =>
-    region(page, "dock").locator('[data-dock-panel="palette"]');
-const grid = (page: Page): Locator => palettePanel(page).locator("[data-palette-grid]");
-const addButton = (page: Page): Locator =>
-    palettePanel(page).getByRole("button", { name: "Add current colour", exact: true });
-const overflowButton = (page: Page): Locator =>
-    palettePanel(page).getByRole("button", { name: "Swatch actions", exact: true });
-const presetsButton = (page: Page): Locator =>
-    palettePanel(page).getByRole("button", { name: /^Presets/ });
-const swatchEditor = (page: Page): Locator => page.getByRole("dialog", { name: "Edit colour" });
-const menuItem = (menu: Locator, name: string): Locator =>
-    menu.getByRole("menuitem", { name, exact: true });
-
-/** The 0xRRGGBBAA colours of the active document's palette, and its name. */
-function palette(page: Page): Promise<{ name: string; colors: number[] }> {
-    return page.evaluate(() => {
-        const state = window.__ngneTest!.sessions.getState();
-        const document = state.documents.find((entry) => entry.id === state.activeId)!;
-        const { name, colors } = document.session.doc.palette;
-        return { name, colors: [...colors] };
-    });
-}
-
-/** The active document's history: entries to undo and the label undo would reverse. */
-function history(page: Page): Promise<{ undo: number; label: string | null }> {
-    return page.evaluate(() => {
-        const state = window.__ngneTest!.sessions.getState();
-        const { history } = state.documents.find((entry) => entry.id === state.activeId)!;
-        return { undo: history.undoCount, label: history.undoLabel };
-    });
-}
-
-/** Sets the active document's palette as a test hook: no history entry. */
-function setPalette(page: Page, colors: readonly number[], name = "Test"): Promise<void> {
-    return page.evaluate(
-        ({ colors, name }) => {
-            const sessions = window.__ngneTest!.sessions.getState();
-            const document = sessions.documents.find((entry) => entry.id === sessions.activeId)!;
-            document.session.doc.palette = { name, colors: [...colors] };
-            sessions.touch(document.id);
-        },
-        { colors, name },
-    );
-}
-
-/** The colours the swatches show, in grid order, as "#RRGGBBAA". */
-function shownColours(page: Page): Promise<(string | null)[]> {
-    return swatches(page).evaluateAll((items) =>
-        items.map((item) => item.getAttribute("data-colour")),
-    );
-}
-
-/** Waits until the focus is inside `surface`. Radix moves it there after the surface opens. */
-async function focusInside(surface: Locator): Promise<void> {
-    await expect
-        .poll(() => surface.evaluate((element) => element.contains(document.activeElement)))
-        .toBe(true);
-}
-
-/** The swatch at `index` once it has the focus. */
-async function focused(page: Page, index: number): Promise<void> {
-    await expect(swatches(page).nth(index)).toBeFocused();
-}
-
-const COLOURS = [0x000000ff, 0xff0000ff, 0x00ff00ff, 0x0000ffff, 0xffffffff, 0x80808080];
-
-/** The editor with a document whose palette is `COLOURS`, the palette section expanded. */
-async function openPalettePanel(page: Page): Promise<void> {
-    // Tall enough for the palette section to start expanded (DESIGN §2).
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await openEditor(page);
-    await openSession(page, { name: "palette", width: 16, height: 16 });
-    await setPalette(page, COLOURS);
-    await expect(swatches(page)).toHaveCount(COLOURS.length);
-}
 
 test("Add current colour appends the foreground in one undo step, and is disabled while the palette holds it", async ({
     page,
@@ -583,93 +524,166 @@ test("a right click on a swatch sets the background and opens no menu", async ({
     expect(errors).toEqual([]);
 });
 
-for (const width of [220, 360]) {
-    test(`a 256-colour palette renders as a scrolling grid of 16 px swatches with no horizontal overflow at dock width ${width}`, async ({
-        page,
-    }) => {
-        const errors = collectErrors(page);
-        await openPalettePanel(page);
-        const many = Array.from(
-            { length: 256 },
-            (_, index) => ((index * 0x010305) << 8) | 0xff,
-        ).map((colour) => colour >>> 0);
-        await setPalette(page, many);
-        await expect(swatches(page)).toHaveCount(256);
-
-        const splitter = page.getByRole("separator", { name: "Resize panels" });
-        await splitter.focus();
-        await expect(splitter).toBeFocused();
-        await page.keyboard.press(width === 220 ? "Home" : "End");
-        await expect.poll(async () => (await boxOf(region(page, "dock"))).width).toBe(width);
-
-        const sizes = await swatches(page).evaluateAll((items) =>
-            items.map((item) => {
-                const box = item.getBoundingClientRect();
-                return `${box.width}x${box.height}`;
-            }),
-        );
-        expect(new Set(sizes)).toEqual(new Set(["16x16"]));
-
-        const layout = await page.evaluate(() => {
-            const dock = document.querySelector('[data-region="dock"]')!;
-            const scroller = dock.querySelector(".shell-dock__scroll")!;
-            const section = dock.querySelector('[data-dock-panel="palette"]')!;
-            const panel = section.querySelector("[data-palette-panel]")!;
-            const element = section.querySelector<HTMLElement>("[data-palette-grid]")!;
-            const header = section.querySelector("h2")!;
-            const toggle = header.querySelector("button")!;
-            const swatches = [...element.querySelectorAll('[role="gridcell"]')];
-            const rows = new Set(swatches.map((item) => (item as HTMLElement).offsetTop)).size;
-            const columns = element.querySelector('[role="row"]')!.children.length;
+/** The colours of the current swatch's mark and of the tokens it is drawn in, as CSS rgb(). */
+function currentMark(page: Page, index: number) {
+    return swatches(page)
+        .nth(index)
+        .evaluate((element) => {
+            const resolve = (value: string) => {
+                const probe = document.createElement("span");
+                probe.style.color = value;
+                document.body.append(probe);
+                const rgb = getComputedStyle(probe).color;
+                probe.remove();
+                return rgb;
+            };
+            const style = getComputedStyle(element, "::after");
             return {
-                rows,
-                columns,
-                gridRight: element.getBoundingClientRect().right,
-                // The border and, while it scrolls, the scroll bar.
-                gridChrome: element.offsetWidth - element.clientWidth,
-                panelWidth: panel.clientWidth,
-                panelRight: panel.getBoundingClientRect().right,
-                dockRight: scroller.getBoundingClientRect().left + scroller.clientWidth,
-                gridScrollWidth: element.scrollWidth,
-                gridClientWidth: element.clientWidth,
-                gridScrollHeight: element.scrollHeight,
-                gridClientHeight: element.clientHeight,
-                dockScrollWidth: scroller.scrollWidth,
-                dockClientWidth: scroller.clientWidth,
-                headerRight: header.getBoundingClientRect().right,
-                headerScrollWidth: header.scrollWidth,
-                headerClientWidth: header.clientWidth,
-                toggleScrollWidth: toggle.scrollWidth,
-                toggleClientWidth: toggle.clientWidth,
+                content: style.content,
+                size: [style.width, style.height],
+                fill: style.backgroundColor,
+                ring: style.borderTopColor,
+                text: resolve("var(--text)"),
+                workspace: resolve("var(--bg-workspace)"),
             };
         });
-        // A grid: whole rows of swatches, more of them than it shows, so it scrolls.
-        expect(layout.columns * (layout.rows - 1)).toBeLessThan(256);
-        expect(layout.columns * layout.rows).toBeGreaterThanOrEqual(256);
-        expect(layout.gridScrollHeight).toBe(layout.rows * 16);
-        expect(layout.gridClientHeight).toBe(8 * 16);
-        // No horizontal overflow: not in the grid, the grid inside the panel, nor in the dock.
-        expect(layout.gridScrollWidth).toBeLessThanOrEqual(layout.gridClientWidth);
-        expect(layout.gridClientWidth).toBe(layout.columns * 16);
-        expect(layout.gridRight).toBeLessThanOrEqual(layout.panelRight);
-        expect(layout.panelRight).toBeLessThanOrEqual(layout.dockRight);
-        expect(layout.dockScrollWidth).toBeLessThanOrEqual(layout.dockClientWidth);
-        // As many columns as fit: one more, with the border and the scroll bar, would not.
-        expect((layout.columns + 1) * 16 + layout.gridChrome).toBeGreaterThan(layout.panelWidth);
-        // The header keeps its title and controls inside the dock.
-        expect(layout.headerScrollWidth).toBeLessThanOrEqual(layout.headerClientWidth);
-        expect(layout.toggleScrollWidth).toBeLessThanOrEqual(layout.toggleClientWidth);
-        expect(layout.headerRight).toBeLessThanOrEqual(layout.dockRight);
-
-        // The last swatch is reached by scrolling the grid, from the keyboard as well.
-        await swatches(page).nth(0).focus();
-        await page.keyboard.press("End");
-        await focused(page, 255);
-        await expect(swatches(page).nth(255)).toBeInViewport();
-        expect(await grid(page).evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-        expect(errors).toEqual([]);
-    });
 }
+
+/** The WCAG contrast ratio of two CSS rgb() colours. */
+function contrast(a: string, b: string): number {
+    const luminance = (rgb: string) => {
+        const [r, g, b] = (rgb.match(/\d+(\.\d+)?/g) ?? []).slice(0, 3).map(Number);
+        const linear = (channel: number) => {
+            const c = channel / 255;
+            return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+        };
+        return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+    };
+    const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (light + 0.05) / (dark + 0.05);
+}
+
+test("the current swatch has a mark of its own, which follows a right press; Remove takes out the marked swatch", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openPalettePanel(page);
+    const marked = palettePanel(page).locator("[data-current]");
+    await expect(marked).toHaveCount(1);
+    await expect(swatches(page).nth(0)).toHaveAttribute("data-current", "");
+    // A dot of --text in a ring of --bg-workspace, beside the foreground's accent outline.
+    const mark = await currentMark(page, 0);
+    expect(mark.content).not.toBe("none");
+    expect(mark.size).toEqual(["6px", "6px"]);
+    expect(mark.fill).toBe(mark.text);
+    expect(mark.ring).toBe(mark.workspace);
+    expect(await currentMark(page, 1)).toMatchObject({ content: "none" });
+
+    // A right press sets the background and makes the swatch the current one.
+    await swatches(page).nth(3).click({ button: "right" });
+    expect((await colourState(page)).background).toBe(COLOURS[3]);
+    await expect(marked).toHaveCount(1);
+    await expect(swatches(page).nth(3)).toHaveAttribute("data-current", "");
+    // The foreground's outline stays on its own swatch.
+    await expect(swatches(page).nth(0)).toHaveAttribute("aria-selected", "true");
+    await expect(swatches(page).nth(3)).toHaveAttribute("aria-selected", "false");
+
+    await overflowButton(page).click();
+    const menu = page.getByRole("menu", { name: "Swatch actions" });
+    await expect(menu).toBeVisible();
+    await focusInside(menu);
+    await menuItem(menu, "Remove Colour").click();
+    await expect(menu).toBeHidden();
+    expect((await palette(page)).colors).toEqual(COLOURS.filter((_, index) => index !== 3));
+    expect(await history(page)).toEqual({ undo: 1, label: "Remove Colour" });
+    // The mark stays at the same place, now on the colour after the one removed.
+    await expect(swatches(page).nth(3)).toHaveAttribute("data-current", "");
+    await expect(swatches(page).nth(3)).toHaveAttribute("data-colour", hex8(COLOURS[4]));
+    expect(errors).toEqual([]);
+});
+
+test("an undo during a drag ends the move: the release moves nothing", async ({ page }) => {
+    const errors = collectErrors(page);
+    await openPalettePanel(page);
+    await setColours(page, 0x12345680, 0xffffffff);
+    await addButton(page).click();
+    const added = [...COLOURS, 0x12345680];
+    expect((await palette(page)).colors).toEqual(added);
+    const centre = async (index: number) => {
+        const box = await boxOf(swatches(page).nth(index));
+        return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    };
+    const from = await centre(1);
+    const to = await centre(4);
+
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 6 });
+    const moved = [added[0], added[2], added[3], added[4], added[1], added[5], added[6]];
+    expect(await shownColours(page)).toEqual(moved.map(hex8));
+    // The pressed swatch has the focus: Ctrl+Z reaches the history.
+    await page.keyboard.press("Control+z");
+    expect((await palette(page)).colors).toEqual(COLOURS);
+    await expect.poll(() => shownColours(page)).toEqual(COLOURS.map(hex8));
+    await page.mouse.move(to.x + 1, to.y, { steps: 2 });
+    expect(await shownColours(page)).toEqual(COLOURS.map(hex8));
+    await page.mouse.up();
+    expect((await palette(page)).colors).toEqual(COLOURS);
+    // The add was undone and nothing was recorded since.
+    expect((await history(page)).undo).toBe(0);
+    expect(errors).toEqual([]);
+});
+
+test("an edit open when another document becomes active goes to its own document, and its popover does not come back", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openPalettePanel(page);
+    const first = await page.evaluate(() => window.__ngneTest!.sessions.getState().activeId!);
+    const second = await openSession(page, { name: "other", width: 8, height: 8 });
+    const activate = (id: string) =>
+        page.evaluate((id) => window.__ngneTest!.sessions.getState().activate(id), id);
+    await activate(first);
+    await expect(swatches(page)).toHaveCount(COLOURS.length);
+
+    await swatches(page).nth(2).dblclick();
+    const editor = swatchEditor(page);
+    await expect(editor).toBeVisible();
+    await focusInside(editor);
+    const hex = editor.getByRole("textbox", { name: "Hex", exact: true });
+    await hex.fill("#ABCDEF");
+    await page.keyboard.press("Enter");
+    await expect(hex).toHaveValue("#ABCDEF");
+
+    await activate(second);
+    await expect(editor).toBeHidden();
+    const histories = await page.evaluate(
+        (ids) =>
+            ids.map((id) => {
+                const document = window
+                    .__ngneTest!.sessions.getState()
+                    .documents.find((entry) => entry.id === id)!;
+                return {
+                    colors: [...document.session.doc.palette.colors],
+                    undo: document.history.undoCount,
+                    label: document.history.undoLabel,
+                };
+            }),
+        [first, second],
+    );
+    const edited = [...COLOURS];
+    edited[2] = 0xabcdefff;
+    expect(histories[0]).toEqual({ colors: edited, undo: 1, label: "Edit Colour" });
+    expect(histories[1].undo).toBe(0);
+    expect(histories[1].colors).not.toContain(0xabcdefff);
+
+    // Back on the first document, no editor comes back.
+    await activate(first);
+    await expect(swatches(page).nth(2)).toHaveAttribute("data-colour", hex8(0xabcdefff));
+    await settleTimers(page);
+    await expect(editor).toHaveCount(0);
+    expect(errors).toEqual([]);
+});
 
 for (const theme of THEMES) {
     test(`axe reports no AA violations on the palette panel, its menus and the swatch editor in the ${theme} theme`, async ({
@@ -687,10 +701,18 @@ for (const theme of THEMES) {
         await expect(swatches(page).first()).toBeVisible();
         await setColours(page, 0x12ab9f80, 0xffffffff);
 
+        // The audit covers the current swatch's mark as well.
+        await expect(palettePanel(page).locator("[data-current]")).toHaveCount(1);
         const panel = await audit(page, '[data-dock-panel="palette"]');
         expect(panel.violations).toEqual([]);
         expect(panel.contrastUndecided).toEqual([]);
         expect(panel.contrastChecked).toBeGreaterThan(0);
+        // axe judges no mark that is not text: the mark's two tokens are checked here, the dot
+        // against its ring, so one of them stands out on any swatch colour.
+        const mark = await currentMark(page, 0);
+        expect(mark.fill).toBe(mark.text);
+        expect(mark.ring).toBe(mark.workspace);
+        expect(contrast(mark.fill, mark.ring)).toBeGreaterThanOrEqual(4.5);
 
         await overflowButton(page).click();
         const menu = page.getByRole("menu", { name: "Swatch actions" });

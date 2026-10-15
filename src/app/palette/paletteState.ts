@@ -55,6 +55,14 @@ export function setCurrentSwatch(index: number): void {
     if (paletteStore.getState().current !== index) paletteStore.setState({ current: index });
 }
 
+/**
+ * Ends the swatch edit without applying it: for an edit that Apply Colour Edit cannot take,
+ * its document closed or in a stroke. Changes no document.
+ */
+export function dropSwatchEdit(): void {
+    if (paletteStore.getState().edit) paletteStore.setState({ edit: null });
+}
+
 /** Sets where Move Colour puts the current swatch; null for nowhere. */
 export function setMoveTarget(target: number | null): void {
     if (paletteStore.getState().target !== target) paletteStore.setState({ target });

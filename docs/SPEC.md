@@ -72,7 +72,7 @@ owner acknowledges under A1 (§12).
 | Animation  | Ping-pong-reverse direction                                          | Later |
 | Colour     | FG/BG, picker (HSV, RGB, hex, alpha)                                 | M1    |
 | Colour     | Preset palettes (data), palette from quantized import                | M4    |
-| Colour     | Palette panel, edit, palette from sprite                             | M6    |
+| Colour     | Palette panel, edit, palette from sprite (§7.1)                      | M6    |
 | Colour     | Palette files (.gpl, .hex, .pal), replace colour, sort               | M6    |
 | Colour     | Colour filters (hue/saturation, brightness/contrast, invert, curves, convolution, despeckle) | Later |
 | View       | Zoom, pan, pixel grid, tile grid, fit, 100%                          | M1    |
@@ -91,16 +91,6 @@ owner acknowledges under A1 (§12).
 | Automation | Lua scripting, extensions, CLI                                       | Later |
 
 Known deviation: Aseprite keeps cel pixels moved off-canvas; v1 clips them when a move is applied.
-
-Palette (SE-060): the palette is document data (§5.1), saved with the document, and changes
-only through commands (§5.2), each one undo step that touches no frame, layer or structure and
-records nothing when it would change nothing: add a colour (not one the palette holds, nor a
-257th), remove, move or edit a colour, load a preset (its name and colours), and palette from
-sprite. Palette from sprite reads the composite of every frame (§5.3: what the sprite shows,
-hidden and reference layers left out): every colour of a pixel whose alpha is above 0, by its
-R, G and B, as an opaque colour, when there are at most 256; otherwise `buildPalette` (§8 step
-7) reduces them to 256. Either way the colours go dark to light and the palette takes the
-sprite's name; a sprite with no visible pixel gives an empty palette.
 
 ## 3. Platform and support envelope
 
@@ -722,6 +712,23 @@ Colours and eyedropper (SE-016):
   panel's field or strips it edits the background, and the panel shows the background until
   the release; a right press on a swatch sets it. The context menu that follows such a press
   is cancelled wherever it comes up, as for a right-button stroke.
+
+Palette (SE-060; the panel is DESIGN §5.4):
+
+- The palette is document data (§5.1), saved with the document, and changes only through
+  commands (§5.2), each one undo step that touches no frame, layer or structure and records
+  nothing when it would change nothing: add a colour (not one the palette holds, nor a 257th),
+  remove, move or edit a colour, load a preset (its name and colours), and palette from sprite.
+- Palette from sprite reads the composite of every frame (§5.3: what the sprite shows, hidden
+  and reference layers left out). A pixel of alpha 0 holds no colour (the composite stores it as
+  0,0,0,0) and does not count. When the other pixels hold at most 256 distinct RGBA colours,
+  the palette is exactly those colours, alpha kept, dark to light by OKLab lightness (of equals,
+  the lower alpha first). With more, `buildPalette` (§8 step 7) reduces them to 256 opaque
+  colours, dark to light. The palette takes the sprite's name; a sprite with no visible pixel
+  gives an empty palette.
+- It takes the composite of a frame the composite cache holds from the cache, and composites
+  any other frame without putting it there, so reading the whole sprite does not push out the
+  composites the viewport and the preview use.
 
 Shape tools and paint bucket (SE-017):
 

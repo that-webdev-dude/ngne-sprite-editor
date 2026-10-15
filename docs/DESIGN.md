@@ -192,7 +192,7 @@ foreground colour has a 2 px accent outline. Header: palette name (menu of prese
 colour, and an overflow menu (remove, edit, import, export, from sprite, sort, replace colour).
 The outline lies inside the swatch, as in the mockup, on the first swatch of the foreground's
 colour. With no document open the section is empty and its header has no controls. Every change
-of the palette is one undo step of the document (SPEC §2.3, Palette). SE-016 made the grid,
+of the palette is one undo step of the document (SPEC §7.1, Palette). SE-016 made the grid,
 SE-060 the rest:
 
 - **Grid.** As many columns as fit the section, less the scroll bar's width while it scrolls,
@@ -200,26 +200,32 @@ SE-060 the rest:
   keys move the focus, Home and End go to the ends, Enter sets the foreground and Shift+Enter
   the background (no Space); the `canvas` letter and digit keys still act from a focused swatch,
   the grid not being a typeahead role. The *current swatch* is the grid's tab stop: the swatch
-  last pressed, with either button, or reached with the keys. Remove and Edit act on it.
+  last pressed, with either button, or reached with the keys. Remove and Edit act on it. It
+  carries a 6 px dot in its centre, `--text` in a 1 px `--bg-workspace` ring, so it shows on any
+  colour in either theme, apart from the foreground's outline and inside it when one swatch is
+  both.
 - **Reorder.** A left drag moves a swatch: the grid shows the order the drop makes, a release
-  over the grid moves it, Escape or a release outside the grid leaves the order; the grid does
-  not scroll by itself during the drag (the wheel scrolls it). Ctrl+← and Ctrl+→ on a focused
-  swatch move it one place, Ctrl+↑ and Ctrl+↓ one row; the focus goes with it.
+  over the grid moves it, Escape or a release outside the grid leaves the order, and so does a
+  change of the palette during the drag (an undo, say); the grid does not scroll by itself
+  during the drag (the wheel scrolls it). Ctrl+← and Ctrl+→ on a focused swatch move it one
+  place, Ctrl+↑ and Ctrl+↓ one row; the focus goes with it.
 - **Header.** The palette name, cut short with an ellipsis, opens the menu of the preset
-  palettes (SPEC §2.3, §8) by name; one replaces the palette's name and colours. The add button appends the
-  foreground, which becomes the current swatch; it is disabled while the palette holds the
-  foreground or 256 colours. The overflow menu ("Swatch actions") holds Remove Colour and Edit
-  Colour…, then Palette from Sprite; it is the registry's context menu `palette`, in groups of
-  hundreds (100 remove and edit, 300 from sprite), leaving the 200s to import and export and
-  the 400s to sort and replace colour. The Menu key or Shift+F10 on a swatch opens it, and the
-  swatch has the focus again after it closes.
+  palettes (SPEC §2.3, §8) by name; one replaces the palette's name and colours. The add
+  button appends the foreground, which becomes the current swatch; it is disabled while the
+  palette holds the foreground or 256 colours. The overflow menu ("Swatch actions") holds
+  Remove Colour and Edit Colour…, then Palette from Sprite; it is the registry's context menu
+  `palette`, in groups of hundreds (100 remove and edit, 300 from sprite), leaving the 200s to
+  import and export and the 400s to sort and replace colour. The Menu key or Shift+F10 on a
+  swatch opens it, and the swatch has the focus again after it closes.
 - **Edit.** Edit Colour…, or a double click on a swatch, opens the picker of §5.3 in a popover
   left of the grid, level with the swatch. It edits the swatch's colour only, with either
   button; the swatch shows the colour as it changes, and the palette takes it in one undo step
   when the popover closes — by Escape, a press outside, or the focus leaving it. A press outside
   applies the edit before it does anything else (a stroke it begins on the canvas comes after
   the edit), applying text typed in a field as leaving the field would; Escape drops such text.
-  The foreground and background keep their colours: a swatch is not a reference to them.
+  The edit is applied as well when its document stops being the active one (to that document)
+  and when the panel leaves the page. It is applied through the command Apply Colour Edit. The
+  foreground and background keep their colours: a swatch is not a reference to them.
 
 ### 5.5 Preview
 

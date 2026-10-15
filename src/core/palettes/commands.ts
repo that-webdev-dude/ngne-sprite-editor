@@ -1,10 +1,11 @@
+import { writeOklab } from "../color";
 import type { Command } from "../history";
 import { buildPalette } from "../import";
 import type { DocSession, Palette, PixelBuffer, Touched } from "../model";
 import { MAX_PROJECT_PALETTE_COLORS } from "../project/format";
 import type { PresetPalette } from "./presets";
 
-// The palette of a document changes through these commands (SPEC §2.3 Colour, §5.2; SE-060):
+// The palette of a document changes through these commands (SPEC §7.1 Palette, §5.2; SE-060):
 // add, remove, move and edit one colour, load a preset, and the palette from the sprite. Each
 // is one undo step that keeps the palette before and after; a palette is at most 256 colours,
 // so that costs little. A change that would leave the palette as it is makes no command
@@ -171,15 +172,61 @@ export function loadPresetCommand(
     return setPaletteCommand(session, { name: preset.name, colors: [...preset.colors] }, label);
 }
 
+/** The composites of a sprite's frames, as many times as asked: each call reads them anew. */
+export type CompositeSource = () => Iterable<PixelBuffer>;
+
+/** Colours dark to light by OKLab lightness; of equals, lower alpha first, then lower value. */
+function darkToLight(colours: readonly number[]): number[] {
+    const lab = new Float64Array(3);
+    const entries = colours.map((colour) => {
+        writeOklab(lab, 0, colour >>> 24, (colour >>> 16) & 0xff, (colour >>> 8) & 0xff);
+        return { colour, lightness: lab[0] };
+    });
+    entries.sort(
+        (a, b) =>
+            a.lightness - b.lightness ||
+            (a.colour & 0xff) - (b.colour & 0xff) ||
+            a.colour - b.colour,
+    );
+    return entries.map((entry) => entry.colour);
+}
+
+/**
+ * The distinct 0xRRGGBBAA colours of the pixels whose alpha is above 0, dark to light; null as
+ * soon as there are more than `limit`. A pixel of alpha 0 holds no colour (the composite stores
+ * it as 0,0,0,0, SPEC §5.3), so it does not count.
+ */
+function distinctColours(buffers: Iterable<PixelBuffer>, limit: number): number[] | null {
+    const seen = new Set<number>();
+    for (const { data } of buffers) {
+        const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+        let previous = -1;
+        for (let at = 0; at < data.length; at += 4) {
+            if (data[at + 3] === 0) continue;
+            const colour = view.getUint32(at);
+            if (colour === previous) continue;
+            previous = colour;
+            seen.add(colour);
+            if (seen.size > limit) return null;
+        }
+    }
+    return darkToLight([...seen]);
+}
+
 /**
  * The palette of a sprite from the composites of its frames (SPEC §5.3: what the sprite shows,
- * hidden layers left out): every colour of a pixel whose alpha is above 0, by its R, G and B,
- * as an opaque colour, when there are at most `SPRITE_PALETTE_COLORS`; otherwise
- * `buildPalette` reduces them to that many. Ordered dark to light either way (`buildPalette`).
- * `composites` is read once, one buffer at a time.
+ * hidden layers left out). When the pixels whose alpha is above 0 hold at most
+ * `SPRITE_PALETTE_COLORS` distinct colours, the palette is exactly those colours, alpha kept,
+ * dark to light (OKLab lightness; of equals, lower alpha first). Otherwise `buildPalette`
+ * reduces them to that many opaque colours, dark to light, and the composites are read a
+ * second time. Each reading takes one buffer at a time and stops counting as soon as there
+ * are too many colours.
  */
-export function paletteFromSprite(composites: Iterable<PixelBuffer>): number[] {
-    return buildPalette(composites, SPRITE_PALETTE_COLORS);
+export function paletteFromSprite(composites: CompositeSource): number[] {
+    return (
+        distinctColours(composites(), SPRITE_PALETTE_COLORS) ??
+        buildPalette(composites(), SPRITE_PALETTE_COLORS)
+    );
 }
 
 /**
@@ -189,7 +236,7 @@ export function paletteFromSprite(composites: Iterable<PixelBuffer>): number[] {
  */
 export function paletteFromSpriteCommand(
     session: DocSession,
-    composites: Iterable<PixelBuffer>,
+    composites: CompositeSource,
     name = session.doc.name,
     label = "Palette from Sprite",
 ): Command | null {

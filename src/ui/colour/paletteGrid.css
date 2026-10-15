@@ -54,6 +54,22 @@
     box-shadow: inset 0 0 0 2px var(--accent);
 }
 
+/* The current swatch, which Remove and Edit act on: a 6 px dot in its centre, `--text` inside
+   a 1 px `--bg-workspace` ring, so it shows on any colour in either theme (as the picker's
+   handles do) and inside the foreground's outline when one swatch is both. */
+.palette-grid__swatch[data-current]::after {
+    content: "";
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    width: 6px;
+    height: 6px;
+    border: var(--border-width) solid var(--bg-workspace);
+    border-radius: 50%;
+    background: var(--text);
+    pointer-events: none;
+}
+
 /* The keyboard focus ring lies over the neighbouring swatches. */
 .palette-grid__swatch:focus-visible {
     z-index: 1;

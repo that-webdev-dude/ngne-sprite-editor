@@ -1,8 +1,10 @@
 import { Popover } from "radix-ui";
 import { useEffect, useMemo, useRef } from "react";
 import type { RefObject } from "react";
-import { finishSwatchEdit } from "../../app/palette/palette.commands";
-import { usePaletteState } from "../../app/palette/paletteState";
+import { APPLY_EDIT } from "../../app/palette/paletteCommandIds";
+import { dropSwatchEdit, paletteStore, usePaletteState } from "../../app/palette/paletteState";
+import { useSessions } from "../../app/state/sessions";
+import { runCommand } from "../commands/runCommand";
 import { ColourPicker } from "./ColourPicker";
 import { PALETTE_GRID_ATTRIBUTE, swatchElement } from "./paletteUi";
 import "../primitives/popover.css";
@@ -13,7 +15,10 @@ import "../primitives/popover.css";
 // the popover closes — by Escape, a press outside, or the focus leaving it. A press outside
 // ends the edit before it does anything else, so a stroke it begins on the canvas comes after
 // the edit; what was typed in a field and not applied yet is applied first, as leaving the
-// field would. Escape drops such typing, as it does in the fields.
+// field would. Escape drops such typing, as it does in the fields. The edit is applied as well
+// when its document stops being the active one, and when the editor leaves the page, so no
+// edit outlives its popover. It is applied through the registry (Apply Colour Edit); an edit
+// that command cannot take (its document closed) is dropped.
 
 /** Takes what the focused field of `container` holds by taking the focus from it. */
 function applyTyping(container: HTMLElement | null): void {
@@ -21,8 +26,15 @@ function applyTyping(container: HTMLElement | null): void {
     if (active instanceof HTMLElement && container?.contains(active)) active.blur();
 }
 
+/** Ends the open swatch edit through the registry. */
+function applyEdit(): void {
+    if (!paletteStore.getState().edit) return;
+    if (!runCommand(APPLY_EDIT)) dropSwatchEdit();
+}
+
 export function SwatchEditor({ fallback }: { fallback: RefObject<HTMLElement | null> }) {
     const edit = usePaletteState((state) => state.edit);
+    const activeId = useSessions((state) => state.activeId);
     const content = useRef<HTMLDivElement>(null);
     const index = edit?.index ?? -1;
     /** The swatch of the last edit, which gets the focus back after the popover closed. */
@@ -35,11 +47,20 @@ export function SwatchEditor({ fallback }: { fallback: RefObject<HTMLElement | n
             const target = event.target instanceof Node ? event.target : null;
             if (target && content.current?.contains(target)) return;
             applyTyping(content.current);
-            finishSwatchEdit();
+            applyEdit();
         };
         window.addEventListener("pointerdown", onPress, true);
         return () => window.removeEventListener("pointerdown", onPress, true);
     }, [index]);
+
+    // Another document became the active one: the edit goes to its own document.
+    useEffect(() => {
+        if (edit && edit.documentId !== activeId) applyEdit();
+    }, [edit, activeId]);
+
+    // The editor leaves the page (no document is open, the region was rebuilt): the edit ends
+    // with it rather than coming back in the next editor.
+    useEffect(() => () => applyEdit(), []);
 
     // Left of the grid, level with the swatch, so it hides no swatch; beside the header's
     // button when the swatch is not on the page (the command ran from the command palette
@@ -66,7 +87,7 @@ export function SwatchEditor({ fallback }: { fallback: RefObject<HTMLElement | n
         <Popover.Root
             open={edit !== null}
             onOpenChange={(open) => {
-                if (!open) finishSwatchEdit();
+                if (!open) applyEdit();
             }}
         >
             <Popover.Anchor virtualRef={anchor} />
