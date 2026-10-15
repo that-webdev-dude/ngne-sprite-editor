@@ -1,7 +1,21 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { railColumns } from "./layout";
+import { RAIL, railColumns } from "./layout";
 import { RegionBoundary } from "./RegionBoundary";
+
+/**
+ * The height the footer takes in one column: its children stacked with the rail's gap. Two
+ * columns may lay them out side by side, so the footer's own height then is less; measuring
+ * that would let the rail switch back and forth (SE-016).
+ */
+function footerHeight(footer: HTMLElement | null): number {
+    if (!footer) return 0;
+    const children = Array.from(footer.children, (child) =>
+        child instanceof HTMLElement ? child.offsetHeight : 0,
+    );
+    if (children.length === 0) return footer.offsetHeight;
+    return children.reduce((sum, height) => sum + height, 0) + (children.length - 1) * RAIL.gap;
+}
 
 /**
  * Tool rail region. It lays its groups out in one column and switches to two (72 px) when they
@@ -22,7 +36,7 @@ export function RailFrame({ children }: { children: ReactNode }) {
                 (group) => group.childElementCount,
             );
             const footer = rail.querySelector<HTMLElement>("[data-rail-footer]");
-            setColumns(railColumns(groups, footer?.offsetHeight ?? 0, rail.clientHeight));
+            setColumns(railColumns(groups, footerHeight(footer), rail.clientHeight));
         };
         // The resize observer reports once when it starts, before the first paint.
         const resize = new ResizeObserver(measure);
@@ -59,7 +73,10 @@ export function RailGroup({ children }: { children: ReactNode }) {
     );
 }
 
-/** Content pinned to the bottom of the rail (the colour chips of DESIGN §5.1). */
+/**
+ * Content pinned to the bottom of the rail (the colour chips of DESIGN §5.1). Its children
+ * stack in one column and stand side by side in two.
+ */
 export function RailFooter({ children }: { children: ReactNode }) {
     return (
         <div className="shell-rail__footer" data-rail-footer="">

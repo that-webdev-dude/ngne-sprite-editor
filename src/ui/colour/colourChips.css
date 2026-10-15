@@ -1,0 +1,36 @@
+/* Foreground and background chips of the tool rail (DESIGN §5.1), as in the mockup: two
+   overlapping 18 px squares in a 28 px button, the foreground on top at the upper left. */
+.colour-chips {
+    position: relative;
+    flex: none;
+    width: var(--row-height);
+    height: var(--row-height);
+    border-radius: var(--radius-control);
+}
+
+.colour-chips__chip {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    overflow: hidden;
+    border: var(--border-width) solid var(--border-strong);
+    border-radius: 2px;
+    /* Shows through a colour that is not opaque. */
+    background: repeating-conic-gradient(var(--check-a) 0 25%, var(--check-b) 0 50%) 0 0 / 8px 8px;
+}
+
+.colour-chips__chip--background {
+    right: 0;
+    bottom: 0;
+}
+
+.colour-chips__chip--foreground {
+    top: 0;
+    left: 0;
+    box-shadow: 0 0 0 var(--border-width) var(--bg-panel);
+}
+
+.colour-chips__fill {
+    position: absolute;
+    inset: 0;
+}

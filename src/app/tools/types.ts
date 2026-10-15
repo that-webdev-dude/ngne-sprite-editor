@@ -157,8 +157,9 @@ export interface ChoiceToolOption extends ToolOptionBase {
 export type ToolOptionSpec = NumberToolOption | ToggleToolOption | ChoiceToolOption;
 
 /**
- * A key that makes a tool the active one while it is held (SPEC §7.8: Space, Alt). It acts
- * while the viewport element itself has the focus (`tools.commands.ts`).
+ * A key that makes a tool the active one while it is held (SPEC §7.8: Space, Alt). It acts in
+ * the `canvas` context; a key that controls consume natively (Space) only while the viewport
+ * element itself has the focus (`tools.commands.ts`).
  */
 export interface ToolHold {
     /** The chord of the held key: "Space", "Alt". Bound in the `canvas` context. */

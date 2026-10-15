@@ -170,9 +170,10 @@ export const calls = (page: Page) => page.evaluate(() => window.se064Calls ?? []
 
 /**
  * Replaces what every command of the registry does by a record of its id, so that running
- * one has no other effect. The commands in `keep` stay as they are. The registry hands the
- * same command objects to menus, keys and the palette, so the record shows that the palette
- * ran the registry's command.
+ * one has no other effect: `run` records the id, and the release of a hold binding records
+ * "id:release". The commands in `keep` stay as they are. The registry hands the same command
+ * objects to menus, keys and the palette, so the record shows that the palette ran the
+ * registry's command.
  */
 export function spyOnCommands(page: Page, keep: readonly string[] = []): Promise<void> {
     return page.evaluate((keep) => {
@@ -180,6 +181,11 @@ export function spyOnCommands(page: Page, keep: readonly string[] = []): Promise
         for (const command of window.__ngneTest!.commands.list()) {
             if (keep.includes(command.id)) continue;
             command.run = () => void ran.push(command.id);
+            // A hold binding enabled in the palette (SE-016: Alt) is released after it ran.
+            if (command.release) {
+                (command as { release: (() => void) | null }).release = () =>
+                    void ran.push(`${command.id}:release`);
+            }
         }
     }, keep);
 }

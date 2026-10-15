@@ -93,7 +93,7 @@ test("a new sprite starts fitted and centred: the largest zoom step that fits", 
     expect(view.scale).toBeGreaterThan(1);
     expect(size.width * view.scale).toBeLessThanOrEqual(viewport.width);
     expect(size.height * view.scale).toBeLessThanOrEqual(viewport.height);
-    // 640 × 384 device pixels in 972 × 424: both leftovers are even.
+    // 640 × 384 device pixels in 944 × 424 (the rail in two columns): both leftovers are even.
     expect(expectCentred(view, size, viewport)).toEqual([0, 0]);
     // The canvas shows the document there: the checkerboard in that rectangle, the workspace
     // around it.

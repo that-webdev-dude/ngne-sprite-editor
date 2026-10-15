@@ -1,4 +1,6 @@
+import { normalizeChord } from "../commands/chord";
 import type { CommandSpec } from "../commands/types";
+import { isNativeKeyChord } from "../keymap/keyClasses";
 import { viewSurface } from "../view/viewNavigation";
 import { toolState } from "./activeTool";
 import { toolPipeline } from "./appPipeline";
@@ -10,10 +12,13 @@ import type { Tool } from "./types";
 // in the `canvas` context, and one that makes it the active tool while its hold key is down
 // (Space → hand; Alt → eyedropper from SE-016). Escape cancels the stroke in progress.
 //
-// A held key acts where it is held: over the viewport element while it has the focus. That
-// is also where the keymap gives Space, a native key, to the `canvas` context (SPEC §7.8).
-// Anywhere else — the command palette among them — the hold command is listed but inert:
-// holding a key cannot be done from there.
+// A held key acts where the keymap gives it to the `canvas` context (SPEC §7.8). A key that
+// controls consume natively (Space) gets there only while the viewport element itself has the
+// focus, so its hold acts only then; anywhere else — the command palette among them — that
+// hold command is listed but inert. Any other key (Alt) acts throughout the `canvas` context,
+// whatever control has the focus (SE-016). The command palette runs such a hold and releases
+// it at once, as for a key pressed and let go (`runPaletteCommand`), which leaves the active
+// tool as it was.
 
 /** Whether the viewport element itself has the focus. */
 function viewportFocused(): boolean {
@@ -44,13 +49,15 @@ function selectCommand(tool: Tool): CommandSpec {
 function holdCommand(tool: Tool): CommandSpec[] {
     const { hold } = tool;
     if (!hold) return [];
+    const native = isNativeKeyChord(normalizeChord(hold.key));
     return [
         {
             id: holdCommandId(tool),
             title: `Temporary ${tool.label}`,
             shortcut: hold.key,
             context: "canvas",
-            enabled: () => viewportFocused() && (hold.when?.(toolState.selected()) ?? true),
+            enabled: () =>
+                (!native || viewportFocused()) && (hold.when?.(toolState.selected()) ?? true),
             run: () => toolState.hold(tool.id),
             release: () => toolState.release(tool.id),
         },

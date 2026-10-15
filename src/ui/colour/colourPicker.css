@@ -1,0 +1,97 @@
+/* The colour panel (DESIGN §5.3), at the mockup's metrics: a 120 px saturation/value field,
+   10 px strips inside 24 px hit areas, then the rows of the hex field and the number fields.
+   The colours of the field and the strips are the user's and set inline; handles are a
+   two-tone ring of tokens, so they show on any colour in either theme. */
+.colour-panel {
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+}
+
+.colour-sv {
+    position: relative;
+    height: 120px;
+    margin-bottom: 1px;
+    border: var(--border-width) solid var(--border-strong);
+    border-radius: var(--radius-control);
+    cursor: crosshair;
+    touch-action: none;
+}
+
+.colour-sv__handle {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border: 2px solid var(--text);
+    border-radius: 50%;
+    box-shadow: 0 0 0 var(--border-width) var(--bg-workspace);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.colour-strip {
+    display: flex;
+    align-items: center;
+    height: var(--control-height);
+    touch-action: none;
+}
+
+.colour-strip__track {
+    position: relative;
+    flex: 1;
+    height: 10px;
+    border: var(--border-width) solid var(--border-strong);
+    border-radius: var(--radius-control);
+}
+
+.colour-strip--alpha .colour-strip__track {
+    background: repeating-conic-gradient(var(--check-a) 0 25%, var(--check-b) 0 50%) 0 0 / 8px 8px;
+}
+
+.colour-strip__fill {
+    position: absolute;
+    inset: 0;
+    border-radius: 3px;
+}
+
+.colour-strip__thumb {
+    position: absolute;
+    top: -3px;
+    width: 4px;
+    height: 14px;
+    margin-left: -2px;
+    border: var(--border-width) solid var(--bg-workspace);
+    border-radius: 2px;
+    background: var(--text);
+    pointer-events: none;
+}
+
+.colour-panel__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    margin-top: var(--space-8);
+}
+
+.colour-panel__hex {
+    flex: 1;
+    min-width: 0;
+    height: var(--control-height);
+    padding: 0 var(--space-8);
+    border: var(--border-width) solid var(--border-input);
+    border-radius: var(--radius-control);
+    background: var(--bg-raised);
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    user-select: text;
+}
+
+.colour-panel__fields .ui-field {
+    flex: 1 1 0;
+}
+
+.colour-panel__fields .ui-number {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+}

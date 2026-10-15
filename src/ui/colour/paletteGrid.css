@@ -1,0 +1,35 @@
+/* The palette grid (DESIGN §5.4): 16 px swatches with no gaps, a 1 px border around the grid,
+   a vertical scroll past eight rows; the foreground's swatch has a 2 px accent outline. */
+.palette-panel {
+    min-height: 1px;
+}
+
+.palette-grid {
+    display: grid;
+    width: max-content;
+    max-height: calc(8 * 16px + 2 * var(--border-width));
+    overflow-y: auto;
+    border: var(--border-width) solid var(--border);
+}
+
+.palette-grid__swatch {
+    position: relative;
+    width: 16px;
+    height: 16px;
+    /* Shows through a colour that is not opaque. */
+    background: repeating-conic-gradient(var(--check-a) 0 25%, var(--check-b) 0 50%) 0 0 / 8px 8px;
+}
+
+.palette-grid__fill {
+    position: absolute;
+    inset: 0;
+}
+
+.palette-grid__swatch[aria-selected="true"] .palette-grid__fill {
+    box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* The keyboard focus ring lies over the neighbouring swatches. */
+.palette-grid__swatch:focus-visible {
+    z-index: 1;
+}

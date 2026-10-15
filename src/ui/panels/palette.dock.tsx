@@ -1,16 +1,12 @@
+import { PaletteGrid } from "../colour/PaletteGrid";
 import type { DockPanel } from "../dock/registry";
-import "./panels.css";
 
-/** Empty until SE-016 adds the swatch grid (DESIGN §5.4). */
-function PalettePanel() {
-    return <div className="panel-placeholder panel-placeholder--palette" />;
-}
-
+/** The palette (DESIGN §5.4): a read-only grid of the document palette until SE-060. */
 export const dockPanel: DockPanel = {
     id: "palette",
     title: "Palette",
     order: 20,
-    Body: PalettePanel,
+    Body: PaletteGrid,
     // DESIGN §2: collapsed by default at window heights under 800 px.
     collapseBelowHeight: 800,
 };

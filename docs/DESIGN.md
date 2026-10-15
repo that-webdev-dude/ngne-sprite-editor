@@ -151,7 +151,11 @@ Groups, top to bottom: draw (pencil, eraser, bucket, eyedropper) · shapes (line
 ellipse) · select (marquee, lasso, wand, move) · navigate (hand, zoom). Tools with variants
 (rectangle/ellipse marquee, lasso/polygon lasso) show a corner mark; press-and-hold or repeat
 the key to switch. Foreground/background chips sit at the bottom with swap (X) and a reset
-button; these are the only FG/BG chips in the interface.
+button; these are the only FG/BG chips in the interface. The chips are one 28 px button, the
+foreground over the upper left of the background as in the mockup, that swaps them as X does;
+the reset button (24 px icon) restores black on white. One column stacks them, two columns put
+them side by side. With them the one-column rail is 493 px tall, so at 1280×720 with the default
+timeline the rail has two columns (SE-016).
 
 ### 5.2 Context bar
 
@@ -166,13 +170,28 @@ hit area); hex field; H S V / R G B fields toggled by a small segmented control.
 the foreground colour; holding the right button or pressing X first edits the background. No
 colour-wheel variants, no harmony tools.
 
+- While the right button is held in the field or a strip, the panel shows the background and
+  the drag edits it; at the release the panel shows the foreground again (SE-016).
+- Fields: H in degrees (0–360), S and V in percent, or R G B (0–255); the hex field shows
+  "#RRGGBB", or "#RRGGBBAA" for a colour that is not opaque, and takes 3, 4, 6 or 8 digits.
+  Alpha is set with its strip or the hex field.
+- Keys: on the field ← → change saturation and ↑ ↓ value; on the strips ← → (and ↑ ↓) change
+  hue or alpha; one step is 1% / 1° / 1, ten with Shift; Home and End go to the ends (on the
+  field, of saturation); Page Up and Page Down step by ten.
+- Handles are a ring of `--text` inside `--bg-workspace`, so they show on any colour in either
+  theme.
+
 ### 5.4 Palette
 
 Grid of 16 px swatches, no gaps, 1 px `--border` around the grid; vertical scroll when it
 exceeds eight rows. Left-click sets foreground, right-click background. The swatch matching the
 foreground colour has a 2 px accent outline. Header: palette name (menu of presets), add current
 colour, and an overflow menu (remove, edit, import, export, from sprite, sort, replace colour).
-Before SE-060 lands the panel is a read-only grid of the document palette.
+Before SE-060 lands the panel is a read-only grid of the document palette (SE-016): a press
+picks (left foreground, right background); the grid is one tab stop where the arrow keys move,
+Home and End go to the ends, Enter or Space sets the foreground and Shift+Enter or Shift+Space
+the background. The outline lies inside the swatch, as in the mockup, on the first swatch of
+the foreground's colour. With no document open the section is empty.
 
 ### 5.5 Preview
 

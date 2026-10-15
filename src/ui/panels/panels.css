@@ -1,12 +1,4 @@
 /* Empty panel bodies at the height their content takes in docs/design/mockup.html. */
-.panel-placeholder--colour {
-    height: 188px;
-}
-
-.panel-placeholder--palette {
-    height: 34px;
-}
-
 .panel-placeholder--preview {
     height: 164px;
 }

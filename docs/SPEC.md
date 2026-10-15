@@ -637,8 +637,11 @@ Tool framework (SE-014):
   tool that throws; a cancelled stroke restores the pixels and records nothing. A stroke that
   changes nothing records nothing. The tool chosen at the press keeps the stroke.
 - Holding a key (Space → Hand) changes the active tool, not the selected one, and returns to it
-  on release. A hold acts only while the viewport element has the focus, so the palette lists it
-  disabled.
+  on release. A held key acts where the keymap gives it to the `canvas` context: a key that
+  controls consume natively (Space) only while the viewport element has the focus, so the
+  palette lists its hold disabled; any other (Alt) whatever control has the focus (SE-016). The
+  palette lists such a hold enabled and runs it with its release at once, which leaves the
+  active tool as it was; hold commands stay in the palette and on the shortcut sheet.
 - Tool options are stored per tool id; an invalid stored value reads as the nearest valid one or
   the default. The context bar shows the active tool's name and its options in order.
 - Refusal messages ("Layer is locked", "Layer is hidden", "Reference layers cannot be painted
@@ -680,6 +683,35 @@ Pencil and eraser (SE-015):
   document only; elsewhere over the viewport the cursor is a crosshair.
 - Pencil and eraser show the hint "Shift: straight line from the end of the last stroke" in
   the status bar.
+
+Colours and eyedropper (SE-016):
+
+- The foreground and background are RGBA colours of the editor state, opaque black and opaque
+  white at start and after "Reset Colours" (a command with no key, and the button beside the
+  rail's chips). X swaps them in the `canvas` context. For each colour the editor also keeps
+  the HSV the colour panel edits: its RGB is always the colour's, and it keeps the hue of a
+  grey and the hue and saturation of black, so dragging to the edge of the saturation/value
+  field and back does not lose the hue. A colour set as RGB (eyedropper, palette, hex or RGB
+  fields) takes its HSV from the RGB with what the RGB leaves open kept.
+- `core/color` converts sRGB8 ↔ HSV (hue 0–360°, saturation and value 0–1, exact inverses on
+  8-bit values) and hex text ↔ 0xRRGGBBAA (3, 4, 6 or 8 digits, `#` optional; without alpha
+  digits the colour is opaque; written "#RRGGBB" when opaque, "#RRGGBBAA" otherwise).
+- Eyedropper: the press and every sample of the drag that follows take the colour of the
+  document pixel under the pointer, exactly as stored: left into the foreground, right into
+  the background; outside the document nothing changes. Option Sample: Composite (default) is
+  the active frame as the composite cache holds it (visible pixel layers blended; reference
+  layers and onion skin are not in it); Active layer is the active layer's cel as stored (cel
+  and layer opacity not applied; an empty cel is transparent, 0,0,0,0; a reference layer gives
+  nothing). It writes no pixels and records nothing, so it works at every zoom step. Below 1×
+  it takes the texel the pointer names (`clientToDoc`, the first texel of the device pixel at
+  a whole device position), which may be a neighbour of the texel NGNE shows there, never a
+  blend.
+- Alt holds the eyedropper while the selected tool paints (`paints`); from other tools Alt
+  keeps its own meaning (the zoom tool's Alt-click).
+- The colour panel and the palette grid take the right button as the background: held in the
+  panel's field or strips it edits the background, and the panel shows the background until
+  the release; a right press on a swatch sets it. The context menu that follows such a press
+  is cancelled wherever it comes up, as for a right-button stroke.
 
 ### 7.2 Selection
 

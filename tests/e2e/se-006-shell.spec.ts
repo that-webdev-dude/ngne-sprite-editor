@@ -30,7 +30,8 @@ const MOCKUP_SELECTORS: Record<Region, string> = {
 };
 const LAYOUT_KEY = "ngne-sprite-editor.layout";
 
-const toolButtons = (page: Page) => region(page, "tool-rail").getByRole("button");
+const toolButtons = (page: Page) => region(page, "tool-rail").locator("button[data-tool]");
+const railButtons = (page: Page) => region(page, "tool-rail").getByRole("button");
 const dockHeaders = (page: Page) => region(page, "dock").locator(".dock-section__toggle");
 const dockSplitter = (page: Page) => page.getByRole("separator", { name: "Resize panels" });
 const timelineSplitter = (page: Page) => page.getByRole("separator", { name: "Resize timeline" });
@@ -54,17 +55,26 @@ function expectSoundLayout(boxes: Record<Region, Box>, window: { width: number; 
     expect(area).toBeCloseTo(window.width * window.height, 0);
 }
 
-/** Every tool button is entirely inside the rail and no two buttons overlap. */
+/**
+ * Every tool button is 28 px and every button of the rail — the tools and, at its bottom,
+ * the colour chips and their reset button (SE-016) — is entirely inside the rail; no two
+ * buttons overlap.
+ */
 async function expectToolsVisible(page: Page) {
     const rail = await boxOf(region(page, "tool-rail"));
-    const buttons = await toolButtons(page).all();
-    expect(buttons).toHaveLength(13);
+    const tools = await toolButtons(page).all();
+    expect(tools).toHaveLength(13);
+    for (const button of tools) {
+        const box = await boxOf(button);
+        expect(box.width).toBe(28);
+        expect(box.height).toBe(28);
+    }
+    const buttons = await railButtons(page).all();
+    expect(buttons.length).toBeGreaterThan(tools.length);
     const boxes: Box[] = [];
     for (const button of buttons) {
         await expect(button).toBeVisible();
         const box = await boxOf(button);
-        expect(box.width).toBe(28);
-        expect(box.height).toBe(28);
         expect(contains(rail, box), `${await button.getAttribute("aria-label")} in rail`).toBe(
             true,
         );
@@ -161,11 +171,18 @@ test("the rail switches to two columns when one does not fit and never clips a t
 }) => {
     await openShell(page, { width: 1280, height: 720 });
     const rail = region(page, "tool-rail");
+    // The default timeline leaves the rail 460 px: the colour chips at its bottom (SE-016)
+    // tip it over to two columns, as SE-006's layout test foresaw.
+    await expect(rail).toHaveAttribute("data-columns", "2");
+    expect((await boxOf(rail)).width).toBe(72);
+    await expectToolsVisible(page);
+    // The lowest timeline leaves room for one column.
+    await timelineSplitter(page).focus();
+    await page.keyboard.press("Home");
     await expect(rail).toHaveAttribute("data-columns", "1");
     expect((await boxOf(rail)).width).toBe(44);
 
     // The tallest timeline (50% of the window) leaves the rail 300 px.
-    await timelineSplitter(page).focus();
     await page.keyboard.press("End");
     await expect(rail).toHaveAttribute("data-columns", "2");
     const boxes = await regionBoxes(page);
