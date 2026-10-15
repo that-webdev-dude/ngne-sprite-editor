@@ -5,6 +5,7 @@ import type { DocSession, PixelBuffer, Rect, SpriteDoc } from "../../core/model"
 import type { ActiveComposites } from "../state/composites";
 import { frameKey } from "../viewport/viewportLink";
 import type { ViewportLink } from "../viewport/viewportLink";
+import type { StrokeEcho } from "./strokeEcho";
 
 // The live-stroke display path (SE-014). While a stroke's transaction is open, the frame it
 // paints is composited with the in-progress image (`compositeFrame` overrides) into one live
@@ -20,13 +21,20 @@ import type { ViewportLink } from "../viewport/viewportLink";
 //
 // At the commit the history step drops the frame's composite; the live buffer, which is up to
 // date, is then adopted again, so the frame is not composited in full after a stroke. An
-// aborted stroke drops it instead: the cache composites the restored pixels when asked.
+// aborted stroke drops it instead: the cache composites the restored pixels when asked. So
+// does a stroke that changed nothing in the end, whose uploads may have shown a change.
+//
+// The overlay stroke echo (SE-015, `strokeEcho.ts`) is told of every rectangle composited
+// into the live buffer, and may composite what is pending before the overlay draws; what it
+// composited is still shown to the viewport in the next animation frame.
 
 export interface LiveCompositeSources {
     composites: Pick<ActiveComposites, "cacheOf" | "invalidate">;
     viewport: Pick<ViewportLink, "invalidate">;
     /** Calls `callback` in the next animation frame; returns the function that cancels it. */
     nextFrame(callback: () => void): () => void;
+    /** The overlay stroke echo (SPEC §6.6, `strokeEcho.ts`); none in tests that omit it. */
+    echo?: Pick<StrokeEcho, "start" | "changed" | "composited" | "release" | "clear">;
 }
 
 /** The display of one stroke. */
@@ -96,19 +104,27 @@ export function startLiveComposite(
     const others = otherFramesShowing(doc, imageId, frameId);
     const buffer = compositeFrame(doc, frameId, { overrides });
     let adopted = sources.composites.cacheOf(session)?.adopt(frameId, buffer) ?? false;
+    /** Written and not composited yet. */
     let pending: Rect | null = null;
+    /** Composited (for the echo, which draws from the buffer) and not shown to the viewport. */
+    let unshown = false;
     /** Whether the viewport was told in the current animation frame. */
     let shownThisFrame = false;
     let cancelFrame: (() => void) | null = null;
+    const { echo } = sources;
 
     const compositePending = () => {
         if (!pending) return;
         compositeFrame(doc, frameId, { rect: pending, into: buffer, overrides });
+        echo?.composited(pending);
         pending = null;
+        unshown = true;
     };
+    echo?.start({ session, frameId, buffer, prepare: compositePending });
 
     const show = () => {
         compositePending();
+        unshown = false;
         // Handed to the cache again each time: the cache may have let it go since (its least
         // recently used composite, or a frame reported changed), and a composite it made in
         // its place would not follow the stroke.
@@ -137,7 +153,7 @@ export function startLiveComposite(
     const onFrame = () => {
         cancelFrame = null;
         shownThisFrame = false;
-        if (pending) show();
+        if (pending || unshown) show();
     };
 
     const stop = () => {
@@ -154,22 +170,35 @@ export function startLiveComposite(
             const area = clip(rect, doc);
             if (!area) return;
             pending = union(pending, area);
+            echo?.changed();
             if (!shownThisFrame) show();
         },
         flush: compositePending,
         committed(recorded) {
             stop();
             compositePending();
-            // The history step dropped the composite this buffer replaced; nothing to hand
-            // back when there was no step (no change was reported).
             if (recorded) {
+                // The history step dropped the composite this buffer replaced.
                 adopted = sources.composites.cacheOf(session)?.adopt(frameId, buffer) ?? false;
+            } else {
+                // No step: the pixels are as they were, but an upload made during the stroke
+                // may still be on screen. The frame is composited and shown anew.
+                adopted = false;
+                sources.composites.invalidate({
+                    frameIds: [frameId, ...others],
+                    layerIds: [layerId],
+                    structure: false,
+                });
             }
+            // From here on, another change of the frame ends the echo (`strokeEcho.ts`).
+            echo?.release();
         },
         aborted() {
             stop();
             pending = null;
+            unshown = false;
             adopted = false;
+            echo?.clear();
             sources.composites.invalidate({
                 frameIds: [frameId, ...others],
                 layerIds: [layerId],

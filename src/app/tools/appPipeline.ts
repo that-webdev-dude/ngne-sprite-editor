@@ -7,6 +7,7 @@ import { viewportLink } from "../viewport/viewportLink";
 import { toolState } from "./activeTool";
 import { createToolPipeline } from "./pipeline";
 import type { ToolPipeline } from "./pipeline";
+import { strokeEcho } from "./strokeEcho";
 
 /** Where the pointer pipeline of the app reads the mapping of the image on screen. */
 let mappingSource: (() => ViewMapping | null) | null = null;
@@ -28,6 +29,7 @@ export const toolPipeline: ToolPipeline = createToolPipeline({
         const request = requestAnimationFrame(() => callback());
         return () => cancelAnimationFrame(request);
     },
+    echo: strokeEcho,
     later(callback, ms) {
         const timer = setTimeout(callback, ms);
         return () => clearTimeout(timer);

@@ -30,6 +30,13 @@ export interface ViewportDocument {
      * is told with `invalidate`.
      */
     pixels(key: string): PixelBuffer | null;
+    /**
+     * A number the app gives the pixels of a key when they are read (SE-015): read in the
+     * same task as `pixels`, kept with the texture they become, and reported with every frame
+     * drawn from that texture (`NgneViewportOptions.onDrawn`), so the app can tell which of
+     * its changes are on screen. Optional.
+     */
+    version?(key: string): number;
 }
 
 /** View state of SPEC §6.4, in device pixels. */

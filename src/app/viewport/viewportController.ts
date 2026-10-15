@@ -9,6 +9,7 @@ import { activeComposites } from "../state/composites";
 import type { ActiveComposites } from "../state/composites";
 import { activeDocument, sessionsStore } from "../state/sessions";
 import type { OpenDocument, SessionsState, ViewState } from "../state/sessions";
+import { viewportLink } from "./viewportLink";
 
 // The wiring of SE-011 between the stores and the viewport: which document and frame it
 // shows, with which view and checkerboard, and when the pixels behind a frame changed.
@@ -39,6 +40,11 @@ export interface ViewportSources {
     preferences: PreferenceStore;
     /** The composite cache of the active document of `sessions`. */
     composites: ActiveComposites;
+    /**
+     * The version given the pixels of each upload (`ViewportLink.version`, SE-015); none
+     * when absent.
+     */
+    version?(): number;
 }
 
 export interface ViewportConnection {
@@ -59,9 +65,11 @@ export function connectViewport(
         sessions: sessionsStore,
         preferences: appPreferences,
         composites: activeComposites,
+        version: () => viewportLink.version,
     },
 ): ViewportConnection {
     const { sessions, preferences, composites } = sources;
+    const version = sources.version;
     let theme = DEFAULT_VIEWPORT_THEME;
     /** The session whose document the viewport shows. */
     let shown: DocSession | null = null;
@@ -102,6 +110,7 @@ export function connectViewport(
                 if (!cache || variant !== "plain" || frameIndex(doc, id) === -1) return null;
                 return cache.get(id);
             },
+            ...(version && { version: () => version() }),
         });
     };
 

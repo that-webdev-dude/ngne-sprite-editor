@@ -40,6 +40,11 @@ export interface NgneViewportOptions {
     onError?(message: string, error: unknown): void;
     /** The viewport element's size in device pixels changed. */
     onResize?(size: DeviceSize): void;
+    /**
+     * A frame was submitted, in the task of its submit: the frame key it drew and the
+     * document's `version` of those pixels (SE-015), or null when it drew no frame image.
+     */
+    onDrawn?(frame: { key: string; version: number | undefined } | null): void;
 }
 
 /**
@@ -437,6 +442,12 @@ export class NgneViewport implements ViewportPort {
         this.#dirty = false;
         if (!instance.draw()) return false;
         this.#submittedFrames++;
+        const drawn = instance.slots.drawnFrame();
+        try {
+            this.#options.onDrawn?.(drawn && { key: drawn.key, version: drawn.version });
+        } catch (error) {
+            this.#report(error);
+        }
         this.probe.onFrame?.(() => readCanvas(instance.canvas));
         return true;
     }

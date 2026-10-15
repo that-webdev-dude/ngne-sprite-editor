@@ -1,7 +1,7 @@
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import type { StoreApi } from "zustand/vanilla";
-import type { DeviceSize, ViewportPort } from "../../engine/viewport/types";
+import type { DeviceSize, ViewportChecker, ViewportPort } from "../../engine/viewport/types";
 
 export { frameKey } from "../../engine/viewport/types";
 
@@ -20,10 +20,21 @@ export interface ViewportLinkState {
     deviceSize: DeviceSize;
 }
 
+/** A frame the viewport submitted: the frame key it drew and the version of its pixels. */
+export interface DrawnFrame {
+    key: string;
+    /** `ViewportLink.version` when the pixels were read; undefined when none was given. */
+    version: number | undefined;
+}
+
 /** What a mounted viewport gets back when it registers. */
 export interface ViewportMount {
     /** The viewport element's size in device pixels changed. */
     resize(size: DeviceSize): void;
+    /** The viewport submitted a frame (null: one without a frame image). */
+    drawn(frame: DrawnFrame | null): void;
+    /** The checkerboard the viewport draws behind the document. */
+    checker(checker: ViewportChecker): void;
     /** The viewport is gone. */
     unmount(): void;
 }
@@ -44,6 +55,20 @@ export interface ViewportLink {
     /** Calls `listener` when `mounted` or `deviceSize` changes. Returns the function that stops it. */
     subscribe(listener: (state: ViewportLinkState) => void): () => void;
     /**
+     * A number raised whenever the pixels the viewport reads change outside a history step: a
+     * live stroke compositing into the cache's buffer (SE-015). The viewport reads it with
+     * the pixels of every upload and reports it with each frame it draws from them
+     * (`onDrawn`), so a change made at version `v` is on screen once a frame of version `v`
+     * or later has been drawn.
+     */
+    readonly version: number;
+    /** Raises `version` and returns it. */
+    nextVersion(): number;
+    /** Calls `listener` after each frame the mounted viewport submits. Returns its remover. */
+    onDrawn(listener: (frame: DrawnFrame | null) => void): () => void;
+    /** The checkerboard the mounted viewport draws behind the document; null while none is. */
+    readonly checker: ViewportChecker | null;
+    /**
      * Registers the viewport that was mounted; the one registered before, if any, is
      * replaced. Used by `mountViewport`.
      */
@@ -56,6 +81,9 @@ const NO_SIZE: DeviceSize = { width: 0, height: 0 };
 export function createViewportLink(): ViewportLink {
     const store = createStore<ViewportLinkState>(() => ({ mounted: false, deviceSize: NO_SIZE }));
     let current: Pick<ViewportPort, "invalidate"> | null = null;
+    let version = 0;
+    let checker: ViewportChecker | null = null;
+    const drawnListeners = new Set<(frame: DrawnFrame | null) => void>();
 
     const setSize = (size: DeviceSize) => {
         const now = store.getState().deviceSize;
@@ -77,6 +105,19 @@ export function createViewportLink(): ViewportLink {
         subscribe(listener) {
             return store.subscribe((state) => listener(state));
         },
+        get version() {
+            return version;
+        },
+        nextVersion: () => ++version,
+        onDrawn(listener) {
+            drawnListeners.add(listener);
+            return () => {
+                drawnListeners.delete(listener);
+            };
+        },
+        get checker() {
+            return checker;
+        },
         mount(viewport, size) {
             current = viewport;
             store.setState({
@@ -87,10 +128,18 @@ export function createViewportLink(): ViewportLink {
                 resize(next) {
                     if (current === viewport) setSize(next);
                 },
+                drawn(frame) {
+                    if (current !== viewport) return;
+                    for (const listener of [...drawnListeners]) listener(frame);
+                },
+                checker(next) {
+                    if (current === viewport) checker = { ...next };
+                },
                 unmount() {
                     // A viewport mounted since stays registered.
                     if (current !== viewport) return;
                     current = null;
+                    checker = null;
                     store.setState({ mounted: false, deviceSize: NO_SIZE });
                 },
             };

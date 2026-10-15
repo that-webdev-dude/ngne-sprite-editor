@@ -3,6 +3,7 @@ import { UploadQueue } from "../UploadQueue";
 import type { TextureTarget, Upload } from "../UploadQueue";
 import { checkerPixels, checkerSpec } from "./checker";
 import { FrameSlots } from "./frameSlots";
+import type { SlotImage } from "./frameSlots";
 import { imageQuad, QUAD_LAYER } from "./geometry";
 import type { Quad } from "./geometry";
 import type { ViewportChecker, ViewportDocument, ViewportView } from "./types";
@@ -59,6 +60,15 @@ interface SlotTag {
     /** Size of the image, in document pixels. */
     width: number;
     height: number;
+    /** The document's `version` of a frame's pixels, when it gives one (SE-015). */
+    version?: number;
+}
+
+/** What an upload is made of: a key and its pixels, read in one task. */
+interface SlotImageSource {
+    key: string;
+    pixels: PixelBuffer;
+    version?: number;
 }
 
 /** What the slots need of the renderer instance they belong to. */
@@ -95,6 +105,8 @@ export class ViewportSlots {
     #checker: string | null | undefined = null;
     /** The frame key drawn last: it stays on screen while the current one loads. */
     #displayed: string | null = null;
+    /** The frame image of the quads made last; null when they had none. */
+    #drawn: SlotImage | null = null;
     #stuck = false;
 
     constructor(scene: Scene, host: SlotsHost) {
@@ -110,6 +122,14 @@ export class ViewportSlots {
     /** True once this renderer cannot show the scene in full any more (see `onStuck`). */
     get stuck(): boolean {
         return this.#stuck;
+    }
+
+    /**
+     * The frame image the quads made last draw: its key and the version of its pixels
+     * (SE-015). Null when they draw no frame.
+     */
+    drawnFrame(): SlotImage | null {
+        return this.#drawn;
     }
 
     /** The key each frame slot shows, for tests. */
@@ -172,6 +192,7 @@ export class ViewportSlots {
      */
     quads(): Quad[] {
         const scene = this.#scene;
+        this.#drawn = null;
         if (!scene.document) return [];
         const quads: Quad[] = [];
         const checker = this.queue.published(CHECKER_SLOT);
@@ -180,7 +201,10 @@ export class ViewportSlots {
         }
         const slot = this.#displaySlot();
         const image = this.frames.shown(slot);
-        if (image) quads.push(imageQuad(frameSlotId(slot), QUAD_LAYER.frame, scene.view, image));
+        if (image) {
+            quads.push(imageQuad(frameSlotId(slot), QUAD_LAYER.frame, scene.view, image));
+            this.#drawn = image;
+        }
         return quads;
     }
 
@@ -244,8 +268,11 @@ export class ViewportSlots {
         const id = frameSlotId(slot);
         this.queue.request(id, () =>
             this.#build(id, () => {
-                const pixels = this.#scene.document?.pixels(key) ?? null;
-                return pixels && { key, pixels };
+                const document = this.#scene.document;
+                const pixels = document?.pixels(key) ?? null;
+                if (!document || !pixels) return null;
+                const version = document.version?.(key);
+                return version === undefined ? { key, pixels } : { key, pixels, version };
             }),
         );
     }
@@ -262,10 +289,7 @@ export class ViewportSlots {
      * Makes an upload. `image` reads the CPU state when the upload starts; null means the
      * slot has nothing to show and gets the placeholder.
      */
-    async #build(
-        slot: string,
-        image: () => { key: string; pixels: PixelBuffer } | null,
-    ): Promise<Upload<SlotTag>> {
+    async #build(slot: string, image: () => SlotImageSource | null): Promise<Upload<SlotTag>> {
         await this.#host.gate(slot);
         // Read together, in one task: the tag describes exactly the pixels uploaded.
         const { epoch } = this.#scene;
@@ -278,23 +302,24 @@ export class ViewportSlots {
             };
         }
         const { width, height } = made.pixels;
-        return {
-            bitmap: await this.#host.bitmap(made.pixels),
-            tag: { epoch, key: made.key, width, height },
-        };
+        const tag: SlotTag = { epoch, key: made.key, width, height };
+        if (made.version !== undefined) tag.version = made.version;
+        return { bitmap: await this.#host.bitmap(made.pixels), tag };
     }
 
     #published(slot: string, tag: SlotTag): void {
         const index = frameSlotIndex(slot);
         if (index >= 0) {
             const current = tag.key !== null && tag.epoch === this.#scene.epoch;
-            this.frames.publish(
-                index,
-                current && tag.key !== null
-                    ? { key: tag.key, width: tag.width, height: tag.height }
-                    : null,
-                { current: this.#scene.current, newerQueued: this.queue.pending(slot) },
-            );
+            let image: SlotImage | null = null;
+            if (current && tag.key !== null) {
+                image = { key: tag.key, width: tag.width, height: tag.height };
+                if (tag.version !== undefined) image.version = tag.version;
+            }
+            this.frames.publish(index, image, {
+                current: this.#scene.current,
+                newerQueued: this.queue.pending(slot),
+            });
         }
         this.#host.onChange();
     }

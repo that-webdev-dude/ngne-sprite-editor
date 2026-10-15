@@ -5,9 +5,10 @@ import type { Browser, CDPSession, Page } from "@playwright/test";
 import { createServer } from "vite";
 import type { ViteDevServer } from "vite";
 import { it } from "vitest";
-// Declares `window.__ngneTest` with the viewport and overlay probes (development builds).
+// Declares `window.__ngneTest` with the viewport, overlay and echo probes (development builds).
 import type {} from "../../src/app/overlay/mountOverlay";
 import type {} from "../../src/app/testing/testHooks";
+import type {} from "../../src/app/tools/strokeEcho.overlay";
 import type {} from "../../src/app/viewport/mountViewport";
 import type * as CoreModel from "../../src/core/model";
 import { record } from "./record";
@@ -39,12 +40,22 @@ import type { PerfEntry } from "./record";
 // the first frame submitted after its event whose prefix reaches the sample's texel. Its
 // latency is that submit's time less the event's `timeStamp` (one clock, the page's).
 //
+// The overlay stroke echo of SPEC §6.6 (SE-015) shows a sample before NGNE does. With the
+// echo on (the default; `PERF_ECHO=off` switches it off through its test hook, on the same
+// build), a sample is also on screen in the first overlay redraw after its event whose echo
+// drew its texel painted (the echo's `onDraw` hook gives the rectangles drawn and the live
+// composite they came from); that redraw's time is the end of the overlay's draw in its
+// animation frame (a microtask after the draw). A sample's latency is the earlier of the two
+// paths; both are reported (`echoPath`, `ngnePath`).
+//
 // Measured: one continuous stroke of 6 s (latency of every sample, and the longest one: the
 // longest pointer-to-submitted gap of SPEC §6.6), and 40 short strokes: their first sample
 // (the press composites the frame in full and copies the image), their second (which can wait
 // for the press's frame) and every sample after the press. The result is the largest of the
-// four p95s. A sample found in no submitted frame, or fewer samples than texels, fails the run. Nothing here asserts the budget; the orchestrator records the number with
-// PERF_RECORD=1 (docs/tickets/EXECUTION.md, Measurements).
+// four p95s. A sample on screen by neither path, or fewer samples than texels, fails the run.
+// Nothing here asserts the budget; the orchestrator records the number with PERF_RECORD=1
+// (docs/tickets/EXECUTION.md, Measurements): id `se-015-stroke-latency-<gpu>` with the echo,
+// `se-015-stroke-latency-<gpu>-no-echo` with `PERF_ECHO=off`.
 
 const BUDGET_MS = 33;
 const SIDE = 256;
@@ -103,6 +114,8 @@ const GPUS: Record<string, GpuConfig> = {
 
 const gpuId = process.env.PERF_GPU ?? "";
 const gpu = GPUS[gpuId];
+/** The overlay stroke echo: on unless `PERF_ECHO=off`. */
+const echo = process.env.PERF_ECHO !== "off";
 
 interface Texel {
     x: number;
@@ -130,9 +143,20 @@ interface BenchFrame {
     prefix: number;
 }
 
+/** One draw of the stroke echo on the overlay: the path texels it showed painted. */
+interface BenchEchoDraw {
+    /** End of the overlay's draw in its animation frame, page clock. */
+    t: number;
+    /** Indices into the path of the texels drawn painted. */
+    indices: number[];
+}
+
 interface Bench {
     /** The path of the stroke in progress, in texels; null between strokes. */
     path: Texel[] | null;
+    /** Index of each texel of `path`, by `x,y`. */
+    pathIndex: Map<string, number> | null;
+    echoDraws: BenchEchoDraw[];
     width: number;
     colour: readonly number[];
     samples: BenchSample[];
@@ -152,6 +176,8 @@ declare global {
 function installBench(): void {
     const bench: Bench = {
         path: null,
+        pathIndex: null,
+        echoDraws: [],
         width: 0,
         colour: [],
         samples: [],
@@ -389,11 +415,21 @@ function texelOf(layout: Layout, client: Texel): Texel {
     };
 }
 
+/** When a sample was on screen, after its event, by each path and by the earlier of them. */
+interface Latency {
+    /** The earlier of the two paths. */
+    best: number;
+    /** NGNE's submit of a frame that contains it; null when none did. */
+    ngne: number | null;
+    /** The end of the overlay draw whose echo showed it; null when none did. */
+    echo: number | null;
+}
+
 interface StrokeResult {
     /** Latency of the press. */
-    first: number;
+    first: Latency;
     /** Latency of every later sample that reached a new texel, in order: the second first. */
-    moves: number[];
+    moves: Latency[];
     /** Longest time between two frames that each showed more of the stroke. */
     longestFrameGap: number;
     samples: number;
@@ -435,8 +471,10 @@ async function strokeAlong(
         (path) => {
             const bench = window.__se015bench!;
             bench.path = path;
+            bench.pathIndex = new Map(path.map((texel, index) => [`${texel.x},${texel.y}`, index]));
             bench.samples = [];
             bench.frames = [];
+            bench.echoDraws = [];
         },
         [...path],
     );
@@ -476,17 +514,23 @@ async function strokeAlong(
     const durationMs = performance.now() - began;
     if (errors.length > 0) throw new Error(`se-015: input failed: ${String(errors[0])}`);
     await quiet(page);
-    const { samples, frames } = await page.evaluate(() => {
+    const { samples, frames, echoDraws } = await page.evaluate(() => {
         const bench = window.__se015bench!;
-        const result = { samples: bench.samples, frames: bench.frames };
+        const result = {
+            samples: bench.samples,
+            frames: bench.frames,
+            echoDraws: bench.echoDraws,
+        };
         bench.path = null;
+        bench.pathIndex = null;
         return result;
     });
+    const drawn = echoDraws.map((draw) => ({ t: draw.t, indices: new Set(draw.indices) }));
 
     const indexOf = new Map(path.map((texel, index) => [`${texel.x},${texel.y}`, index]));
     let reached = -1;
-    let first: number | null = null;
-    const moves: number[] = [];
+    let first: Latency | null = null;
+    const moves: Latency[] = [];
     let missing = 0;
     // From the press on: the pointer hovered over the first texel before it.
     const press = samples.findIndex((sample) => sample.kind === "down");
@@ -504,15 +548,23 @@ async function strokeAlong(
         if (index === undefined || index <= reached) continue;
         reached = index;
         const frame = frames.find((entry) => entry.t >= sample.t && entry.prefix > index);
-        if (!frame) {
+        const draw = drawn.find((entry) => entry.t >= sample.t && entry.indices.has(index));
+        const ngne = frame ? frame.t - sample.t : null;
+        const echoed = draw ? draw.t - sample.t : null;
+        if (ngne === null && echoed === null) {
             missing++;
             continue;
         }
-        if (sample.kind === "down") first = frame.t - sample.t;
-        else moves.push(frame.t - sample.t);
+        const latency: Latency = {
+            best: Math.min(ngne ?? Infinity, echoed ?? Infinity),
+            ngne,
+            echo: echoed,
+        };
+        if (sample.kind === "down") first = latency;
+        else moves.push(latency);
     }
     if (missing > 0 || first === null) {
-        throw new Error(`se-015: ${missing} samples of a stroke were in no submitted frame`);
+        throw new Error(`se-015: ${missing} samples of a stroke were on screen by neither path`);
     }
     let longestFrameGap = 0;
     let shown = 0;
@@ -671,6 +723,43 @@ it.skipIf(!gpu)(
                 },
                 [...PAINT],
             );
+            // The stroke echo: switched as asked, and followed at each of its draws.
+            await page.evaluate((on) => {
+                const probe = window.__ngneTest!.strokeEcho;
+                if (!probe) throw new Error("se-015: no stroke echo on the page");
+                probe.enabled = on;
+                probe.onDraw = (rects, buffer) => {
+                    const bench = window.__se015bench!;
+                    const index = bench.pathIndex;
+                    if (!index) return;
+                    const [r, g, b, a] = bench.colour;
+                    const indices: number[] = [];
+                    for (const rect of rects) {
+                        for (let y = rect.y; y < rect.y + rect.height; y++) {
+                            for (let x = rect.x; x < rect.x + rect.width; x++) {
+                                const found = index.get(`${x},${y}`);
+                                if (found === undefined) continue;
+                                const at = (y * buffer.width + x) * 4;
+                                const { data } = buffer;
+                                if (
+                                    data[at] === r &&
+                                    data[at + 1] === g &&
+                                    data[at + 2] === b &&
+                                    data[at + 3] === a
+                                ) {
+                                    indices.push(found);
+                                }
+                            }
+                        }
+                    }
+                    const draw = { t: Number.NaN, indices };
+                    bench.echoDraws.push(draw);
+                    // After the whole redraw of the overlay, which runs in one task.
+                    queueMicrotask(() => {
+                        draw.t = performance.now();
+                    });
+                };
+            }, echo);
             await quiet(page);
             const used = await page.evaluate(() => window.__se015bench!.adapters);
             for (const device of used) {
@@ -708,9 +797,9 @@ it.skipIf(!gpu)(
             const cdp = await context.newCDPSession(page);
 
             // Short strokes: the first sample of each, on rows of their own.
-            const firsts: number[] = [];
-            const seconds: number[] = [];
-            const shortMoves: number[] = [];
+            const firsts: Latency[] = [];
+            const seconds: Latency[] = [];
+            const shortMoves: Latency[] = [];
             const strokesPerRow = Math.floor(columns / (SHORT_MOVES + 3));
             for (let stroke = 0; stroke < SHORT_STROKES; stroke++) {
                 const y = 2 * Math.floor(stroke / strokesPerRow);
@@ -753,20 +842,35 @@ it.skipIf(!gpu)(
 
             const browserVersion = browser.version();
             const overlayRedraws = await page.evaluate(() => window.__ngneTest!.overlay!.redraws);
-            const stroke = summary(continuous.moves);
-            const first = summary(firsts);
-            const second = summary(seconds);
-            const short = summary(shortMoves);
-            const all = summary([...continuous.moves, ...shortMoves, ...firsts]);
+            const best = (values: readonly Latency[]) => summary(values.map((value) => value.best));
+            /** One path's numbers: of the samples it showed (it may not have shown all). */
+            const byPath = (path: "ngne" | "echo") => {
+                const of = (values: readonly Latency[]) =>
+                    summary(values.flatMap((value) => (value[path] === null ? [] : [value[path]])));
+                return {
+                    continuousStroke: of(continuous.moves),
+                    firstSample: of(firsts),
+                    secondSample: of(seconds),
+                    shortStrokeSamplesAfterThePress: of(shortMoves),
+                };
+            };
+            const stroke = best(continuous.moves);
+            const first = best(firsts);
+            const second = best(seconds);
+            const short = best(shortMoves);
+            const all = best([...continuous.moves, ...shortMoves, ...firsts]);
             const resultMs = Math.max(stroke.p95Ms, first.p95Ms, second.p95Ms, short.p95Ms);
             if (pageErrors.length > 0) throw new Error(`se-015: page errors: ${pageErrors[0]}`);
             const entry: PerfEntry = {
-                id: `se-015-stroke-latency-${gpuId}`,
+                id: `se-015-stroke-latency-${gpuId}${echo ? "" : "-no-echo"}`,
                 ticket: "SE-015",
                 measurement:
-                    "Pointer event to the submit of the frame containing that sample, for pencil " +
-                    `strokes of real mouse input on a ${SIDE}×${SIDE} document with ${LAYERS} ` +
-                    `layers and the pixel grid shown, at ${SCALE}× (SPEC §6.6), on ${gpu.label}.`,
+                    "Pointer event to the frame containing that sample, for pencil strokes of " +
+                    `real mouse input on a ${SIDE}×${SIDE} document with ${LAYERS} layers and ` +
+                    `the pixel grid shown, at ${SCALE}× (SPEC §6.6), on ${gpu.label}, ` +
+                    (echo
+                        ? "the earlier of NGNE's submit and the overlay draw of the stroke echo."
+                        : "NGNE's submit, with the stroke echo off."),
                 statistic:
                     "the largest of four p95s: every sample of one continuous stroke of " +
                     `${CONTINUOUS_MS / 1000} s; of ${SHORT_STROKES} short strokes, the first ` +
@@ -788,7 +892,9 @@ it.skipIf(!gpu)(
                     secondSample: second,
                     shortStrokeSamplesAfterThePress: short,
                     allSamples: all,
-                    echo: "off",
+                    echo: echo ? "on" : "off",
+                    ngnePath: byPath("ngne"),
+                    echoPath: byPath("echo"),
                     input: `mouse at ${RATE} Hz, one texel (${SCALE} device px) per report, ${(RATE * SCALE) / RATIO} CSS px/s`,
                     document: `${SIDE}×${SIDE}, ${LAYERS} layers with half-transparent content, pixel grid on`,
                     zoom: SCALE,

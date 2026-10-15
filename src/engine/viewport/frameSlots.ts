@@ -8,6 +8,8 @@ export interface SlotImage {
     /** Size of the image in document pixels at the time it was built. */
     width: number;
     height: number;
+    /** The document's `version` of the pixels, when it gives one (SE-015). */
+    version?: number;
 }
 
 /** When an upload into a slot resolved (see `FrameSlots.publish`). */
