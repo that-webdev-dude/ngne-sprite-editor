@@ -4,13 +4,14 @@ import { History } from "../../src/core/history";
 import { addLayerCommand, deleteLayerCommand } from "../../src/core/layers";
 import { assertInvariants, createDocument, sequentialIds } from "../../src/core/model";
 import type { BitMask, DocSession, Selection } from "../../src/core/model";
-import { createBrush } from "../../src/core/raster";
+import { createBrush, forEachLinePixel } from "../../src/core/raster";
 import {
     combineSelection,
     createMask,
     deselectCommand,
     ellipseMask,
     ellipseRows,
+    forEachLinePixelOn,
     fullMask,
     intersectMask,
     invertMask,
@@ -19,6 +20,7 @@ import {
     maskBounds,
     maskHas,
     masksEqual,
+    MAX_POLYGON_COORDINATE,
     polygonMask,
     rectMask,
     selectAll,
@@ -30,7 +32,7 @@ import {
     subtractMask,
     unionMask,
 } from "../../src/core/selection";
-import { maskOf, randomMask, rowsOf, seeded } from "./se-030-support";
+import { maskOf, randomMask, randomRows, rowsOf, seeded } from "./se-030-support";
 
 // SE-030: the selection model of SPEC §5.2 and §7.2 — 1-bit masks with bounds, the boolean
 // operations against hand-built masks, the masks of the selection shapes, the boundary as edge
@@ -191,7 +193,7 @@ describe("boolean operations against hand-built masks", () => {
         expect(rowsOf(all.mask)).toEqual(["######", "######", "######", "######", "######"]);
         expect(all.bounds).toEqual({ x: 0, y: 0, width: 6, height: 5 });
         expect(maskBounds(all.mask)).toEqual(all.bounds);
-        // Inverting everything leaves nothing; inverting nothing selects everything (Aseprite).
+        // Inverting everything leaves nothing; inverting nothing selects everything.
         expect(invertSelection(all, 6, 5)).toBeNull();
         expect(rowsOf(invertSelection(null, 6, 5)!.mask)).toEqual(rowsOf(all.mask));
         // Twice is the identity.
@@ -211,21 +213,74 @@ describe("boolean operations against hand-built masks", () => {
         expect(current.bounds).toEqual({ x: 1, y: 1, width: 3, height: 3 });
     });
 
-    it("bounds always equal those of the mask, for random masks and every mode", () => {
+    it("for random masks and every mode, the pixels and bounds a per-pixel rule gives", () => {
+        /** The rows each operation gives, worked out pixel by pixel on the text of the masks. */
+        const rule: Record<string, (a: boolean, b: boolean) => boolean> = {
+            replace: (_a, b) => b,
+            add: (a, b) => a || b,
+            subtract: (a, b) => a && !b,
+            intersect: (a, b) => a && b,
+            invert: (a) => !a,
+        };
+        /** Rows and bounds of `rows`, worked out from the text; null bounds for no "#". */
+        const expected = (rows: string[]) => {
+            let left = Infinity;
+            let top = Infinity;
+            let right = -Infinity;
+            let bottom = -Infinity;
+            rows.forEach((row, y) => {
+                [...row].forEach((cell, x) => {
+                    if (cell !== "#") return;
+                    left = Math.min(left, x);
+                    right = Math.max(right, x);
+                    top = Math.min(top, y);
+                    bottom = Math.max(bottom, y);
+                });
+            });
+            const bounds =
+                right < 0
+                    ? null
+                    : { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
+            return { rows, bounds };
+        };
+        const combine = (a: string[], b: string[], test: (p: boolean, q: boolean) => boolean) =>
+            a.map((row, y) =>
+                [...row]
+                    .map((cell, x) => (test(cell === "#", b[y]?.[x] === "#") ? "#" : "."))
+                    .join(""),
+            );
         const random = seeded(30);
-        for (let round = 0; round < 40; round++) {
+        let empty = 0;
+        for (let round = 0; round < 60; round++) {
             const width = 1 + Math.floor(random() * 19);
             const height = 1 + Math.floor(random() * 11);
-            const current = selectionOf(randomMask(width, height, random() * 0.6, random));
-            const shape = randomMask(width, height, random() * 0.6, random);
+            const currentRows = randomRows(width, height, random() * 0.6, random);
+            const shapeRows = randomRows(width, height, random() * 0.6, random);
+            const current = selectionOf(maskOf(currentRows));
             for (const mode of ["replace", "add", "subtract", "intersect"] as const) {
-                const result = combineSelection(current, shape, mode);
-                if (result) expect(result.bounds).toEqual(maskBounds(result.mask));
-                else expect(result).toBeNull();
+                const result = combineSelection(current, maskOf(shapeRows), mode);
+                // Without a current selection every pixel of it counts as clear.
+                const want = expected(combine(currentRows, shapeRows, rule[mode]!));
+                const label = `round ${round}, ${mode}`;
+                if (want.bounds === null) {
+                    empty++;
+                    expect(result, label).toBeNull();
+                } else {
+                    expect(rowsOf(result!.mask), label).toEqual(want.rows);
+                    expect(result!.bounds, label).toEqual(want.bounds);
+                }
             }
             const inverted = invertSelection(current, width, height);
-            if (inverted) expect(inverted.bounds).toEqual(maskBounds(inverted.mask));
+            const want = expected(combine(currentRows, currentRows, rule.invert!));
+            if (want.bounds === null) {
+                expect(inverted).toBeNull();
+            } else {
+                expect(rowsOf(inverted!.mask)).toEqual(want.rows);
+                expect(inverted!.bounds).toEqual(want.bounds);
+            }
         }
+        // The rounds include results with no pixel.
+        expect(empty).toBeGreaterThan(0);
     });
 
     it("refuses masks of different sizes", () => {
@@ -360,6 +415,94 @@ describe("masks of the selection shapes", () => {
                 { x: 2, y: 2 },
             ]),
         ).toThrow(RangeError);
+    });
+
+    it("a polygon's points are checked first, also when there are fewer than 3", () => {
+        expect(() => polygonMask(4, 4, [{ x: 0.5, y: 0 }])).toThrow(RangeError);
+        expect(() =>
+            polygonMask(4, 4, [
+                { x: 1, y: 1 },
+                { x: 2, y: Number.NaN },
+            ]),
+        ).toThrow(RangeError);
+        expect(() => polygonMask(4, 4, [{ x: MAX_POLYGON_COORDINATE + 1, y: 0 }])).toThrow(
+            RangeError,
+        );
+        expect(() =>
+            polygonMask(4, 4, [
+                { x: -MAX_POLYGON_COORDINATE, y: 0 },
+                { x: 1, y: MAX_POLYGON_COORDINATE },
+            ]),
+        ).not.toThrow();
+    });
+
+    it("a side is walked on the canvas only, with the pixels forEachLinePixel draws there", () => {
+        const width = 6;
+        const height = 5;
+        const onCanvas = (x0: number, y0: number, x1: number, y1: number) => {
+            const pixels: string[] = [];
+            forEachLinePixel(x0, y0, x1, y1, (x, y) => {
+                if (x >= 0 && y >= 0 && x < width && y < height) pixels.push(`${x},${y}`);
+            });
+            return pixels;
+        };
+        const walked = (x0: number, y0: number, x1: number, y1: number) => {
+            const pixels: string[] = [];
+            const steps = forEachLinePixelOn(x0, y0, x1, y1, width, height, (x, y) =>
+                pixels.push(`${x},${y}`),
+            );
+            return { pixels, steps };
+        };
+        // Every line between two points of a grid around the canvas: the same pixels, in order.
+        for (let x0 = -4; x0 <= 9; x0++) {
+            for (let y0 = -4; y0 <= 8; y0++) {
+                for (let x1 = -4; x1 <= 9; x1++) {
+                    for (let y1 = -4; y1 <= 8; y1++) {
+                        const { pixels, steps } = walked(x0, y0, x1, y1);
+                        expect(pixels, `${x0},${y0} → ${x1},${y1}`).toEqual(
+                            onCanvas(x0, y0, x1, y1),
+                        );
+                        expect(steps).toBeLessThanOrEqual(Math.max(width, height));
+                    }
+                }
+            }
+        }
+        // Long lines with far ends, at random.
+        const random = seeded(31);
+        for (let round = 0; round < 300; round++) {
+            const end = () => Math.floor(random() * 6001) - 3000;
+            const [x0, y0, x1, y1] = [end(), end(), end(), end()];
+            expect(walked(x0, y0, x1, y1).pixels, `${x0},${y0} → ${x1},${y1}`).toEqual(
+                onCanvas(x0, y0, x1, y1),
+            );
+        }
+        // Ends ten million pixels away: a few steps, not twenty million.
+        const far = walked(-10_000_000, 2, 10_000_000, 3);
+        expect(far.steps).toBe(width);
+        expect(far.pixels).toEqual(onCanvas(-10_000_000, 2, 10_000_000, 3));
+    });
+
+    it("a polygon with a vertex ten million pixels away", () => {
+        // The long side from (10 000 000, 0) to (0, 5) lies at y = 5 (rounded) over the canvas;
+        // the rows between it and the top side are inside.
+        expect(
+            rowsOf(
+                polygonMask(8, 8, [
+                    { x: 0, y: 0 },
+                    { x: 10_000_000, y: 0 },
+                    { x: 0, y: 5 },
+                ]),
+            ),
+        ).toEqual([
+            "########",
+            "########",
+            "########",
+            "########",
+            "########",
+            "########",
+            "........",
+            "........",
+        ]);
     });
 
     it("a flood mask, or any mask of the canvas, becomes a selection with its bounds", () => {

@@ -1,5 +1,4 @@
 import type { BitMask, Rect } from "../model";
-import { forEachLinePixel } from "../raster";
 import type { PixelPoint } from "../raster";
 import { createMask, setMaskPixel, setMaskRun } from "./mask";
 
@@ -114,21 +113,80 @@ export function ellipseMask(width: number, height: number, rect: Rect): BitMask 
     return mask;
 }
 
+/** How far from 0 a polygon's vertex may lie, so that the line arithmetic stays exact. */
+export const MAX_POLYGON_COORDINATE = 2 ** 24;
+
+/**
+ * Calls `visit` for the pixels of the Bresenham line from `x0, y0` to `x1, y1` (as
+ * `forEachLinePixel` draws it, both ends included) that lie on a `width` × `height` canvas,
+ * in order, and for no other: the pixels off the canvas are skipped, not walked, so the work
+ * grows with the canvas, not with the line. The line takes one pixel per step along its
+ * major axis, and the step `k` lies `floor((2 · minor · k + major) / (2 · major))` pixels
+ * along the other (the closed form of Zingl's error term, checked against `forEachLinePixel`
+ * by the tests). Ends within `MAX_POLYGON_COORDINATE` of 0 keep every product below 2^53.
+ * Returns how many steps it took: at most the canvas's side along the major axis.
+ */
+export function forEachLinePixelOn(
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    width: number,
+    height: number,
+    visit: (x: number, y: number) => void,
+): number {
+    const dx = Math.abs(x1 - x0);
+    const dy = Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1;
+    const sy = y0 < y1 ? 1 : -1;
+    const xMajor = dx >= dy;
+    const major = xMajor ? dx : dy;
+    const minor = xMajor ? dy : dx;
+    // The steps whose major coordinate lies on the canvas.
+    const start = xMajor ? x0 : y0;
+    const sign = xMajor ? sx : sy;
+    const extent = xMajor ? width : height;
+    const first = Math.max(0, sign > 0 ? -start : start - (extent - 1));
+    const last = Math.min(major, sign > 0 ? extent - 1 - start : start);
+    for (let k = first; k <= last; k++) {
+        const along = major === 0 ? 0 : Math.floor((2 * minor * k + major) / (2 * major));
+        const x = xMajor ? x0 + sx * k : x0 + sx * along;
+        const y = xMajor ? y0 + sy * along : y0 + sy * k;
+        if (x >= 0 && y >= 0 && x < width && y < height) visit(x, y);
+    }
+    return Math.max(0, last - first + 1);
+}
+
 /**
  * The pixels of a closed polygon through `points` (document pixels, in order; the last joins
  * the first) that lie on the canvas: its outline, the Bresenham line of each side, and every
- * pixel whose centre lies inside it by the even-odd rule, as Aseprite's lasso fills its
- * contour. A polygon of fewer than 3 points encloses nothing and gives an empty mask.
- * Throws `RangeError` when a point is not a whole number.
+ * pixel whose centre lies inside it by the even-odd rule. A polygon of fewer than 3 points
+ * encloses nothing and gives an empty mask. Throws `RangeError` when a point is not a whole
+ * number within `MAX_POLYGON_COORDINATE` of 0, also for fewer than 3 points.
  */
 export function polygonMask(width: number, height: number, points: readonly PixelPoint[]): BitMask {
+    for (const { x, y } of points) {
+        if (
+            !Number.isSafeInteger(x) ||
+            !Number.isSafeInteger(y) ||
+            Math.abs(x) > MAX_POLYGON_COORDINATE ||
+            Math.abs(y) > MAX_POLYGON_COORDINATE
+        ) {
+            throw new RangeError(
+                `polygonMask: a vertex is a whole number within ${MAX_POLYGON_COORDINATE} of 0, ` +
+                    `got ${x}, ${y}.`,
+            );
+        }
+    }
     const mask = createMask(width, height);
     if (points.length < 3) return mask;
     const count = points.length;
     for (let index = 0; index < count; index++) {
         const from = points[index];
         const to = points[(index + 1) % count];
-        forEachLinePixel(from.x, from.y, to.x, to.y, (x, y) => setMaskPixel(mask, x, y));
+        forEachLinePixelOn(from.x, from.y, to.x, to.y, width, height, (x, y) =>
+            setMaskPixel(mask, x, y),
+        );
     }
     // The vertices are pixel centres, so the centre of a pixel of row `y` lies on the line
     // `y` of the vertices' coordinates; a side counts on a row from its upper end up to, not

@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { appCommands } from "../../src/app/commands/appCommands";
 import { plannedCommands } from "../../src/app/commands/planned.commands";
-import { activeDocument, sessionsStore } from "../../src/app/state/sessions";
+import { activeDocument, isDirty, sessionsStore } from "../../src/app/state/sessions";
+import { createToolPipeline } from "../../src/app/tools/pipeline";
 import { pencilTool } from "../../src/app/tools/pencil/pencil.tools";
 import { compositeFrame } from "../../src/core/composite";
 import { createDocument } from "../../src/core/model";
-import type { DocSession } from "../../src/core/model";
+import type { DocSession, Rect } from "../../src/core/model";
 import { maskHas, rectMask, selectCommand } from "../../src/core/selection";
 import { FRAME, celImage, firstDifference, layerId, sprite } from "./se-010-support";
 import type { Rgba } from "./se-010-support";
@@ -80,6 +81,18 @@ describe("selection commands", () => {
         expect(history.undoCount).toBe(2);
         // The store tells its subscribers (the status bar, the overlay) of each step.
         expect(activeDocument(sessionsStore.getState())?.revision).toBeGreaterThan(0);
+    });
+
+    it("make the document dirty: a selection change is a history step", async () => {
+        const document = sessionsStore
+            .getState()
+            .open(createDocument({ name: "sel", width: 6, height: 4 }));
+        const current = () => activeDocument(sessionsStore.getState())!;
+        expect(isDirty(current())).toBe(false);
+        await command("select.all").run();
+        expect(isDirty(current())).toBe(true);
+        document.history.undo();
+        expect(isDirty(current())).toBe(false);
     });
 
     it("are disabled while a stroke's transaction is open", () => {
@@ -218,6 +231,55 @@ describe("paint clipped to the selection", () => {
         ]);
         expect(h.document().history.undoCount).toBe(undo);
         expect(Array.from(image.data)).toEqual(Array.from(before));
+    });
+
+    it("composites and echoes only the part of each change within the selection's bounds", () => {
+        const h = harness();
+        const session = withSelection(h);
+        const composited: Rect[] = [];
+        let echoes = 0;
+        // The pipeline of the harness, with an overlay stroke echo that records what it is told.
+        const pipeline = createToolPipeline({
+            sessions: h.sessions,
+            composites: h.composites,
+            viewport: { invalidate() {} },
+            status: h.status,
+            editor: h.editor,
+            tools: h.tools,
+            mapping: () => h.mapping(),
+            nextFrame: h.frames.request,
+            later: h.timers.set,
+            onError: (error) => void h.errors.push(error),
+            echo: {
+                start: () => void echoes++,
+                changed() {},
+                composited: (rect) => void composited.push({ ...rect }),
+                release() {},
+                clear() {},
+            },
+        });
+        const [first, ...rest] = across;
+        pipeline.down(at(h, first!, { button: 0 }));
+        for (const point of rest) {
+            pipeline.move([at(h, point)]);
+            h.frames.run();
+        }
+        pipeline.up(at(h, rest.at(-1)!, { button: 0, buttons: 0 }));
+        expect(echoes).toBe(1);
+        expect(composited.length).toBeGreaterThan(0);
+        const bounds = session.selection!.bounds;
+        for (const rect of composited) {
+            expect(rect.x >= bounds.x && rect.y >= bounds.y, JSON.stringify(rect)).toBe(true);
+            expect(rect.x + rect.width <= bounds.x + bounds.width, JSON.stringify(rect)).toBe(true);
+            expect(rect.y + rect.height <= bounds.y + bounds.height, JSON.stringify(rect)).toBe(
+                true,
+            );
+        }
+        // The stroke's pixels inside are all there, in the cache's composite too.
+        expect(h.errors).toEqual([]);
+        expect(
+            firstDifference(h.composites.cache!.get(FRAME), compositeFrame(session.doc, FRAME)),
+        ).toBeNull();
     });
 
     it("without a selection every pixel can change", () => {

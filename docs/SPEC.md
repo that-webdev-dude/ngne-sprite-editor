@@ -734,21 +734,27 @@ Selection model (SE-030):
   empty). A change that would leave the same pixels selected makes no command and records
   nothing, as a stroke that changes nothing (§7.1). While a transaction is open they are
   disabled, as undo and redo are.
-- Invert with no selection selects every pixel, as in Aseprite; inverting a selection of every
-  pixel leaves none.
+- A selection change is a history step like any other: it moves the history position, so it
+  makes the document dirty (§5.2), and the close confirmation and autosave treat it as a
+  change.
+- Invert with no selection selects every pixel; inverting a selection of every pixel leaves
+  none.
 - Shape masks, clipped to the canvas: a rectangle; the filled ellipse that fits a rectangle
-  (Zingl's `plotEllipseRect` with the tips finished while y0 − y1 ≤ b, which for a square
-  gives the circle brush of §7.1); a polygon as its outline (the Bresenham line of each side,
-  the last vertex joined to the first) and the pixels whose centres lie inside it by the
-  even-odd rule, as Aseprite's lasso; fewer than 3 vertices enclose nothing. A flood mask, or
-  any mask of the document's size, becomes a selection with its bounds as it is.
+  (after Zingl's `plotEllipseRect`, with the tips finished while y0 − y1 ≤ b, which for a
+  square gives the circle brush of §7.1); a polygon as its outline (the Bresenham line of each
+  side, the last vertex joined to the first; only the part on the canvas is walked) and the
+  pixels whose centres lie inside it by the even-odd rule; fewer than 3 vertices enclose
+  nothing, and a vertex must be a whole number within 2^24 of 0. A flood mask, or any mask of
+  the document's size, becomes a selection with its bounds as it is.
 - The boundary for drawing is a list of axis-aligned edge segments on the document's grid
   lines, each a maximal run with the selected side on one hand, and the outer corners (grid
   points with exactly one of their four pixels selected); the canvas edge counts as boundary.
   The ants are drawn from it (DESIGN §6).
 - Paint is clipped where the pointer pipeline begins a paint stroke: the selection's mask is
   the transaction's clip (§5.2), so a pixel outside it gets its value at `begin` back at each
-  report, before the live composite and the stroke echo read it.
+  report, before the live composite and the stroke echo read it. Of each reported rectangle
+  only the part within the selection's bounds is composited and echoed: outside them nothing
+  changed, and the opaque echo would hide onion skins and references there.
 
 ### 7.3 Layers
 

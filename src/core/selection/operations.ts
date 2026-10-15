@@ -90,7 +90,7 @@ export function combineSelection(
 
 /**
  * The pixels of a `width` × `height` canvas outside `current`: Invert Selection. With no
- * selection every pixel is selected, as in Aseprite; a selection of every pixel inverts to
+ * selection every pixel is selected; a selection of every pixel inverts to
  * none (null).
  */
 export function invertSelection(

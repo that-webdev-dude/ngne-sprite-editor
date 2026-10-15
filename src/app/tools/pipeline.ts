@@ -1,5 +1,6 @@
 import type { StoreApi } from "zustand/vanilla";
 import type { Transaction } from "../../core/history";
+import type { Rect } from "../../core/model";
 import type { EditorState } from "../state/editor";
 import { activeDocument } from "../state/sessions";
 import type { OpenDocument, SessionsState } from "../state/sessions";
@@ -113,6 +114,15 @@ interface Stroke {
     readonly live: LiveComposite | null;
     /** The mapping of the last sample, used while none can be read. */
     mapping: ViewMapping;
+}
+
+/** The part of `rect` inside `bounds`, or null when there is none. */
+function intersection(rect: Rect, bounds: Rect): Rect | null {
+    const x = Math.max(rect.x, bounds.x);
+    const y = Math.max(rect.y, bounds.y);
+    const right = Math.min(rect.x + rect.width, bounds.x + bounds.width);
+    const bottom = Math.min(rect.y + rect.height, bounds.y + bounds.height);
+    return right > x && bottom > y ? { x, y, width: right - x, height: bottom - y } : null;
 }
 
 function modifiersOf(input: Omit<KeyInput, "type" | "key" | "repeat">): ToolModifiers {
@@ -311,6 +321,10 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
             }
             const opened = transaction;
             const display = live;
+            // Outside the selection's bounds the clip changed nothing: only the part inside
+            // is composited and echoed (the opaque echo would hide onion skins and references
+            // over pixels that did not change).
+            const shownBounds = opened ? (document.session.selection?.bounds ?? null) : null;
             const context: ToolContext = {
                 document,
                 session: document.session,
@@ -325,7 +339,8 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
                     markDirty(rect) {
                         if (!opened.open) return;
                         opened.markDirty(rect);
-                        display?.dirty(rect);
+                        const shown = shownBounds ? intersection(rect, shownBounds) : rect;
+                        if (shown) display?.dirty(shown);
                     },
                 },
                 feedback: showFeedback,

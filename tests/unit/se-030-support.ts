@@ -32,20 +32,30 @@ export function rowsOf(mask: BitMask): string[] {
     return rows;
 }
 
-/** A mask of `width` × `height` with each pixel set when `random()` is below `density`. */
-export function randomMask(
+/** Rows of `width` × `height` with each pixel "#" when `random()` is below `density`. */
+export function randomRows(
     width: number,
     height: number,
     density: number,
     random: () => number,
-): BitMask {
+): string[] {
     const rows: string[] = [];
     for (let y = 0; y < height; y++) {
         let row = "";
         for (let x = 0; x < width; x++) row += random() < density ? "#" : ".";
         rows.push(row);
     }
-    return maskOf(rows);
+    return rows;
+}
+
+/** The mask of `randomRows`. */
+export function randomMask(
+    width: number,
+    height: number,
+    density: number,
+    random: () => number,
+): BitMask {
+    return maskOf(randomRows(width, height, density, random));
 }
 
 /** A repeatable generator of numbers in [0, 1) (mulberry32). */

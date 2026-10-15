@@ -133,7 +133,7 @@ test("the Select menu runs the three commands, enabled as the selection allows",
     await expect(menuItem(page, "select.invert")).toHaveText("Invert SelectionCtrl+I");
     await expect(menuItem(page, "select.none")).toHaveAttribute("aria-disabled", "true");
     await expect(menuItem(page, "select.all")).not.toHaveAttribute("aria-disabled", "true");
-    // Invert with no selection selects every pixel, as in Aseprite.
+    // Invert with no selection selects every pixel.
     await expect(select).toBeVisible();
     await menuItem(page, "select.invert").click();
     await expect(page.getByRole("menu")).toHaveCount(0);
@@ -262,14 +262,10 @@ test("with a selection, a pencil stroke crossing its edge changes pixels only in
     expect(await historyOf(page, document.id)).toEqual({ undo: 2, open: true });
     expect(await page.evaluate(() => window.__ngneTest!.strokeEcho!.regions)).toBeGreaterThan(0);
 
-    // The echo: wherever it drew outside the selection, it drew the pixel as it was. It does
-    // draw there: the stroke's rectangles reach outside, where the clip put the pixels back.
+    // The echo draws nothing outside the selection: of each change only the part within the
+    // selection's bounds (here the selection itself) is composited and echoed.
     const echoed = await page.evaluate(() => window.__se030Echoed ?? []);
-    expect(echoed.length).toBeGreaterThan(0);
-    for (const { x, y, rgba } of echoed) {
-        const at = (y * STROKE_WIDTH + x) * 4;
-        expect(rgba, `echoed ${x}, ${y}`).toEqual(original.slice(at, at + 4));
-    }
+    expect(echoed).toEqual([]);
     // And on the overlay: the middle device pixel of each texel outside the selection is
     // clear or shows the texel as it was, never the stroke; inside, the stroke's texels show
     // magenta. The texels next to the pointer carry the brush cursor and are left out.

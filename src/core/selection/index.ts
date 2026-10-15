@@ -34,4 +34,12 @@ export {
     unionMask,
 } from "./operations";
 export type { SelectionMode } from "./operations";
-export { ellipseMask, ellipseRows, MAX_ELLIPSE_SIDE, polygonMask, rectMask } from "./shapes";
+export {
+    ellipseMask,
+    ellipseRows,
+    forEachLinePixelOn,
+    MAX_ELLIPSE_SIDE,
+    MAX_POLYGON_COORDINATE,
+    polygonMask,
+    rectMask,
+} from "./shapes";
