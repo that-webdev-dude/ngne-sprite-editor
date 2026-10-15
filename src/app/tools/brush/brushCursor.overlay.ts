@@ -12,8 +12,8 @@ import { brushOf, hasBrush } from "./brushOptions";
 // not hold NGNE's pixels, so it cannot invert them; the outline is two-tone instead, visible
 // on any content: a 1 device pixel black ring just outside the footprint and a 1 device pixel
 // white ring outside that one. The footprint itself is left clear, so its pixels show. Drawn
-// over every other layer of SE-013; the system cursor is hidden over the document while a
-// paint tool is active (`paintCursor`).
+// over every other layer of SE-013; a paint tool that draws this outline hides the system
+// cursor over the document (`paintCursor`).
 
 /** Order of the layer in the overlay's stack: over the grids (SE-013 uses 100 to 300). */
 export const BRUSH_CURSOR_ORDER = 900;

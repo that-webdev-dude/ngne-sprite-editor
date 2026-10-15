@@ -264,8 +264,8 @@ transient tool feedback in `--warn`.
   (SE-030).
 - Brush cursor: 1 px outline of the brush footprint snapped to pixels, two-tone so it shows on
   any content (black just outside the footprint, white outside that; an inverted outline cannot
-  be drawn on the overlay, which does not hold NGNE's pixels); the system cursor is hidden over
-  the document while a paint tool is active.
+  be drawn on the overlay, which does not hold NGNE's pixels); a paint tool that draws a brush
+  outline hides the system cursor over the document.
 - Zoom readout and "fit" live in the status bar, not as floating buttons over the canvas.
 - Empty state (no document open): centred in the workspace — New sprite, Open, Import PNG and
   the recent files list, as plain text buttons; no illustration.

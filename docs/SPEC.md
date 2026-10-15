@@ -689,8 +689,8 @@ Pencil and eraser (SE-015):
   point when there is none. Shift pressed during a stroke does nothing.
 - The brush cursor is the overlay draw layer `brush-cursor` (order 900): a two-tone outline of
   the footprint, 1 device pixel black just outside it and 1 device pixel white outside that,
-  with the footprint left clear (DESIGN §6). A paint tool hides the system cursor over the
-  document only; elsewhere over the viewport the cursor is a crosshair.
+  with the footprint left clear (DESIGN §6). A paint tool that draws a brush outline hides the
+  system cursor over the document only; elsewhere over the viewport the cursor is a crosshair.
 - Pencil and eraser show the hint "Shift: straight line from the end of the last stroke" in
   the status bar.
 
@@ -759,8 +759,8 @@ Shape tools and paint bucket (SE-017):
   the document fills nothing. Options in order: Contiguous (on), Sample (Active layer by default,
   or Composite), Tolerance (0–255, 0 by default), ink, opacity. Active layer samples the active
   cel as the stroke found it (an empty cel is transparent); Composite samples the frame's
-  composite as the cache holds it. The bucket has no brush outline, so its cursor is a crosshair
-  over the document too (DESIGN §6 hides the system cursor for the tools that draw one).
+  composite as the cache holds it. The bucket draws no brush outline: its cursor is a crosshair
+  over the whole viewport, the document included.
 - Flood fill (`core/raster/flood.ts`) returns a 1-bit mask of the source's size, which the magic
   wand makes a selection (§7.2). A pixel matches the seed when both are transparent (alpha 0,
   whatever their RGB) or when each of the four channels differs by at most the tolerance: 0 is

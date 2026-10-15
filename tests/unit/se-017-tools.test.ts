@@ -28,7 +28,7 @@ import { compositeFrame } from "../../src/core/composite";
 import { celAt, createDocument, sequentialIds } from "../../src/core/model";
 import type { DocSession, PixelBuffer, Rect } from "../../src/core/model";
 import { clonePixelBuffer } from "../../src/core/pixels";
-import { paintInk, ShapeStroke } from "../../src/core/raster";
+import { linePixels, paintInk, ShapeStroke } from "../../src/core/raster";
 import type { PixelPoint, Shape } from "../../src/core/raster";
 import { selectionOf } from "../../src/core/selection";
 import { FRAME, celImage, layerId, sprite } from "./se-010-support";
@@ -239,6 +239,36 @@ describe("a shape drag is one undo step", () => {
         history.undo();
         expect(celAt(session.doc, session.activeLayerId, session.activeFrameId)).toBeUndefined();
     });
+
+    it("released at a pixel off the document: the part of the shape on it is kept, one undo step", () => {
+        for (const tool of [lineTool, rectangleTool, ellipseTool]) {
+            const h = tools(tool.id);
+            const session = patterned();
+            const { history } = h.open(session);
+            h.tools.setOption(h.tools.active()!, FILLED.key, true);
+            const before = clonePixelBuffer(image(session));
+            // From inside the document to beyond its top right corner (16 × 12).
+            stroke(h, [p(5, 6), p(10, 3), p(25, -6)]);
+            expect(history.undoCount, tool.id).toBe(1);
+            const kind = tool.id as Shape["kind"];
+            const shape = dragShape(kind, p(5, 6), p(25, -6), NONE, true);
+            const after = image(session).data.slice();
+            expect(after, tool.id).toEqual(expected(h, before, shape));
+            // Clipped: the changed pixels reach the document's top or right edge.
+            const changedOnEdge = (x: number, y: number) =>
+                rgbaAt(image(session), x, y).join() !== rgbaAt(before, x, y).join();
+            const top = Array.from({ length: WIDTH }, (_, x) => x).some((x) => changedOnEdge(x, 0));
+            const right = Array.from({ length: HEIGHT }, (_, y) => y).some((y) =>
+                changedOnEdge(WIDTH - 1, y),
+            );
+            expect(top || right, tool.id).toBe(true);
+            history.undo();
+            expect(image(session).data, tool.id).toEqual(before.data);
+            history.redo();
+            expect(image(session).data, tool.id).toEqual(after);
+            expect(h.errors, tool.id).toEqual([]);
+        }
+    });
 });
 
 describe("the rubber band", () => {
@@ -413,25 +443,45 @@ describe("modifiers", () => {
         const h = tools("line");
         const { session, history } = h.open(blank(20, 20));
         const before = empty(20, 20);
+        const start = p(9, 9);
+        const end = p(17, 12);
         const line = (modifiers: { shift: boolean; ctrl: boolean }) =>
-            expected(h, before, dragShape("line", p(2, 2), p(14, 6), modifiers, false));
-        h.pipeline.down(at(h, p(2, 2), { button: 0 }));
-        h.pipeline.move([at(h, p(14, 6))]);
-        expect(image(session).data).toEqual(line(NONE));
+            expected(h, before, dragShape("line", start, end, modifiers, false));
+        h.pipeline.down(at(h, start, { button: 0 }));
+        h.pipeline.move([at(h, end)]);
+        h.frames.run();
+        // The stroke's live composite, which the viewport and the echo are shown.
+        const live = shown(h, session);
+        /** The image holds the line with `modifiers`, and the live composite shows it alone. */
+        const showsLine = (modifiers: { shift: boolean; ctrl: boolean }) => {
+            expect(image(session).data).toEqual(line(modifiers));
+            h.frames.run();
+            expect(shown(h, session)).toBe(live);
+            expect(live.data).toEqual(compositeFrame(session.doc, session.activeFrameId).data);
+        };
+        showsLine(NONE);
         // Shift down: the line snaps to the horizontal, with no pointer move.
         expect(h.pipeline.key(key("down", "Shift", { shiftKey: true }))).toBe(true);
-        expect(image(session).data).toEqual(line({ shift: true, ctrl: false }));
-        expect(rgbaAt(image(session), 14, 2)).toEqual(RED);
-        // Ctrl down as well: from the centre.
+        showsLine({ shift: true, ctrl: false });
+        expect(rgbaAt(image(session), 17, 9)).toEqual(RED);
+        // Ctrl down as well: from the centre, as far on the other side.
         expect(h.pipeline.key(key("down", "Ctrl", { shiftKey: true, ctrlKey: true }))).toBe(true);
-        expect(image(session).data).toEqual(line({ shift: true, ctrl: true }));
-        // Both up: the drag as it is.
-        h.pipeline.key(key("up", "Shift", { ctrlKey: true }));
-        h.pipeline.key(key("up", "Ctrl"));
-        expect(image(session).data).toEqual(line(NONE));
+        showsLine({ shift: true, ctrl: true });
+        expect(rgbaAt(image(session), 1, 9)).toEqual(RED);
+        // Shift up: the centred line follows the pointer again.
+        expect(h.pipeline.key(key("up", "Shift", { ctrlKey: true }))).toBe(true);
+        showsLine({ shift: false, ctrl: true });
+        expect(rgbaAt(live, 1, 6)).toEqual(RED);
+        // Ctrl up: the line shrinks to the drag; its other half is gone from the composite.
+        expect(h.pipeline.key(key("up", "Ctrl"))).toBe(true);
+        showsLine(NONE);
+        const kept = new Set(linePixels(start, end).map(({ x, y }) => `${x},${y}`));
+        const gone = linePixels(p(1, 6), end).filter(({ x, y }) => !kept.has(`${x},${y}`));
+        expect(gone.length).toBeGreaterThan(5);
+        for (const { x, y } of gone) expect(rgbaAt(live, x, y), `${x}, ${y}`).toEqual([0, 0, 0, 0]);
         // Other keys are not the tool's.
         expect(h.pipeline.key(key("down", "A"))).toBe(false);
-        h.pipeline.up(at(h, p(14, 6), { button: 0, buttons: 0 }));
+        h.pipeline.up(at(h, end, { button: 0, buttons: 0 }));
         expect(history.undoCount).toBe(1);
     });
 });

@@ -102,6 +102,24 @@ describe("flood fill, golden", () => {
         expect(rowsOf(floodMask(imageOf(rows), p(0, 0), exact))).toEqual(["#..", "...", "..."]);
     });
 
+    it("on a 1 × 1 document: its one pixel, contiguous and global, transparent or opaque", () => {
+        for (const colour of [0, 0xff8000ff]) {
+            const image = createPixelBuffer(1, 1, colour);
+            for (const contiguous of [true, false]) {
+                for (const tolerance of [0, 255]) {
+                    const mask = floodMask(image, p(0, 0), { tolerance, contiguous });
+                    expect([mask.width, mask.height], `${colour} ${contiguous}`).toEqual([1, 1]);
+                    expect(rowsOf(mask), `${colour} ${contiguous} ${tolerance}`).toEqual(["#"]);
+                    // Only the pixel's bit is set: the other bits of the byte stay 0.
+                    expect(Array.from(mask.data)).toEqual([1]);
+                }
+                expect(rowsOf(floodMask(image, p(1, 0), { tolerance: 0, contiguous }))).toEqual([
+                    ".",
+                ]);
+            }
+        }
+    });
+
     it("gives an empty mask for a seed outside the image", () => {
         for (const seed of [p(-1, 0), p(0, -1), p(20, 3), p(3, 15)]) {
             expect(maskBounds(floodMask(imageOf(SPIRAL), seed, exact))).toBeNull();
@@ -313,6 +331,36 @@ describe("without recursion", () => {
         }
         // 512 corridor rows and 512 gaps.
         expect(count).toBe((SIDE / 2) * SIDE + SIDE / 2);
+    });
+
+    it("fills the single corridor of the transposed maze, whose spans are one pixel wide", () => {
+        // The maze above has one span per corridor row, so a fill that recursed once per span
+        // would go only about 1024 deep there. Here the corridors are the even columns and
+        // each odd column is a wall with one gap, at its bottom end and its top end in turn:
+        // every row of a corridor is a span of its own, half a million spans in one path,
+        // which a fill recursing per pixel or per span could not follow.
+        const gap = (x: number) => ((x >> 1) % 2 === 0 ? SIDE - 1 : 0);
+        const image = createPixelBuffer(SIDE, SIDE, 0xffffffff);
+        for (let x = 1; x < SIDE; x += 2) {
+            for (let y = 0; y < SIDE; y++) {
+                if (y !== gap(x)) image.data.set(WALL, (y * SIDE + x) * 4);
+            }
+        }
+        const mask = floodMask(image, p(0, 0), exact);
+        let count = 0;
+        for (let index = 0; index < SIDE * SIDE; index++) {
+            const set = (mask.data[index >> 3]! & (1 << (index & 7))) !== 0;
+            const x = index % SIDE;
+            const y = Math.floor(index / SIDE);
+            const corridor = x % 2 === 0 || y === gap(x);
+            if (set !== corridor) throw new Error(`pixel ${x}, ${y}: ${set ? "set" : "clear"}`);
+            if (set) count++;
+        }
+        // 512 corridor columns and 512 gaps (the last column's a dead end).
+        expect(count).toBe((SIDE / 2) * SIDE + SIDE / 2);
+        // From the far end of the path: the same pixels.
+        const back = floodMask(image, p(SIDE - 2, 0), exact);
+        expect(back.data).toEqual(mask.data);
     });
 
     it("fills a 1024 × 1024 empty canvas in full", () => {

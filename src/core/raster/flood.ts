@@ -1,7 +1,7 @@
 import type { BitMask, PixelBuffer, Rect } from "../model";
+import { Changes } from "./changes";
 import type { Ink } from "./ink";
 import type { PixelPoint } from "./line";
-import { Changes } from "./stroke";
 
 // Flood fill (SPEC §7.1, SE-017): the pixels of a source image that match the colour of a
 // seed pixel, as a 1-bit mask in the layout of `BitMask` (pixel x, y is bit y · width + x,

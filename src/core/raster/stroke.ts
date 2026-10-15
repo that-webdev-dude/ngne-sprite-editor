@@ -1,5 +1,6 @@
 import type { PixelBuffer, Rect } from "../model";
 import type { Brush } from "./brush";
+import { Changes } from "./changes";
 import type { Ink } from "./ink";
 import { forEachLinePixel } from "./line";
 import type { PixelPoint } from "./line";
@@ -24,31 +25,6 @@ export interface BrushStrokeOptions {
     ink: Ink;
     /** Removes the corner pixels of L-shaped turns (`pixelPerfect.ts`); freehand strokes only. */
     pixelPerfect?: boolean;
-}
-
-/** The bounding rectangle of the pixels changed by one call (also `shapeStroke.ts`'s). */
-export class Changes {
-    #minX = Infinity;
-    #minY = Infinity;
-    #maxX = -Infinity;
-    #maxY = -Infinity;
-
-    add(x: number, y: number): void {
-        if (x < this.#minX) this.#minX = x;
-        if (x > this.#maxX) this.#maxX = x;
-        if (y < this.#minY) this.#minY = y;
-        if (y > this.#maxY) this.#maxY = y;
-    }
-
-    rect(): Rect | null {
-        if (this.#maxX < this.#minX) return null;
-        return {
-            x: this.#minX,
-            y: this.#minY,
-            width: this.#maxX - this.#minX + 1,
-            height: this.#maxY - this.#minY + 1,
-        };
-    }
 }
 
 /** Stamps a brush with an ink into an image, clipped to the image. */

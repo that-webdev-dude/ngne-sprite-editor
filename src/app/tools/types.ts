@@ -108,8 +108,8 @@ export interface ToolCursorState {
     /** A stroke of this tool is in progress. */
     readonly pressed: boolean;
     /**
-     * The pointer is over the document (DESIGN §6: a paint tool hides the system cursor
-     * there and shows its brush outline instead).
+     * The pointer is over the document (DESIGN §6: a paint tool that draws a brush outline
+     * hides the system cursor there and shows the outline instead).
      */
     readonly overDocument: boolean;
 }

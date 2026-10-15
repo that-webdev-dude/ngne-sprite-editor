@@ -235,19 +235,58 @@ describe("the rubber-band stroke", () => {
         }
     });
 
-    it("inks each covered pixel once, from its value at the stroke's start", () => {
-        const image = createPixelBuffer(12, 10, 0xff000080);
+    it("inks each covered pixel once, from its value at the stroke's start, where brush stamps overlap too", () => {
+        const width = 14;
+        const height = 12;
+        // Translucent pixels, each its own colour: alpha ink at a partial opacity changes a
+        // pixel again each time it is applied, so a pixel inked twice would show it.
+        const image = createPixelBuffer(width, height);
+        for (let index = 0; index < width * height; index++) {
+            image.data.set([200, (index * 7) & 255, 40, 100 + (index % 50)], index * 4);
+        }
         const original = clonePixelBuffer(image);
-        const ink = paintInk("alpha", 0x0000ff80, 255);
-        const stroke = new ShapeStroke(image, original, { brush: createBrush("circle", 3), ink });
-        // The brush stamps overlap along the outline, and the fill covers them again.
-        stroke.draw(shape("ellipse", p(1, 1), p(10, 8), true));
-        stroke.draw(shape("ellipse", p(1, 1), p(10, 7), true));
-        stroke.draw(shape("ellipse", p(1, 1), p(10, 8), true));
-        const once = original.data.slice(0, 4);
-        ink.apply(once, original.data.slice(0, 4), 0);
-        const centre = (5 * 12 + 5) * 4;
-        expect(Array.from(image.data.slice(centre, centre + 4))).toEqual(Array.from(once));
+        const ink = paintInk("alpha", 0x0000ff80, 200);
+        const brush = createBrush("circle", 3);
+        for (const filled of [false, true]) {
+            image.data.set(original.data);
+            const stroke = new ShapeStroke(image, original, { brush, ink });
+            const final = shape("ellipse", p(2, 2), p(11, 9), filled);
+            stroke.draw(final);
+            stroke.draw(shape("ellipse", p(2, 2), p(11, 8), filled));
+            stroke.draw(final);
+            // How many stamps of the brush, and the inside, cover each pixel.
+            const covers = new Map<string, number>();
+            const count = (key: string) => covers.set(key, (covers.get(key) ?? 0) + 1);
+            forEachOutlinePixel(final, (x, y) => {
+                for (const run of brushRuns(brush, x, y)) {
+                    for (let px = run.x; px < run.end; px++) count(`${px},${run.y}`);
+                }
+            });
+            forEachFilledRun(final, (y, x, end) => {
+                for (let px = x; px < end; px++) count(`${px},${y}`);
+            });
+            let overlapping = 0;
+            for (let index = 0; index < width * height; index++) {
+                const x = index % width;
+                const y = Math.floor(index / width);
+                const at = index * 4;
+                const start = original.data.slice(at, at + 4);
+                const once = start.slice();
+                ink.apply(once, start, 0);
+                const twice = once.slice();
+                ink.apply(twice, once, 0);
+                const times = covers.get(`${x},${y}`) ?? 0;
+                if (times > 1) {
+                    overlapping++;
+                    // A second application would be seen here.
+                    expect(Array.from(twice), `${x}, ${y}`).not.toEqual(Array.from(once));
+                }
+                expect(Array.from(image.data.slice(at, at + 4)), `${filled} ${x}, ${y}`).toEqual(
+                    Array.from(times > 0 ? once : start),
+                );
+            }
+            expect(overlapping, `${filled}`).toBeGreaterThan(20);
+        }
     });
 
     it("draws only the part on the image; a shape off the image changes nothing", () => {

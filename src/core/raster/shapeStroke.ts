@@ -1,9 +1,9 @@
 import type { PixelBuffer, Rect } from "../model";
 import type { Brush } from "./brush";
+import { Changes } from "./changes";
 import type { Ink } from "./ink";
 import { forEachFilledRun, forEachOutlinePixel, sameShape } from "./shape";
 import type { Shape } from "./shape";
-import { Changes } from "./stroke";
 
 // Rubber-band shapes (SPEC §7.1, SE-017): the stroke of a shape tool. Each pointer sample
 // draws the whole shape again in place of the one drawn before, into the image of the stroke's
