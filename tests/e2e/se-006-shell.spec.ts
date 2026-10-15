@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
-// The page imports this module from the dev server; here it is needed for its types.
+// The page imports these modules from the dev server; here they are needed for their types.
+import type * as EditorModule from "../../src/app/state/editor";
 import type * as ToolRegistryModule from "../../src/app/tools/toolRegistry";
 import {
     boxOf,
@@ -353,8 +354,43 @@ test("regions carry their landmarks and the placeholders are empty", async ({ pa
     );
     await expect(page.getByRole("contentinfo")).toHaveAttribute("data-region", "status-bar");
 
-    for (const id of ["context-bar", "status-bar"] as const) {
-        await expect(region(page, id)).toBeEmpty();
+    // With no document open, the context bar and the status bar hold only what the active
+    // tool brings (SE-014; the default tool is registered since SE-015): its name and its
+    // options, and the hint of its modifiers.
+    const active = await page.evaluate(async () => {
+        const registryPath = "/src/app/tools/toolRegistry.ts";
+        const editorPath = "/src/app/state/editor.ts";
+        const registry = (await import(
+            /* @vite-ignore */ registryPath
+        )) as typeof ToolRegistryModule;
+        const editor = (await import(/* @vite-ignore */ editorPath)) as typeof EditorModule;
+        const tool = registry.toolRegistry.get(editor.editorStore.getState().tool);
+        if (!tool) return null;
+        const options = tool.options.map((option) => option.key);
+        return { label: tool.label, options, hint: tool.hint ?? null };
+    });
+    const contextBar = region(page, "context-bar");
+    const statusBar = region(page, "status-bar");
+    if (!active) {
+        await expect(contextBar).toBeEmpty();
+    } else {
+        await expect(contextBar.locator(":scope > *")).toHaveCount(1 + active.options.length);
+        await expect(contextBar.locator(":scope > [data-context-tool]")).toHaveText(active.label);
+        expect(
+            await contextBar
+                .locator(":scope > [data-tool-option]")
+                .evaluateAll((items) => items.map((item) => item.getAttribute("data-tool-option"))),
+        ).toEqual(active.options);
+    }
+    if (!active?.hint) {
+        await expect(statusBar).toBeEmpty();
+    } else {
+        await expect(statusBar.locator(":scope > *")).toHaveCount(1);
+        await expect(statusBar.locator(':scope > [data-status="message"]')).toHaveText(active.hint);
+        await expect(statusBar.locator(':scope > [data-status="message"]')).toHaveAttribute(
+            "data-kind",
+            "hint",
+        );
     }
     await expect(region(page, "timeline").locator(".shell-timeline__content")).toBeEmpty();
     // Rail tools are placeholders until their tickets register them (SE-014): a tool's button
