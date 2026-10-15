@@ -2,7 +2,7 @@ import type { StoreApi } from "zustand/vanilla";
 import { frameIndex } from "../../core/model";
 import type { DocSession } from "../../core/model";
 import { frameKey, parseFrameKey } from "../../engine/viewport/types";
-import type { ViewportPort } from "../../engine/viewport/types";
+import type { ViewportChecker, ViewportPort } from "../../engine/viewport/types";
 import { preferences as appPreferences } from "../preferences/preferences";
 import type { PreferenceStore } from "../preferences/preferences";
 import { activeComposites } from "../state/composites";
@@ -45,6 +45,21 @@ export interface ViewportSources {
      * when absent.
      */
     version?(): number;
+    /**
+     * Told each checkerboard the viewport is told, after it (SE-015: the stroke echo draws
+     * over the same one, through `ViewportLink.checker`); none when absent.
+     */
+    checker?(checker: ViewportChecker): void;
+}
+
+/** The sources of the app's viewport: its stores, its composite cache and `viewportLink`. */
+export function appViewportSources(): ViewportSources {
+    return {
+        sessions: sessionsStore,
+        preferences: appPreferences,
+        composites: activeComposites,
+        version: () => viewportLink.version,
+    };
 }
 
 export interface ViewportConnection {
@@ -61,12 +76,7 @@ export interface ViewportConnection {
  */
 export function connectViewport(
     viewport: ViewportPort,
-    sources: ViewportSources = {
-        sessions: sessionsStore,
-        preferences: appPreferences,
-        composites: activeComposites,
-        version: () => viewportLink.version,
-    },
+    sources: ViewportSources = appViewportSources(),
 ): ViewportConnection {
     const { sessions, preferences, composites } = sources;
     const version = sources.version;
@@ -78,11 +88,12 @@ export function connectViewport(
 
     const pushChecker = () => {
         const { colors, size } = preferences.get("checkerboard");
-        viewport.setChecker(
+        const checker: ViewportChecker =
             colors === "theme"
                 ? { a: theme.checkerA, b: theme.checkerB, size }
-                : { a: colors.a, b: colors.b, size },
-        );
+                : { a: colors.a, b: colors.b, size };
+        viewport.setChecker(checker);
+        sources.checker?.(checker);
     };
 
     const show = (document: OpenDocument | null) => {

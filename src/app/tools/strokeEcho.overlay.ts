@@ -4,18 +4,19 @@ import type {} from "../../import-meta";
 import type { OverlayLayer } from "../overlay/types";
 import { viewportLink } from "../viewport/viewportLink";
 import { strokeEcho } from "./strokeEcho";
+import type { StrokeEcho } from "./strokeEcho";
 
 // The overlay stroke echo (SPEC §6.6, SE-015), drawn: the regions of the stroke not yet on
 // screen through NGNE (`strokeEcho.ts`), from the stroke's live composite, as NGNE will show
 // them — each document pixel over the checkerboard, opaque, scaled nearest-neighbour to the
 // view the overlay draws with. The lowest layer of the overlay: under the document outline,
 // the grids and the brush cursor. Nothing is drawn, and nothing asks for a redraw, while no
-// stroke is echoed.
+// stroke is echoed. Nothing is drawn either while NGNE shows another frame than the stroke's,
+// or below 1×, where NGNE's nearest minification picks which texel a device pixel shows
+// (SPEC §6.4) and the echo could not show the same one; a stroke goes on through a zoom.
 
 /** Order in the overlay's stack: below the outline (100), the grids and the brush cursor. */
 export const STROKE_ECHO_ORDER = 50;
-/** Above this many regions, their bounding rectangle is drawn as one. */
-const MAX_REGIONS = 16;
 /** The dark theme's checkerboard, while no viewport has reported one. */
 const DEFAULT_CHECKER: ViewportChecker = { a: 0x3a3a3a, b: 0x4a4a4a, size: 8 };
 
@@ -23,7 +24,10 @@ const DEFAULT_CHECKER: ViewportChecker = { a: 0x3a3a3a, b: 0x4a4a4a, size: 8 };
 export interface StrokeEchoProbe {
     /** Off: no stroke is echoed. On by default. */
     enabled: boolean;
-    /** Regions waiting for NGNE. */
+    /**
+     * Regions waiting for NGNE: the rectangles composited and not yet on screen through it,
+     * those merged into one bounding rectangle included (`StrokeEcho.waiting`).
+     */
     readonly regions: number;
     /**
      * Called at the end of each draw of the echo with the document rectangles drawn and the
@@ -71,46 +75,53 @@ export function echoPixels(
     return out;
 }
 
-/** The bounding rectangle of `rects`. */
-function bounds(rects: readonly Rect[]): Rect {
-    const x = Math.min(...rects.map((rect) => rect.x));
-    const y = Math.min(...rects.map((rect) => rect.y));
-    const right = Math.max(...rects.map((rect) => rect.x + rect.width));
-    const bottom = Math.max(...rects.map((rect) => rect.y + rect.height));
-    return { x, y, width: right - x, height: bottom - y };
+/** The echo's draw layer and its probe. */
+export interface StrokeEchoLayer {
+    layer: OverlayLayer;
+    probe: StrokeEchoProbe;
 }
 
-let scratch: OffscreenCanvas | null = null;
+/**
+ * The draw layer of `echo`, drawing over the checkerboard `checker()` names (the one the
+ * viewport draws; the dark theme's while there is none). The probe goes on the page with the
+ * overlay in development builds.
+ */
+export function createStrokeEchoLayer(
+    echo: StrokeEcho,
+    checker: () => ViewportChecker | null,
+): StrokeEchoLayer {
+    /** Where a region is put before it is scaled onto the overlay; let go when the echo ends. */
+    let scratch: OffscreenCanvas | null = null;
 
-const probe: StrokeEchoProbe = {
-    get enabled() {
-        return strokeEcho.enabled;
-    },
-    set enabled(value: boolean) {
-        strokeEcho.enabled = value;
-    },
-    get regions() {
-        return strokeEcho.regions().length;
-    },
-    onDraw: null,
-};
+    const probe: StrokeEchoProbe = {
+        get enabled() {
+            return echo.enabled;
+        },
+        set enabled(value: boolean) {
+            echo.enabled = value;
+        },
+        get regions() {
+            return echo.waiting();
+        },
+        onDraw: null,
+    };
 
-export const overlayLayers: OverlayLayer[] = [
-    {
+    const layer: OverlayLayer = {
         id: "stroke-echo",
         order: STROKE_ECHO_ORDER,
         draw({ context, document, mapping }) {
-            const target = strokeEcho.target;
-            if (!strokeEcho.enabled || !target) return;
+            const target = echo.target;
+            if (!echo.enabled || !target) {
+                scratch = null;
+                return;
+            }
             const { session } = document;
             if (session !== target.session || session.activeFrameId !== target.frameId) return;
-            strokeEcho.prepare();
-            const regions = strokeEcho.regions();
-            if (regions.length === 0) return;
-            const all = regions.map((region) => region.rect);
-            // Pixels of the box outside every region are on screen already, as drawn here.
-            const rects = all.length > MAX_REGIONS ? [bounds(all)] : all;
-            const checker = viewportLink.checker ?? DEFAULT_CHECKER;
+            if (!echo.showsTarget || mapping.frame.view.scale < 1) return;
+            echo.prepare();
+            const rects = echo.regions().map((region) => region.rect);
+            if (rects.length === 0) return;
+            const colours = checker() ?? DEFAULT_CHECKER;
             context.imageSmoothingEnabled = false;
             for (const rect of rects) {
                 const { width, height } = rect;
@@ -123,7 +134,7 @@ export const overlayLayers: OverlayLayer[] = [
                 const source = scratch.getContext("2d");
                 if (!source) return;
                 source.putImageData(
-                    new ImageData(echoPixels(target.buffer, rect, checker), width, height),
+                    new ImageData(echoPixels(target.buffer, rect, colours), width, height),
                     0,
                     0,
                 );
@@ -138,7 +149,7 @@ export const overlayLayers: OverlayLayer[] = [
             probe.onDraw?.(rects, target.buffer);
         },
         watch(redraw) {
-            const stop = strokeEcho.subscribe(redraw);
+            const stop = echo.subscribe(redraw);
             // The probe goes on the page with the overlay (development builds).
             const hooks =
                 import.meta.env.DEV && typeof window !== "undefined"
@@ -150,5 +161,10 @@ export const overlayLayers: OverlayLayer[] = [
                 if (hooks?.strokeEcho === probe) delete hooks.strokeEcho;
             };
         },
-    },
+    };
+    return { layer, probe };
+}
+
+export const overlayLayers: OverlayLayer[] = [
+    createStrokeEchoLayer(strokeEcho, () => viewportLink.checker).layer,
 ];

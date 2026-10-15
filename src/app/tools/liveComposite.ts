@@ -20,9 +20,10 @@ import type { StrokeEcho } from "./strokeEcho";
 //     → composited into the live buffer → viewport told (≤ 1 per animation frame) → upload
 //
 // At the commit the history step drops the frame's composite; the live buffer, which is up to
-// date, is then adopted again, so the frame is not composited in full after a stroke. An
-// aborted stroke drops it instead: the cache composites the restored pixels when asked. So
-// does a stroke that changed nothing in the end, whose uploads may have shown a change.
+// date, is then adopted again, so the frame is not composited in full after a stroke. A stroke
+// that changed nothing in the end has no step: its buffer, as up to date, is adopted again and
+// the viewport told, since its uploads may have shown a change. An aborted stroke drops the
+// frame's composite instead: the cache composites the restored pixels when asked.
 //
 // The overlay stroke echo (SE-015, `strokeEcho.ts`) is told of every rectangle composited
 // into the live buffer, and may composite what is pending before the overlay draws; what it
@@ -122,9 +123,8 @@ export function startLiveComposite(
     };
     echo?.start({ session, frameId, buffer, prepare: compositePending });
 
-    const show = () => {
-        compositePending();
-        unshown = false;
+    /** Hands the buffer to the cache and tells the viewport that the frame's pixels changed. */
+    const present = () => {
         // Handed to the cache again each time: the cache may have let it go since (its least
         // recently used composite, or a frame reported changed), and a composite it made in
         // its place would not follow the stroke.
@@ -132,7 +132,8 @@ export function startLiveComposite(
         if (adopted) {
             sources.viewport.invalidate([frameKey(frameId)]);
         } else {
-            // Not in the cache (over its budget): it composites the frame when asked.
+            // Not in the cache (over its budget, or the frame's layers are no longer those
+            // the buffer was composited from): it composites the frame when asked.
             sources.composites.invalidate({
                 frameIds: [frameId],
                 layerIds: [layerId],
@@ -146,6 +147,12 @@ export function startLiveComposite(
                 structure: false,
             });
         }
+    };
+
+    const show = () => {
+        compositePending();
+        unshown = false;
+        present();
         shownThisFrame = true;
         cancelFrame ??= sources.nextFrame(onFrame);
     };
@@ -181,14 +188,10 @@ export function startLiveComposite(
                 // The history step dropped the composite this buffer replaced.
                 adopted = sources.composites.cacheOf(session)?.adopt(frameId, buffer) ?? false;
             } else {
-                // No step: the pixels are as they were, but an upload made during the stroke
-                // may still be on screen. The frame is composited and shown anew.
-                adopted = false;
-                sources.composites.invalidate({
-                    frameIds: [frameId, ...others],
-                    layerIds: [layerId],
-                    structure: false,
-                });
+                // No step: the pixels are as they were, and so is the buffer, which followed
+                // every write; but an upload made during the stroke may still be on screen.
+                // The buffer is shown anew, as at an animation frame: not composited again.
+                present();
             }
             // From here on, another change of the frame ends the echo (`strokeEcho.ts`).
             echo?.release();

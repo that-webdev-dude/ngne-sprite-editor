@@ -1,8 +1,7 @@
 import { NgneViewport } from "../../engine/NgneViewport";
 import type { ViewportProbe } from "../../engine/NgneViewport";
-import type { ViewportPort } from "../../engine/viewport/types";
 import type {} from "../../import-meta";
-import { connectViewport } from "./viewportController";
+import { appViewportSources, connectViewport } from "./viewportController";
 import type { ViewportTheme } from "./viewportController";
 import { viewportLink } from "./viewportLink";
 
@@ -43,18 +42,10 @@ export function mountViewport(
     });
     const linked = viewportLink.mount(viewport, viewport.deviceSize);
     // The checkerboard goes to the link too, as the viewport is told it.
-    const port: ViewportPort = {
-        setDocument: (document) => viewport.setDocument(document),
-        setCurrent: (key) => viewport.setCurrent(key),
-        invalidate: (keys) => viewport.invalidate(keys),
-        setView: (view) => viewport.setView(view),
-        setBackground: (colour) => viewport.setBackground(colour),
-        setChecker(checker) {
-            viewport.setChecker(checker);
-            linked.checker(checker);
-        },
-    };
-    const connection = connectViewport(port);
+    const connection = connectViewport(viewport, {
+        ...appViewportSources(),
+        checker: (checker) => linked.checker(checker),
+    });
     const hooks = import.meta.env.DEV ? window.__ngneTest : undefined;
     if (hooks) hooks.viewport = viewport.probe;
 
