@@ -14,9 +14,15 @@ Node benchmarks: `PERF_RECORD=1 npx vitest run --config vitest.perf.config.ts te
 | `se-015-stroke-latency-rtx-4060-no-echo`  | SE-015 | The same on RTX 4060                                     | 33 ms | 34.1 ms (over) | as above                    | 2026-10-15 |
 | `se-015-stroke-latency-intel-uhd` | SE-015 | Pointer event to the first frame showing it, NGNE's submit or the overlay echo's redraw, whichever is earlier; otherwise as above, with the stroke echo (72ca19b) | 33 ms | 17.6 ms | as above; longest pointer-to-submitted gap 8.6 ms | 2026-10-15 |
 | `se-015-stroke-latency-rtx-4060`  | SE-015 | The same on RTX 4060                                     | 33 ms | 20.2 ms  | as above; longest gap 8.6 ms      | 2026-10-15 |
+| `se-017-flood-fill`      | SE-017 | `floodMask` (contiguous, tolerance 0) of a 1024×1024 image from one pixel, then `paintMask` over the mask; transparent and opaque flat images, Node | 100 ms | 20.4 ms | larger of the two images' slowest of 20 fills, cold run included | 2026-10-15 |
 
 `se-043-import` was measured again on 2026-10-13 after the colour key moved before the resample
 (first record, 2026-10-12: 56.9 ms).
+
+`se-017-flood-fill` also gives, in `details`, the whole paint bucket press through the tool
+pipeline in Node (fill, live composite, commit comparison and undo patches; no viewport):
+68.8 ms, slowest of 10. An unrecorded run right after the record gave 27.3 ms for the fill and
+72.1 ms for the press (REVIEW.md E90).
 
 Browser benchmark: `PERF_RECORD=1 PERF_GPU=<intel-uhd|rtx-4060> npx vitest run --config
 vitest.perf.config.ts tests/perf/se-015-stroke-latency.perf.ts`; `PERF_ECHO=off` measures

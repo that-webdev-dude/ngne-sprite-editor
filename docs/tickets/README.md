@@ -24,7 +24,7 @@ A ticket may start only when every dependency is Done **and** its "Blocked until
 | Gate | Condition (checkable)                                                                              | Set by  | Blocks                         | State   |
 | ---- | -------------------------------------------------------------------------------------------------- | ------- | ------------------------------ | ------- |
 | G0   | Engine feasibility: every SE-002 question meets its go threshold, or SPEC §6/§9 is amended with the fallback and the amendment is recorded in REVIEW.md | SE-002 | SE-011, SE-053, SE-054 | Passed 2026-10-12 |
-| G1   | Drawing loop: SE-015 and SE-017 Done, including the recorded stroke latency budget (with or without the echo fallback) | SE-017 | SE-022, SE-041, SE-054 | Pending |
+| G1   | Drawing loop: SE-015 and SE-017 Done, including the recorded stroke latency budget (with or without the echo fallback) | SE-017 | SE-022, SE-041, SE-054 | Passed 2026-10-15 |
 | G2   | Export conformance: the three conditions of SPEC §9.7 pass locally and in CI                       | SE-053  | SE-052, SE-070 (as dependencies) | Passed 2026-10-14 |
 | G3   | Release readiness: every v1 ticket other than SE-073 is Done, or descoped by the owner in writing in REVIEW.md. `.ngsprite` v1 and `ngne-sprite-atlas` v1 are frozen at this point | — | SE-073 | Pending |
 
@@ -58,7 +58,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-014 | Tool framework and pointer pipeline               | L    | 004, 007, 012, 013                 | —             | Done   |
 | SE-015 | Pencil and eraser                                 | L    | 014                                | —             | Done   |
 | SE-016 | Colour state, picker and eyedropper               | M    | 006, 014                           | —             | Done   |
-| SE-017 | Bucket, line, rectangle and ellipse (gate G1)     | M    | 015, 016                           | —             | In progress |
+| SE-017 | Bucket, line, rectangle and ellipse (gate G1)     | M    | 015, 016                           | —             | Done   |
 | **M2** | **[Layers and timeline](M2-layers-and-timeline.md)** |   |                                    |               |        |
 | SE-020 | Layer commands                                    | M    | 004, 010                           | —             | Done   |
 | SE-021 | Frame, cel and tag commands                       | L    | 004, 010                           | —             | Done   |
@@ -89,7 +89,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-053 | Export conformance against NGNE (gate G2)         | L    | 002, 051                           | G0            | Done   |
 | SE-054 | Preview panel (NGNE `BrowserGame`)                | L    | 002, 006, 007, 011, 051            | G0, G1        | Ready  |
 | **M6** | **[Palette and parity extras](M6-palette-and-parity.md)** | |                                   |               |        |
-| SE-060 | Palette panel                                     | M    | 016, 043                           | —             | In progress |
+| SE-060 | Palette panel                                     | M    | 016, 043                           | —             | Done   |
 | SE-061 | Blend modes and cel opacity                       | M    | 010, 022                           | —             | Ready  |
 | SE-062 | Symmetry and tiled mode                           | M    | 011, 015, 017                      | —             | Ready  |
 | SE-063 | GIF export                                        | M    | 043, 052                           | —             | Ready  |

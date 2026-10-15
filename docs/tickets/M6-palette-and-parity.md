@@ -11,7 +11,7 @@ each to be Done or descoped by the owner in writing.
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-016, SE-043                                           |
 | Blocks       | SE-066                                                   |
 | Blocked until | —                                                       |
@@ -89,6 +89,11 @@ Scope
   `app/tools/brush/freehandTool.ts`.
   The stroke echo (SPEC §6.6) draws the stroke's frame once; in tiled mode it must also draw
   each copy, or the copies lag the stroke by an upload.
+- From the SE-017 review: line, rectangle and ellipse do not stamp through `Stamper`; they mark
+  their pixels in `ShapeStroke` (`core/raster/shapeStroke.ts`), so their symmetry and wrap go
+  into its mark pass (mirror the outline pixels and filled runs before marking). The bucket
+  reads its source in place: with symmetric seeds, compute every seed's flood mask before any
+  paint and paint their union, or a later seed reads what an earlier one wrote.
 
 Acceptance
 - A stroke with horizontal symmetry on an even-width canvas is a pixel-exact mirror; one undo step.

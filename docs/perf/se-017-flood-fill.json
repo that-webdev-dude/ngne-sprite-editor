@@ -1,0 +1,96 @@
+{
+    "id": "se-017-flood-fill",
+    "ticket": "SE-017",
+    "measurement": "floodMask (contiguous, tolerance 0) of a 1024×1024 image from one pixel, then paintMask writing simple ink into every pixel of the mask; a transparent and an opaque flat image, Node",
+    "statistic": "larger of the two canvases' slowest of 20 consecutive fills, the first (cold) one included",
+    "budgetMs": 100,
+    "resultMs": 20.406000000000404,
+    "details": {
+        "runs": 20,
+        "transparent": {
+            "maxMs": 16.971300000000156,
+            "medianMs": 12.020099999999957,
+            "minMs": 11.499499999999898,
+            "firstMs": 16.01189999999997,
+            "samplesMs": [
+                16.01189999999997,
+                14.284099999999853,
+                11.741700000000037,
+                12.153600000000097,
+                11.541299999999865,
+                11.705399999999827,
+                11.886599999999817,
+                11.692199999999957,
+                12.262499999999818,
+                14.219100000000253,
+                14.465299999999843,
+                16.971300000000156,
+                15.962100000000191,
+                11.499499999999898,
+                11.779300000000148,
+                12.836299999999937,
+                11.699399999999969,
+                14.237300000000232,
+                11.701700000000073,
+                11.530900000000202
+            ]
+        },
+        "opaqueFlat": {
+            "maxMs": 20.406000000000404,
+            "medianMs": 14.987549999999828,
+            "minMs": 13.714699999999993,
+            "firstMs": 20.406000000000404,
+            "samplesMs": [
+                20.406000000000404,
+                13.832600000000184,
+                14.405999999999949,
+                13.714699999999993,
+                13.716399999999794,
+                13.790599999999813,
+                13.755299999999806,
+                13.994500000000244,
+                16.024000000000342,
+                16.751600000000053,
+                14.064300000000003,
+                15.309999999999945,
+                13.721500000000106,
+                15.006199999999808,
+                15.355799999999817,
+                15.391599999999926,
+                15.65689999999995,
+                17.77489999999989,
+                15.247299999999996,
+                14.968899999999849
+            ]
+        },
+        "bucketPress": {
+            "measurement": "the paint bucket's press from down to up through createToolPipeline in Node, opaque flat 1024×1024 document with one layer: full composite and snapshot at the press, the fill, the live composite of the whole canvas, the commit's comparison and undo patches; no viewport",
+            "statistic": "slowest of 10 presses, each on a fresh document, the first included",
+            "maxMs": 68.79809999999998,
+            "medianMs": 62.86559999999986,
+            "minMs": 56.96140000000014,
+            "firstMs": 66.21199999999999,
+            "samplesMs": [
+                66.21199999999999,
+                59.51919999999973,
+                56.96140000000014,
+                66.25109999999995,
+                58.32119999999986,
+                68.7800000000002,
+                58.548699999999826,
+                67.3819999999996,
+                58.20499999999993,
+                68.79809999999998
+            ]
+        }
+    },
+    "pass": true,
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-10-15T17:34:09.759Z"
+}

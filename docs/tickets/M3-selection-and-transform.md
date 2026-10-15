@@ -82,6 +82,10 @@ Scope
   noise mask: a non-contiguous wand pick of a dithered area is this ticket's worst case.
   Measure it with a benchmark `tests/perf/se-031-*.perf.ts` (a pan over such a selection on a
   256² and a 1024² document); the number is recorded by the orchestrator.
+- From the SE-017 review: the wand takes `floodMask` (`core/raster/flood.ts`): Aseprite's match
+  rule (`color_equal_32`), 4-connected, and its `within` mask limits the global (non-contiguous)
+  branch as well as the contiguous one, while Aseprite's global fill takes no mask. Decide
+  whether the wand passes a mask and record it.
 
 Acceptance
 - E2E per tool: the resulting mask equals the expected mask for a scripted gesture.
