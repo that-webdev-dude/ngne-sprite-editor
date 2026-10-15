@@ -434,6 +434,16 @@ after the first review fix and after the echo (125 tests); after the echo's revi
 pointer tests, none of the echo) passed alone; two of them failed the same way under that load
 on 98293c8.
 
+### Leg 4 (2026-10-15): SE-015
+
+SE-015 is Done: its stroke latency records with the echo met the budget on both GPUs (E69).
+
+| #   | Source | Finding | Decision | Applied in |
+| --- | ------ | ------- | -------- | ---------- |
+| E68 | Start of the leg | `main` equalled `origin/main` (72ca19b) and CI was green on it (run 38733904958). SE-015 was In progress, waiting for its latency record with the echo (E66). 5-hour limit 3% used, weekly 61% | SE-015 resumed first: the orchestrator measured, alone | — |
+| E69 | Measurement | Taken by the orchestrator alone at 72ca19b (SE-015's code is that of d3e1a89), PERF_RECORD=1, at 15:00: Intel UHD 17.6 ms with 725 frames submitted during the stroke, RTX 4060 20.2 ms with 691 (the `-no-echo` record of that GPU had 650). Unrecorded runs right after gave 16.2 and 16.1 ms. The echo path sets the result (continuous stroke p95 7.5 and 7.4 ms; NGNE's own path 14.9 and 17.8 ms); the longest pointer-to-submitted gap is 8.6 ms on both | The stroke budget is met with the echo fallback; SE-015 is Done. G1 stays Pending until SE-017 | `docs/perf/se-015-stroke-latency-intel-uhd.json`, `se-015-stroke-latency-rtx-4060.json`, `docs/perf/README.md`; ticket index |
+| E70 | Measurement | The leg's first check run submitted 88 frames (invalid, as in E66). The next, on the same build, submitted 713, yet its short strokes were far slower than its continuous stroke (first sample p95 99.4 ms, NGNE path 130 ms). Runs of fc3eb7f, 98293c8 and d3e1a89 just after gave 26.7, 20.3 and 16.4 ms with 710 to 730 frames, in line with their earlier numbers (26.2, 19.7): the machine had slowed down for part of a run; the code had not regressed | A run is valid only with the usual frame count and when an unrecorded run right after it agrees within a few milliseconds; each record of E69 has such a run | `docs/perf/README.md` |
+
 ## Descoped tickets
 
 None.
