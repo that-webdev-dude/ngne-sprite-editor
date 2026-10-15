@@ -190,12 +190,36 @@ Grid of 16 px swatches, no gaps, 1 px `--border` around the grid; vertical scrol
 exceeds eight rows. Left-click sets foreground, right-click background. The swatch matching the
 foreground colour has a 2 px accent outline. Header: palette name (menu of presets), add current
 colour, and an overflow menu (remove, edit, import, export, from sprite, sort, replace colour).
-Before SE-060 lands the panel is a read-only grid of the document palette (SE-016): a press
-picks (left foreground, right background); the grid is one tab stop where the arrow keys move,
-Home and End go to the ends, Enter sets the foreground and Shift+Enter the background; the
-`canvas` letter and digit keys still act from a focused swatch. The outline lies inside the
-swatch, as in the mockup, on the first swatch of the foreground's colour. With no document open
-the section is empty.
+The outline lies inside the swatch, as in the mockup, on the first swatch of the foreground's
+colour. With no document open the section is empty and its header has no controls. Every change
+of the palette is one undo step of the document (SPEC §2.3, Palette). SE-016 made the grid,
+SE-060 the rest:
+
+- **Grid.** As many columns as fit the section, less the scroll bar's width while it scrolls,
+  so the grid never overflows sideways at any dock width. The grid is one tab stop: the arrow
+  keys move the focus, Home and End go to the ends, Enter sets the foreground and Shift+Enter
+  the background (no Space); the `canvas` letter and digit keys still act from a focused swatch,
+  the grid not being a typeahead role. The *current swatch* is the grid's tab stop: the swatch
+  last pressed, with either button, or reached with the keys. Remove and Edit act on it.
+- **Reorder.** A left drag moves a swatch: the grid shows the order the drop makes, a release
+  over the grid moves it, Escape or a release outside the grid leaves the order; the grid does
+  not scroll by itself during the drag (the wheel scrolls it). Ctrl+← and Ctrl+→ on a focused
+  swatch move it one place, Ctrl+↑ and Ctrl+↓ one row; the focus goes with it.
+- **Header.** The palette name, cut short with an ellipsis, opens the menu of the preset
+  palettes (SPEC §2.3, §8) by name; one replaces the palette's name and colours. The add button appends the
+  foreground, which becomes the current swatch; it is disabled while the palette holds the
+  foreground or 256 colours. The overflow menu ("Swatch actions") holds Remove Colour and Edit
+  Colour…, then Palette from Sprite; it is the registry's context menu `palette`, in groups of
+  hundreds (100 remove and edit, 300 from sprite), leaving the 200s to import and export and
+  the 400s to sort and replace colour. The Menu key or Shift+F10 on a swatch opens it, and the
+  swatch has the focus again after it closes.
+- **Edit.** Edit Colour…, or a double click on a swatch, opens the picker of §5.3 in a popover
+  left of the grid, level with the swatch. It edits the swatch's colour only, with either
+  button; the swatch shows the colour as it changes, and the palette takes it in one undo step
+  when the popover closes — by Escape, a press outside, or the focus leaving it. A press outside
+  applies the edit before it does anything else (a stroke it begins on the canvas comes after
+  the edit), applying text typed in a field as leaving the field would; Escape drops such text.
+  The foreground and background keep their colours: a swatch is not a reference to them.
 
 ### 5.5 Preview
 

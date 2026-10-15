@@ -1,0 +1,99 @@
+import { Popover } from "radix-ui";
+import { useEffect, useMemo, useRef } from "react";
+import type { RefObject } from "react";
+import { finishSwatchEdit } from "../../app/palette/palette.commands";
+import { usePaletteState } from "../../app/palette/paletteState";
+import { ColourPicker } from "./ColourPicker";
+import { PALETTE_GRID_ATTRIBUTE, swatchElement } from "./paletteUi";
+import "../primitives/popover.css";
+
+// The swatch editor (DESIGN §5.4, SE-060): the colour picker of DESIGN §5.3 in a popover
+// (DESIGN §4) beside the swatch that Edit Colour… opened it on. The picker edits a draft; the
+// swatch shows it while the popover is open, and the palette takes it in one undo step when
+// the popover closes — by Escape, a press outside, or the focus leaving it. A press outside
+// ends the edit before it does anything else, so a stroke it begins on the canvas comes after
+// the edit; what was typed in a field and not applied yet is applied first, as leaving the
+// field would. Escape drops such typing, as it does in the fields.
+
+/** Takes what the focused field of `container` holds by taking the focus from it. */
+function applyTyping(container: HTMLElement | null): void {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && container?.contains(active)) active.blur();
+}
+
+export function SwatchEditor({ fallback }: { fallback: RefObject<HTMLElement | null> }) {
+    const edit = usePaletteState((state) => state.edit);
+    const content = useRef<HTMLDivElement>(null);
+    const index = edit?.index ?? -1;
+    /** The swatch of the last edit, which gets the focus back after the popover closed. */
+    const edited = useRef(-1);
+
+    useEffect(() => {
+        if (index < 0) return;
+        edited.current = index;
+        const onPress = (event: PointerEvent) => {
+            const target = event.target instanceof Node ? event.target : null;
+            if (target && content.current?.contains(target)) return;
+            applyTyping(content.current);
+            finishSwatchEdit();
+        };
+        window.addEventListener("pointerdown", onPress, true);
+        return () => window.removeEventListener("pointerdown", onPress, true);
+    }, [index]);
+
+    // Left of the grid, level with the swatch, so it hides no swatch; beside the header's
+    // button when the swatch is not on the page (the command ran from the command palette
+    // with the section collapsed).
+    const anchor = useMemo(
+        () => ({
+            current: {
+                getBoundingClientRect: (): DOMRect => {
+                    const swatch = swatchElement(index);
+                    const grid = swatch?.closest(`[${PALETTE_GRID_ATTRIBUTE}]`);
+                    if (!swatch || !grid) {
+                        return (fallback.current ?? document.body).getBoundingClientRect();
+                    }
+                    const row = swatch.getBoundingClientRect();
+                    const box = grid.getBoundingClientRect();
+                    return new DOMRect(box.left, row.top, box.width, row.height);
+                },
+            },
+        }),
+        [index, fallback],
+    );
+
+    return (
+        <Popover.Root
+            open={edit !== null}
+            onOpenChange={(open) => {
+                if (!open) finishSwatchEdit();
+            }}
+        >
+            <Popover.Anchor virtualRef={anchor} />
+            <Popover.Portal>
+                <Popover.Content
+                    ref={content}
+                    className="ui-popover swatch-editor"
+                    aria-label="Edit colour"
+                    data-swatch-editor=""
+                    side="left"
+                    align="start"
+                    sideOffset={6}
+                    collisionPadding={8}
+                    onContextMenu={(event) => event.preventDefault()}
+                    onCloseAutoFocus={(event) => {
+                        // There is no trigger to go back to. A press outside put the focus
+                        // where it pressed; otherwise the swatch has it again.
+                        event.preventDefault();
+                        const active = document.activeElement;
+                        if (active && active !== document.body) return;
+                        const swatch = swatchElement(edited.current);
+                        (swatch ?? fallback.current)?.focus({ preventScroll: true });
+                    }}
+                >
+                    {edit ? <ColourPicker store={edit.draft} single /> : null}
+                </Popover.Content>
+            </Popover.Portal>
+        </Popover.Root>
+    );
+}

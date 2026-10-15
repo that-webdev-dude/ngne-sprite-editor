@@ -1,0 +1,44 @@
+/* The palette section's header controls (DESIGN §5.4): the palette name as the trigger of the
+   preset menu, muted as in the mockup and cut short with an ellipsis so the header keeps its
+   title at the narrowest dock; the add button and the overflow menu's button. */
+.palette-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.palette-header__presets {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    /* The title, its chevron and the two buttons keep their room at every dock width. */
+    max-width: min(160px, calc(var(--shell-dock-width, 264px) - 160px));
+    height: var(--control-height);
+    padding: 0 var(--space-2) 0 var(--space-4);
+    border-radius: var(--radius-control);
+    color: var(--text-muted);
+    transition:
+        background-color var(--motion-fast) var(--motion-ease),
+        color var(--motion-fast) var(--motion-ease);
+}
+
+.palette-header__presets:hover {
+    background: var(--bg-raised);
+    color: var(--text);
+}
+
+.palette-header__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.palette-header__presets svg {
+    flex: none;
+}
+
+/* The swatch editor popover: the colour panel at the width it has in the default dock. */
+.swatch-editor {
+    width: 240px;
+}

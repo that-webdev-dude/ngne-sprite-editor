@@ -1,7 +1,9 @@
-import { useRef, useState } from "react";
+import { createContext, useContext, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent, PointerEvent } from "react";
-import { editorStore, useEditor } from "../../app/state/editor";
-import type { ColourSlot } from "../../app/state/editor";
+import { useStore } from "zustand";
+import type { StoreApi } from "zustand/vanilla";
+import { editorStore } from "../../app/state/editor";
+import type { ColourSlot, EditorState } from "../../app/state/editor";
 import { formatHex, hsvToRgb, packRgba, parseHex, unpackRgba } from "../../core/color";
 import type { Hsv } from "../../core/color";
 import { NumberField } from "../primitives/NumberField";
@@ -27,9 +29,18 @@ import "./colourPicker.css";
 // works from the keyboard (arrow keys on the field and the strips). Keys act on the colour
 // the panel shows, so during a right-button drag they edit the background as well. What each
 // control does to the colour is in `pickerEdits.ts`.
+//
+// The palette's swatch editor (DESIGN §5.4, SE-060) is the same panel on a store of its own,
+// `single`: it edits that store's foreground only, with either button.
 
-const store: EditorStore = editorStore;
-const editor = () => editorStore.getState();
+interface PickerContext {
+    /** The store whose colours the panel edits. */
+    store: StoreApi<EditorState>;
+    /** The right button edits the foreground as well: there is no background. */
+    single: boolean;
+}
+
+const Picker = createContext<PickerContext>({ store: editorStore, single: false });
 
 /** Whether a key comes with a modifier that leaves it to the shortcuts. */
 function chorded(event: KeyboardEvent): boolean {
@@ -51,11 +62,13 @@ type Pick = (slot: ColourSlot, x: number, y: number, element: HTMLElement) => vo
 
 /**
  * The pointer of the field and the strips: a left press edits the foreground and a right
- * press the background, through the drag that follows (DESIGN §5.3). `editing` is told which
- * colour the panel shows. The context menu of a right press is cancelled.
+ * press the background, through the drag that follows (DESIGN §5.3); in a `single` panel both
+ * edit the foreground. `editing` is told which colour the panel shows. The context menu of a
+ * right press is cancelled.
  */
 function useColourDrag(pick: Pick, editing: (slot: ColourSlot) => void) {
-    const drag = useRef<{ pointerId: number; slot: ColourSlot } | null>(null);
+    const { single } = useContext(Picker);
+    const drag = useRef<{ pointerId: number; slot: ColourSlot; button: number } | null>(null);
     const end = (event: PointerEvent<HTMLElement>) => {
         if (drag.current?.pointerId !== event.pointerId) return;
         drag.current = null;
@@ -64,8 +77,8 @@ function useColourDrag(pick: Pick, editing: (slot: ColourSlot) => void) {
     return {
         onPointerDown(event: PointerEvent<HTMLElement>) {
             if (drag.current || (event.button !== 0 && event.button !== 2)) return;
-            const slot: ColourSlot = event.button === 2 ? "background" : "foreground";
-            if (slot === "background") cancelNextContextMenu();
+            const slot: ColourSlot = event.button === 2 && !single ? "background" : "foreground";
+            if (event.button === 2) cancelNextContextMenu();
             // No text selection from the drag. The control takes the focus itself, so a
             // field being typed in commits first; after the release, the focus rule of SPEC
             // §7.8 hands it to the viewport.
@@ -77,7 +90,7 @@ function useColourDrag(pick: Pick, editing: (slot: ColourSlot) => void) {
             } catch {
                 // The pointer is gone already; its release or cancel ends the drag.
             }
-            drag.current = { pointerId: event.pointerId, slot };
+            drag.current = { pointerId: event.pointerId, slot, button: event.button };
             editing(slot);
             pick(slot, event.clientX, event.clientY, element);
         },
@@ -85,7 +98,7 @@ function useColourDrag(pick: Pick, editing: (slot: ColourSlot) => void) {
             const current = drag.current;
             if (!current || current.pointerId !== event.pointerId) return;
             // Its button released while another stays down: the drag ends.
-            if ((event.buttons & (current.slot === "foreground" ? 1 : 2)) === 0) {
+            if ((event.buttons & (current.button === 2 ? 2 : 1)) === 0) {
                 end(event);
                 return;
             }
@@ -107,6 +120,7 @@ interface ControlProps {
 
 /** The saturation/value square: saturation from left to right, value from bottom to top. */
 function SaturationValueField({ slot, hsv, editing }: ControlProps) {
+    const { store } = useContext(Picker);
     const drag = useColourDrag(
         (target, x, y, element) => pickSaturationValue(store, target, innerBox(element), x, y),
         editing,
@@ -174,6 +188,7 @@ function ColourStrip({
     step,
     editing,
 }: StripProps) {
+    const { store } = useContext(Picker);
     const drag = useColourDrag(
         (target, x, _y, element) =>
             pick(store, target, innerBox(element.firstElementChild ?? element), x),
@@ -245,12 +260,29 @@ const FIELD_MODES = [
     { value: "rgb", label: "RGB" },
 ] as const;
 
-/** The colour panel of the dock. */
-export function ColourPicker() {
+export interface ColourPickerProps {
+    /** The store whose colours the panel edits; the default is the editor's. */
+    store?: StoreApi<EditorState>;
+    /** Edit the store's foreground only, with either button (the swatch editor, SE-060). */
+    single?: boolean;
+}
+
+/** The colour panel of the dock, or of the palette's swatch editor. */
+export function ColourPicker({ store = editorStore, single = false }: ColourPickerProps) {
+    return (
+        <Picker.Provider value={{ store, single }}>
+            <ColourPanel />
+        </Picker.Provider>
+    );
+}
+
+function ColourPanel() {
+    const { store, single } = useContext(Picker);
+    const editor = () => store.getState();
     const [slot, setSlot] = useState<ColourSlot>("foreground");
     const [mode, setMode] = useState<FieldMode>("hsv");
-    const colour = useEditor((state) => state[slot]);
-    const hsv = useEditor((state) =>
+    const colour = useStore(store, (state) => state[slot]);
+    const hsv = useStore(store, (state) =>
         slot === "foreground" ? state.foregroundHsv : state.backgroundHsv,
     );
     const rgba = unpackRgba(colour);
@@ -260,7 +292,11 @@ export function ColourPicker() {
         editor().setColour(slot, packRgba(current.r, current.g, current.b, current.a));
     };
     return (
-        <div className="colour-panel" data-colour-panel="" data-editing={slot}>
+        <div
+            className="colour-panel"
+            data-colour-panel={single ? undefined : ""}
+            data-editing={slot}
+        >
             <SaturationValueField slot={slot} hsv={hsv} editing={setSlot} />
             <ColourStrip
                 kind="hue"

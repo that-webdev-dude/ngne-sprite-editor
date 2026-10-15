@@ -92,6 +92,16 @@ owner acknowledges under A1 (§12).
 
 Known deviation: Aseprite keeps cel pixels moved off-canvas; v1 clips them when a move is applied.
 
+Palette (SE-060): the palette is document data (§5.1), saved with the document, and changes
+only through commands (§5.2), each one undo step that touches no frame, layer or structure and
+records nothing when it would change nothing: add a colour (not one the palette holds, nor a
+257th), remove, move or edit a colour, load a preset (its name and colours), and palette from
+sprite. Palette from sprite reads the composite of every frame (§5.3: what the sprite shows,
+hidden and reference layers left out): every colour of a pixel whose alpha is above 0, by its
+R, G and B, as an opaque colour, when there are at most 256; otherwise `buildPalette` (§8 step
+7) reduces them to 256. Either way the colours go dark to light and the palette takes the
+sprite's name; a sprite with no visible pixel gives an empty palette.
+
 ## 3. Platform and support envelope
 
 - Desktop Chrome or Edge, current stable, on a secure origin (HTTPS or localhost), hardware

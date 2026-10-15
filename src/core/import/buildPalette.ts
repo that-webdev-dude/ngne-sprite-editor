@@ -89,7 +89,7 @@ class Histogram {
  * Merging by one more bit puts at most eight bins into one, so more than `MAX_POINTS` / 8
  * points remain after it: more than any palette size.
  */
-function pointsOf(buffers: readonly PixelBuffer[]): Points {
+function pointsOf(buffers: Iterable<PixelBuffer>): Points {
     const histogram = new Histogram();
     for (const { data } of buffers) {
         for (let i = 0; i < data.length; i += 4) {
@@ -295,10 +295,12 @@ function sortedPalette(colors: ArrayLike<number>): number[] {
  * - Colours are opaque 0xRRGGBBAA, ordered from dark to light.
  * - Deterministic: the same pixels give the same palette, in any order and split over any
  *   number of buffers.
+ * - `buffers` is read once, in order, so an iterable can hand them out one at a time (the
+ *   palette from the sprite of SE-060 reads the composite of each frame).
  *
  * Throws `ImportError` ("settings") when `count` is not an integer 1..256.
  */
-export function buildPalette(buffers: readonly PixelBuffer[], count: number): number[] {
+export function buildPalette(buffers: Iterable<PixelBuffer>, count: number): number[] {
     assertInteger("Palette size", count, 1, MAX_PALETTE_COLORS);
     const points = pointsOf(buffers);
     // So few points are never merged ones: they are the buffers' own colours.
