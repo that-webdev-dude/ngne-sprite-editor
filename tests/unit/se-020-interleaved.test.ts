@@ -260,9 +260,18 @@ function stroke(walker: Walker, step: OtherStep, newId: IdGenerator): void {
     };
     for (const shade of [c, c + 101]) {
         const transaction = history.begin(cel, newId);
-        transaction.image.data.set([shade % 256, (shade * 3) % 256, (shade * 7) % 256, 255]);
+        const colour = [shade % 256, (shade * 3) % 256, (shade * 7) % 256, 255];
+        const unchanged = colour.every((value, index) => transaction.image.data[index] === value);
+        transaction.image.data.set(colour);
         transaction.markDirty({ x: 0, y: 0, width: 1, height: 1 });
-        expect(transaction.commit("Stroke")).not.toBeNull();
+        const command = transaction.commit("Stroke");
+        // A stroke that changes nothing records nothing (SPEC §7.1): two shades can share a
+        // colour (332 and 1100), and the walks that follow find any entry it left.
+        if (unchanged) {
+            expect(command).toBeNull();
+            continue;
+        }
+        expect(command).not.toBeNull();
         walker.record(step.kind, session.activeLayerId);
     }
 }
