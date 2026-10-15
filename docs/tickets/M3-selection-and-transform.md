@@ -9,7 +9,7 @@ Goal: select, move, transform and copy pixels; resize and reshape the sprite.
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Ready                                                    |
+| Status       | In progress                                              |
 | Depends on   | SE-004, SE-013, SE-014                                   |
 | Blocks       | SE-031, SE-034, SE-066                                   |
 | Blocked until | —                                                       |
