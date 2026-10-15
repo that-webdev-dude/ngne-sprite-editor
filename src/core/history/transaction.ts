@@ -42,9 +42,12 @@ export interface Transaction {
     markDirty(rect: Rect): void;
     /**
      * Closes the stroke as one history entry labelled `label`, which includes the creation
-     * of the cel when `begin` created it, and returns its command. When no change was
-     * reported it acts as `abort` and returns null. When the entry cannot be allocated it
-     * also restores the state at `begin`, and throws `AllocationError`.
+     * of the cel when `begin` created it, and returns its command. The entry keeps the
+     * bounding rectangle of the reported pixels whose bytes differ from `begin` (from
+     * transparent for a created cel). When none differs — nothing was reported, or every
+     * reported pixel has its value at `begin` again — it acts as `abort` and returns null
+     * (SPEC §7.1: a stroke that changes nothing records nothing). When the entry cannot be
+     * allocated it also restores the state at `begin`, and throws `AllocationError`.
      */
     commit(label: string): Command | null;
     /** Closes the stroke with no history entry: pixels as at `begin`, a created cel removed. */
@@ -174,9 +177,9 @@ class StrokeTransaction implements Transaction {
 
     commit(label: string): Command | null {
         this.#assertOpen("commit");
-        const area = this.#dirty;
         let command: Command | null = null;
         try {
+            const area = this.#dirty && this.#changedIn(this.#dirty);
             if (area) command = this.#command(label, area);
         } finally {
             if (!command) this.#restore();
@@ -231,6 +234,43 @@ class StrokeTransaction implements Transaction {
                     data[at + 2] = before ? before[at + 2] : 0;
                     data[at + 3] = before ? before[at + 3] : 0;
                 }
+            }
+        }
+        return maxX < 0
+            ? null
+            : { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
+    }
+
+    /**
+     * The bounding rectangle of the pixels of `area` whose bytes differ from their value at
+     * `begin` (transparent black for a created cel), or null when none does.
+     */
+    #changedIn(area: Rect): Rect | null {
+        const { width, data } = this.image;
+        const before = this.#before?.data;
+        const right = area.x + area.width;
+        const bottom = area.y + area.height;
+        let minX = right;
+        let minY = bottom;
+        let maxX = -1;
+        let maxY = -1;
+        for (let y = area.y; y < bottom; y++) {
+            for (let x = area.x; x < right; x++) {
+                const at = (y * width + x) * 4;
+                const same = before
+                    ? data[at] === before[at] &&
+                      data[at + 1] === before[at + 1] &&
+                      data[at + 2] === before[at + 2] &&
+                      data[at + 3] === before[at + 3]
+                    : data[at] === 0 &&
+                      data[at + 1] === 0 &&
+                      data[at + 2] === 0 &&
+                      data[at + 3] === 0;
+                if (same) continue;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
             }
         }
         return maxX < 0

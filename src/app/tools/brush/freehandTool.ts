@@ -13,8 +13,11 @@ import { brushOf, paintCursor, PIXEL_PERFECT } from "./brushOptions";
 // the pixels as they were when the stroke began (`core/raster/ink.ts`).
 //
 // The pipeline (SE-014) opens the stroke's transaction before `onDown` and commits it after
-// `onUp`; every change is reported with `markDirty`, over the pixels whose bytes changed only,
-// so a stroke that changes nothing records nothing.
+// `onUp`; every change is reported with `markDirty`, and the commit records only the pixels
+// that differ from the stroke's start, so a stroke that changes nothing records nothing. The
+// end of a stroke becomes the anchor of the next Shift-click once the stroke is kept
+// (`onCommit`: committed, or changed nothing); a cancelled or taken-back stroke leaves the
+// anchor where it was.
 
 /** What a freehand tool's module declares. */
 export interface FreehandToolSpec {
@@ -31,10 +34,12 @@ export const FREEHAND_HINT = "Shift: straight line from the end of the last stro
 
 /** The stroke in progress, by the context of its stroke. */
 const strokes = new WeakMap<ToolContext, FreehandStroke | StraightStroke>();
-/** Where the last stroke of a freehand tool ended, by document. */
+/** Where a released stroke ended, until the pipeline says whether it was kept. */
+const ends = new WeakMap<ToolContext, PixelPoint>();
+/** Where the last kept stroke of a freehand tool ended, by document. */
 const lastEnds = new WeakMap<DocSession, PixelPoint>();
 
-/** Where the last committed freehand stroke on `session` ended; null when none did yet. */
+/** Where the last kept freehand stroke on `session` ended; null when none did yet. */
 export function lastStrokeEnd(session: DocSession): PixelPoint | null {
     return lastEnds.get(session) ?? null;
 }
@@ -82,10 +87,16 @@ export function freehandTool(spec: FreehandToolSpec): ToolSpec {
             if (!stroke) return;
             strokes.delete(context);
             report(context, stroke.to(pointer.pixel));
-            if (stroke.last) lastEnds.set(context.session, stroke.last);
+            if (stroke.last) ends.set(context, stroke.last);
+        },
+        onCommit(context) {
+            const end = ends.get(context);
+            ends.delete(context);
+            if (end) lastEnds.set(context.session, end);
         },
         onCancel(context) {
             strokes.delete(context);
+            ends.delete(context);
         },
     };
 }

@@ -156,10 +156,13 @@ test("the rail shows the tools of the registry: Hand and Zoom work, later tools 
         if (registered[index]) await expect(button, id).toBeEnabled();
         else await expect(button, id).toBeDisabled();
     }
-    // The default tool, the pencil (registered by SE-015), is active: its button alone is
-    // pressed and the context bar shows it.
-    await expect(rail.locator('[aria-pressed="true"]')).toHaveCount(1);
-    await expect(rail.locator('[aria-pressed="true"]')).toHaveAttribute("data-tool", "pencil");
+    // The default tool, the pencil (registered by SE-015), is active: its button alone of the
+    // tool buttons is pressed and the context bar shows it.
+    await expect(rail.locator('[data-tool][aria-pressed="true"]')).toHaveCount(1);
+    await expect(rail.locator('[data-tool][aria-pressed="true"]')).toHaveAttribute(
+        "data-tool",
+        "pencil",
+    );
     await expect(region(page, "context-bar").locator("[data-context-tool]")).toHaveText("Pencil");
     expect(await toolsState(page)).toMatchObject({ selected: "pencil", active: "pencil" });
 

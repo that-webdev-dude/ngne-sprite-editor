@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test";
 import { collectErrors } from "./se-006-support";
 import { openDocument, openViewportEditor, readback, settle } from "./se-011-support";
 import type { Rect } from "./se-011-support";
-import { activeView, geometry, viewportArea } from "./se-012-support";
+import { activeView, geometry } from "./se-012-support";
 import type { Point, View } from "./se-012-support";
 import { overlayCanvas, overlaySettled, setGrids } from "./se-013-support";
 import { historyOf, texelClient, toolsState } from "./se-014-support";
@@ -63,13 +63,18 @@ export function brushCursorTests(ratio: number): void {
             const layout = await geometry(page);
             const view: View = await activeView(page);
             expect(view.scale).toBeGreaterThanOrEqual(4);
-            const area = viewportArea(page);
-            const cursor = () => area.evaluate((element) => getComputedStyle(element).cursor);
+            /** The cursor of the element under a client position: what the pointer shows. */
+            const cursorAt = (client: Point) =>
+                page.evaluate(({ x, y }) => {
+                    const element = window.document.elementFromPoint(x, y);
+                    if (!element) throw new Error(`se-015: no element at ${x}, ${y}`);
+                    return getComputedStyle(element).cursor;
+                }, client);
 
             // Beside the document the system cursor shows; over it, the outline alone.
             const beside = texelClient(layout, view, { x: -2, y: 15 });
             await page.mouse.move(beside.x, beside.y);
-            await expect.poll(cursor).toBe("crosshair");
+            await expect.poll(() => cursorAt(beside)).toBe("crosshair");
             const target: Point = { x: 20, y: 15 };
             // Where on the texel the pointer is: its first, last and centre device pixel.
             const places = ["first", "last", "centre"] as const;
@@ -81,7 +86,7 @@ export function brushCursorTests(ratio: number): void {
                     await setToolOptions(page, "pencil", { size, shape });
                     const client = texelClient(layout, view, target, where);
                     await page.mouse.move(client.x, client.y);
-                    await expect.poll(cursor).toBe("none");
+                    await expect.poll(() => cursorAt(client)).toBe("none");
                     expect((await toolsState(page)).cursor).toBe("none");
                     await overlaySettled(page);
                     // A window of the canvas around the texel, wide enough for both rings.

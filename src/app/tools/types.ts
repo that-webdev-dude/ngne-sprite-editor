@@ -221,6 +221,13 @@ export interface ToolSpec {
      * passed here; it cancels the stroke.
      */
     onKey?(context: ToolContext, key: ToolKey): boolean;
+    /**
+     * The stroke ended at its release (`onUp`) and was kept: for a tool that paints, after
+     * its transaction was committed, `recorded` when that made a history entry and false
+     * when the stroke changed nothing. Not called when the stroke was cancelled, nor when its
+     * pixels were taken back because they could not be committed (SE-015).
+     */
+    onCommit?(context: ToolContext, recorded: boolean): void;
 }
 
 /** A registered tool: its spec, with what its planned slot supplies. */

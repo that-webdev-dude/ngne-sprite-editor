@@ -15,9 +15,10 @@ import type { Point, View } from "./se-012-support";
 import { historyOf, texelClient, toolsState } from "./se-014-support";
 import {
     celBytes,
-    dragAtSpeed,
+    dragByReports,
     pointerSamples,
     recordPointerSamples,
+    setColours,
     setToolOptions,
     texelsOf,
 } from "./se-015-support";
@@ -33,6 +34,11 @@ const VIEW: View = { scale: 8, originX: 64, originY: 40 };
 const BLACK = [0, 0, 0, 255];
 const WHITE = [255, 255, 255, 255];
 const CLEAR = [0, 0, 0, 0];
+
+/** Paints black with the left button and white with the right (the defaults are SE-016's). */
+function blackOnWhite(page: Page): Promise<void> {
+    return setColours(page, 0x000000ff, 0xffffffff);
+}
 
 /** Moves the mouse onto the centre of each texel in turn (one move each). */
 async function moveOver(page: Page, texels: readonly Point[], view = VIEW): Promise<void> {
@@ -75,6 +81,7 @@ test("a pencil stroke shows while the button is held; it is one undo step, which
     const errors = collectErrors(page);
     await openViewportEditor(page);
     const document = await openDocument(page, { width: WIDTH, height: HEIGHT }, VIEW);
+    await blackOnWhite(page);
     await paint(page, document.id, pattern(WIDTH, HEIGHT, 3));
     await settle(page);
     // The pencil is the default tool.
@@ -119,6 +126,7 @@ test("a scripted diagonal drag across a 64 × 64 canvas at 2000 px/s leaves no g
     const errors = collectErrors(page);
     await openViewportEditor(page);
     const document = await openDocument(page, { width: 64, height: 64 });
+    await blackOnWhite(page);
     await settle(page);
     const layout = await geometry(page);
     // The largest zoom at which the whole document fits the viewport, with a margin.
@@ -132,11 +140,13 @@ test("a scripted diagonal drag across a 64 × 64 canvas at 2000 px/s leaves no g
     await recordPointerSamples(page);
     const from = texelClient(layout, view, { x: 0, y: 0 });
     const to = texelClient(layout, view, { x: 63, y: 63 });
-    // A mouse that reports at 125 Hz: 16 px between reports, more than a texel.
-    const moves = await dragAtSpeed(page, from, to, 2000, 125);
-    // A drag, not a jump: however slowly the moves are delivered, several of them.
-    expect(moves).toBeGreaterThanOrEqual(3);
+    // A mouse that reports at 125 Hz, 16 px apart: 2000 px/s, more than a texel a report.
+    const moves = await dragByReports(page, from, to, 16, 125);
+    expect(moves).toBeGreaterThan(10);
+    await expect.poll(() => historyOf(page, document.id)).toEqual({ undo: 1, open: false });
     const samples = await pointerSamples(page);
+    // The page received the reports as samples of their own.
+    expect(samples.length).toBeGreaterThan(10);
     const gaps = samples.slice(1).map((sample, index) => {
         const previous = samples[index]!;
         return Math.max(Math.abs(sample.x - previous.x), Math.abs(sample.y - previous.y));
@@ -144,7 +154,6 @@ test("a scripted diagonal drag across a 64 × 64 canvas at 2000 px/s leaves no g
     // The samples alone would leave gaps: some lie more than a texel apart.
     expect(Math.max(...gaps)).toBeGreaterThan(scale);
 
-    expect(await historyOf(page, document.id)).toEqual({ undo: 1, open: false });
     const pixels = await celBytes(page, document.id);
     expect(texelsOf(pixels!, 64, BLACK)).toEqual(
         Array.from({ length: 64 }, (_, index) => ({ x: index, y: index })),
@@ -160,6 +169,7 @@ test("Shift-click draws a straight line from the end of the last stroke; the rig
     const errors = collectErrors(page);
     await openViewportEditor(page);
     const document = await openDocument(page, { width: WIDTH, height: HEIGHT }, VIEW);
+    await blackOnWhite(page);
     await settle(page);
     await moveOver(page, [{ x: 2, y: 3 }]);
     await page.mouse.down();
@@ -190,6 +200,7 @@ test("E selects the eraser: the left button makes pixels transparent, the right 
     const errors = collectErrors(page);
     await openViewportEditor(page);
     const document = await openDocument(page, { width: WIDTH, height: HEIGHT }, VIEW);
+    await blackOnWhite(page);
     const before = pattern(WIDTH, HEIGHT, 5);
     await paint(page, document.id, before);
     await settle(page);
@@ -237,6 +248,7 @@ test("the context bar shows the brush options in order, and the size and shape s
     const errors = collectErrors(page);
     await openViewportEditor(page);
     const document = await openDocument(page, { width: WIDTH, height: HEIGHT }, VIEW);
+    await blackOnWhite(page);
     await settle(page);
     const bar = region(page, "context-bar");
     const options = () =>

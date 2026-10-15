@@ -17,7 +17,8 @@ import type { Tool, ToolButton, ToolContext, ToolModifiers, ToolPointer } from "
 // synthetic sequences.
 //
 //   pointer down (left or right) → active tool; a paint tool's target resolved and its
-//     transaction begun → onDown → onMove per sample → onUp → commit (one history entry)
+//     transaction begun → onDown → onMove per sample → onUp → commit (one history entry,
+//     or none when nothing changed) → onCommit
 //   Escape, pointer cancel, the document left → onCancel → abort (pixels as before)
 //
 // One stroke at a time: other pointers and other buttons are ignored while one is in
@@ -168,14 +169,17 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
         cancelFeedback = sources.later(clearFeedback, FEEDBACK_MS);
     };
 
-    /** Ends `ended`, which is no longer the stroke in progress: commits or aborts its pixels. */
-    const close = (ended: Stroke, commit: boolean) => {
+    /**
+     * Ends `ended`, which is no longer the stroke in progress: commits or aborts its pixels.
+     * Returns what became of them: a history entry, no change, or taken back.
+     */
+    const close = (ended: Stroke, commit: boolean): "recorded" | "unchanged" | "aborted" => {
         const { transaction, live } = ended;
-        if (!transaction?.open) return;
+        if (!transaction?.open) return commit ? "unchanged" : "aborted";
         if (!commit) {
             transaction.abort();
             live?.aborted();
-            return;
+            return "aborted";
         }
         try {
             live?.flush();
@@ -185,7 +189,7 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
             transaction.abort();
             live?.aborted();
             onError(error);
-            return;
+            return "aborted";
         }
         let recorded: boolean;
         try {
@@ -194,9 +198,10 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
             // The commit could not allocate its entry: it put the pixels back itself.
             live?.aborted();
             onError(error);
-            return;
+            return "aborted";
         }
         live?.committed(recorded);
+        return recorded ? "recorded" : "unchanged";
     };
 
     const cancelStroke = (): boolean => {
@@ -238,7 +243,13 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
             return;
         }
         stroke = null;
-        close(current, true);
+        const outcome = close(current, true);
+        if (outcome === "aborted") return;
+        try {
+            current.tool.onCommit?.(current.context, outcome === "recorded");
+        } catch (error) {
+            onError(error);
+        }
     };
 
     /** The stroke ends with the document it works on: closed, or no longer the active one. */

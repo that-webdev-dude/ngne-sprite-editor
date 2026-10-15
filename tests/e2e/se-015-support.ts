@@ -59,38 +59,53 @@ export function setColours(page: Page, foreground: number, background: number): 
 }
 
 /**
- * Drags the real mouse with the left button from client `from` to `to` in a straight line at
- * `speed` CSS pixels per second, reported as a mouse reports at `rate` Hz: every `1000 / rate`
- * ms the pointer moves to where it is at that moment. A report that comes late goes where the
- * pointer is by then, so the drag keeps its speed. Returns the moves sent.
+ * Drags with the left button from client `from` to `to` in a straight line, as a mouse
+ * reporting at `rate` Hz that moves `step` CSS pixels between reports (16 px at 125 Hz is
+ * 2000 px/s): the press, a move every `1000 / rate` ms to the next planned position, the
+ * release. The events go through the DevTools protocol without waiting for each one's
+ * acknowledgement, as a real mouse sends them, so a slow page does not slow the drag or
+ * merge its reports. Returns the moves sent.
  */
-export async function dragAtSpeed(
+export async function dragByReports(
     page: Page,
     from: Point,
     to: Point,
-    speed: number,
+    step = 16,
     rate = 125,
 ): Promise<number> {
-    const length = Math.hypot(to.x - from.x, to.y - from.y);
-    const duration = (length / speed) * 1000;
+    const cdp = await page.context().newCDPSession(page);
+    const errors: unknown[] = [];
+    const send = (params: Record<string, unknown>) =>
+        void cdp.send("Input.dispatchMouseEvent", params as never).catch((error: unknown) => {
+            errors.push(error);
+        });
+    const moves = Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / step);
     const period = 1000 / rate;
-    await page.mouse.move(from.x, from.y);
-    await page.mouse.down();
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: from.x, y: from.y });
     const start = performance.now();
-    let moves = 0;
-    for (let tick = 1; ; tick++) {
-        const due = start + tick * period;
-        const wait = due - performance.now();
+    send({ type: "mousePressed", ...from, button: "left", buttons: 1, clickCount: 1 });
+    for (let index = 1; index <= moves; index++) {
+        const wait = start + index * period - performance.now();
         if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-        const fraction = Math.min(1, (performance.now() - start) / duration);
-        await page.mouse.move(
-            from.x + (to.x - from.x) * fraction,
-            from.y + (to.y - from.y) * fraction,
-        );
-        moves++;
-        if (fraction === 1) break;
+        const fraction = index / moves;
+        send({
+            type: "mouseMoved",
+            x: from.x + (to.x - from.x) * fraction,
+            y: from.y + (to.y - from.y) * fraction,
+            button: "left",
+            buttons: 1,
+        });
     }
-    await page.mouse.up();
+    // The release is waited for: it has reached the page when this returns.
+    await cdp.send("Input.dispatchMouseEvent", {
+        type: "mouseReleased",
+        ...to,
+        button: "left",
+        buttons: 0,
+        clickCount: 1,
+    });
+    await cdp.detach();
+    if (errors.length > 0) throw new Error(`se-015: a mouse event failed: ${String(errors[0])}`);
     return moves;
 }
 

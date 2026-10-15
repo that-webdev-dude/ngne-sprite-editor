@@ -40,9 +40,10 @@ import type { PerfEntry } from "./record";
 // latency is that submit's time less the event's `timeStamp` (one clock, the page's).
 //
 // Measured: one continuous stroke of 6 s (latency of every sample, and the longest one: the
-// longest pointer-to-submitted gap of SPEC §6.6), and the first sample of 40 short strokes
-// (the press composites the frame in full and copies the image). The result is the larger
-// of the two p95s. Nothing here asserts the budget; the orchestrator records the number with
+// longest pointer-to-submitted gap of SPEC §6.6), and 40 short strokes: their first sample
+// (the press composites the frame in full and copies the image), their second (which can wait
+// for the press's frame) and every sample after the press. The result is the largest of the
+// four p95s. A sample found in no submitted frame, or fewer samples than texels, fails the run. Nothing here asserts the budget; the orchestrator records the number with
 // PERF_RECORD=1 (docs/tickets/EXECUTION.md, Measurements).
 
 const BUDGET_MS = 33;
@@ -389,12 +390,10 @@ function texelOf(layout: Layout, client: Texel): Texel {
 }
 
 interface StrokeResult {
-    /** Latency of the press, when it was found in a frame. */
-    first: number | null;
-    /** Latency of every later sample that reached a new texel. */
+    /** Latency of the press. */
+    first: number;
+    /** Latency of every later sample that reached a new texel, in order: the second first. */
     moves: number[];
-    /** Samples that reached a new texel but no frame was found for. */
-    missing: number;
     /** Longest time between two frames that each showed more of the stroke. */
     longestFrameGap: number;
     samples: number;
@@ -492,7 +491,14 @@ async function strokeAlong(
     // From the press on: the pointer hovered over the first texel before it.
     const press = samples.findIndex((sample) => sample.kind === "down");
     if (press === -1) throw new Error("se-015: the page saw no press");
-    for (const sample of samples.slice(press)) {
+    const received = samples.slice(press);
+    if (received.length < indexOf.size) {
+        throw new Error(
+            `se-015: the page received ${received.length} samples for a path of ` +
+                `${indexOf.size} texels`,
+        );
+    }
+    for (const sample of received) {
         const texel = texelOf(layout, sample);
         const index = indexOf.get(`${texel.x},${texel.y}`);
         if (index === undefined || index <= reached) continue;
@@ -504,6 +510,9 @@ async function strokeAlong(
         }
         if (sample.kind === "down") first = frame.t - sample.t;
         else moves.push(frame.t - sample.t);
+    }
+    if (missing > 0 || first === null) {
+        throw new Error(`se-015: ${missing} samples of a stroke were in no submitted frame`);
     }
     let longestFrameGap = 0;
     let shown = 0;
@@ -523,7 +532,6 @@ async function strokeAlong(
     return {
         first,
         moves,
-        missing,
         longestFrameGap,
         samples: samples.length,
         frames: frames.length,
@@ -701,8 +709,8 @@ it.skipIf(!gpu)(
 
             // Short strokes: the first sample of each, on rows of their own.
             const firsts: number[] = [];
+            const seconds: number[] = [];
             const shortMoves: number[] = [];
-            let missing = 0;
             const strokesPerRow = Math.floor(columns / (SHORT_MOVES + 3));
             for (let stroke = 0; stroke < SHORT_STROKES; stroke++) {
                 const y = 2 * Math.floor(stroke / strokesPerRow);
@@ -712,21 +720,23 @@ it.skipIf(!gpu)(
                     y,
                 }));
                 const result = await strokeAlong(page, cdp, layout, path);
-                if (result.first !== null) firsts.push(result.first);
-                else missing++;
+                firsts.push(result.first);
+                // The sample after the press, which can wait for the press's frame.
+                if (result.moves[0] !== undefined) seconds.push(result.moves[0]);
                 shortMoves.push(...result.moves);
-                missing += result.missing;
             }
             const usedRows = 2 * Math.ceil(SHORT_STROKES / strokesPerRow) + 2;
 
             // One continuous stroke: a serpentine over the rows below, one texel per report.
+            // Along a row, down two texels at its end, and back along the next row from the
+            // texel after the turn: no texel is visited twice.
             const length = Math.ceil((CONTINUOUS_MS / 1000) * RATE);
             const path: Texel[] = [];
             let y = usedRows;
             let rightwards = true;
             while (path.length < length) {
                 if (y >= rows) throw new Error("se-015: the viewport is too small for the stroke");
-                for (let step = 0; step < columns && path.length < length; step++) {
+                for (let step = path.length === 0 ? 0 : 1; step < columns; step++) {
                     path.push({ x: rightwards ? step : columns - 1 - step, y });
                 }
                 const x = rightwards ? columns - 1 : 0;
@@ -736,15 +746,19 @@ it.skipIf(!gpu)(
                 rightwards = !rightwards;
             }
             path.length = length;
+            if (new Set(path.map(({ x, y }) => `${x},${y}`)).size !== path.length) {
+                throw new Error("se-015: the continuous stroke visits a texel twice");
+            }
             const continuous = await strokeAlong(page, cdp, layout, path);
-            missing += continuous.missing;
 
             const browserVersion = browser.version();
             const overlayRedraws = await page.evaluate(() => window.__ngneTest!.overlay!.redraws);
             const stroke = summary(continuous.moves);
             const first = summary(firsts);
+            const second = summary(seconds);
+            const short = summary(shortMoves);
             const all = summary([...continuous.moves, ...shortMoves, ...firsts]);
-            const resultMs = Math.max(stroke.p95Ms, first.p95Ms);
+            const resultMs = Math.max(stroke.p95Ms, first.p95Ms, second.p95Ms, short.p95Ms);
             if (pageErrors.length > 0) throw new Error(`se-015: page errors: ${pageErrors[0]}`);
             const entry: PerfEntry = {
                 id: `se-015-stroke-latency-${gpuId}`,
@@ -754,8 +768,9 @@ it.skipIf(!gpu)(
                     `strokes of real mouse input on a ${SIDE}×${SIDE} document with ${LAYERS} ` +
                     `layers and the pixel grid shown, at ${SCALE}× (SPEC §6.6), on ${gpu.label}.`,
                 statistic:
-                    "the larger of two p95s: every sample of one continuous stroke of " +
-                    `${CONTINUOUS_MS / 1000} s, and the first sample of ${SHORT_STROKES} strokes`,
+                    "the largest of four p95s: every sample of one continuous stroke of " +
+                    `${CONTINUOUS_MS / 1000} s; of ${SHORT_STROKES} short strokes, the first ` +
+                    "sample (the press), the second sample, and every sample after the press",
                 budgetMs: BUDGET_MS,
                 resultMs,
                 details: {
@@ -770,8 +785,9 @@ it.skipIf(!gpu)(
                         framesSubmitted: continuous.frames,
                     },
                     firstSample: first,
+                    secondSample: second,
+                    shortStrokeSamplesAfterThePress: short,
                     allSamples: all,
-                    samplesWithoutFrame: missing,
                     echo: "off",
                     input: `mouse at ${RATE} Hz, one texel (${SCALE} device px) per report, ${(RATE * SCALE) / RATIO} CSS px/s`,
                     document: `${SIDE}×${SIDE}, ${LAYERS} layers with half-transparent content, pixel grid on`,

@@ -46,10 +46,15 @@ function patterned(): DocSession {
     return { doc, selection: null, activeLayerId: layerId(0), activeFrameId: FRAME };
 }
 
-/** A pipeline with the pencil and the eraser registered and `tool` selected. */
+/**
+ * A pipeline with the pencil and the eraser registered and `tool` selected, painting black
+ * in the foreground and white in the background (set here: the defaults are SE-016's).
+ */
 function tools(tool: "pencil" | "eraser" = "pencil"): Harness {
     const h = harness([pencilTool, eraserTool]);
     h.tools.select(tool);
+    h.editor.getState().setForeground(0x000000ff);
+    h.editor.getState().setBackground(0xffffffff);
     return h;
 }
 
@@ -116,6 +121,58 @@ describe("one stroke is one undo step", () => {
         ]);
         expect(history.undoCount).toBe(0);
         expect(celAt(session.doc, session.activeLayerId, session.activeFrameId)).toBeUndefined();
+    });
+});
+
+describe("a stroke whose pixels end as they began records nothing", () => {
+    it("pixel-perfect takes back the only pixel inside the document: no entry, no cel", () => {
+        const h = tools();
+        const { history, session } = h.open(blank());
+        h.tools.setOption(h.tools.active()!, PIXEL_PERFECT.key, true);
+        // 0, 0 is the corner of an L between -1, 0 and 0, -1, both outside the document.
+        h.pipeline.down(at(h, { x: -1, y: 0 }, { button: 0 }));
+        h.pipeline.move([at(h, { x: 0, y: 0 })]);
+        expect(history.transaction?.dirty).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+        h.pipeline.move([at(h, { x: 0, y: -1 })]);
+        h.pipeline.up(at(h, { x: 0, y: -1 }, { button: 0, buttons: 0 }));
+        expect(history.undoCount).toBe(0);
+        expect(celAt(session.doc, session.activeLayerId, session.activeFrameId)).toBeUndefined();
+        expect(h.errors).toEqual([]);
+    });
+
+    it("a Shift line dragged back off the document: no entry", () => {
+        const h = tools();
+        const session = patterned();
+        const { history } = h.open(session);
+        const before = image(session).data.slice();
+        // A click outside the document changes nothing, and is where the next line starts.
+        stroke(h, [{ x: -3, y: 5 }]);
+        expect(lastStrokeEnd(session)).toEqual({ x: -3, y: 5 });
+        h.pipeline.down(at(h, { x: 2, y: 5 }, { button: 0, shiftKey: true }));
+        expect(rgbaAt(image(session), 1, 5)).toEqual(BLACK);
+        h.pipeline.move([at(h, { x: -6, y: 5 }, { shiftKey: true })]);
+        h.pipeline.up(at(h, { x: -6, y: 5 }, { button: 0, buttons: 0, shiftKey: true }));
+        expect(history.undoCount).toBe(0);
+        expect(image(session).data).toEqual(before);
+    });
+
+    it("a Shift line released over pixels that already have its colour: no entry", () => {
+        const h = tools();
+        const { history, session } = h.open(blank());
+        stroke(h, [
+            { x: 1, y: 1 },
+            { x: 8, y: 1 },
+        ]);
+        expect(history.undoCount).toBe(1);
+        const painted = image(session).data.slice();
+        // From 8, 1: first across new pixels, then released along the row painted already.
+        h.pipeline.down(at(h, { x: 3, y: 6 }, { button: 0, shiftKey: true }));
+        expect(rgbaAt(image(session), 3, 6)).toEqual(BLACK);
+        h.pipeline.move([at(h, { x: 1, y: 1 }, { shiftKey: true })]);
+        h.pipeline.up(at(h, { x: 1, y: 1 }, { button: 0, buttons: 0, shiftKey: true }));
+        expect(history.undoCount).toBe(1);
+        expect(image(session).data).toEqual(painted);
+        expect(lastStrokeEnd(session)).toEqual({ x: 1, y: 1 });
     });
 });
 
@@ -218,6 +275,47 @@ describe("Shift-click", () => {
         stroke(h, [{ x: 4, y: 4 }]);
         h.pipeline.down(at(h, { x: 9, y: 9 }, { button: 0 }));
         h.pipeline.cancel();
+        expect(lastStrokeEnd(session)).toEqual({ x: 4, y: 4 });
+    });
+
+    it("after Escape mid-stroke, a Shift-press draws from the end of the last kept stroke", () => {
+        const h = tools();
+        const { history, session } = h.open(blank());
+        stroke(h, [{ x: 4, y: 4 }]);
+        h.pipeline.down(at(h, { x: 9, y: 9 }, { button: 0 }));
+        h.pipeline.move([at(h, { x: 12, y: 9 })]);
+        // What the Escape command runs (tools.commands.ts).
+        expect(h.pipeline.cancel()).toBe(true);
+        stroke(h, [{ x: 4, y: 8 }], { shiftKey: true });
+        expect(history.undoCount).toBe(2);
+        expect(pixelsOf(session, BLACK)).toEqual(linePixels({ x: 4, y: 4 }, { x: 4, y: 8 }));
+        expect(lastStrokeEnd(session)).toEqual({ x: 4, y: 8 });
+    });
+
+    it("a stroke taken back at the release leaves the last end where it was", () => {
+        const h = tools();
+        const fill = new Array<Rgba>(WIDTH * HEIGHT).fill([10, 20, 30, 255]);
+        const doc = sprite(WIDTH, HEIGHT, [{ pixels: fill }, { pixels: fill }]);
+        const session = { doc, selection: null, activeLayerId: layerId(1), activeFrameId: FRAME };
+        const { history } = h.open(session);
+        stroke(h, [{ x: 4, y: 4 }]);
+        expect(lastStrokeEnd(session)).toEqual({ x: 4, y: 4 });
+        h.pipeline.down(at(h, { x: 9, y: 9 }, { button: 0 }));
+        // Shown in the next animation frame: still to be composited at the release.
+        h.pipeline.move([at(h, { x: 12, y: 9 })]);
+        // The painted layer turns into a reference layer under the stroke: the frame cannot
+        // be composited at the release, and the stroke is taken back (SE-014).
+        Object.assign(doc.layers[1]!, {
+            kind: "reference",
+            sourceId: "source",
+            x: 0,
+            y: 0,
+            scale: 1,
+            placement: "behind",
+        });
+        h.pipeline.up(at(h, { x: 12, y: 9 }, { button: 0, buttons: 0 }));
+        expect(h.errors).toHaveLength(1);
+        expect(history.undoCount).toBe(1);
         expect(lastStrokeEnd(session)).toEqual({ x: 4, y: 4 });
     });
 });

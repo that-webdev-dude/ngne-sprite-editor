@@ -332,7 +332,9 @@ test("dock sections collapse from their headers; the palette starts collapsed un
     await expect(header("Palette")).toHaveAttribute("aria-expanded", "true");
 });
 
-test("regions carry their landmarks and the placeholders are empty", async ({ page }) => {
+test("regions carry their landmarks; the context bar and status bar hold only the active tool's name, options and hint", async ({
+    page,
+}) => {
     await openShell(page);
     await expect(page.getByRole("banner")).toHaveAttribute("data-region", "menu-bar");
     await expect(page.getByRole("navigation", { name: "Tools" })).toHaveAttribute(
