@@ -316,6 +316,11 @@ Scope
   (asserting more), and record it. The paint guard refuses paint tools below 1×; at the overview
   steps `clientToDoc` names the first texel of a device pixel, not always the one shown: decide
   what the eyedropper samples there. The colour chips go in the rail (`ToolRail.tsx`).
+- From the SE-015 review: pencil and eraser are `paints: true`, so the Alt hold can test
+  `selected?.paints`. A stroke takes its colour at the press (`context.colour`). SE-015's tests
+  set the foreground and background themselves (`setColours`), so the defaults are this
+  ticket's. SE-014's rail test counts pressed `[data-tool]` buttons only, so colour chips with
+  `aria-pressed` do not change it.
 
 Acceptance
 - Unit tests: `hsv→rgb→hsv` keeps RGB identical for all 8-bit greys and a 4096-colour sample;
@@ -350,6 +355,13 @@ Scope
 - From the SE-014 review: a stroke exposes no snapshot of the image at its start; the rubber
   band keeps its own copy from `onDown` and marks the previous preview rectangle dirty so the
   live composite clears it. The bucket is a paint tool, refused below 1×.
+- From the SE-015 review: shape tools list `BRUSH_SIZE`, `BRUSH_SHAPE`, `INK` and `OPACITY`
+  from `app/tools/brush/brushOptions.ts` and take their brush from `brushOf(values)`; listing
+  size and shape gives them the brush cursor. `StraightStroke` (`core/raster/stroke.ts`) is
+  already a rubber-band brush line that takes its previous bounds back from the stroke-start
+  copy. Inks compute from that copy; report only changed rectangles. A shape released where it
+  changes nothing records nothing (SPEC §7.1). The midpoint ellipse is this ticket's own; SE-015's
+  circle-brush goldens stay as they are.
 
 Acceptance
 - Golden tests: ellipses for bounding boxes 1×1 through 9×9 and a 16×7; flood fill on a spiral

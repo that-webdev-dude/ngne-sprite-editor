@@ -82,6 +82,13 @@ Scope
 - Tiled mode: X, Y or both, stored in `DocSettings.tiled`. The viewport draws the current frame
   slot 3×3 (NGNE sprites); paint wraps around the canvas edges.
 - View menu toggles.
+- From the SE-015 review: symmetry and tiled wrap belong in the `Stamper` of
+  `core/raster/stroke.ts`. Inks compute from the stroke-start copy, so a pixel stamped twice
+  (the centre column) gets one value. Pixel-perfect filters the base path before mirroring.
+  The Shift anchor (`lastStrokeEnd`) is kept per `DocSession` in
+  `app/tools/brush/freehandTool.ts`.
+  The stroke echo (SPEC §6.6) draws the stroke's frame once; in tiled mode it must also draw
+  each copy, or the copies lag the stroke by an upload.
 
 Acceptance
 - A stroke with horizontal symmetry on an even-width canvas is a pixel-exact mirror; one undo step.

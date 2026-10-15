@@ -233,6 +233,9 @@ Scope
 - From the SE-014 review: the composite of the frame being stroked is one buffer rewritten in
   place until the commit (SPEC §5.3). The preview learns of changes from the cache's
   notifications, not from a buffer's identity, and copies what it keeps across an `await`.
+- From the SE-015 review: the viewport's upload versions (`viewportLink.nextVersion`,
+  `onDrawn`) are one counter for the page, not one per frame key; a reader of them compares
+  versions of one key only.
 
 Acceptance
 - E2E readback (in `afterFrame`): paused on frame k, the preview canvas equals the composite of

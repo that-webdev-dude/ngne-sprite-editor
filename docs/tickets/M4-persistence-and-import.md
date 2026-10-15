@@ -223,6 +223,10 @@ Scope
   layer properties popover with X, Y, scale and placement fields.
 - Menu: Layer → New Reference Layer from File; limit of four with a toast when exceeded.
 - Reference sources kept in the per-document store of SE-007 and round-tripped by SE-040.
+- From the SE-015 review: the stroke echo (SPEC §6.6) is drawn opaque over the composite's
+  place, so it hides a reference placed in front (quad layer 6), and one behind (layer 2) under
+  transparent pixels, where it lies. Decide how it gives way while a reference is on screen and
+  test it.
 
 Out of scope: dragging and scaling on the canvas (SE-046).
 

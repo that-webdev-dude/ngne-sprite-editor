@@ -1,0 +1,65 @@
+{
+    "id": "se-015-stroke-latency-intel-uhd-no-echo",
+    "ticket": "SE-015",
+    "measurement": "Pointer event to the submit of the frame containing that sample, for pencil strokes of real mouse input on a 256×256 document with 8 layers and the pixel grid shown, at 8× (SPEC §6.6), on Intel UHD.",
+    "statistic": "the largest of four p95s: every sample of one continuous stroke of 6 s; of 40 short strokes, the first sample (the press), the second sample, and every sample after the press",
+    "budgetMs": 33,
+    "resultMs": 26.2,
+    "details": {
+        "continuousStroke": {
+            "count": 749,
+            "medianMs": 13.1,
+            "p95Ms": 14.5,
+            "maxMs": 21,
+            "longestPointerToSubmittedMs": 21,
+            "longestGapBetweenFramesShowingMoreMs": 21.6,
+            "durationMs": 6003,
+            "texels": 750,
+            "samples": 751,
+            "framesSubmitted": 739
+        },
+        "firstSample": {
+            "count": 40,
+            "medianMs": 19.3,
+            "p95Ms": 26.2,
+            "maxMs": 34.4
+        },
+        "secondSample": {
+            "count": 40,
+            "medianMs": 13,
+            "p95Ms": 23,
+            "maxMs": 24.3
+        },
+        "shortStrokeSamplesAfterThePress": {
+            "count": 240,
+            "medianMs": 13,
+            "p95Ms": 19.5,
+            "maxMs": 35.9
+        },
+        "allSamples": {
+            "count": 1029,
+            "medianMs": 13.1,
+            "p95Ms": 18.1,
+            "maxMs": 35.9
+        },
+        "echo": "off",
+        "input": "mouse at 125 Hz, one texel (8 device px) per report, 1000 CSS px/s",
+        "document": "256×256, 8 layers with half-transparent content, pixel grid on",
+        "zoom": 8,
+        "devicePixelRatio": 1,
+        "window": "1920×1080 CSS px",
+        "viewportDevicePx": "1612×784",
+        "overlayRedraws": 1014,
+        "adapter": "intel / gen-12lp ()",
+        "chrome": "155.0.8059.79, new headless, --force-color-profile=srgb --force-low-power-gpu --force-device-scale-factor=1"
+    },
+    "pass": true,
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-10-15T06:44:15.170Z"
+}

@@ -30,6 +30,9 @@ Scope
   selection and motion is allowed, so SE-013's idle test (no redraw for 2 s) still holds.
 - From the SE-014 review: the selection is passed as `clip` where the pipeline begins the
   transaction (`src/app/tools/pipeline.ts`, a comment marks the place).
+- From the SE-015 review: the transaction's clip puts pixels outside the selection back at
+  `markDirty`; SE-015's inks compute from the stroke-start copy, so the two agree. The dot tool
+  is gone: the clipping test uses the pencil. Overlay order 900 is the brush cursor's.
 - Paint clipping: the tool framework passes the selection as the transaction clip mask (SE-004).
 - Commands: Select All, Deselect, Invert with the keys of SPEC §7.8.
 - Status bar shows the selection size.

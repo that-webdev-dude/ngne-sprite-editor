@@ -320,6 +320,9 @@ preview, thumbnails, the eyedropper and every export read its output. It:
   keep across an `await`, or wait while a transaction is open; and do not call `get` for the
   stroked frame synchronously inside a notification (the viewport defers to a microtask), or
   the frame is composited in full before the stroke's buffer is adopted again.
+- A stroke that changes nothing (§7.1) hands its buffer back to the cache in the same way and
+  tells the viewport. It is composited in full only when the cache refuses the buffer, as when
+  the commit removes a cel the stroke created.
 
 Reference layers, onion skins, symmetry axes and tiled copies are never part of this composite.
 
@@ -374,7 +377,8 @@ All symbols are exported from the package root.
   its old canvas after a resize (§6.4). It then draws with the mapping NGNE drew with (the
   view, in that canvas's pixels) and maps the pointer through the stretch.
 - Draw layers register from their own module (`*.overlay.ts`, found by a glob) with an order:
-  outline 100, pixel grid 200, tile grid 300. A layer asks for a redraw through its `watch`.
+  stroke echo 50 (§6.6), outline 100, pixel grid 200, tile grid 300, brush cursor 900. A layer
+  asks for a redraw through its `watch`.
   The overlay redraws only when the active document, its size or view, the canvas size or the
   theme changes, when the cursor moves to another device pixel or enters or leaves the
   viewport, or when a layer asks; at most once per animation frame.
@@ -477,6 +481,13 @@ Upload queue (one per renderer instance)
   for drawing) change only when the matching upload resolves; frame builders never pair new
   metadata with an old texture. A slot is drawn over the rectangle of the image it holds, so a
   change of the document's size never stretches an old texture.
+- Versions (SE-015, for the stroke echo of §6.6): a `ViewportDocument` may give `version(key)`,
+  read in the same task as the key's pixels; the version travels with the upload into the slot
+  and is reported, with the frame key, for every frame NGNE submits (`NgneViewport` option
+  `onDrawn`; `drawnFrame()`, which knows the frame slot's quad only). The app's link
+  (`app/viewport/viewportLink`) hands out versions (`nextVersion`, one counter for the page),
+  relays `onDrawn`, and holds the checkerboard the viewport was last given
+  (`ViewportSources.checker`), so the echo draws the same one.
 
 ### 6.5 Preview panel (`NgnePreview`)
 
@@ -522,6 +533,29 @@ and cleared when the matching upload resolves. SE-002 question 2 recorded isolat
 between publishes of 55–110 ms on Intel UHD during a continuous stream of replacements (about
 one per second, in the pattern of garbage collection), so SE-015's measurement covers one
 continuous stroke of at least 5 s and reports the longest gap beside the p95.
+
+SE-015's measurement missed the budget on RTX 4060 (34.1 ms; Intel UHD 26.2 ms), so the echo is
+implemented (`docs/perf`, records `se-015-stroke-latency-*`). It is the draw layer `stroke-echo`,
+order 50, under every other layer; its state is in `app/tools/strokeEcho.ts`, fed by the live
+composite:
+
+- It draws the live composite's pixels for each region the stroke has composited, over the
+  viewport's checkerboard, opaque, nearest-neighbour at the overlay's mapping, in the overlay's
+  next redraw after the sample. Opaque and transparent pixels equal NGNE's; a translucent one
+  may differ from NGNE's blend by 1 per channel.
+- Each composited rectangle is stamped with a version (`viewportLink.nextVersion()`, one counter
+  for the page). The viewport reads the version with the pixels of each upload and reports it
+  with every frame it submits (`NgneViewport` option `onDrawn`). A region is cleared once a
+  frame of its key drawn from that version or a later one has been submitted, which is later
+  than "the upload resolved" and never shows the echo and NGNE out of step.
+- It is drawn only while NGNE shows the stroke's frame, and not below 1×. Above 16 regions they
+  are merged into one. A cancel or an abort clears it at once; after the stroke, any change of
+  its frame, another active document or a closed one clears it at once.
+- It hides whatever NGNE draws over the composite's place: references and onion skins (quad
+  layers 2, 3, 5, 6). SE-025 and SE-045 decide how it gives way to them.
+- Development builds switch it with `window.__ngneTest.strokeEcho.enabled`; the benchmark
+  measures both ways on one build (`PERF_ECHO=off`). With the echo, a sample's frame is the
+  earlier of NGNE's submit and the end of the overlay draw that showed it.
 
 ### 6.7 Tests against WebGPU canvases
 
@@ -610,6 +644,42 @@ Tool framework (SE-014):
 - Refusal messages ("Layer is locked", "Layer is hidden", "Reference layers cannot be painted
   on", the zoom message above) clear at the next press or after 4 s, and never clear a message
   set by someone else.
+- A tool may have `onCommit(context, recorded)`, called once a stroke it ended at the release
+  is kept: committed (`recorded`) or with no change. Not after a cancel or an abort (SE-015).
+- A stroke's history entry keeps the bounding rectangle of the pixels whose bytes differ from
+  the stroke's start (from transparent for a cel the stroke created). When none differs, for
+  example a pixel-perfect corner taken back or a Shift line dragged back over itself, the
+  stroke records nothing and a cel it created is not kept.
+
+Pencil and eraser (SE-015):
+
+- Brush size, shape, pixel-perfect, ink and opacity are one set of option specs
+  (`app/tools/brush/brushOptions.ts`) that every brush tool lists, the shape tools included.
+  Their values are stored per tool id, as in Aseprite (the eraser keeps its own size). Defaults:
+  size 1, circle, pixel-perfect off, simple ink, opacity 255 (range 0–255). The eraser has no
+  ink option.
+- A brush is placed at −⌊size/2⌋ from the texel under the pointer, so an even brush has that
+  texel at the lower right of its centre. The circle brush is the filled ellipse (Zingl's
+  algorithm) that fits the size × size square, as Aseprite draws it.
+- Inks compute each pixel from its value at the stroke's start, so a stroke never builds up
+  over itself. Simple replaces the pixel with the colour, its alpha multiplied by the opacity
+  (at opacity 0 it writes transparent). Alpha compositing is the compositor's normal blend at
+  the opacity. Lock alpha is that blend with the pixel's own alpha kept; a transparent pixel
+  stays as it was. A result with alpha 0 is written as 0,0,0,0.
+- Eraser: the left button lowers alpha by alpha × opacity, so 255 clears; the right button
+  composites the background colour at the opacity (a transparent background changes nothing).
+- Pixel-perfect is Aseprite's rule applied as the stroke goes: the newest pixel shows at once
+  and is taken back when the next one makes it a corner; a pixel another stamp still covers
+  stays.
+- Shift at the press draws a straight line that follows the pointer until the release, from the
+  end of the last pencil or eraser stroke kept on that document (`onCommit`), or from the press
+  point when there is none. Shift pressed during a stroke does nothing.
+- The brush cursor is the overlay draw layer `brush-cursor` (order 900): a two-tone outline of
+  the footprint, 1 device pixel black just outside it and 1 device pixel white outside that,
+  with the footprint left clear (DESIGN §6). A paint tool hides the system cursor over the
+  document only; elsewhere over the viewport the cursor is a crosshair.
+- Pencil and eraser show the hint "Shift: straight line from the end of the last stroke" in
+  the status bar.
 
 ### 7.2 Selection
 

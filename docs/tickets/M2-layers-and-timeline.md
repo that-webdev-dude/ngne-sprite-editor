@@ -164,6 +164,10 @@ Scope
   more frames gives up exactly the next frame at each step (one upload per step), and a second
   switch inside the first upload can draw one frame with the checkerboard only. The fallback
   path shows the newest ready frame and never the checkerboard alone.
+- From the SE-015 review: the stroke echo (SPEC §6.6) clears a region when the viewport reports
+  a drawn frame of its key (`drawnFrame`, `onDrawn`), which today knows only the frame slot's
+  quad. Frames drawn for `ed:play` must report too, or playback must clear the echo when it
+  starts, so no region outlives a stroke for the length of a playback.
 
 Acceptance
 - Unit tests of the playback clock with a controlled time source: frame at time t for mixed
@@ -204,6 +208,10 @@ Scope
 - From the SE-014 review: during a stroke on a linked cel, the composites of the other frames
   that show the image are dropped at each animation frame; linked neighbours on screen are then
   composited and uploaded again at that rate. Readers follow SPEC §5.3 on the stroke's buffer.
+- From the SE-015 review: the stroke echo (SPEC §6.6) is drawn opaque over the composite's
+  place, so it hides onion skins (quad layers 3 and 5) where it lies, for the one to three
+  frames a region lives. Decide how it gives way while ghosts are on screen (no echo, or an
+  echo that draws them too) and test it.
 
 Acceptance
 - E2E readback: with one frame before at 50% and tint off, a known pixel shows the expected
