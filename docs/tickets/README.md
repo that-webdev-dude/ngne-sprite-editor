@@ -57,7 +57,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-013 | Overlay canvas                                    | M    | 012                                | —             | Done   |
 | SE-014 | Tool framework and pointer pipeline               | L    | 004, 007, 012, 013                 | —             | Done   |
 | SE-015 | Pencil and eraser                                 | L    | 014                                | —             | Done   |
-| SE-016 | Colour state, picker and eyedropper               | M    | 006, 014                           | —             | In progress |
+| SE-016 | Colour state, picker and eyedropper               | M    | 006, 014                           | —             | Done   |
 | SE-017 | Bucket, line, rectangle and ellipse (gate G1)     | M    | 015, 016                           | —             | Ready  |
 | **M2** | **[Layers and timeline](M2-layers-and-timeline.md)** |   |                                    |               |        |
 | SE-020 | Layer commands                                    | M    | 004, 010                           | —             | Done   |
@@ -68,7 +68,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-025 | Onion skin                                        | M    | 024                                | —             | Ready  |
 | SE-026 | Timeline editing interactions                     | M    | 022, 023                           | —             | Ready  |
 | **M3** | **[Selection and transform](M3-selection-and-transform.md)** | |                                |               |        |
-| SE-030 | Selection model and marching ants                 | M    | 004, 013, 014                      | —             | In progress |
+| SE-030 | Selection model and marching ants                 | M    | 004, 013, 014                      | —             | Done   |
 | SE-031 | Selection tools                                   | M    | 014, 017, 030                      | —             | Ready  |
 | SE-032 | Move, floating selection and clipboard            | L    | 005, 031                           | —             | Ready  |
 | SE-033 | Selection transforms                              | M    | 032                                | —             | Ready  |

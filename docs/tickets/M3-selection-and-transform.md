@@ -9,7 +9,7 @@ Goal: select, move, transform and copy pixels; resize and reshape the sprite.
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-004, SE-013, SE-014                                   |
 | Blocks       | SE-031, SE-034, SE-066                                   |
 | Blocked until | —                                                       |
@@ -72,6 +72,16 @@ Scope
   (corner mark, hold or repeat the key) are not in SE-014's registry or rail. This ticket
   extends `src/app/tools/types.ts`, `planned.tools.ts`, `pipeline.ts` and
   `src/ui/shell/regions/ToolRail.tsx` for them.
+- From the SE-030 review: the masks come from `core/selection` (`rectMask`, `ellipseMask`,
+  `polygonMask`, `selectionOf` for the wand's flood mask). The polygon rule (Bresenham sides,
+  even-odd interior at pixel centres, fewer than 3 points select nothing) is this editor's own;
+  it was not checked against Aseprite's lasso. `polygonMask` refuses vertices that are not
+  whole numbers or lie beyond 2^24 and walks each side on the canvas only. The ants redraw in a
+  constant number of draw calls, but their ring is rebuilt at each view change in time
+  proportional to the visible boundary, and `selectionBoundary` takes about 55 ms for a 1024²
+  noise mask: a non-contiguous wand pick of a dithered area is this ticket's worst case.
+  Measure it with a benchmark `tests/perf/se-031-*.perf.ts` (a pan over such a selection on a
+  256² and a 1024² document); the number is recorded by the orchestrator.
 
 Acceptance
 - E2E per tool: the resulting mask equals the expected mask for a scripted gesture.
