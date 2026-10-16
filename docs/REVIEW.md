@@ -475,8 +475,8 @@ limit was 61% used, above the 55% a start needs.
 ### Leg 5 (2026-10-16): SE-034
 
 Leg 5 first fixed the red CI run of 90ffea5 (E96, E97). SE-034 then ran alone with one review
-and its fixes, and is Done. It was the last ticket of run 2; the run stops at checkpoint C,
-whose hand test is the owner's.
+and its fixes, and is Done. It was the last ticket of run 2; the run stopped at checkpoint C,
+which the owner passed (E109–E111).
 
 | #   | Source | Finding | Decision | Applied in |
 | --- | ------ | ------- | -------- | ---------- |
@@ -493,6 +493,9 @@ whose hand test is the owner's.
 | E106 | SE-034 review | A flip or rotation that changed nothing made an undo step and a dirty document, against E100's rule (I); a request opened before React rendered the null between two requests reused the previous dialog and its values (J); a cast typed the shared store as holding sprite requests only (K); a comment said "within 0.05 px" (P) | Null when the canvas keeps its size and every image and the pivot equal their transform; the host keys each dialog per request (the new E2E failed without the key); a read-only view narrowed by kind; "about 0.05 px" | `src/core/sprite/operations.ts`, `src/ui/dialogs/DialogHost.tsx`, `src/app/dialogs/dialogRequests.ts`, `src/app/sprite/dialogs.ts` |
 | E107 | SE-034 review | The count-limit round trip (65 535 frames, 131 072 cels) repeats se-040-limits' cost (M); the 512 MB warning E2E holds 129 hidden 1024² layers, safe only while nothing reads hidden cels (N) | M measured: 13.8 s and 19.9 s against 300 s timeouts, no change. N: a ticket that reads every cel (timeline thumbnails, SE-042's recovery encode) runs this E2E before it is Done | — |
 | E108 | Full E2E with `CI=1` | On eae1a82 (SE-034 before its review fixes) 402 of 402 passed (30.7 min); on 53830e0 (after the fixes) 403 of 403 passed (37.5 min). `npm run check` passed on both (3385 and 3424 unit tests) | SE-034 is Done; run 2 is complete and stops at checkpoint C | Ticket index |
+| E109 | Checkpoint C (owner, 2026-10-16) | CI green on 48a70ca (run 38935030284), which `origin/main` equals. The owner drew by hand in the dev build (pencil, eraser, shapes, undo) and found it fine. Stroke latency records in `docs/perf/`; G1 and G2 Passed in the index | Checkpoint C passed; run 2 is closed | — |
+| E110 | Checkpoint C (owner, 2026-10-16) | E104: the pivot follows the content under canvas size, crop, trim, flip and rotate | Confirmed by the owner: the pivot follows the content. No change | — |
+| E111 | Checkpoint C (owner, 2026-10-16) | E78: a click on the colour chips swaps foreground and background, as X does, rather than opening a picker | Confirmed by the owner: the click swaps. No change | — |
 
 ## Descoped tickets
 
