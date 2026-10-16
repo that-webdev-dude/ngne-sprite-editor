@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { collectErrors } from "./se-006-support";
 import {
     expectImage,
@@ -25,6 +26,27 @@ const HEIGHT = 24;
 const VIEW: View = { scale: 8, originX: 40, originY: 32 };
 const BLACK = [0, 0, 0, 255];
 
+/**
+ * The element's device size once the shell has laid out after a resize. The shell lays out
+ * again a frame later (the rail chooses its column count from its new height, which moves and
+ * widens the viewport), so the size is the one two reads two animation frames apart agree on.
+ */
+async function laidOutDeviceSize(page: Page): Promise<{ width: number; height: number }> {
+    let size = await hostDeviceSize(page);
+    for (let read = 0; read < 20; read += 1) {
+        await page.evaluate(
+            () =>
+                new Promise<void>((resolve) =>
+                    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+                ),
+        );
+        const next = await hostDeviceSize(page);
+        if (next.width === size.width && next.height === size.height) return size;
+        size = next;
+    }
+    throw new Error("the viewport element kept changing size after the resize");
+}
+
 test("while NGNE stretches its old canvas after a resize, a stroke paints the texel shown under the pointer", async ({
     page,
 }) => {
@@ -40,7 +62,7 @@ test("while NGNE stretches its old canvas after a resize, a stroke paints the te
     // A larger window: the element grows, NGNE's replacement waits for its device.
     await page.evaluate(() => window.__se011.holdDevices());
     await page.setViewportSize({ width: 1600, height: 900 });
-    const box = await hostDeviceSize(page);
+    const box = await laidOutDeviceSize(page);
     await expect
         .poll(() => page.evaluate(() => window.__ngneTest!.overlay!.canvasSize))
         .not.toEqual(box);
@@ -48,6 +70,7 @@ test("while NGNE stretches its old canvas after a resize, a stroke paints the te
     expect(backing.width).toBeLessThan(box.width);
     expect(backing.height).toBeLessThan(box.height);
     const layout = await geometry(page);
+    expect(layout.device).toEqual(box);
 
     // The centre of a device pixel of the element over the document, and the canvas pixel
     // shown there.

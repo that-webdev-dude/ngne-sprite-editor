@@ -472,6 +472,13 @@ limit was 61% used, above the 55% a start needs.
 | E94 | Full E2E with `CI=1` | On 798bebe (both tickets merged, before their review fixes) 391 of 391 passed (25.8 min); on a128b27 (after the fixes) 394 of 394 passed (30.7 min). `npm run check` passed on both (3256 and 3270 unit tests) | SE-017 and SE-060 are Done | Ticket index |
 | E95 | Gate G1 | SE-015 and SE-017 are Done, with the stroke latency budget recorded with the echo fallback (E69) | G1 passed on 2026-10-15; SE-022, SE-041 and SE-054 are no longer gated by it | Ticket index |
 
+### Leg 5 (2026-10-16): SE-034
+
+| #   | Source | Finding | Decision | Applied in |
+| --- | ------ | ------- | -------- | ---------- |
+| E96 | Start of the leg | `main` equalled `origin/main` (90ffea5), but CI was red on it (run 38793350343): `se-014-resize.spec.ts` painted another texel than the one it expected; 393 other tests passed. Locally it passed 15 of 15 with `CI=1`. 5-hour limit 0% used, weekly 72% | The cause is fixed before SE-034 starts | — |
+| E97 | CI fix | After a resize the shell lays out twice: a frame later the rail chooses its column count from its new height (E79), which at 1280×720 → 1600×900 goes from two columns to one and widens the viewport from 1264 to 1292 px. The test read the element's size once, which on the slower runner could be the size before the switch, so its expected texel came from the wrong stretch | The test reads the size once two reads two animation frames apart agree, and asserts that the geometry it maps with has that size. No assertion removed; 10 of 10 passed with `CI=1` | `tests/e2e/se-014-resize.spec.ts` |
+
 ## Descoped tickets
 
 None.
