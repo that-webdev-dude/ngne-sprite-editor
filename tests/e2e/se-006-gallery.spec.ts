@@ -573,7 +573,10 @@ test.describe("keyboard operation", () => {
 
         await page.keyboard.press("Space");
         await expect(list).toBeVisible();
+        // The chosen option takes the focus one timer after the list opens.
+        await expect(list.getByRole("option", { name: "Alpha compositing" })).toBeFocused();
         await page.keyboard.press("ArrowDown");
+        await expect(list.getByRole("option", { name: "Lock alpha" })).toBeFocused();
         await page.keyboard.press("Escape");
         await expect(list).toBeHidden();
         await expect(select).toHaveText("Alpha compositing");
@@ -759,6 +762,7 @@ test.describe("keyboard operation", () => {
         // Arrow keys skip the disabled item; Escape closes without acting.
         await page.keyboard.press("Shift+F10");
         await expect(menu).toBeVisible();
+        await expect(menu.locator("[data-highlighted]")).toBeFocused();
         await page.keyboard.press("End");
         await expect(menu.locator("[data-highlighted]")).toHaveText("Delete");
         await page.keyboard.press("ArrowUp");
