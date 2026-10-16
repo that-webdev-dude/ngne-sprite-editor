@@ -1,7 +1,10 @@
 // The layer commands of SPEC §7.3. Each function below makes a `Command` (SPEC §5.2) from a
 // session and plain arguments; nothing changes until `History.execute` runs it. A request
 // that cannot be met throws a `LayerError` while the command is made, with a `code` naming
-// the reason and a message that can be shown as it is.
+// the reason and a message that can be shown as it is. A request that would take the document
+// past one of its limits (SPEC §5.1: layers, cels, images, pixel memory, the length of a name)
+// throws the `DocumentLimitError` of `core/model` instead; add, duplicate, merge down and
+// flatten take the limits as an option, which a test lowers.
 //
 // A command that would change nothing is not made: the factory returns null, and there is
 // then no step to undo and nothing that makes the document dirty. The five property

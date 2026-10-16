@@ -1,5 +1,5 @@
-import { celAt, celKey, frameIndex } from "../model";
-import type { BitMask, DocSession, IdGenerator, PixelBuffer, Rect } from "../model";
+import { assertCanAdd, celAt, celKey, frameIndex } from "../model";
+import type { BitMask, DocSession, DocumentLimits, IdGenerator, PixelBuffer, Rect } from "../model";
 import { blitPixels } from "../pixels";
 import { allocateBuffer, copyRect, type PixelAllocator } from "./allocate";
 import type { Command } from "./command";
@@ -59,6 +59,8 @@ export interface TransactionHost {
     /** Makes the ID of the image of a created cel. */
     newId: IdGenerator;
     allocate: PixelAllocator;
+    /** The limits a created cel and its image must stay within (SPEC §5.1). */
+    limits: Readonly<DocumentLimits>;
     /** Called once when the transaction closes, before `record`. */
     closed(): void;
     /** Takes the command of a commit. Its change is already in the session. */
@@ -310,7 +312,8 @@ class StrokeTransaction implements Transaction {
  * Begins a stroke on the cel of a pixel layer at a frame: keeps a copy of the cel's image
  * or, when the cel is empty, creates a transparent image and the cel. Throws
  * `TransactionError` for a target that is not a cel of a pixel layer or a mask of the
- * wrong size, and `AllocationError` (session unchanged) when memory runs out.
+ * wrong size, `DocumentLimitError` when a created cel and image would take the document past
+ * `host.limits`, and `AllocationError` when memory runs out; the session is then unchanged.
  */
 export function beginTransaction(
     session: DocSession,
@@ -345,6 +348,8 @@ export function beginTransaction(
         return new StrokeTransaction(session, host, options, cel.imageId, image, before);
     }
 
+    const bytes = doc.width * doc.height * 4;
+    assertCanAdd(doc, { cels: 1, images: 1, pixelBytes: bytes }, host.limits);
     const image = allocateBuffer(host.allocate, doc.width, doc.height);
     const imageId = host.newId();
     doc.images.set(imageId, image);

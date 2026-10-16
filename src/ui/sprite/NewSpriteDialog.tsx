@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { MAX_NAME_LENGTH } from "../../core/model";
 import { NEW_SPRITE_SIZE_PRESETS, newSpriteProblems } from "../../app/sprite/dialogs";
 import type { NewSpriteRequest, NewSpriteValues } from "../../app/sprite/dialogs";
 import { Button } from "../primitives/Button";
@@ -108,6 +109,7 @@ export function NewSpriteDialog({ request }: { request: NewSpriteRequest }) {
                     type="text"
                     autoComplete="off"
                     spellCheck={false}
+                    maxLength={MAX_NAME_LENGTH}
                     value={values.name}
                     onChange={(event) => change({ name: event.target.value })}
                 />

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { appCommands } from "../../src/app/commands/appCommands";
 import { buildMenu, menuCommands } from "../../src/app/commands/menuModel";
 import { plannedCommands } from "../../src/app/commands/planned.commands";
@@ -81,6 +81,9 @@ async function editProperties(edit: (values: SpritePropertiesValues) => void) {
     answer(values);
     await done;
 }
+
+// SE-034: a request is answered at once while no dialog host is attached; the test is the host.
+beforeAll(() => spriteDialogs.attachHost());
 
 afterEach(() => {
     request()?.answer(null);
@@ -560,6 +563,7 @@ describe("Sprite Properties", () => {
 describe("sprite dialog requests", () => {
     it("one dialog at a time: a request made while another is open is answered with null", async () => {
         const dialogs = createSpriteDialogs();
+        dialogs.attachHost();
         const initial = { name: "a", width: 8, height: 8 };
         const first = dialogs.newSprite({ initial, discards: null });
         const open = dialogs.store.getState().request;
@@ -580,6 +584,7 @@ describe("sprite dialog requests", () => {
 
     it("an answer closes the dialog; a second answer changes nothing", async () => {
         const dialogs = createSpriteDialogs();
+        dialogs.attachHost();
         const initial = { name: "a", width: 8, height: 8 };
         const first = dialogs.newSprite({ initial, discards: "old" });
         const stale = dialogs.store.getState().request;
@@ -599,6 +604,7 @@ describe("sprite dialog requests", () => {
 
     it("tells subscribers when a dialog opens and closes", async () => {
         const dialogs = createSpriteDialogs();
+        dialogs.attachHost();
         const seen: (string | null)[] = [];
         dialogs.store.subscribe((state) => seen.push(state.request?.kind ?? null));
         const done = dialogs.newSprite({

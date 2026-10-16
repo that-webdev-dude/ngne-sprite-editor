@@ -7,6 +7,7 @@ import { AppShell } from "./shell/AppShell";
 import { isWindowTooSmall } from "./shell/layout";
 import { WebGpuRequired } from "./shell/notices/WebGpuRequired";
 import { WindowTooSmall } from "./shell/notices/WindowTooSmall";
+import { PixelMemoryWarning } from "./sprite/PixelMemoryWarning";
 import { AppSurfaces } from "./surfaces/AppSurfaces";
 import { UiRoot } from "./UiRoot";
 
@@ -41,6 +42,7 @@ function Editor() {
             <AppShell hidden={tooSmall} />
             {tooSmall ? <WindowTooSmall width={width} height={height} /> : null}
             <AppSurfaces />
+            <PixelMemoryWarning />
         </>
     );
 }

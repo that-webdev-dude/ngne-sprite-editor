@@ -1,6 +1,6 @@
 import { compositeFrame } from "../composite";
 import type { Command } from "../history";
-import { celAt, celKey, randomId } from "../model";
+import { assertWithinLimits, celAt, celKey, documentCounts, randomId } from "../model";
 import type { DocSession, PixelBuffer, PixelLayer, SpriteDoc } from "../model";
 import { pixelBuffersEqual } from "../pixels";
 import { LayerError } from "./errors";
@@ -62,6 +62,38 @@ interface MergeRule {
     activate(activeLayerId: string): string;
 }
 
+/**
+ * Throws `DocumentLimitError` when a merge could take the document past its limits of images,
+ * cels or pixel memory (SPEC §5.1). A merge removes every cel of the merged layers, with the
+ * images no other cel names, and gives the target a cel at each of `frames` frames, with at
+ * most one new image each: the most it can leave is checked, before anything is composited.
+ * Linked cels whose results are equal share an image in the end, so a merge near a limit may
+ * be refused although its result would have fitted.
+ */
+function assertMergeWithinLimits(
+    doc: SpriteDoc,
+    mergedIds: ReadonlySet<string>,
+    frames: number,
+    options: LayerImageOptions,
+): void {
+    const removedCels = celKeysOf(doc, [...mergedIds]);
+    const kept = new Set<string>();
+    const named = new Set<string>();
+    for (const [key, cel] of doc.cels) (removedCels.has(key) ? named : kept).add(cel.imageId);
+    const removedImages = [...named].filter((imageId) => !kept.has(imageId)).length;
+    const before = documentCounts(doc);
+    const images = before.images - removedImages + frames;
+    assertWithinLimits(
+        before,
+        {
+            cels: before.cels - removedCels.size + frames,
+            images,
+            pixelBytes: images * doc.width * doc.height * 4,
+        },
+        options.limits,
+    );
+}
+
 /** The edit that merges `merged` (pixel layers, bottom to top; the first is the target). */
 function mergeEdit(
     session: DocSession,
@@ -78,8 +110,10 @@ function mergeEdit(
     // one for each frame at which a merged layer has a cel. A frame that gets no image
     // (flatten: all its cels are hidden) leaves its ID unused; linked cels use the ID of the
     // first of their frames.
+    const frames = framesWithCels(doc, merged);
+    assertMergeWithinLimits(doc, mergedIds, frames.length, options);
     const imageIds = new Map<string, string>();
-    for (const frameId of framesWithCels(doc, merged)) imageIds.set(frameId, newId());
+    for (const frameId of frames) imageIds.set(frameId, newId());
 
     return {
         label,
@@ -153,7 +187,8 @@ function mergeEdit(
  * each do: the active layer can be switched between an undo and a redo.
  *
  * Throws the `layer-not-found` error, the `not-a-pixel-layer` error for a reference layer and
- * the `no-pixel-layer-below` error when there is no pixel layer below.
+ * the `no-pixel-layer-below` error when there is no pixel layer below, and
+ * `DocumentLimitError` when the merge could pass `options.limits` (`assertMergeWithinLimits`).
  */
 export function mergeDownCommand(
     session: DocSession,
@@ -202,7 +237,8 @@ function isFlat(doc: SpriteDoc): boolean {
  *
  * A document with one pixel layer is flattened too when there is something to bake: the
  * layer's opacity, blend mode or visibility, or the opacity of a cel. Returns null when
- * there is not (`isFlat`): flatten would change nothing, so there is no step to undo.
+ * there is not (`isFlat`): flatten would change nothing, so there is no step to undo. Throws
+ * `DocumentLimitError` when the merge could pass `options.limits` (`assertMergeWithinLimits`).
  */
 export function flattenCommand(
     session: DocSession,

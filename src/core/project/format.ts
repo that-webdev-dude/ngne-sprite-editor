@@ -1,3 +1,9 @@
+import {
+    DOCUMENT_LIMITS,
+    MAX_DOCUMENT_PIXEL_BYTES,
+    MAX_NAME_LENGTH as MODEL_NAME_LENGTH,
+} from "../model";
+
 // Names, version and limits of the `.ngsprite` project file, schema version 1, as specified in
 // docs/FORMAT.md. A value changed here is a change of the format: it needs a new schema
 // version and a migration (SPEC §10).
@@ -39,12 +45,15 @@ export function referenceEntry(sourceId: string): string {
 // once is written inside every limit of a size. A test builds that document and saves it
 // (se-040-limits.test.ts); the sums for what it does not reach are in the comments below.
 
-/** Most layers, frames, tags and cels of a document. */
-export const MAX_PROJECT_LAYERS = 1024;
-export const MAX_PROJECT_FRAMES = 65_535;
-export const MAX_PROJECT_TAGS = 1024;
+/**
+ * Most layers, frames, tags and cels of a document: the limits of the document model
+ * (`DOCUMENT_LIMITS` of `core/model`), which the commands that add them enforce.
+ */
+export const MAX_PROJECT_LAYERS = DOCUMENT_LIMITS.layers;
+export const MAX_PROJECT_FRAMES = DOCUMENT_LIMITS.frames;
+export const MAX_PROJECT_TAGS = DOCUMENT_LIMITS.tags;
 /** 128 full layers of 1024 frames. */
-export const MAX_PROJECT_CELS = 131_072;
+export const MAX_PROJECT_CELS = DOCUMENT_LIMITS.cels;
 
 /** Most colours of the palette (SPEC §5.1). */
 export const MAX_PROJECT_PALETTE_COLORS = 256;
@@ -63,7 +72,7 @@ export const MAX_PROJECT_ENTRIES = 65_534;
  * and `MAX_PROJECT_REFERENCE_LAYERS` reference sources. Linked cels share an image, so a
  * document can have `MAX_PROJECT_CELS` cels all the same.
  */
-export const MAX_PROJECT_IMAGES = 65_527;
+export const MAX_PROJECT_IMAGES = DOCUMENT_LIMITS.images;
 
 /** Longest ID, in characters. */
 export const MAX_ID_LENGTH = 64;
@@ -72,7 +81,7 @@ export const MAX_ID_LENGTH = 64;
  * Longest text a file holds as one string: the name of a document, layer, tag or palette, and
  * the generator. Counted as JavaScript counts it, in UTF-16 code units.
  */
-export const MAX_NAME_LENGTH = 255;
+export const MAX_NAME_LENGTH = MODEL_NAME_LENGTH;
 
 /** Farthest a reference layer's `x` or `y` lies from the canvas origin, in document pixels. */
 export const MAX_REFERENCE_OFFSET = 1_000_000;
@@ -105,7 +114,7 @@ export function maxImageEntryBytes(width: number, height: number): number {
 export const MAX_REFERENCE_SOURCE_BYTES = 64 * 1024 * 1024;
 
 /** Most pixel data a project holds (images × width × height × 4): the 1 GB of SPEC §5.1. */
-export const MAX_PROJECT_PIXEL_BYTES = 1024 * 1024 * 1024;
+export const MAX_PROJECT_PIXEL_BYTES = MAX_DOCUMENT_PIXEL_BYTES;
 
 /**
  * Most bytes the entries of a project hold together, uncompressed. The other limits stay

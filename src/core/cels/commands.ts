@@ -1,6 +1,14 @@
 import type { Command, PixelAllocator } from "../history";
-import { celAt, frameIndex, layerIndex, randomId } from "../model";
-import type { Cel, IdGenerator, SpriteDoc, Touched } from "../model";
+import {
+    DOCUMENT_LIMITS,
+    assertWithinLimits,
+    celAt,
+    documentCounts,
+    frameIndex,
+    layerIndex,
+    randomId,
+} from "../model";
+import type { Cel, DocumentLimits, IdGenerator, SpriteDoc, Touched } from "../model";
 import { CelPlan, defaultAllocator, type CellRef } from "./celPlan";
 import { CelOpacityError, CelTargetError, isCelOpacity } from "./errors";
 
@@ -78,10 +86,18 @@ function counted(label: string, { layers, frames }: Positions): string {
 /**
  * The command of a plan, or null when the plan leaves every cel as it is. Its `do` throws,
  * with the session unchanged, when the document no longer is what the plan was made from.
+ * With `limits`, throws `DocumentLimitError` when the plan would take the document past
+ * them (SPEC §5.1): the commands that can add cels and images pass them.
  */
-function celCommand(label: string, doc: SpriteDoc, plan: CelPlan): Command | null {
+function celCommand(
+    label: string,
+    doc: SpriteDoc,
+    plan: CelPlan,
+    limits?: Readonly<DocumentLimits>,
+): Command | null {
     const change = plan.build();
     if (!change) return null;
+    if (limits) assertWithinLimits(documentCounts(doc), change.after, limits);
     return {
         label,
         bytes: change.bytes,
@@ -179,8 +195,9 @@ export function moveCelsCommand(
  * afterwards are removed, and undo restores them.
  *
  * The IDs of the new images come from `newId`. Returns null when nothing would change, which
- * includes an offset of zero. Throws as `moveCelsCommand` does; `do` throws `AllocationError`
- * with the session unchanged when an image cannot be allocated.
+ * includes an offset of zero. Throws as `moveCelsCommand` does, and `DocumentLimitError` when
+ * the copies would take the document past `limits` (SPEC §5.1); `do` throws
+ * `AllocationError` with the session unchanged when an image cannot be allocated.
  */
 export function copyCelsCommand(
     doc: SpriteDoc,
@@ -188,6 +205,7 @@ export function copyCelsCommand(
     offset: CelOffset,
     newId: IdGenerator = randomId,
     allocate: PixelAllocator = defaultAllocator,
+    limits: Readonly<DocumentLimits> = DOCUMENT_LIMITS,
 ): Command | null {
     const positions = positionsOf(doc, selection, "copyCelsCommand");
     const pairs = shifted(doc, positions, offset, "copyCelsCommand");
@@ -198,7 +216,7 @@ export function copyCelsCommand(
         const copy = cel ? { imageId: plan.copyOf(cel.imageId), opacity: cel.opacity } : null;
         plan.set(to.layerId, to.frameId, copy);
     }
-    return celCommand(counted("Copy Cel", positions), doc, plan);
+    return celCommand(counted("Copy Cel", positions), doc, plan, limits);
 }
 
 /**
@@ -229,13 +247,16 @@ export function linkCelsCommand(doc: SpriteDoc, selection: CelSelection): Comman
  * selected, the last of them (layers from the bottom, then frames in order) keeps the image.
  *
  * The IDs of the new images come from `newId`. Returns null when no selected cel is linked.
- * `do` throws `AllocationError` with the session unchanged when an image cannot be allocated.
+ * Throws `DocumentLimitError` when the new images would take the document past `limits`
+ * (SPEC §5.1). `do` throws `AllocationError` with the session unchanged when an image cannot
+ * be allocated.
  */
 export function unlinkCelsCommand(
     doc: SpriteDoc,
     selection: CelSelection,
     newId: IdGenerator = randomId,
     allocate: PixelAllocator = defaultAllocator,
+    limits: Readonly<DocumentLimits> = DOCUMENT_LIMITS,
 ): Command | null {
     const positions = positionsOf(doc, selection, "unlinkCelsCommand");
     const users = new Map<string, number>();
@@ -251,7 +272,7 @@ export function unlinkCelsCommand(
             opacity: cel.opacity,
         });
     }
-    return celCommand(counted("Unlink Cel", positions), doc, plan);
+    return celCommand(counted("Unlink Cel", positions), doc, plan, limits);
 }
 
 /**

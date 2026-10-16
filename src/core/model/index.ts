@@ -4,4 +4,5 @@ export * from "./defaultPalette";
 export * from "./defaults";
 export * from "./ids";
 export * from "./invariants";
+export * from "./limits";
 export * from "./queries";

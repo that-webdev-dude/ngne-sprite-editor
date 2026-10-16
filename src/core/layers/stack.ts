@@ -1,6 +1,6 @@
 import type { Command, PixelAllocator } from "../history";
-import { celAt, celKey, layerIndex, randomId } from "../model";
-import type { DocSession, IdGenerator, Layer, PixelLayer } from "../model";
+import { assertCanAdd, celAt, celKey, layerIndex, randomId, truncateName } from "../model";
+import type { DocSession, DocumentLimits, IdGenerator, Layer, PixelLayer } from "../model";
 import { LayerError } from "./errors";
 import {
     canDeleteLayer,
@@ -31,6 +31,8 @@ export interface AddLayerOptions {
     name?: string;
     /** Makes the ID of the new layer; the default is `randomId`. */
     newId?: IdGenerator;
+    /** The limits the command checks (SPEC §5.1); the default is `DOCUMENT_LIMITS`. */
+    limits?: Readonly<DocumentLimits>;
 }
 
 /** Options of the commands that create images. */
@@ -39,6 +41,8 @@ export interface LayerImageOptions {
     newId?: IdGenerator;
     /** Allocates the images the command creates; a test replaces it to simulate failure. */
     allocate?: PixelAllocator;
+    /** The limits the command checks (SPEC §5.1); the default is `DOCUMENT_LIMITS`. */
+    limits?: Readonly<DocumentLimits>;
 }
 
 /**
@@ -50,11 +54,15 @@ export interface LayerImageOptions {
  *
  * The position is the one found when the command is made: a redo puts the layer there
  * again, whichever layer is active by then, so that it gives the document of the first do.
+ *
+ * Throws `DocumentLimitError` when the document has as many layers as `options.limits`
+ * allows, or the name is longer than `MAX_NAME_LENGTH`.
  */
 export function addLayerCommand(session: DocSession, options: AddLayerOptions = {}): Command {
     const { doc } = session;
     const { newId = randomId } = options;
     const given = options.name === undefined ? undefined : normalizeLayerName(options.name);
+    assertCanAdd(doc, { layers: 1 }, options.limits);
     const id = newId();
     const active = doc.layers.find((candidate) => candidate.id === session.activeLayerId);
     const index = active?.kind === "pixel" ? layerIndex(doc, active.id) + 1 : doc.layers.length;
@@ -136,7 +144,9 @@ export function deleteLayerCommand(session: DocSession, layerId: string): Comman
  * copy, to a copy of their image, and never to the layer they were copied from.
  *
  * Throws the `layer-not-found` error, and the `not-a-pixel-layer` error for a reference
- * layer: reference layers are created only in the ways SPEC §7.6 lists.
+ * layer: reference layers are created only in the ways SPEC §7.6 lists. Throws
+ * `DocumentLimitError` when the copy, its cels or its images would take the document past
+ * `options.limits`. A name that would pass `MAX_NAME_LENGTH` with " Copy" is cut to it.
  */
 export function duplicateLayerCommand(
     session: DocSession,
@@ -147,20 +157,39 @@ export function duplicateLayerCommand(
     const { newId = randomId, allocate = defaultAllocator } = options;
     const label = "Duplicate Layer";
     const source = findPixelLayer(doc, layerId, label);
-    const copyId = newId();
     // One new image per image of the layer, so that the links carry over.
-    const copyOf = new Map<string, string>();
+    const images = new Set<string>();
+    let cels = 0;
     for (const frame of doc.frames) {
         const cel = celAt(doc, layerId, frame.id);
-        if (cel && !copyOf.has(cel.imageId)) copyOf.set(cel.imageId, newId());
+        if (!cel) continue;
+        cels++;
+        images.add(cel.imageId);
     }
+    assertCanAdd(
+        doc,
+        {
+            layers: 1,
+            cels,
+            images: images.size,
+            pixelBytes: images.size * doc.width * doc.height * 4,
+        },
+        options.limits,
+    );
+    const copyId = newId();
+    const copyOf = new Map<string, string>();
+    for (const imageId of images) copyOf.set(imageId, newId());
     return stackCommand(session, {
         label,
         // The copy shows wherever the layer has a cel.
         touched: { ...touchedByLayers(doc, [source], true), layerIds: [copyId] },
         change(current) {
             const found = findPixelLayer(current.doc, layerId, label);
-            const copy: PixelLayer = { ...found, id: copyId, name: `${found.name} Copy` };
+            const copy: PixelLayer = {
+                ...found,
+                id: copyId,
+                name: truncateName(`${found.name} Copy`),
+            };
             return {
                 layers: insertedAt(current.doc.layers, layerIndex(current.doc, layerId) + 1, copy),
                 activeLayerId: copyId,

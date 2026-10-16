@@ -510,42 +510,14 @@ export function attachImages(
 }
 
 /**
- * The two invariants of SPEC §5.1 about the range of a tag, "tag-endpoints-exist" and
- * "tag-order", with the model's own error. Called once the frame IDs are known to be
- * distinct. `assertInvariants` finds each endpoint by walking the frame list, which is
- * tags × frames comparisons of IDs: many seconds for a file at the limits of both, with IDs
- * of full length. Here the frames are looked up, and the work is their sum.
- */
-function assertTagRanges(doc: SpriteDoc): void {
-    const indexOf = new Map(doc.frames.map((frame, index) => [frame.id, index] as const));
-    for (const tag of doc.tags) {
-        const from = indexOf.get(tag.fromFrameId);
-        const to = indexOf.get(tag.toFrameId);
-        if (from === undefined || to === undefined) {
-            const missing = from === undefined ? tag.fromFrameId : tag.toFrameId;
-            throw new InvariantError(
-                "tag-endpoints-exist",
-                `tag "${tag.id}" names frame "${missing}"`,
-            );
-        }
-        if (from > to) {
-            throw new InvariantError(
-                "tag-order",
-                `tag "${tag.id}" runs from frame index ${from} to ${to}`,
-            );
-        }
-    }
-}
-
-/**
  * Checks the invariants of SPEC §5.1 with the model's `assertInvariants`, on a document that
  * has no image yet: before a pixel is decoded. One blank image of the document's size stands
  * in for every image the cels name, since the invariants ask whether a cel's image exists
  * and what size it has, never what it shows. `attachImages` then puts an image of that size
  * under each of those IDs and no other, so what holds here holds for the finished document.
  *
- * The model is shown every tag with its range set to the first frame, and the ranges are
- * checked by `assertTagRanges`: the same two invariants, in time a file cannot stretch.
+ * `assertInvariants` looks the tag endpoints up in a map of the frames, so a file at the
+ * limits of both tags and frames cannot stretch the check.
  *
  * Throws `ProjectError` "invariant" whose `cause` is the `InvariantError`.
  */
@@ -554,17 +526,14 @@ export function assertSkeleton(skeleton: DocSkeleton): void {
     const blank = createPixelBuffer(doc.width, doc.height);
     for (const imageId of imageIds) doc.images.set(imageId, blank);
     try {
-        const first = doc.frames[0]?.id ?? "";
-        const tags = doc.tags.map((tag) => ({ ...tag, fromFrameId: first, toFrameId: first }));
         // The session part of the check cannot fail: without a first layer or a first frame
         // the document's own invariants fail before it.
         assertInvariants({
-            doc: { ...doc, tags },
+            doc,
             selection: null,
             activeLayerId: doc.layers[0]?.id ?? "",
-            activeFrameId: first,
+            activeFrameId: doc.frames[0]?.id ?? "",
         });
-        assertTagRanges(doc);
     } catch (cause) {
         if (!(cause instanceof InvariantError)) throw cause;
         throw new ProjectError("invariant", `The document is not valid. ${cause.message}.`, {

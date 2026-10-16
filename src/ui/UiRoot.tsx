@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect } from "react";
 import type { ReactNode } from "react";
+import { DialogHost } from "./dialogs/DialogHost";
 import { inertOutsideModalLayers } from "./focus/inertOutside";
 import { trackFocusModality } from "./focus/modality";
 import { TooltipProvider } from "./primitives/Tooltip";
@@ -11,7 +12,8 @@ import "./styles/base.css";
 /**
  * Everything the primitives need above them: tokens and base styles, the theme mirrored to
  * `<html data-theme>`, focus-modality tracking, `inert` outside modal layers, the tooltip
- * provider and the toast viewport.
+ * provider, the toast viewport and the host of the command dialogs (SE-034: at the root, so
+ * no failed region takes the dialogs with it).
  * Rendered once at the root of the app (and of any test page that mounts interface code).
  */
 export function UiRoot({ children }: { children: ReactNode }) {
@@ -25,6 +27,7 @@ export function UiRoot({ children }: { children: ReactNode }) {
     return (
         <TooltipProvider>
             {children}
+            <DialogHost />
             <ToastViewport />
         </TooltipProvider>
     );

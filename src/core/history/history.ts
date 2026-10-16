@@ -1,5 +1,5 @@
-import { randomId } from "../model";
-import type { DocSession, IdGenerator, Touched } from "../model";
+import { DOCUMENT_LIMITS, randomId } from "../model";
+import type { DocSession, DocumentLimits, IdGenerator, Touched } from "../model";
 import { defaultPixelAllocator, type PixelAllocator } from "./allocate";
 import type { Command } from "./command";
 import { TransactionError } from "./errors";
@@ -14,6 +14,11 @@ export interface HistoryOptions {
     budgetBytes?: number;
     /** Allocates the pixel memory of transactions; a test replaces it to simulate failure. */
     allocate?: PixelAllocator;
+    /**
+     * The limits a transaction that creates a cel checks (SPEC §5.1); the default is
+     * `DOCUMENT_LIMITS`. A test lowers them.
+     */
+    limits?: Readonly<DocumentLimits>;
 }
 
 /** One step of a history, as reported to its subscribers. */
@@ -46,6 +51,7 @@ export class History {
     /** Memory budget in bytes. */
     readonly budgetBytes: number;
     readonly #allocate: PixelAllocator;
+    readonly #limits: Readonly<DocumentLimits>;
     /** Oldest first. Entries below `#done` are done; the rest are undone and can be redone. */
     readonly #entries: Entry[] = [];
     #done = 0;
@@ -60,6 +66,7 @@ export class History {
         this.session = session;
         this.budgetBytes = options.budgetBytes ?? DEFAULT_HISTORY_BUDGET_BYTES;
         this.#allocate = options.allocate ?? defaultPixelAllocator;
+        this.#limits = options.limits ?? DOCUMENT_LIMITS;
     }
 
     /** Number of commands `undo` can still reverse. */
@@ -146,13 +153,16 @@ export class History {
     /**
      * Begins a tool stroke on the cel of a pixel layer at a frame (SPEC §5.2). An empty
      * cel gets a transparent image, whose ID comes from `newId`. Throws `TransactionError`
-     * for a target that is not such a cel, and `AllocationError` with the session unchanged.
+     * for a target that is not such a cel, `DocumentLimitError` when the cel and its image
+     * would take the document past a limit (SPEC §5.1), and `AllocationError`; the session is
+     * then unchanged.
      */
     begin(options: TransactionOptions, newId: IdGenerator = randomId): Transaction {
         this.#assertIdle("begin");
         this.#transaction = beginTransaction(this.session, options, {
             newId,
             allocate: this.#allocate,
+            limits: this.#limits,
             closed: () => {
                 this.#transaction = null;
             },

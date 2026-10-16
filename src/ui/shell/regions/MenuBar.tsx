@@ -3,7 +3,6 @@ import { MENU_BAR } from "../../../app/commands/types";
 import { CommandPaletteTrigger } from "../../commandPalette/CommandPaletteTrigger";
 import { MenubarItems } from "../../menubar/MenubarItems";
 import { DocumentName } from "../../sprite/DocumentName";
-import { SpriteDialogs } from "../../sprite/SpriteDialogs";
 import "../../primitives/menu.css";
 import "../../menubar/menubar.css";
 
@@ -33,7 +32,7 @@ function Menus() {
 /**
  * Menu bar content: the menus, the name of the active document in the centre (SE-008) and the
  * command palette trigger at the right (SE-064). The document tabs are added by SE-047.
- * The dialogs of the sprite commands are mounted here, next to the menus that open them.
+ * The dialogs the menus open are shown by the dialog host at the root of the app (SE-034).
  */
 export function MenuBar() {
     return (
@@ -41,7 +40,6 @@ export function MenuBar() {
             <Menus />
             <DocumentName />
             <CommandPaletteTrigger />
-            <SpriteDialogs />
         </>
     );
 }

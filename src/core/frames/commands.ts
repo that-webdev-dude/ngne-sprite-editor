@@ -1,7 +1,14 @@
 import { CelPlan, defaultAllocator, type CelChange } from "../cels/celPlan";
 import type { Command, PixelAllocator } from "../history";
-import { celAt, frameIndex, randomId } from "../model";
-import type { FrameInfo, IdGenerator, SpriteDoc } from "../model";
+import {
+    assertCanAdd,
+    assertWithinLimits,
+    celAt,
+    documentCounts,
+    frameIndex,
+    randomId,
+} from "../model";
+import type { DocumentLimits, FrameInfo, IdGenerator, SpriteDoc } from "../model";
 import { followFrames } from "../tags/follow";
 import { sameTags, tagListChange } from "../tags/tagList";
 import { FrameDurationError, isFrameDuration, LastFrameError } from "./errors";
@@ -115,14 +122,17 @@ function frameListCommand(edit: FrameListEdit): Command {
 /**
  * Adds an empty frame after the frame `afterFrameId`, with that frame's duration, and makes
  * it the active frame. Its ID comes from `newId`. A tag that contains `afterFrameId` contains
- * the new frame as well. Throws `RangeError` when the document has no such frame.
+ * the new frame as well. Throws `RangeError` when the document has no such frame, and
+ * `DocumentLimitError` when it has as many frames as `limits` allows (SPEC §5.1).
  */
 export function addFrameCommand(
     doc: SpriteDoc,
     afterFrameId: string,
     newId: IdGenerator = randomId,
+    limits?: Readonly<DocumentLimits>,
 ): Command {
     const [at] = positionsOf(doc, [afterFrameId], "addFrameCommand");
+    assertCanAdd(doc, { frames: 1 }, limits);
     const frame: FrameInfo = { ...doc.frames[at], id: newId() };
     return frameListCommand({
         label: "New Empty Frame",
@@ -143,15 +153,20 @@ export function addFrameCommand(
  *
  * `newId` gives the IDs of the new frames, then those of the new images. `do` throws
  * `AllocationError` with the session unchanged when an image cannot be allocated. Throws
- * `RangeError` when no frame is named or the document lacks one of them.
+ * `RangeError` when no frame is named or the document lacks one of them, and
+ * `DocumentLimitError` when the copies, their cels or their images would take the document
+ * past `limits` (SPEC §5.1).
  */
 export function duplicateFramesCommand(
     doc: SpriteDoc,
     frameIds: readonly string[],
     newId: IdGenerator = randomId,
     allocate: PixelAllocator = defaultAllocator,
+    limits?: Readonly<DocumentLimits>,
 ): Command {
     const positions = positionsOf(doc, frameIds, "duplicateFramesCommand");
+    // The frames are checked before any ID is made; the cels and images once they are planned.
+    assertCanAdd(doc, { frames: positions.length }, limits);
     const sources = positions.map((index) => doc.frames[index]);
     const copies = sources.map((source): FrameInfo => ({ ...source, id: newId() }));
     const plan = new CelPlan(doc, newId, allocate);
@@ -164,6 +179,14 @@ export function duplicateFramesCommand(
         }
     });
     const cels = plan.build();
+    if (cels) {
+        const before = documentCounts(doc);
+        assertWithinLimits(
+            before,
+            { ...cels.after, frames: before.frames + positions.length },
+            limits,
+        );
+    }
     const end = positions[positions.length - 1] + 1;
     return frameListCommand({
         label: counted("New Frame", copies.length),

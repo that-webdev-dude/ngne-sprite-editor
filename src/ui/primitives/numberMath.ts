@@ -4,6 +4,12 @@ export interface NumberRange {
     max?: number;
     /** Size of one arrow-key step and the grid values snap to. Default 1. */
     step?: number;
+    /**
+     * Decimals a value keeps when it is typed or stepped; the default is the decimals of
+     * `step`. The field shows the step's decimals at least, and up to these when the value
+     * has more (SE-034: a pivot keeps four decimals and steps by 0.01).
+     */
+    precision?: number;
 }
 
 /** Arrow keys move by one step, with Shift by ten. */
@@ -19,12 +25,18 @@ function decimals(step: number): number {
     return point < 0 ? 0 : text.length - point - 1;
 }
 
-/** Clamps to the range and removes binary noise beyond the step's decimals. */
-export function normalizeNumber(value: number, { min, max, step = 1 }: NumberRange): number {
+/** Decimals a value of the range keeps: the step's, or `precision` when that is more. */
+function keptDecimals({ step = 1, precision = 0 }: NumberRange): number {
+    return Math.max(decimals(step), precision);
+}
+
+/** Clamps to the range and removes binary noise beyond the decimals the range keeps. */
+export function normalizeNumber(value: number, range: NumberRange): number {
+    const { min, max } = range;
     let next = value;
     if (min !== undefined) next = Math.max(min, next);
     if (max !== undefined) next = Math.min(max, next);
-    return Number(next.toFixed(decimals(step)));
+    return Number(next.toFixed(keptDecimals(range)));
 }
 
 /** The value after `steps` arrow presses (negative for down). */
@@ -51,6 +63,21 @@ export function parseNumber(text: string, range: NumberRange): number | null {
     return Number.isFinite(value) ? normalizeNumber(value, range) : null;
 }
 
-export function formatNumber(value: number, { step = 1 }: NumberRange): string {
-    return value.toFixed(decimals(step));
+/**
+ * The value as the field shows it: with the decimals of the step, and with more, up to
+ * `precision`, when the value needs them (0.5 → "0.50", 0.9688 → "0.9688" for a step of
+ * 0.01 and a precision of 4).
+ */
+export function formatNumber(value: number, range: NumberRange): string {
+    const least = decimals(range.step ?? 1);
+    const most = keptDecimals(range);
+    const text = value.toFixed(most);
+    if (most === least) return text;
+    const point = text.indexOf(".");
+    const shortest = least === 0 ? point : point + 1 + least;
+    let end = text.length;
+    while (end > shortest && text[end - 1] === "0") end--;
+    // No decimal left: no point either.
+    if (end === point + 1) end = point;
+    return text.slice(0, end);
 }

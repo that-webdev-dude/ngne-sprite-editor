@@ -1,5 +1,5 @@
 import type { Command } from "../history";
-import { MAX_DOCUMENT_SIDE } from "../model";
+import { assertNameLength, MAX_DOCUMENT_SIDE, MAX_NAME_LENGTH } from "../model";
 import type { DocSettings, GridSettings, SpriteDoc, Touched } from "../model";
 
 // Sprite properties of SPEC §7.7. Name and pivot change through undoable commands; the grid is
@@ -62,16 +62,22 @@ function nothingTouched(): Touched {
     return { frameIds: [], layerIds: [], structure: false };
 }
 
-/** The name as a document stores it: without surrounding white space. Throws `SpriteNameError`. */
+/**
+ * The name as a document stores it: without surrounding white space. Throws `SpriteNameError`
+ * for an empty name, and `DocumentLimitError` for one longer than `MAX_NAME_LENGTH` UTF-16
+ * code units (FORMAT.md §1.2), which no file could hold.
+ */
 export function normalizeSpriteName(name: string): string {
     const trimmed = name.trim();
     if (trimmed === "") throw new SpriteNameError();
+    assertNameLength(trimmed);
     return trimmed;
 }
 
 /** Whether `normalizeSpriteName` accepts the name. */
 export function isSpriteName(name: string): boolean {
-    return name.trim() !== "";
+    const trimmed = name.trim();
+    return trimmed !== "" && trimmed.length <= MAX_NAME_LENGTH;
 }
 
 /** Whether both coordinates are numbers in 0..1. */
@@ -82,7 +88,8 @@ export function isPivot(pivot: Pivot): boolean {
 
 /**
  * Renames the document (the name is also the export base name, SPEC §5.1). Throws
- * `SpriteNameError` for an empty name; the command is then not created.
+ * `SpriteNameError` for an empty name and `DocumentLimitError` for one that is too long; the
+ * command is then not created.
  */
 export function renameSpriteCommand(name: string): Command {
     const next = normalizeSpriteName(name);

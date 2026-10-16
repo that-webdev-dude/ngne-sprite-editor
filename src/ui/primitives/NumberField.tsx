@@ -48,8 +48,9 @@ export function NumberField({
     min,
     max,
     step,
+    precision,
 }: NumberFieldProps) {
-    const range: NumberRange = { min, max, step };
+    const range: NumberRange = { min, max, step, precision };
     const generatedId = useId();
     const inputId = id ?? generatedId;
     const [draft, setDraft] = useState<string | null>(null);

@@ -1,4 +1,4 @@
-import { celKey } from "../model";
+import { assertNameLength, celKey, MAX_NAME_LENGTH } from "../model";
 import type { Layer, PixelLayer, SpriteDoc, Touched } from "../model";
 import { LayerError } from "./errors";
 
@@ -103,14 +103,20 @@ export function nextLayerName(doc: SpriteDoc): string {
     return `Layer ${Math.max(0, ...numbers) + 1}`;
 }
 
-/** The name as a layer stores it: without surrounding white space. Throws the `name` error. */
+/**
+ * The name as a layer stores it: without surrounding white space. Throws the `name` error
+ * for an empty name, and `DocumentLimitError` for one longer than `MAX_NAME_LENGTH` UTF-16
+ * code units (FORMAT.md §1.2), which no file could hold.
+ */
 export function normalizeLayerName(name: string): string {
     const trimmed = name.trim();
     if (trimmed === "") throw new LayerError("name", "A layer name cannot be empty.");
+    assertNameLength(trimmed);
     return trimmed;
 }
 
 /** Whether `normalizeLayerName` accepts the name. */
 export function isLayerName(name: string): boolean {
-    return name.trim() !== "";
+    const trimmed = name.trim();
+    return trimmed !== "" && trimmed.length <= MAX_NAME_LENGTH;
 }

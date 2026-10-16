@@ -1,6 +1,7 @@
 import { writeOklab } from "../color";
 import type { Command } from "../history";
 import { buildPalette } from "../import";
+import { assertNameLength } from "../model";
 import type { DocSession, Palette, PixelBuffer, Touched } from "../model";
 import { MAX_PROJECT_PALETTE_COLORS } from "../project/format";
 import type { PresetPalette } from "./presets";
@@ -44,13 +45,15 @@ function isIndex(palette: Palette, index: number): boolean {
 /**
  * The command that makes `next` the session's palette, labelled `label`; null when `next` is
  * the palette now (same name, same colours in the same order). Throws `RangeError` for more
- * than `MAX_PALETTE_COLORS` colours or a colour that is not an integer 0..0xFFFFFFFF.
+ * than `MAX_PALETTE_COLORS` colours or a colour that is not an integer 0..0xFFFFFFFF, and
+ * `DocumentLimitError` for a name longer than `MAX_NAME_LENGTH` (FORMAT.md §1.2).
  */
 export function setPaletteCommand(
     session: DocSession,
     next: Palette,
     label: string,
 ): Command | null {
+    assertNameLength(next.name);
     if (next.colors.length > MAX_PALETTE_COLORS) {
         throw new RangeError(
             `setPaletteCommand: ${next.colors.length} colours; a palette holds at most ` +

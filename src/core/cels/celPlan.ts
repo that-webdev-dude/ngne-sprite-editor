@@ -1,6 +1,6 @@
 import { AllocationError } from "../history";
 import type { PixelAllocator } from "../history";
-import { celKey, randomId } from "../model";
+import { celKey, pixelMemoryBytes, randomId } from "../model";
 import type { Cel, IdGenerator, PixelBuffer, SpriteDoc } from "../model";
 import { applyMapEdit, revertMapEdit, type MapUndo } from "./orderedMap";
 
@@ -37,6 +37,11 @@ function copyImage(allocate: PixelAllocator, source: PixelBuffer): PixelBuffer {
 export interface CelChange {
     /** Pixel memory of the images the change removes; it keeps them while it is applied. */
     readonly bytes: number;
+    /**
+     * The cels, images and pixel memory the document has once the change is applied, for
+     * the limits of SPEC §5.1.
+     */
+    readonly after: { readonly cels: number; readonly images: number; readonly pixelBytes: number };
     /** The cells whose cel the change creates, removes or replaces, in the order planned. */
     readonly cells: readonly CellRef[];
     /**
@@ -148,10 +153,19 @@ export class CelPlan {
         const copies = [...this.#copies].filter(([id]) => used.has(id));
         let bytes = 0;
         for (const id of orphans) bytes += doc.images.get(id)?.data.byteLength ?? 0;
+        let added = 0;
+        for (const [, sourceId] of copies) added += doc.images.get(sourceId)?.data.byteLength ?? 0;
+        const newCels = [...sets.keys()].filter((key) => !doc.cels.has(key)).length;
+        const after = {
+            cels: doc.cels.size - removes.length + newCels,
+            images: doc.images.size - orphans.length + copies.length,
+            pixelBytes: pixelMemoryBytes(doc) - bytes + added,
+        };
 
         let undo: { cels: MapUndo<Cel>; images: MapUndo<PixelBuffer> } | null = null;
         return {
             bytes,
+            after,
             cells,
             matches(target) {
                 const counted =

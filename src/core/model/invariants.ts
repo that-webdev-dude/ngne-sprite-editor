@@ -1,5 +1,4 @@
 import { MAX_REFERENCE_LAYERS } from "./defaults";
-import { frameIndex } from "./queries";
 import type { DocSession, SpriteDoc } from "./types";
 
 /**
@@ -84,9 +83,12 @@ function assertDocument(doc: SpriteDoc): void {
         if (!referenced.has(imageId)) fail("no-orphan-image", `image "${imageId}" has no cel`);
     }
 
+    // Each endpoint is looked up in a map of the frames, so the work is tags + frames, not
+    // tags × frames. The frame IDs are distinct by here ("unique-ids").
+    const frameIndex = new Map(doc.frames.map((frame, index) => [frame.id, index] as const));
     for (const tag of doc.tags) {
-        const from = frameIndex(doc, tag.fromFrameId);
-        const to = frameIndex(doc, tag.toFrameId);
+        const from = frameIndex.get(tag.fromFrameId) ?? -1;
+        const to = frameIndex.get(tag.toFrameId) ?? -1;
         if (from === -1 || to === -1) {
             const missing = from === -1 ? tag.fromFrameId : tag.toFrameId;
             fail("tag-endpoints-exist", `tag "${tag.id}" names frame "${missing}"`);
