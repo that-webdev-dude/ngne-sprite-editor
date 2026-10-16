@@ -72,7 +72,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-031 | Selection tools                                   | M    | 014, 017, 030                      | —             | Ready  |
 | SE-032 | Move, floating selection and clipboard            | L    | 005, 031                           | —             | Ready  |
 | SE-033 | Selection transforms                              | M    | 032                                | —             | Ready  |
-| SE-034 | Sprite operations                                 | L    | 006, 007, 020, 021, 030, 040       | —             | Ready  |
+| SE-034 | Sprite operations                                 | L    | 006, 007, 020, 021, 030, 040       | —             | In progress |
 | **M4** | **[Persistence and import](M4-persistence-and-import.md)** | |                                  |               |        |
 | SE-040 | Project file format (`.ngsprite`)                 | M    | 003, 005, 010                      | —             | Done   |
 | SE-041 | File workflows                                    | L    | 007, 008, 040                      | G1            | Ready  |
