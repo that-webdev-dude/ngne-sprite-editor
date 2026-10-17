@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { installTestHooks } from "../app/testing/testHooks";
 import { useEditorKeymap } from "./commands/useEditorKeymap";
+import { FileWorkflows } from "./file/FileWorkflows";
 import { useWindowHeight, useWindowWidth } from "./platform/useWindowSize";
 import { useWebGpuSupport } from "./platform/webgpu";
 import { AppShell } from "./shell/AppShell";
@@ -43,6 +44,7 @@ function Editor() {
             {tooSmall ? <WindowTooSmall width={width} height={height} /> : null}
             <AppSurfaces />
             <PixelMemoryWarning />
+            <FileWorkflows />
         </>
     );
 }

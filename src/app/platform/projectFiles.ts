@@ -1,0 +1,239 @@
+/**
+ * The browser's ways to read and write the user's files (SPEC §10): the File System Access API
+ * where the browser has it (Chrome and Edge), otherwise a file input to open and a download to
+ * save. Everything here touches the page only when it is called, so the modules that import it
+ * also load in Node; the file workflows take a `ProjectFilePlatform`, and tests give them a fake.
+ */
+import { PROJECT_FILE_EXTENSION } from "../../core/project";
+
+/** The files the pickers offer: projects, which are zip archives (docs/FORMAT.md §1.1). */
+const PICKER_TYPES = [
+    { description: "NGNE sprite project", accept: { "application/zip": [PROJECT_FILE_EXTENSION] } },
+];
+/** The pickers remember the last folder under this id. */
+const PICKER_ID = "ngne-sprite-project";
+
+/**
+ * A file of the user's disk the app keeps and can read and write again: a File System Access
+ * handle (SE-041 keeps one per document).
+ */
+export interface ProjectFileHandle {
+    /** The file's name, "hero.ngsprite". */
+    readonly name: string;
+    read(): Promise<Uint8Array>;
+    /**
+     * Whether the app may write the file. Asks the user when the permission is not granted yet
+     * (the browser shows its prompt only during a user gesture); false when it is refused.
+     */
+    requestWrite(): Promise<boolean>;
+    /** Replaces the file's content; the file keeps its old content when this fails. */
+    write(bytes: Uint8Array<ArrayBuffer>): Promise<void>;
+}
+
+/** A file the user chose to open: from a picker, a file input or a drop. */
+export interface ChosenFile {
+    readonly name: string;
+    read(): Promise<Uint8Array>;
+    /** The handle to save back to: from a picker or a drop with File System Access, or null. */
+    handle(): Promise<ProjectFileHandle | null>;
+}
+
+export interface ProjectFilePlatform {
+    /** True when a save asks where to write (a save picker); false when it downloads. */
+    canChooseSaveTarget(): boolean;
+    /** Asks for a project file to open; null when the user cancels. */
+    chooseFileToOpen(): Promise<ChosenFile | null>;
+    /** Asks where to save, with a save picker; null when the user cancels. */
+    chooseSaveTarget(suggestedName: string): Promise<ProjectFileHandle | null>;
+    /** Hands the bytes to the browser as a download named `name`. */
+    download(name: string, bytes: Uint8Array<ArrayBuffer>): void;
+}
+
+// --- File System Access, as far as the app uses it (Chrome has it; lib.dom lacks part) --------
+
+type PermissionMode = { mode: "read" | "readwrite" };
+
+interface NativeWritable {
+    write(data: Uint8Array<ArrayBuffer>): Promise<void>;
+    close(): Promise<void>;
+    abort?(): Promise<void>;
+}
+
+interface NativeFileHandle {
+    readonly kind: string;
+    readonly name: string;
+    getFile(): Promise<File>;
+    createWritable(): Promise<NativeWritable>;
+    queryPermission?(descriptor: PermissionMode): Promise<PermissionState>;
+    requestPermission?(descriptor: PermissionMode): Promise<PermissionState>;
+}
+
+interface PickerOptions {
+    id?: string;
+    types?: typeof PICKER_TYPES;
+    excludeAcceptAllOption?: boolean;
+    multiple?: boolean;
+    suggestedName?: string;
+}
+
+interface FileSystemAccessWindow {
+    showOpenFilePicker?(options?: PickerOptions): Promise<NativeFileHandle[]>;
+    showSaveFilePicker?(options?: PickerOptions): Promise<NativeFileHandle>;
+}
+
+interface HandleItem {
+    getAsFileSystemHandle?(): Promise<NativeFileHandle | null>;
+}
+
+function pickers(): FileSystemAccessWindow {
+    return window as unknown as FileSystemAccessWindow;
+}
+
+/** True when the user closed a picker without choosing: not a failure. */
+function isAbort(error: unknown): boolean {
+    return error instanceof DOMException && error.name === "AbortError";
+}
+
+async function bytesOf(file: Blob): Promise<Uint8Array> {
+    return new Uint8Array(await file.arrayBuffer());
+}
+
+function wrapHandle(native: NativeFileHandle): ProjectFileHandle {
+    return {
+        name: native.name,
+        read: async () => bytesOf(await native.getFile()),
+        async requestWrite() {
+            const descriptor: PermissionMode = { mode: "readwrite" };
+            // A browser without the permission methods grants what the handle was given for.
+            if (!native.queryPermission) return true;
+            if ((await native.queryPermission(descriptor)) === "granted") return true;
+            return (await native.requestPermission?.(descriptor)) === "granted";
+        },
+        async write(bytes) {
+            const writable = await native.createWritable();
+            try {
+                await writable.write(bytes);
+            } catch (error) {
+                // The browser writes to a copy, so the file keeps its old content.
+                await writable.abort?.().catch(() => {});
+                throw error;
+            }
+            await writable.close();
+        },
+    };
+}
+
+function chosenFile(file: File, handle: Promise<ProjectFileHandle | null>): ChosenFile {
+    return { name: file.name, read: () => bytesOf(file), handle: () => handle };
+}
+
+/** The open picker of File System Access. */
+async function pickToOpen(
+    show: NonNullable<FileSystemAccessWindow["showOpenFilePicker"]>,
+): Promise<ChosenFile | null> {
+    let handles: NativeFileHandle[];
+    try {
+        handles = await show({ id: PICKER_ID, types: PICKER_TYPES, multiple: false });
+    } catch (error) {
+        if (isAbort(error)) return null;
+        throw error;
+    }
+    const [native] = handles;
+    if (!native) return null;
+    const handle = wrapHandle(native);
+    return chosenFile(await native.getFile(), Promise.resolve(handle));
+}
+
+/**
+ * A file input, clicked: the way to open a file without File System Access. Resolves null when
+ * the user cancels (Chrome fires `cancel` on the input).
+ */
+function inputToOpen(): Promise<ChosenFile | null> {
+    return new Promise((resolve) => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = PROJECT_FILE_EXTENSION;
+        input.hidden = true;
+        input.dataset.projectFileInput = "";
+        const finish = (file: File | null) => {
+            input.remove();
+            resolve(file ? chosenFile(file, Promise.resolve(null)) : null);
+        };
+        input.addEventListener("change", () => finish(input.files?.[0] ?? null), { once: true });
+        input.addEventListener("cancel", () => finish(null), { once: true });
+        document.body.append(input);
+        input.click();
+    });
+}
+
+/** The page's platform: File System Access where the browser has it, else input and download. */
+export function browserProjectFiles(): ProjectFilePlatform {
+    return {
+        canChooseSaveTarget: () => typeof pickers().showSaveFilePicker === "function",
+
+        chooseFileToOpen() {
+            const show = pickers().showOpenFilePicker;
+            return typeof show === "function" ? pickToOpen(show.bind(window)) : inputToOpen();
+        },
+
+        async chooseSaveTarget(suggestedName) {
+            const show = pickers().showSaveFilePicker;
+            if (typeof show !== "function") return null;
+            try {
+                const native = await show.call(window, {
+                    id: PICKER_ID,
+                    types: PICKER_TYPES,
+                    suggestedName,
+                });
+                return wrapHandle(native);
+            } catch (error) {
+                if (isAbort(error)) return null;
+                throw error;
+            }
+        },
+
+        download(name, bytes) {
+            const url = URL.createObjectURL(new Blob([bytes], { type: "application/zip" }));
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = name;
+            link.hidden = true;
+            document.body.append(link);
+            link.click();
+            link.remove();
+            // The download has started from the URL; it is let go once the browser has it.
+            setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        },
+    };
+}
+
+/**
+ * The files of a drop, with the handle of each where File System Access gives one. Called
+ * during the `drop` event: the items of a data transfer are empty once the event is over.
+ */
+export function droppedFiles(transfer: DataTransfer): ChosenFile[] {
+    const chosen: ChosenFile[] = [];
+    for (const item of Array.from(transfer.items)) {
+        if (item.kind !== "file") continue;
+        const file = item.getAsFile();
+        if (!file) continue;
+        const native = (item as DataTransferItem & HandleItem).getAsFileSystemHandle?.();
+        const handle = (native ?? Promise.resolve(null)).then(
+            (found) => (found?.kind === "file" ? wrapHandle(found) : null),
+            () => null,
+        );
+        chosen.push(chosenFile(file, handle));
+    }
+    // A transfer made by a script may list its files only under `files`.
+    if (chosen.length === 0) {
+        for (const file of Array.from(transfer.files)) {
+            chosen.push(chosenFile(file, Promise.resolve(null)));
+        }
+    }
+    return chosen;
+}
+
+/** Whether a drag carries files (and not text or an element of the page). */
+export function carriesFiles(transfer: DataTransfer | null): boolean {
+    return transfer !== null && Array.from(transfer.types).includes("Files");
+}

@@ -96,8 +96,12 @@ export interface SessionsState {
     /** Closes a document; when it was active, its neighbour becomes active. */
     close(id: string): void;
     activate(id: string): void;
-    /** Records the current state as saved: the document is no longer dirty. */
-    markSaved(id: string): void;
+    /**
+     * Records a state of the document as saved: by default the current one, which is then no
+     * longer dirty. A save passes the state it wrote (`savedStateOf` when it made the bytes),
+     * so a change made while the file was being written keeps the document dirty.
+     */
+    markSaved(id: string, state?: SavedState): void;
     /** Changes view preferences of the document: no history entry, never dirty (SPEC §5.2). */
     updateDocSettings(id: string, update: (settings: DocSettings) => void): void;
     /** Changes output preferences: no history entry, dirty until saved (SPEC §5.2). */
@@ -119,6 +123,21 @@ export interface SessionsState {
 
 function snapshot(settings: ExportSettings): string {
     return JSON.stringify(settings);
+}
+
+/** What the dirty rule of SPEC §5.2 compares: a history position and the export settings. */
+export interface SavedState {
+    readonly position: number;
+    /** `ExportSettings` as JSON. */
+    readonly exportSettings: string;
+}
+
+/** The state of a document now, as `markSaved` records it. */
+export function savedStateOf(document: OpenDocument): SavedState {
+    return {
+        position: document.history.position,
+        exportSettings: snapshot(document.session.doc.exportSettings),
+    };
 }
 
 /** The active document of a state, or null. */
@@ -280,12 +299,10 @@ export function createSessionsStore(): StoreApi<SessionsState> {
                 });
             },
 
-            markSaved(id) {
-                const { history, session } = find(id);
-                change(id, {
-                    savedPosition: history.position,
-                    savedExportSettings: snapshot(session.doc.exportSettings),
-                });
+            markSaved(id, state) {
+                const document = find(id);
+                const { position, exportSettings } = state ?? savedStateOf(document);
+                change(id, { savedPosition: position, savedExportSettings: exportSettings });
             },
 
             updateDocSettings(id, update) {

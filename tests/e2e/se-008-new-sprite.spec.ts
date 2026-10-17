@@ -103,19 +103,34 @@ test("the empty state shows New sprite, centred in the workspace, while no docum
 }) => {
     await openEditor(page);
     const viewport = region(page, "viewport");
-    // New sprite and nothing else: Open, Import PNG and recent files come with their tickets.
-    await expect(viewport.getByRole("button")).toHaveText(["New sprite"]);
-    await expect(viewport).toHaveText("New sprite");
+    // New sprite and Open (SE-041), nothing else: Import PNG and recent files come with their
+    // tickets.
+    await expect(viewport.getByRole("button")).toHaveText(["New sprite", "Open"]);
+    await expect(viewport).toHaveText("New spriteOpen");
 
-    // Centred in the workspace, a plain text button of the usual size.
+    // Centred in the workspace: the column of plain text buttons, New sprite first, each of the
+    // usual size.
     const area = await boxOf(viewport);
     const button = await boxOf(newSpriteButton(page));
+    const buttons = await viewport
+        .getByRole("button")
+        .evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect()))
+        .then((boxes) => ({
+            left: Math.min(...boxes.map((box) => box.left)),
+            right: Math.max(...boxes.map((box) => box.right)),
+            top: Math.min(...boxes.map((box) => box.top)),
+            bottom: Math.max(...boxes.map((box) => box.bottom)),
+        }));
     expect(Math.abs(button.x + button.width / 2 - (area.x + area.width / 2))).toBeLessThanOrEqual(
         1,
     );
-    expect(Math.abs(button.y + button.height / 2 - (area.y + area.height / 2))).toBeLessThanOrEqual(
-        1,
-    );
+    expect(
+        Math.abs((buttons.top + buttons.bottom) / 2 - (area.y + area.height / 2)),
+    ).toBeLessThanOrEqual(1);
+    expect(
+        Math.abs((buttons.left + buttons.right) / 2 - (area.x + area.width / 2)),
+    ).toBeLessThanOrEqual(1);
+    expect(button.y).toBe(buttons.top);
     expect(button.height).toBe(24);
     expect(await viewport.locator("img, svg, canvas").count()).toBe(0);
 

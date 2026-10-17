@@ -1293,6 +1293,38 @@ Export is accepted only when all three hold (SE-053):
   document outside them with a typed error, so a file that was written can be read.
 - Save/Save As use the File System Access API when present, otherwise download. Open also
   accepts drag-and-drop.
+- File workflows (SE-041), on the active document:
+  - A document remembers the file it was opened from or last saved to. With File System Access
+    that is a handle: Save writes to it without asking, after asking the browser for write
+    permission when it is not granted (a file opened through the open picker or a drop has
+    read permission only); refused, Save asks where to save, as Save As does. Save As always
+    asks, and the chosen file becomes the document's. Without File System Access, Save and
+    Save As download `<file>.ngsprite`, and Open uses a file input.
+  - A document without a file is saved as its name with the characters a file name cannot hold
+    on Windows replaced by `_`, at most 200 characters, no trailing dot or space, and
+    `.ngsprite` (`Sprite.ngsprite` when nothing is left of the name).
+  - Save applies a floating selection first, then records as saved the history position and
+    export settings the written bytes hold (§5.2): a change made while the file is being
+    written keeps the document dirty. Saving an unchanged document writes the same bytes again.
+  - Open reads and checks the file before anything else: a file that cannot be opened is
+    reported by an error toast naming the problem (`ProjectError`) and changes nothing, nor
+    does it ask. The opened document takes the place of the active one (tabs: SE-047), with no
+    selection, an empty history, the first frame and the top pixel layer active, and its
+    reference source bytes in the store.
+  - A drop of files on the window opens the first file whose name ends in `.ngsprite` (in any
+    case); a drop without one is reported by an error toast. A drop while a menu or dialog is
+    open, or while a file operation runs, is ignored; no file drop ever navigates the page.
+  - Revert reads the document's file again in its place, keeping the view; without File System
+    Access it reads the bytes last opened or downloaded. It needs a file.
+  - Close, Open and Revert ask once before unsaved changes are lost ("Discard unsaved
+    changes?", Cancel / Discard, as New sprite does); Cancel and Escape keep the document.
+  - One file operation at a time: while one waits for a picker, a question or a write, the
+    file commands are disabled. None acts during a stroke.
+  - Results ("Saved hero.ngsprite", "Opened …", "Reverted to …") are info toasts; failures
+    ("Could not open “x”. <reason>", "Could not save …") are error toasts.
+  - The unsaved marker (an asterisk after the document's name, DESIGN §2) is shown while the
+    active document is dirty. While any open document is dirty, the page asks the browser to
+    confirm before it is left (`beforeunload`); with none dirty no listener is registered.
 - Autosave: each dirty document is snapshotted to IndexedDB 2 s after its last change
   (`doc.json` plus raw image buffers keyed by image ID; only changed images are rewritten). On
   launch, unsaved snapshots are offered for recovery. Closing a tab with unsaved changes

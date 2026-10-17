@@ -9,16 +9,32 @@
     gap: var(--space-8);
 }
 
-/* Centred in the space the menus leave, like the document tabs of the mockup. */
+/*
+ * Centred in the space the menus leave, like the document tabs of the mockup: the name, cut
+ * off when it is long, and the unsaved marker after it (SE-041), which is never cut off.
+ */
 .document-name {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-4);
     min-width: 0;
     margin: 0 auto;
     padding: 0 var(--space-12);
+}
+
+.document-name__text {
+    min-width: 0;
     overflow: hidden;
     color: var(--text);
     font-weight: var(--font-weight-strong);
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.document-name__unsaved {
+    flex: none;
+    color: var(--text);
+    font-weight: var(--font-weight-strong);
 }
 
 /* Dialog body: a column of labels and a column of controls. */
