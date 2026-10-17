@@ -2,12 +2,13 @@ import type { PixelBuffer, Rect } from "../model";
 import type { Brush } from "./brush";
 import { Changes } from "./changes";
 import type { Ink } from "./ink";
-import { forEachFilledRun, forEachOutlinePixel, sameShape } from "./shape";
-import type { Shape } from "./shape";
+import { copyShape, forEachFilledRun, forEachOutlinePixel, sameShape } from "./shape";
+import type { PathShape, Shape } from "./shape";
 
 // Rubber-band shapes (SPEC §7.1, SE-017): the stroke of a shape tool. Each pointer sample
 // draws the whole shape again in place of the one drawn before, into the image of the stroke's
 // transaction, so the preview is the stroke's own pixels and the release keeps the last one.
+// The curve and the polygon of SE-065 (`PathShape`) are drawn the same way.
 //
 // A draw marks the pixels the new shape covers — the brush stamped at every pixel of its
 // outline, and for a filled shape every pixel inside it — then gives each pixel of the
@@ -35,7 +36,7 @@ export class ShapeStroke {
     #generation = 0;
     /** The rectangle of the image the shape drawn last covers; null when none. */
     #covered: Rect | null = null;
-    #shape: Shape | null = null;
+    #shape: Shape | PathShape | null = null;
 
     constructor(image: PixelBuffer, original: PixelBuffer, options: ShapeStrokeOptions) {
         if (
@@ -55,12 +56,12 @@ export class ShapeStroke {
     }
 
     /** The shape drawn last; null before the first draw. */
-    get shape(): Shape | null {
+    get shape(): Shape | PathShape | null {
         return this.#shape;
     }
 
     /** Draws `shape` in place of the shape drawn before. */
-    draw(shape: Shape): Rect | null {
+    draw(shape: Shape | PathShape): Rect | null {
         if (this.#shape && sameShape(this.#shape, shape)) return null;
         const { width, height, data } = this.#image;
         const original = this.#original;
@@ -91,7 +92,7 @@ export class ShapeStroke {
             for (let row = 0; row < size; row++)
                 mark(top + row, left + starts[row], left + ends[row]);
         });
-        forEachFilledRun(shape, mark);
+        forEachFilledRun(shape, mark, 0, height - 1);
 
         const changes = new Changes();
         const previous = this.#covered;
@@ -118,12 +119,7 @@ export class ShapeStroke {
             }
         }
         this.#covered = covered;
-        this.#shape = {
-            kind: shape.kind,
-            from: { x: shape.from.x, y: shape.from.y },
-            to: { x: shape.to.x, y: shape.to.y },
-            filled: shape.filled,
-        };
+        this.#shape = copyShape(shape);
         return changes.rect();
     }
 

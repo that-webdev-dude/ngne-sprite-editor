@@ -31,7 +31,8 @@ import type { Tool, ToolButton, ToolContext, ToolModifiers, ToolPointer } from "
 // tool keeps open past the release (`ToolContext.openGesture`):
 //
 //   first press → onDown … onUp → (open) hover moves → onHover → next press → onDown … onUp
-//     → … → Enter or a double click → onClose → commit → onCommit
+//     → … → Enter, a double click or the tool itself (`ToolContext.closeGesture`, SE-065)
+//     → onClose → commit → onCommit
 //   Escape, a pointer cancel during a press, the document left, the active tool changed
 //     → onCancel → abort
 //
@@ -332,6 +333,21 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
             if (stroke?.gesture && sources.tools.active() !== stroke.tool) cancelStroke();
         }) ?? (() => {});
 
+    /** Closes the open gesture `current` and keeps it (Enter, a double click, its tool). */
+    const closeOpenGesture = (current: Stroke) => {
+        let failed = false;
+        try {
+            current.tool.onClose?.(current.context);
+        } catch (error) {
+            failed = true;
+            onError(error);
+        }
+        if (stroke !== current) return;
+        if (failed) cancelStroke();
+        // A press in progress ends with the gesture: its release finds no stroke.
+        else keep(current);
+    };
+
     /** A press of the open gesture `current`: its next `onDown`. */
     const pressGesture = (current: Stroke, input: PointerInput, button: ToolButton): boolean => {
         clearFeedback();
@@ -439,6 +455,10 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
                     own.gesture = true;
                     sources.gesture?.(true);
                 },
+                closeGesture() {
+                    if (!own || stroke !== own || !own.gesture) return;
+                    closeOpenGesture(own);
+                },
             };
             const current: Stroke = {
                 tool,
@@ -495,17 +515,7 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
         closeGesture() {
             const current = stroke;
             if (!current?.gesture) return false;
-            let failed = false;
-            try {
-                current.tool.onClose?.(current.context);
-            } catch (error) {
-                failed = true;
-                onError(error);
-            }
-            if (stroke !== current) return true;
-            if (failed) cancelStroke();
-            // A press in progress ends with the gesture: its release finds no stroke.
-            else keep(current);
+            closeOpenGesture(current);
             return true;
         },
 

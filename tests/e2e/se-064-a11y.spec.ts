@@ -144,7 +144,9 @@ for (const theme of THEMES) {
         ]);
         await openShortcutSheet(page);
         await expectAccessible(page, "shortcut sheet", ".ui-dialog");
-        // Title, key and the hold mark of one row.
+        // Title, key and the hold mark of one row, scrolled into view: the commands of later
+        // tools (SE-065) put it below the fold of the list, where contrast is not judged.
+        await page.locator('.ui-dialog [data-command="se064.hold"]').scrollIntoViewIfNeeded();
         const row = await audit(page, '.ui-dialog [data-command="se064.hold"]');
         expect(row.violations).toEqual([]);
         expect(row.contrastChecked).toBe(3);

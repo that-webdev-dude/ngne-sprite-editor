@@ -109,6 +109,13 @@ export interface ToolContext {
      * it does nothing.
      */
     openGesture(): void;
+    /**
+     * Closes this stroke's open gesture as Enter does (SE-065: the curve, after its last
+     * point): `onClose`, then it is kept as at a release. Called from a handler of the stroke;
+     * when no gesture of the stroke is open it does nothing. Called from `onDown`, the press
+     * ends with the gesture: its release finds no stroke.
+     */
+    closeGesture(): void;
 }
 
 /** What a tool's cursor depends on (`ToolSpec.cursor`). */

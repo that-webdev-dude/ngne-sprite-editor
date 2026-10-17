@@ -27,8 +27,11 @@ export interface BrushStrokeOptions {
     pixelPerfect?: boolean;
 }
 
-/** Stamps a brush with an ink into an image, clipped to the image. */
-class Stamper {
+/**
+ * Stamps a brush with an ink into an image, clipped to the image. The brush strokes here, the
+ * contour and the spray (SE-065) write through it; the shapes draw through `ShapeStroke`.
+ */
+export class Stamper {
     readonly #image: PixelBuffer;
     readonly #original: Uint8ClampedArray;
     readonly #brush: Brush;
@@ -78,6 +81,21 @@ class Stamper {
             if (coverage) coverage[index]++;
             if (ink.apply(data, original, index * 4)) changes.add(px, py);
         });
+    }
+
+    /**
+     * Inks the pixels `[from, to)` of row `y` (clipped to the image) without the brush: the
+     * inside of a filled shape (SE-065, the contour).
+     */
+    inkRun(y: number, from: number, to: number, changes: Changes): void {
+        const { width, height, data } = this.#image;
+        if (y < 0 || y >= height) return;
+        const original = this.#original;
+        const ink = this.#ink;
+        const end = Math.min(width, to);
+        for (let px = Math.max(0, from); px < end; px++) {
+            if (ink.apply(data, original, (y * width + px) * 4)) changes.add(px, y);
+        }
     }
 
     /** Takes back a stamp: a pixel no other stamp covers gets its original value back. */

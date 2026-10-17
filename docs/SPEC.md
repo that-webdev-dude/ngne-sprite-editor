@@ -615,6 +615,10 @@ with Bresenham lines.
 | Move            | Moves selection content or, with no selection, the active cel          |
 | Hand            | Pan                                                                    |
 | Zoom            | Click in, Alt-click out                                                |
+| Curve           | Cubic Bézier: drag from end to end, then click each control point      |
+| Contour         | Freehand closed shape, filled at the release                           |
+| Polygon         | Click vertices; Enter or double-click closes; outline or filled        |
+| Spray           | Dots of the brush over a disk around the pointer; radius, density      |
 
 A locked or hidden layer, or a reference layer, rejects paint with a status-bar message.
 Paint is clipped to the selection when one exists. Keys are in §7.8.
@@ -842,6 +846,63 @@ run. A pan — the same mask, zoom and canvas size, the document moved by whole 
 moves the pixels kept by as much and paints only the strips it uncovered; a zoom, a resize, a
 pan that leaves nothing kept where the ring now is, or another mask paints afresh.
 
+Curve, contour, polygon and spray (SE-065):
+
+- Rail and keys: the spray (Shift+B) is a variant of the pencil's slot, the curve (Shift+L) of
+  the line's, the contour (D) and the polygon (Shift+D) of the rectangle's (DESIGN §5.1). These
+  are Aseprite's groups (pencil and spray; line and curve; contour and polygon, a group of its
+  own there, which the 13 slots of this rail do not have room for), so B, L and D pressed again
+  switch within a slot (SE-031), and U never reaches the contour or the polygon.
+- All four paint as the other brush tools do: brush size and shape placed as for the pencil,
+  ink and opacity, values per tool id; the left button paints the foreground and the right the
+  background (for a gesture, the colour of its first press). Each stroke or gesture is one undo
+  step labelled with the tool's name, and records nothing when it changes nothing. Escape takes
+  it back, as do the other cancels of a stroke or a gesture; paint is clipped to the selection,
+  and the press that would begin one is refused on a locked, hidden or reference layer and
+  below 1×.
+- Curve: options size, shape, ink, opacity. A gesture of three presses: the first press fixes
+  the start and its drag moves the end, with both control points on it (a straight line); after
+  its release the pointer moves both control points, and the second release fixes the first;
+  the pointer then moves the second, and the third release fixes it and keeps the curve. A
+  press and its drag move what the pointer moved before the press (in Aseprite the third press
+  already fixes the second control point). Enter or a double click keeps the curve as shown. It
+  is a rubber band (`ShapeStroke`), drawn as Aseprite's `algo_spline` draws it (checked in its
+  source): n = ⌊1.2 · √(|P0P1| + |P1P2| + |P2P3|)⌋ samples, held to 4..64, evenly spaced in
+  the curve's parameter, joined by Bresenham lines, the brush stamped at every pixel. Each
+  sample is evaluated directly and rounded to the nearest pixel, halves up; Aseprite reaches
+  them by forward differencing and truncates x + 0.5, so the first and last are exactly the
+  ends here, and a sample within rounding error of a half may fall on the other pixel.
+- Polygon: options size, shape, Filled (off by default), ink, opacity. A gesture: every press
+  and every release adds the pixel under the pointer as a vertex unless it is the last vertex
+  already (the polygon lasso's rule). Until it is closed the polygon runs through the vertices
+  and the pointer, drawn as a rubber band, so the preview is the result (Aseprite fills only at
+  the end by default); Enter or a double click closes it through the vertices. The brush is
+  stamped along the Bresenham line of each side, the last vertex joined to the first (two
+  vertices are one line, one a pixel); Filled adds the pixels whose centres lie inside by the
+  even-odd rule, the polygon lasso's mask (§7.2). Aseprite's polygon is always filled; here
+  Filled is an option, off by default as for the rectangle.
+- Contour: options size, shape, ink, opacity; always filled. The press and every sample on
+  another pixel than the point before is a point; while the button is held the brush draws the
+  lines that join them, as the pencil's (no pixel-perfect); the release joins the last point to
+  the first and inks the pixels inside by the even-odd rule. A contour covers what the filled
+  polygon through the same points covers. The inside appears at the release, as Aseprite's
+  does by default (`filled_preview` off).
+- Spray: options size, shape, Radius (1–64 px, 8), Density (1–100 %, 20), ink, opacity. Its
+  dots are brush stamps at offsets drawn uniformly from the disk dx² + dy² ≤ radius² around
+  the pixels of the pointer's path (samples joined by Bresenham lines). The density is the
+  share of the area under the spray that dots fall on, before they overlap: the press sprays
+  density % of the disk's offsets, and each pixel the path moves on density % of 2 · radius +
+  1, the width it sweeps anew; fractions of a dot carry over. A pointer held still sprays
+  nothing more. Each stroke takes a seed (a random one in the app), and a generator seeded with
+  it (mulberry32, integer arithmetic) draws the offsets, so the same seed and samples give the
+  same pixels in Node and in the browser. Aseprite sprays width²/4 · speed/100 points per
+  pointer event, at a uniform angle and radius; this editor's own rule counts per pixel of the
+  path, so the dots do not depend on how often the pointer reports.
+- Tool framework: a tool may close its own gesture (`ToolContext.closeGesture`), as Enter does
+  (`onClose`, then it is kept); the curve does so at its third release. The contour and the
+  spray stamp through `Stamper` and the curve and the polygon draw through `ShapeStroke`
+  (`core/raster`), where SE-062 adds symmetry.
+
 ### 7.2 Selection
 
 - A selection is a 1-bit mask plus bounds in the `DocSession`. Changing it is undoable.
@@ -958,7 +1019,7 @@ binds it.
 | Context    | Applies when                                              |
 | ---------- | --------------------------------------------------------- |
 | `text`     | A text or number field has focus. The field handles typing, Enter, Escape, arrows, Tab and Ctrl+Z/Y/A/X/C/V; of the bindings below only the Ctrl/Alt/F-key chords marked † still act |
-| `gesture`  | A multi-click tool gesture is in progress (polygon lasso, curve) |
+| `gesture`  | A multi-click tool gesture is in progress (polygon lasso, polygon, curve) |
 | `floating` | A floating selection exists                               |
 | `timeline` | Focus is inside the timeline panel (a click in the timeline keeps focus there) |
 | `canvas`   | Focus is on the viewport or on any non-text control, with no menu, dialog or popover open. Inside the timeline it is the fallback for keys `timeline` does not bind, so tool keys keep working |
