@@ -22,6 +22,11 @@ export interface ProjectFileHandle {
     readonly name: string;
     read(): Promise<Uint8Array>;
     /**
+     * Whether the app may read the file. Asks the user when the permission is not granted (any
+     * more); false when it is refused. As for `requestWrite`, a prompt needs a user gesture.
+     */
+    requestRead(): Promise<boolean>;
+    /**
      * Whether the app may write the file. Asks the user when the permission is not granted yet
      * (the browser shows its prompt only during a user gesture); false when it is refused.
      */
@@ -33,6 +38,8 @@ export interface ProjectFileHandle {
 /** A file the user chose to open: from a picker, a file input or a drop. */
 export interface ChosenFile {
     readonly name: string;
+    /** Its size in bytes, known before it is read. */
+    readonly size: number;
     read(): Promise<Uint8Array>;
     /** The handle to save back to: from a picker or a drop with File System Access, or null. */
     handle(): Promise<ProjectFileHandle | null>;
@@ -45,8 +52,16 @@ export interface ProjectFilePlatform {
     chooseFileToOpen(): Promise<ChosenFile | null>;
     /** Asks where to save, with a save picker; null when the user cancels. */
     chooseSaveTarget(suggestedName: string): Promise<ProjectFileHandle | null>;
-    /** Hands the bytes to the browser as a download named `name`. */
+    /**
+     * Hands the bytes to the browser as a download named `name`. The page learns nothing of
+     * what follows: a save dialog of the browser that the user cancels leaves no file.
+     */
     download(name: string, bytes: Uint8Array<ArrayBuffer>): void;
+    /**
+     * Whether the page still has the user's gesture (`navigator.userActivation.isActive`): a
+     * picker or a permission prompt needs it, and it lapses a few seconds after the gesture.
+     */
+    hasUserActivation(): boolean;
 }
 
 // --- File System Access, as far as the app uses it (Chrome has it; lib.dom lacks part) --------
@@ -98,17 +113,20 @@ async function bytesOf(file: Blob): Promise<Uint8Array> {
     return new Uint8Array(await file.arrayBuffer());
 }
 
+/** Whether `native` has the permission, asking the user when it has not. */
+async function request(native: NativeFileHandle, descriptor: PermissionMode): Promise<boolean> {
+    // A browser without the permission methods grants what the handle was given for.
+    if (!native.queryPermission) return true;
+    if ((await native.queryPermission(descriptor)) === "granted") return true;
+    return (await native.requestPermission?.(descriptor)) === "granted";
+}
+
 function wrapHandle(native: NativeFileHandle): ProjectFileHandle {
     return {
         name: native.name,
         read: async () => bytesOf(await native.getFile()),
-        async requestWrite() {
-            const descriptor: PermissionMode = { mode: "readwrite" };
-            // A browser without the permission methods grants what the handle was given for.
-            if (!native.queryPermission) return true;
-            if ((await native.queryPermission(descriptor)) === "granted") return true;
-            return (await native.requestPermission?.(descriptor)) === "granted";
-        },
+        requestRead: () => request(native, { mode: "read" }),
+        requestWrite: () => request(native, { mode: "readwrite" }),
         async write(bytes) {
             const writable = await native.createWritable();
             try {
@@ -124,7 +142,7 @@ function wrapHandle(native: NativeFileHandle): ProjectFileHandle {
 }
 
 function chosenFile(file: File, handle: Promise<ProjectFileHandle | null>): ChosenFile {
-    return { name: file.name, read: () => bytesOf(file), handle: () => handle };
+    return { name: file.name, size: file.size, read: () => bytesOf(file), handle: () => handle };
 }
 
 /** The open picker of File System Access. */
@@ -203,6 +221,14 @@ export function browserProjectFiles(): ProjectFilePlatform {
             link.remove();
             // The download has started from the URL; it is let go once the browser has it.
             setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        },
+
+        hasUserActivation() {
+            const { userActivation } = navigator as Navigator & {
+                userActivation?: { isActive: boolean };
+            };
+            // Without the API the picker is tried, and a refusal reported.
+            return userActivation?.isActive ?? true;
         },
     };
 }

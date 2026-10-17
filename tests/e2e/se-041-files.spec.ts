@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { zipSync } from "fflate";
 import { collectErrors } from "./se-006-support";
-import { menuItem, openMenu } from "./se-007-support";
+import { menuItem, openMenu, rename } from "./se-007-support";
 import { dialogButton } from "./se-008-support";
 import {
     activeState,
@@ -120,6 +120,12 @@ test("saving twice without changes writes identical bytes and clears the dirty m
     const first = (await fileSystem(page)).files["hero.ngsprite"];
     expect(first?.length).toBeGreaterThan(0);
 
+    // Two steps that move the history and leave the content as it was: the marker shows.
+    const { id } = (await activeState(page))!;
+    await rename(page, id, "villain", "Rename");
+    await rename(page, id, "hero", "Rename");
+    await expect(unsavedMarker(page)).toBeVisible();
+
     // The second save, from the File menu, writes to the same file without asking.
     await openMenu(page, "File");
     await menuItem(page, "file.save").click();
@@ -137,6 +143,62 @@ test("saving twice without changes writes identical bytes and clears the dirty m
     await expect(unsavedMarker(page)).toBeVisible();
     await page.evaluate(() => window.__ngneTest!.commands.get("edit.redo")!.run());
     await expect(unsavedMarker(page)).toHaveCount(0);
+    expect(errors).toEqual([]);
+});
+
+test("a write that fails leaves the document dirty and its file as it was, with one error toast", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await stubFileSystemAccess(page);
+    await openHero(page);
+    await drawStroke(page, STROKES[0]!);
+    await arrangeFiles(page, { nextSave: ["hero.ngsprite"] });
+    await page.keyboard.press("Control+KeyS");
+    await expect(unsavedMarker(page)).toHaveCount(0);
+    await drawStroke(page, STROKES[1]!);
+    await expect(unsavedMarker(page)).toBeVisible();
+
+    // Save As to a new file whose write fails (the disk is full).
+    await arrangeFiles(page, {
+        nextSave: ["copy.ngsprite"],
+        failWrite: {
+            "copy.ngsprite": {
+                name: "QuotaExceededError",
+                message: "The quota has been exceeded.",
+            },
+        },
+    });
+    await page.keyboard.press("Control+Shift+KeyS");
+    await expect(errorToast(page)).toHaveText(
+        "Could not save “copy.ngsprite”. The quota has been exceeded.",
+    );
+    await expect(errorToast(page)).toHaveCount(1);
+    await expect(unsavedMarker(page)).toBeVisible();
+    expect((await activeState(page))?.dirty).toBe(true);
+    expect(Object.keys((await fileSystem(page)).files)).toEqual(["hero.ngsprite"]);
+
+    // The document keeps its file: Save writes there without asking.
+    await page.keyboard.press("Control+KeyS");
+    await expect
+        .poll(async () => (await fileSystem(page)).writes)
+        .toEqual(["hero.ngsprite", "hero.ngsprite"]);
+    await expect(unsavedMarker(page)).toHaveCount(0);
+    expect((await fileSystem(page)).saveSuggestions).toEqual(["hero.ngsprite", "hero.ngsprite"]);
+
+    // The file is gone: within the key's gesture Save asks where to save instead.
+    await drawStroke(page, STROKES[2]!);
+    await arrangeFiles(page, {
+        nextSave: ["moved.ngsprite"],
+        failWrite: { "hero.ngsprite": { name: "NotFoundError", message: "The file is gone." } },
+    });
+    await page.keyboard.press("Control+KeyS");
+    await expect(infoToast(page, "Saved moved.ngsprite")).toBeVisible();
+    await expect(unsavedMarker(page)).toHaveCount(0);
+    const files = await fileSystem(page);
+    expect(files.writes).toEqual(["hero.ngsprite", "hero.ngsprite", "moved.ngsprite"]);
+    expect(files.saveSuggestions).toHaveLength(3);
+    await expect(errorToast(page)).toHaveCount(1);
     expect(errors).toEqual([]);
 });
 
@@ -214,7 +276,8 @@ test("closing a dirty document asks once; cancelling keeps the document", async 
     await expect(page.getByRole("dialog")).toHaveCount(0);
     expect((await activeState(page))?.id).toBe(before?.id);
 
-    // Discard, from the File menu, closes it.
+    // Discard, from the File menu, closes it. The focus is back first.
+    await expect(viewportFocus(page)).toBeFocused();
     await openMenu(page, "File");
     await menuItem(page, "file.close").click();
     await expect(dialog).toBeVisible();
@@ -326,9 +389,9 @@ test("a project file dropped on the window opens; another file is reported", asy
             return over.defaultPrevented && dropped.defaultPrevented;
         }, files);
 
-    expect(await drop([{ name: "sketch.png", bytes: [137, 80, 78, 71] }])).toBe(true);
+    expect(await drop([{ name: "notes.txt", bytes: [110, 111, 116, 101, 115] }])).toBe(true);
     await expect(errorToast(page)).toContainText(
-        "“sketch.png” is not a sprite project (.ngsprite).",
+        "“notes.txt” is not a sprite project (.ngsprite).",
     );
     await expect(emptyState(page)).toBeVisible();
 
@@ -336,7 +399,7 @@ test("a project file dropped on the window opens; another file is reported", asy
     await expect(documentName(page)).toHaveText("hero");
     expect(await frameComposites(page)).toEqual(saved);
     expect(await activeState(page)).toMatchObject({ undo: 0, dirty: false });
-    // Only the toast of the PNG reported an error.
+    // Only the toast reported the text file.
     expect(errors).toEqual([]);
 });
 
@@ -372,10 +435,11 @@ test("leaving the page asks first while a document is dirty, and not once it is 
     await page.keyboard.press("Control+KeyS");
     await expect(unsavedMarker(page)).toHaveCount(0);
     expect(await guarded()).toBe(false);
+    // A question would be answered by leaving, so that it fails as an assertion below.
     const dialogs: string[] = [];
     page.on("dialog", (shown) => {
         dialogs.push(shown.type());
-        void shown.dismiss();
+        void shown.accept();
     });
     const closing = page.waitForEvent("close");
     await page.close({ runBeforeUnload: true });

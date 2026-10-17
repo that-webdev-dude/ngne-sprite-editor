@@ -3,8 +3,11 @@ import { appCommands } from "../../src/app/commands/appCommands";
 import { buildMenu, menuCommands } from "../../src/app/commands/menuModel";
 import { plannedCommands } from "../../src/app/commands/planned.commands";
 import type { Command } from "../../src/app/commands/types";
+import { fileDialogs } from "../../src/app/file/dialogs";
 import { isProjectFileName, projectFileName } from "../../src/app/file/fileName";
 import { installFileWorkflows } from "../../src/app/file/install";
+import { fileWorkflows } from "../../src/app/file/workflows";
+import { keyContextStore, setKeyContext } from "../../src/app/keymap/contextState";
 import { createNotices } from "../../src/app/notices/notices";
 import type { NoticeKind } from "../../src/app/notices/notices";
 import type { ChosenFile } from "../../src/app/platform/projectFiles";
@@ -24,6 +27,7 @@ function command(id: string): Command {
 }
 
 afterEach(() => {
+    setKeyContext("floating", false);
     for (const document of sessionsStore.getState().documents) {
         sessionsStore.getState().close(document.id);
     }
@@ -85,11 +89,79 @@ describe("the file commands in the registry", () => {
         transaction.abort();
         expect(enabled()).toEqual(["file.open", "file.save", "file.saveAs", "file.close"]);
     });
+
+    it("Save and Save As stay enabled while a selection floats, which they apply first (SPEC §5.2)", () => {
+        const enabled = () => FILE_COMMANDS.filter((id) => command(id).enabled());
+        const document = sessionsStore
+            .getState()
+            .open(createDocument({ name: "hero", width: 4, height: 3 }));
+        // The transaction of a floating selection: the `floating` context says so (SE-032).
+        const transaction = document.history.begin({
+            layerId: document.session.activeLayerId,
+            frameId: document.session.activeFrameId,
+        });
+        expect(enabled()).toEqual([]);
+        setKeyContext("floating", true);
+        expect(keyContextStore.getState().floating).toBe(true);
+        expect(enabled()).toEqual(["file.save", "file.saveAs"]);
+        setKeyContext("floating", false);
+        expect(enabled()).toEqual([]);
+        transaction.abort();
+    });
+
+    it("New Sprite and the file commands wait while a file operation runs", async () => {
+        const ids = ["file.new", ...FILE_COMMANDS];
+        const enabled = () => ids.filter((id) => command(id).enabled());
+        const document = sessionsStore
+            .getState()
+            .open(createDocument({ name: "hero", width: 4, height: 3 }));
+        paint(document, 1);
+        expect(enabled()).toEqual([
+            "file.new",
+            "file.open",
+            "file.save",
+            "file.saveAs",
+            "file.close",
+        ]);
+        // Close asks about the unsaved changes: an operation that waits for its answer.
+        const detach = fileDialogs.attachHost();
+        try {
+            const closing = fileWorkflows.close();
+            expect(fileWorkflows.busy).toBe(true);
+            expect(enabled()).toEqual([]);
+            fileDialogs.store.getState().request?.answer(null);
+            expect(await closing).toBe(false);
+            expect(enabled()).toEqual([
+                "file.new",
+                "file.open",
+                "file.save",
+                "file.saveAs",
+                "file.close",
+            ]);
+        } finally {
+            detach();
+        }
+    });
 });
 
 describe("the unload guard and the drop (installFileWorkflows)", () => {
+    /** An event target that counts the `beforeunload` listeners on it. */
+    class CountingTarget extends EventTarget {
+        unloadListeners = 0;
+        override addEventListener(...args: Parameters<EventTarget["addEventListener"]>): void {
+            if (args[0] === "beforeunload") this.unloadListeners++;
+            super.addEventListener(...args);
+        }
+        override removeEventListener(
+            ...args: Parameters<EventTarget["removeEventListener"]>
+        ): void {
+            if (args[0] === "beforeunload") this.unloadListeners--;
+            super.removeEventListener(...args);
+        }
+    }
+
     function setup() {
-        const target = new EventTarget();
+        const target = new CountingTarget();
         const sessions = createSessionsStore();
         const opened: string[][] = [];
         const state = { overlay: false, busy: false };
@@ -128,34 +200,42 @@ describe("the unload guard and the drop (installFileWorkflows)", () => {
     }
 
     it("asks before the page is left while any document is dirty, and only then", () => {
-        const { sessions, stop, guarded } = setup();
-        expect(guarded()).toBe(false);
+        const { target, sessions, stop, guarded } = setup();
+        /** Whether leaving asks, and the `beforeunload` listeners registered: one while dirty. */
+        const expectGuard = (asks: boolean) => {
+            expect(guarded()).toBe(asks);
+            expect(target.unloadListeners).toBe(asks ? 1 : 0);
+        };
+        expectGuard(false);
         const document = sessions
             .getState()
             .open(createDocument({ name: "hero", width: 4, height: 3 }));
-        expect(guarded()).toBe(false);
+        expectGuard(false);
         // A view preference does not make the document dirty (SPEC §5.2).
         sessions.getState().updateDocSettings(document.id, (settings) => {
             settings.grid.visible = true;
         });
-        expect(guarded()).toBe(false);
+        expectGuard(false);
         paint(document, 1);
-        expect(guarded()).toBe(true);
+        expectGuard(true);
+        // Still dirty: still one listener.
+        paint(document, 2);
+        expectGuard(true);
         sessions.getState().markSaved(document.id);
-        expect(guarded()).toBe(false);
+        expectGuard(false);
         sessions.getState().updateExportSettings(document.id, (settings) => {
             settings.padding = 4;
         });
-        expect(guarded()).toBe(true);
+        expectGuard(true);
         // A second, clean document changes nothing; closing the dirty one ends the guard.
         sessions.getState().open(createDocument({ name: "other", width: 2, height: 2 }));
-        expect(guarded()).toBe(true);
+        expectGuard(true);
         sessions.getState().close(document.id);
-        expect(guarded()).toBe(false);
+        expectGuard(false);
         paint(sessions.getState().documents[0]!, 2);
-        expect(guarded()).toBe(true);
+        expectGuard(true);
         stop();
-        expect(guarded()).toBe(false);
+        expectGuard(false);
     });
 
     it("a drop of files opens them; the browser never takes the drop", () => {
@@ -206,9 +286,22 @@ describe("the file name of a document without a file", () => {
         expect(projectFileName('a<b>c:d"e/f\\g|h?i*j')).toBe("a_b_c_d_e_f_g_h_i_j.ngsprite");
         expect(projectFileName("tab\there\u0000")).toBe("tab_here_.ngsprite");
         expect(projectFileName("  walk cycle.  ")).toBe("walk cycle.ngsprite");
+        // The extension is found behind trailing dots and spaces, and taken off once.
+        expect(projectFileName("hero.ngsprite.")).toBe("hero.ngsprite");
+        expect(projectFileName("hero.ngsprite .")).toBe("hero.ngsprite");
+        expect(projectFileName("hero. .ngsprite")).toBe("hero.ngsprite");
+    });
+
+    it("puts _ before a device name of Windows, also before an extension or a space", () => {
         expect(projectFileName("con")).toBe("_con.ngsprite");
         expect(projectFileName("LPT1.v2")).toBe("_LPT1.v2.ngsprite");
+        expect(projectFileName("con .v2")).toBe("_con .v2.ngsprite");
+        for (const device of ["COM¹", "com²", "LPT³", "lpt¹.walk", "nul", "AUX", "prn.x"]) {
+            expect(projectFileName(device), device).toBe(`_${device}.ngsprite`);
+        }
         expect(projectFileName("console")).toBe("console.ngsprite");
+        expect(projectFileName("com10")).toBe("com10.ngsprite");
+        expect(projectFileName("conx.v2")).toBe("conx.v2.ngsprite");
     });
 
     it("falls back to Sprite and keeps at most 200 characters", () => {

@@ -8,6 +8,7 @@ import {
     setPivotCommand,
 } from "../../core/sprite";
 import type { CommandSpec } from "../commands/types";
+import { fileWorkflows } from "../file/workflows";
 import { preferences } from "../preferences/preferences";
 import { activeDocument, isDirty, sessionsStore } from "../state/sessions";
 import type { OpenDocument } from "../state/sessions";
@@ -109,6 +110,8 @@ export const commands: CommandSpec[] = [
         title: "New Sprite…",
         shortcut: "Ctrl+Alt+N",
         context: ["global", "text"],
+        // It replaces the active document: not while a file operation (SE-041) runs.
+        enabled: () => !fileWorkflows.busy,
         run: newSprite,
     },
     {

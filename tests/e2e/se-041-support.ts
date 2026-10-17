@@ -29,6 +29,8 @@ export interface FileSystemStub {
     openPickers: number;
     /** Every write, by file name, in order. */
     writes: string[];
+    /** Writes to these files fail with a `DOMException` of this name and message. */
+    failWrite: Record<string, { name: string; message: string }>;
 }
 
 declare global {
@@ -50,6 +52,7 @@ export async function stubFileSystemAccess(page: Page): Promise<void> {
             saveSuggestions: [],
             openPickers: 0,
             writes: [],
+            failWrite: {},
         };
         window.__se041Fs = stub;
         const handle = (name: string) => ({
@@ -64,6 +67,8 @@ export async function stubFileSystemAccess(page: Page): Promise<void> {
                 const chunks: number[] = [];
                 return {
                     async write(data: Uint8Array) {
+                        const failure = stub.failWrite[name];
+                        if (failure) throw new DOMException(failure.message, failure.name);
                         for (const byte of data) chunks.push(byte);
                     },
                     async close() {
@@ -108,16 +113,22 @@ export function fileSystem(page: Page): Promise<FileSystemStub> {
     return page.evaluate(() => structuredClone(window.__se041Fs!));
 }
 
-/** Sets what the next pickers return, and files in the stub's memory. */
+/** Sets what the next pickers return, files in the stub's memory, and failing writes. */
 export function arrangeFiles(
     page: Page,
-    arrangement: { nextSave?: string[]; nextOpen?: string[]; files?: Record<string, number[]> },
+    arrangement: {
+        nextSave?: string[];
+        nextOpen?: string[];
+        files?: Record<string, number[]>;
+        failWrite?: FileSystemStub["failWrite"];
+    },
 ): Promise<void> {
     return page.evaluate((arrangement) => {
         const stub = window.__se041Fs!;
         stub.nextSave.push(...(arrangement.nextSave ?? []));
         stub.nextOpen.push(...(arrangement.nextOpen ?? []));
         Object.assign(stub.files, arrangement.files ?? {});
+        Object.assign(stub.failWrite, arrangement.failWrite ?? {});
     }, arrangement);
 }
 

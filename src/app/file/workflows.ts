@@ -1,12 +1,21 @@
 import type { StoreApi } from "zustand/vanilla";
 import type { DocSession, SpriteDoc } from "../../core/model";
-import { PROJECT_FILE_EXTENSION, deserialize, serialize } from "../../core/project";
+import {
+    MAX_PROJECT_CONTENT_BYTES,
+    MAX_PROJECT_ENTRIES,
+    PROJECT_FILE_EXTENSION,
+    deserialize,
+    serialize,
+} from "../../core/project";
 import type { ProjectContents } from "../../core/project";
 import { notices as appNotices } from "../notices/notices";
 import type { Notices } from "../notices/notices";
 import { browserProjectFiles } from "../platform/projectFiles";
 import type { ChosenFile, ProjectFileHandle, ProjectFilePlatform } from "../platform/projectFiles";
-import { applyFloating as applyAppFloating } from "../selection/floating";
+import {
+    applyFloating as applyAppFloating,
+    isFloating as isAppFloating,
+} from "../selection/floating";
 import { activeDocument, isDirty, savedStateOf, sessionsStore } from "../state/sessions";
 import type { OpenDocument, SessionsState } from "../state/sessions";
 import { fileDialogs as appFileDialogs } from "./dialogs";
@@ -18,8 +27,27 @@ import { isProjectFileName, projectFileName } from "./fileName";
 // from or last saved to; with File System Access that is a handle Save writes to again.
 //
 // One operation at a time: while one runs (a picker, a question, a write), `busy` is true and
-// the others do nothing. Results and failures are reported as notices (toasts); a failure
+// the others do nothing. Results and failures are reported as notices (toasts): one for each
+// operation that fails or is given up after it started, none when the user cancels. A failure
 // leaves every open document as it was.
+
+/**
+ * Zip framing and compression overhead allowed per entry on top of the content of a project
+ * (local and central headers, names, data descriptors, deflate block headers).
+ */
+const ZIP_FRAMING_BYTES_PER_ENTRY = 1024;
+/** The end-of-central-directory record with the longest comment a zip can hold. */
+const MAX_END_RECORD_BYTES = 22 + 0xffff;
+
+/**
+ * The largest file Open reads (SPEC §10): the content a project may hold (docs/FORMAT.md
+ * §1.8: 2 GiB) plus 1 KiB of zip framing for each of its at most 65 534 entries. A larger file
+ * is refused before it is read into memory.
+ */
+export const MAX_PROJECT_FILE_BYTES =
+    MAX_PROJECT_CONTENT_BYTES +
+    MAX_PROJECT_ENTRIES * ZIP_FRAMING_BYTES_PER_ENTRY +
+    MAX_END_RECORD_BYTES;
 
 /** The file a document was opened from or last saved to. */
 export interface DocumentFile {
@@ -42,6 +70,8 @@ export interface FileWorkflowOptions {
     notices?: Pick<Notices, "info" | "error">;
     /** Applies the floating selection before a save (SPEC §5.2); the default is the app's. */
     applyFloating?(): void;
+    /** Whether the active document holds a floating selection; the default is the app's. */
+    isFloating?(): boolean;
 }
 
 export interface FileWorkflows {
@@ -51,6 +81,11 @@ export interface FileWorkflows {
     subscribe(listener: () => void): () => void;
     /** The file of an open document, or null when it has none (never saved, not opened). */
     fileOf(id: string): DocumentFile | null;
+    /**
+     * Whether Save and Save As can run now: no operation runs, a document is open, and its
+     * history is idle or holds a floating selection, which the save applies first (SPEC §5.2).
+     */
+    canSave(): boolean;
     /** Asks for a project file and opens it in place of the active document. */
     open(): Promise<boolean>;
     /** Opens the first project file among `files` (a drop) in place of the active document. */
@@ -68,6 +103,11 @@ export interface FileWorkflows {
 /** What went wrong, for a message: an error's own message (ProjectError names the entry). */
 function reason(error: unknown): string {
     return error instanceof Error && error.message !== "" ? error.message : String(error);
+}
+
+/** The file a handle names is gone: moved or deleted since it was chosen. */
+function isNotFound(error: unknown): boolean {
+    return error instanceof DOMException && error.name === "NotFoundError";
 }
 
 /**
@@ -88,7 +128,10 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
     const platform = options.platform ?? browserProjectFiles();
     const dialogs = options.dialogs ?? appFileDialogs;
     const notices = options.notices ?? appNotices;
-    const applyFloating = options.applyFloating ?? applyAppFloating;
+    // The app's hooks are looked up when they are called, not when the workflows are made: a
+    // test that replaces the floating module with one of its own keeps working.
+    const applyFloating = options.applyFloating ?? (() => applyAppFloating());
+    const isFloating = options.isFloating ?? (() => isAppFloating());
 
     const files = new Map<string, DocumentFile>();
     const listeners = new Set<() => void>();
@@ -132,6 +175,16 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
         const current = editable();
         return current?.session === document.session ? current : null;
     };
+    /** Why `stillActive(document)` is null: for the message of an operation given up. */
+    const interruption = (document: OpenDocument): string => {
+        const state = sessions.getState();
+        const active = activeDocument(state);
+        if (active?.session === document.session) return "A stroke is in progress.";
+        const open = state.documents.some((entry) => entry.session === document.session);
+        return open
+            ? "Another document became the active one meanwhile."
+            : "The document was closed meanwhile.";
+    };
     /** Asks before unsaved changes of `document` are lost; true when there are none. */
     const mayDiscard = (document: OpenDocument, action: DiscardAction, file: string | null) =>
         isDirty(document)
@@ -154,22 +207,32 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
     };
 
     const openChosen = async (chosen: ChosenFile): Promise<boolean> => {
+        const failed = (why: string) => {
+            notices.error(`Could not open “${chosen.name}”. ${why}`);
+            return false;
+        };
+        // A file no project can be is not read into memory at all.
+        if (chosen.size > MAX_PROJECT_FILE_BYTES) {
+            return failed(
+                `The file is too large to be a sprite project: ${chosen.size} bytes; the ` +
+                    `limit is ${MAX_PROJECT_FILE_BYTES} bytes.`,
+            );
+        }
         // The file is read first: a file that cannot be opened asks nothing and changes nothing.
         const project = await read(chosen.name, () => chosen.read(), "open");
         if (!project) return false;
         const active = activeDocument(sessions.getState());
         if (active) {
-            if (active.history.transaction) return false;
+            if (active.history.transaction) return failed(interruption(active));
             if (!(await mayDiscard(active, "open", chosen.name))) return false;
-            if (!stillActive(active)) return false;
+            if (!stillActive(active)) return failed(interruption(active));
         }
         const handle = await chosen.handle();
         const { doc, referenceSources } = project.contents;
         try {
             sessions.getState().replaceActive(sessionOf(doc), { referenceSources });
         } catch (error) {
-            notices.error(`Could not open “${chosen.name}”. ${reason(error)}`);
-            return false;
+            return failed(reason(error));
         }
         setFile(doc.id, { name: chosen.name, handle, bytes: handle ? null : project.bytes });
         notices.info(`Opened ${chosen.name}`);
@@ -177,42 +240,80 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
     };
 
     const saveActive = async (as: boolean): Promise<boolean> => {
-        applyFloating();
-        const document = editable();
-        if (!document) return false;
-        const known = files.get(document.id) ?? null;
-        const suggested = known?.name ?? projectFileName(document.session.doc.name);
-        let handle = as ? null : (known?.handle ?? null);
+        const opened = activeDocument(sessions.getState());
+        if (!opened) return false;
+        const known = files.get(opened.id) ?? null;
+        const suggested = known?.name ?? projectFileName(opened.session.doc.name);
+        const failed = (name: string, why: string) => {
+            notices.error(`Could not save “${name}”. ${why}`);
+            return false;
+        };
+        try {
+            applyFloating();
+        } catch (error) {
+            return failed(suggested, reason(error));
+        }
+        // A stroke, or a floating selection that applying did not end.
+        const document = stillActive(opened);
+        if (!document) return failed(suggested, interruption(opened));
+
+        let target = as ? null : (known?.handle ?? null);
         try {
             // Permission is settled before the bytes are made: the browser prompts only
-            // within the user's gesture. Refused, Save asks where to save, as Save As does.
-            if (handle && !(await handle.requestWrite())) handle = null;
-            if (!handle && platform.canChooseSaveTarget()) {
-                handle = await platform.chooseSaveTarget(suggested);
-                if (!handle) return false;
+            // within the user's gesture. Refused, Save asks where to save, as Save As does,
+            // while the gesture lasts; the picker needs it too.
+            if (target && !(await target.requestWrite())) {
+                if (!platform.hasUserActivation()) {
+                    notices.error(`No permission to write “${target.name}”. Use Save As…`);
+                    return false;
+                }
+                target = null;
+            }
+            if (!target && platform.canChooseSaveTarget()) {
+                target = await platform.chooseSaveTarget(suggested);
+                if (!target) return false;
             }
         } catch (error) {
-            notices.error(`Could not save “${suggested}”. ${reason(error)}`);
-            return false;
+            return failed(target?.name ?? suggested, reason(error));
         }
-        // A picker may have been open for a while; the document is taken as it is now.
+        // A picker or a prompt may have been open for a while: the document is taken as it is
+        // now, if it is still the active one and no stroke has begun.
         const current = stillActive(document);
-        if (!current) return false;
-        const name = handle?.name ?? suggested;
+        if (!current) return failed(target?.name ?? suggested, interruption(document));
         // The state the bytes hold: a change made while they are written keeps the document
         // dirty.
         const state = savedStateOf(current);
+        let bytes: Uint8Array<ArrayBuffer>;
         try {
-            const bytes = serialize(current.session.doc, current.referenceSources);
-            if (handle) await handle.write(bytes);
-            else platform.download(name, bytes);
-            if (sessions.getState().documents.some((entry) => entry.session === current.session)) {
-                sessions.getState().markSaved(current.id, state);
-                setFile(current.id, { name, handle, bytes: handle ? null : bytes });
-            }
+            bytes = serialize(current.session.doc, current.referenceSources);
         } catch (error) {
-            notices.error(`Could not save “${name}”. ${reason(error)}`);
-            return false;
+            return failed(target?.name ?? suggested, reason(error));
+        }
+        try {
+            if (target) await target.write(bytes);
+            else platform.download(suggested, bytes);
+        } catch (error) {
+            const kept = target !== null && target === known?.handle;
+            if (!target || !kept || !isNotFound(error)) {
+                return failed(target?.name ?? suggested, reason(error));
+            }
+            // The document's file was moved or deleted: ask where to save while the gesture
+            // lasts, as Save As does.
+            if (!platform.hasUserActivation()) {
+                return failed(target.name, "The file no longer exists. Use Save As…");
+            }
+            try {
+                target = await platform.chooseSaveTarget(suggested);
+                if (!target) return false;
+                await target.write(bytes);
+            } catch (retry) {
+                return failed(target?.name ?? suggested, reason(retry));
+            }
+        }
+        const name = target?.name ?? suggested;
+        if (sessions.getState().documents.some((entry) => entry.session === current.session)) {
+            sessions.getState().markSaved(current.id, state);
+            setFile(current.id, { name, handle: target, bytes: target ? null : bytes });
         }
         notices.info(`Saved ${name}`);
         return true;
@@ -229,10 +330,18 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
             };
         },
         fileOf: (id) => files.get(id) ?? null,
+        canSave() {
+            const document = activeDocument(sessions.getState());
+            return !busy && document !== null && (!document.history.transaction || isFloating());
+        },
 
         open: () =>
             exclusive(async () => {
-                if (activeDocument(sessions.getState())?.history.transaction) return false;
+                const active = activeDocument(sessions.getState());
+                if (active?.history.transaction) {
+                    notices.error(`Could not open a file. ${interruption(active)}`);
+                    return false;
+                }
                 let chosen: ChosenFile | null;
                 try {
                     chosen = await platform.chooseFileToOpen();
@@ -264,7 +373,11 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
                 const document = editable();
                 if (!document) return false;
                 if (!(await mayDiscard(document, "close", null))) return false;
-                if (!stillActive(document)) return false;
+                if (!stillActive(document)) {
+                    const name = document.session.doc.name;
+                    notices.error(`Could not close “${name}”. ${interruption(document)}`);
+                    return false;
+                }
                 sessions.getState().close(document.id);
                 return true;
             }),
@@ -274,15 +387,30 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
                 const document = editable();
                 const file = document ? files.get(document.id) : undefined;
                 if (!document || !file) return false;
+                const failed = (why: string) => {
+                    notices.error(`Could not revert to “${file.name}”. ${why}`);
+                    return false;
+                };
                 if (!(await mayDiscard(document, "revert", file.name))) return false;
                 const { handle, bytes } = file;
+                // Read permission can lapse: asked again, within the gesture of the command or
+                // of the question's Discard.
+                try {
+                    if (handle && !(await handle.requestRead())) {
+                        notices.error(`No permission to read “${file.name}”.`);
+                        return false;
+                    }
+                } catch (error) {
+                    return failed(reason(error));
+                }
                 const project = await read(
                     file.name,
                     async () => (handle ? handle.read() : (bytes ?? new Uint8Array())),
                     "revert to",
                 );
-                const current = project && stillActive(document);
-                if (!project || !current) return false;
+                if (!project) return false;
+                const current = stillActive(document);
+                if (!current) return failed(interruption(document));
                 const { doc, referenceSources } = project.contents;
                 try {
                     sessions.getState().replaceActive(sessionOf(doc), {
@@ -290,8 +418,7 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
                         view: { ...current.view },
                     });
                 } catch (error) {
-                    notices.error(`Could not revert to “${file.name}”. ${reason(error)}`);
-                    return false;
+                    return failed(reason(error));
                 }
                 setFile(doc.id, { name: file.name, handle, bytes: handle ? null : project.bytes });
                 notices.info(`Reverted to ${file.name}`);

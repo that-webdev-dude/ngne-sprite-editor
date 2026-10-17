@@ -1379,31 +1379,52 @@ Export is accepted only when all three hold (SE-053):
   - A document remembers the file it was opened from or last saved to. With File System Access
     that is a handle: Save writes to it without asking, after asking the browser for write
     permission when it is not granted (a file opened through the open picker or a drop has
-    read permission only); refused, Save asks where to save, as Save As does. Save As always
-    asks, and the chosen file becomes the document's. Without File System Access, Save and
-    Save As download `<file>.ngsprite`, and Open uses a file input.
+    read permission only). Save As always asks, and the chosen file becomes the document's;
+    a Save As whose write fails leaves the document its previous file. Without File System
+    Access, Save and Save As download `<file>.ngsprite`, and Open uses a file input.
+  - A picker or a permission prompt needs the user's gesture, which lapses a few seconds after
+    the key or click (`navigator.userActivation.isActive`). When write permission is refused,
+    or the document's file no longer exists (`NotFoundError` from the write: moved or
+    deleted), Save asks where to save, as Save As does, while the gesture lasts; once it has
+    lapsed, it stops with an error toast that names Save As ("No permission to write “x”. Use
+    Save As…", "Could not save “x”. The file no longer exists. Use Save As…").
+  - With the download fallback the document counts as saved once the download is handed to
+    the browser. The page cannot learn what follows: if the user cancels the browser's save
+    dialog, the document is clean and no file was written.
   - A document without a file is saved as its name with the characters a file name cannot hold
-    on Windows replaced by `_`, at most 200 characters, no trailing dot or space, and
-    `.ngsprite` (`Sprite.ngsprite` when nothing is left of the name).
-  - Save applies a floating selection first, then records as saved the history position and
-    export settings the written bytes hold (§5.2): a change made while the file is being
-    written keeps the document dirty. Saving an unchanged document writes the same bytes again.
-  - Open reads and checks the file before anything else: a file that cannot be opened is
-    reported by an error toast naming the problem (`ProjectError`) and changes nothing, nor
-    does it ask. The opened document takes the place of the active one (tabs: SE-047), with no
-    selection, an empty history, the first frame and the top pixel layer active, and its
-    reference source bytes in the store.
+    on Windows replaced by `_`, its first 200 characters, no trailing dot or space, and
+    `.ngsprite`, which a name ending in it (behind dots and spaces too) does not get twice;
+    `Sprite.ngsprite` when nothing is left of the name. A device name of Windows (CON, PRN,
+    AUX, NUL, COM0–9, LPT0–9, COM¹–³, LPT¹–³) before the first dot, spaces after it ignored,
+    gets `_` in front.
+  - Save applies a floating selection first, so Save and Save As are enabled while a selection
+    floats (§5.2); then it records as saved the history position and export settings the
+    written bytes hold: a change made while the file is being written keeps the document
+    dirty. Saving an unchanged document writes the same bytes again.
+  - Open refuses a file larger than any project can be (the 2 GiB of content of FORMAT §1.8
+    plus 1 KiB of zip framing for each of its 65 534 entries) before it reads it. Then it reads
+    and checks the file before anything else: a file that cannot be opened is reported by an
+    error toast naming the problem (`ProjectError`) and changes nothing, nor does it ask. The
+    opened document takes the place of the active one (tabs: SE-047), with no selection, an
+    empty history, the first frame and the top pixel layer active, and its reference source
+    bytes in the store.
   - A drop of files on the window opens the first file whose name ends in `.ngsprite` (in any
-    case); a drop without one is reported by an error toast. A drop while a menu or dialog is
-    open, or while a file operation runs, is ignored; no file drop ever navigates the page.
-  - Revert reads the document's file again in its place, keeping the view; without File System
-    Access it reads the bytes last opened or downloaded. It needs a file.
+    case); a drop without a project file (and, from SE-044, without an image) is reported by
+    an error toast. A drop while a menu or dialog is open, or while a file operation runs, is
+    ignored; no file drop ever navigates the page.
+  - Revert reads the document's file again in its place, keeping the view; with File System
+    Access it asks for read permission again first (refused: "No permission to read “x”.",
+    the document stays); without it, it reads the bytes last opened or downloaded. It needs a
+    file.
   - Close, Open and Revert ask once before unsaved changes are lost ("Discard unsaved
     changes?", Cancel / Discard, as New sprite does); Cancel and Escape keep the document.
   - One file operation at a time: while one waits for a picker, a question or a write, the
-    file commands are disabled. None acts during a stroke.
+    file commands and New Sprite are disabled. None acts during a stroke. An operation given up
+    after it started, because a stroke began or the active document changed meanwhile, says so
+    in an error toast; a picker or a question the user cancels is not reported.
   - Results ("Saved hero.ngsprite", "Opened …", "Reverted to …") are info toasts; failures
-    ("Could not open “x”. <reason>", "Could not save …") are error toasts.
+    ("Could not open “x”. <reason>", "Could not save …") are error toasts, one per failed
+    operation.
   - The unsaved marker (an asterisk after the document's name, DESIGN §2) is shown while the
     active document is dirty. While any open document is dirty, the page asks the browser to
     confirm before it is left (`beforeunload`); with none dirty no listener is registered.

@@ -6,7 +6,8 @@ import { fileWorkflows } from "./workflows";
 // The file commands of SPEC §10 (SE-041). They take the File menu items planned for their ids
 // (commands/planned.commands.ts). SPEC §7.8: Ctrl+O, Ctrl+S, Ctrl+Shift+S and Alt+W are
 // marked †, so they also act while a text field has focus. Each waits while another file
-// operation runs, and none acts on a document during a stroke.
+// operation runs, and none acts on a document during a stroke; Save and Save As do act while a
+// selection floats, which they apply first (SPEC §5.2).
 
 /** The active document's history, when one is open. */
 function activeHistory() {
@@ -39,7 +40,7 @@ export const commands: CommandSpec[] = [
         title: "Save",
         shortcut: "Ctrl+S",
         context: TEXT_TOO,
-        enabled: idleDocument,
+        enabled: () => fileWorkflows.canSave(),
         run: async () => void (await fileWorkflows.save()),
     },
     {
@@ -47,7 +48,7 @@ export const commands: CommandSpec[] = [
         title: "Save As…",
         shortcut: "Ctrl+Shift+S",
         context: TEXT_TOO,
-        enabled: idleDocument,
+        enabled: () => fileWorkflows.canSave(),
         run: async () => void (await fileWorkflows.saveAs()),
     },
     {
