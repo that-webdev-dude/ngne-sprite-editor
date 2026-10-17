@@ -82,7 +82,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-007, SE-011, SE-020, SE-021                           |
 | Blocks       | SE-023, SE-024, SE-026, SE-045, SE-061                   |
 | Blocked until | Gate G1 passed                                          |

@@ -291,6 +291,10 @@ Scope
   cache cleared, so the 128 MB budget is not multiplied by the number of tabs.
 - Recent files (File System Access handles in IndexedDB) on the empty state and in
   File → Open Recent; entries whose permission is gone prompt once, then are removed on denial.
+- From SE-041 (REVIEW F17): Open replaces the active document after the discard question until
+  this ticket; the unit test titled "… (until SE-047)" in `tests/unit/se-041-workflows.test.ts`
+  is this ticket's to replace with the tab rule. The empty-state assertions of
+  `se-006-boundary` and `se-008-new-sprite` are placeholders this ticket may extend (B3).
 
 Acceptance
 - E2E: open two documents; drawing in one leaves the other's composite unchanged; undo acts on
