@@ -777,6 +777,71 @@ Shape tools and paint bucket (SE-017):
   pixel. With a selection the fill neither takes nor crosses an unselected pixel, as Aseprite's
   contiguous fill does; the transaction's clip keeps every other pixel.
 
+Selection tools (SE-031):
+
+- Rectangular marquee (M), elliptical marquee (Shift+M), lasso (Q), polygon lasso (Shift+Q)
+  and magic wand (W). The elliptical marquee and the polygon lasso are variants of the
+  marquee's and the lasso's rail slots (DESIGN §5.1). They write no pixels, so they work at
+  every zoom step, on any layer and beyond the document's edge (their shapes are clipped to the
+  canvas); either button selects, and the cursor is a crosshair. Each keeps its option values.
+- Mode: the option Mode (Replace by default, Add, Subtract, Intersect), or, over it, the
+  modifiers held at the press that begins the gesture: Shift add, Alt subtract, Shift+Alt
+  intersect (`combineSelection`, §7.2). Modifiers pressed later change nothing. The status bar's
+  hint names them.
+- A completed gesture is one history step labelled with the tool's name; a change that leaves
+  the same pixels selected records nothing (§7.2). Escape during a gesture, a pointer cancel or
+  the document left changes nothing.
+- A gesture that encloses no pixel selects nothing: a click with a marquee (the pointer never
+  left the pressed pixel), a lasso or polygon of fewer than 3 points, a wand press outside the
+  document. With Replace or Intersect that deselects; with Add or Subtract it changes nothing.
+- Marquees: the press fixes one corner and the pointer the other, both pixels included; the
+  release selects the rectangle, or the filled ellipse that fits it (§7.2).
+- Lasso: the press and every pointer sample after it is a point (a sample on the pixel of the
+  point before adds none); the release closes the path into the polygon of §7.2.
+- Polygon lasso: a gesture of several presses. Every press and every release adds the pixel
+  under the pointer as a vertex unless it is the last vertex already, so a click adds one and a
+  drag two. Enter (the `gesture` context of §7.8) or a double click closes the polygon through
+  the vertices. Escape, a pointer cancel during a press, a change of the active tool (a held
+  one, Space, included) or of the active document cancels it. While it is open every press over
+  the viewport is its own (the wheel and the middle button still navigate), and Enter does not
+  reach play/pause.
+- Magic wand: the press takes the flood mask (Flood fill above) of the pixel under the pointer
+  in the active layer's cel as stored (an empty cel is transparent; with a reference layer
+  active the press does nothing) or in the frame's composite as the cache holds it (Sample),
+  with Tolerance and Contiguous; the release combines it with the selection. Options in order:
+  Mode, Contiguous (on), Sample (Active layer by default, or Composite), Tolerance (0–255, 0).
+  The wand passes no selection to the flood fill (`within`): its area is found in the whole
+  image, contiguous or not, and the mode decides what the selection keeps of it — Intersect
+  keeps the part inside the selection. Aseprite's wand does the same: its selection inks fill
+  with no mask (`ToolLoopImpl` sets `m_useMask` false for them; checked in its source).
+- Live preview: while a gesture is in progress the overlay shows the pixels it would select as
+  the ants show a selection, standing still (DESIGN §6): a marquee's shape from the first move
+  off the pressed pixel, the lasso's polygon so far, the polygon lasso's polygon through its
+  vertices and the pointer, the wand's area until the release. A path of fewer than 3 points
+  shows its line, which selects nothing. It is drawn by the ants' painter (`ringPainter.ts`):
+  painted once per shape, zoom and canvas size, moved with a pan, one `drawImage` a redraw. With
+  Replace the selection keeps the shape's very mask, so the boundary the wand's preview worked
+  out is the ants' too (`boundaryCache.ts`, which keeps the boundaries of the two masks asked
+  for last).
+- Tool framework: a tool may make its stroke a gesture (`ToolContext.openGesture`). It stays
+  open past the release; the next presses over the viewport are its own, and the moves between
+  them reach its `onHover`. Enter and a double click close it (`onClose`, then it is kept as at
+  a release); Escape (`tool.cancel`), a pointer cancel during a press, the document left and a
+  change of the active tool cancel it. While one is open the keymap's `gesture` context
+  applies. A tool shares a rail slot as a variant by naming it (`variantOf`).
+- Tool keys: `tool.<id>` selects exactly that tool, from its key, the palette or a menu. A
+  tool's key pressed again while that tool is selected selects the next of its slot's variants
+  whose key is the same letter (M and Shift+M; DESIGN §5.1): a command of its own on the same
+  key, `tool.<id>.next`, enabled exactly while `tool.<id>` is not (that is, while the tool is
+  selected and has such a variant), so the two never conflict.
+
+Ants on a pan (SE-031 review, in SE-030's `ringPainter.ts` and `antsGeometry.ts`): the ring's
+surface covers the selection's device bounds grown by 1 pixel, cut to the canvas, found in
+constant time; the boundary is walked only where pixels are painted, with no object made per
+run. A pan — the same mask, zoom and canvas size, the document moved by whole device pixels —
+moves the pixels kept by as much and paints only the strips it uncovered; a zoom, a resize, a
+pan that leaves nothing kept where the ring now is, or another mask paints afresh.
+
 ### 7.2 Selection
 
 - A selection is a 1-bit mask plus bounds in the `DocSession`. Changing it is undoable.

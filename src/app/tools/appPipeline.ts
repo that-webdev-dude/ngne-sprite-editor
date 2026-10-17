@@ -1,3 +1,4 @@
+import { setKeyContext } from "../keymap/contextState";
 import { activeComposites } from "../state/composites";
 import { editorStore } from "../state/editor";
 import { sessionsStore } from "../state/sessions";
@@ -34,6 +35,8 @@ export const toolPipeline: ToolPipeline = createToolPipeline({
         const timer = setTimeout(callback, ms);
         return () => clearTimeout(timer);
     },
+    // While a gesture is open, Enter closes it (SPEC §7.8, `gesture.commands.ts`).
+    gesture: (open) => setKeyContext("gesture", open),
 });
 
 /**

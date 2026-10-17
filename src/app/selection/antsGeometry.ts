@@ -22,9 +22,12 @@ import type { Axis } from "../overlay/gridLines";
 // exact there) the ring is exactly the pixels outside the selected texels within one device
 // pixel of them; at the overview steps a run that rounds to nothing keeps one pixel.
 //
-// Only what lies on the canvas is looked at: the boundary's segments are sorted by line, so
-// the lines on the canvas, and the segments of each line on it, are found by binary search,
-// and the work grows with what is visible, not with the selection.
+// Only what lies in a clip — the canvas, or a strip of it a pan uncovered (SE-031) — is looked
+// at: the boundary's segments are sorted by line, so the lines in the clip, and the segments
+// of each line in it, are found by binary search, and the work grows with what is visible, not
+// with the selection. The runs reach the visitor as numbers, with no object made per run.
+// Where the ring can lie at all is known in constant time from the selection's bounds
+// (`ringBounds`).
 //
 // The dashes are black and white, 2 device pixels each, by the sum x + y of the canvas pixel:
 // along every row and column of the ring they repeat every 4 pixels, also round corners, and
@@ -41,6 +44,16 @@ function onCanvas(rect: DeviceRect, size: DeviceSize): DeviceRect | null {
     const y = Math.max(0, rect.y);
     const right = Math.min(size.width, rect.x + rect.width);
     const bottom = Math.min(size.height, rect.y + rect.height);
+    return right > x && bottom > y ? { x, y, width: right - x, height: bottom - y } : null;
+}
+
+/** The part `a` and `b` share; null when they share none (or `a` is null). */
+export function intersection(a: DeviceRect | null, b: DeviceRect): DeviceRect | null {
+    if (!a) return null;
+    const x = Math.max(a.x, b.x);
+    const y = Math.max(a.y, b.y);
+    const right = Math.min(a.x + a.width, b.x + b.width);
+    const bottom = Math.min(a.y + a.height, b.y + b.height);
     return right > x && bottom > y ? { x, y, width: right - x, height: bottom - y } : null;
 }
 
@@ -74,65 +87,69 @@ function linesWithin(axis: Axis, from: number, to: number): [number, number] {
 
 /**
  * Calls `visit` with each rectangle of the ring of the ants for `boundary` (document grid
- * lines) on a canvas of `size`, where the document lies along `axes`: 1-pixel-thick
- * rectangles, clipped to the canvas, which may overlap where two runs meet. Returns how many
- * boundary items were looked at, which grows with the part on the canvas.
+ * lines) that lies in `clip` (device pixels: the canvas, or a part of it), where the document
+ * lies along `axes`: 1-pixel-thick runs `x, y, width, height`, clipped to `clip`, which may
+ * overlap where two runs meet. No object is made per run. Returns how many boundary items were
+ * looked at, which grows with the part of the boundary in `clip`, not with the boundary.
  */
-export function forEachRingRect(
+export function forEachRingRun(
     boundary: SelectionBoundary,
     axes: { x: Axis; y: Axis },
-    size: DeviceSize,
-    visit: (rect: DeviceRect) => void,
+    clip: DeviceRect,
+    visit: (x: number, y: number, width: number, height: number) => void,
 ): number {
     let examined = 0;
-    const add = (rect: DeviceRect) => {
-        const visible = onCanvas(rect, size);
-        if (visible) visit(visible);
+    const left = clip.x;
+    const top = clip.y;
+    const right = clip.x + clip.width;
+    const bottom = clip.y + clip.height;
+    if (right <= left || bottom <= top) return 0;
+    const add = (x: number, y: number, width: number, height: number) => {
+        const x0 = Math.max(left, x);
+        const y0 = Math.max(top, y);
+        const x1 = Math.min(right, x + width);
+        const y1 = Math.min(bottom, y + height);
+        if (x1 > x0 && y1 > y0) visit(x0, y0, x1 - x0, y1 - y0);
     };
 
     // A horizontal edge on line y covers the row before or after `devicePosition(y)`: lines
-    // at device rows 0 to height. Within a line the edges run left to right.
+    // at device rows `top` to `bottom`. Within a line the edges run left to right.
     const horizontal: readonly HorizontalEdge[] = boundary.horizontal;
-    const [rowFirst, rowLast] = linesWithin(axes.y, 0, size.height);
+    const [rowFirst, rowLast] = linesWithin(axes.y, top, bottom);
     for (let line = rowFirst; line <= rowLast; line++) {
         const row = devicePosition(axes.y, line);
         let index = firstIndex(horizontal.length, (at) => {
             const edge = horizontal[at];
             if (edge.y !== line) return edge.y > line;
-            return spanEnd(axes.x, devicePosition(axes.x, edge.x0), edge.x1) > 0;
+            return spanEnd(axes.x, devicePosition(axes.x, edge.x0), edge.x1) > left;
         });
         for (; index < horizontal.length && horizontal[index].y === line; index++) {
             const edge = horizontal[index];
             const x0 = devicePosition(axes.x, edge.x0);
-            if (x0 >= size.width) break;
+            if (x0 >= right) break;
             examined++;
             const x1 = spanEnd(axes.x, x0, edge.x1);
             // Outside is the row after the line when the selection is above it, else the row before.
-            add({ x: x0, y: edge.inside === "above" ? row : row - 1, width: x1 - x0, height: 1 });
+            add(x0, edge.inside === "above" ? row : row - 1, x1 - x0, 1);
         }
     }
 
     const vertical: readonly VerticalEdge[] = boundary.vertical;
-    const [columnFirst, columnLast] = linesWithin(axes.x, 0, size.width);
+    const [columnFirst, columnLast] = linesWithin(axes.x, left, right);
     for (let line = columnFirst; line <= columnLast; line++) {
         const column = devicePosition(axes.x, line);
         let index = firstIndex(vertical.length, (at) => {
             const edge = vertical[at];
             if (edge.x !== line) return edge.x > line;
-            return spanEnd(axes.y, devicePosition(axes.y, edge.y0), edge.y1) > 0;
+            return spanEnd(axes.y, devicePosition(axes.y, edge.y0), edge.y1) > top;
         });
         for (; index < vertical.length && vertical[index].x === line; index++) {
             const edge = vertical[index];
             const y0 = devicePosition(axes.y, edge.y0);
-            if (y0 >= size.height) break;
+            if (y0 >= bottom) break;
             examined++;
             const y1 = spanEnd(axes.y, y0, edge.y1);
-            add({
-                x: edge.inside === "left" ? column : column - 1,
-                y: y0,
-                width: 1,
-                height: y1 - y0,
-            });
+            add(edge.inside === "left" ? column : column - 1, y0, 1, y1 - y0);
         }
     }
 
@@ -143,19 +160,67 @@ export function forEachRingRect(
         let index = firstIndex(corners.length, (at) => {
             const corner = corners[at];
             if (corner.y !== line) return corner.y > line;
-            return devicePosition(axes.x, corner.x) >= 0;
+            return devicePosition(axes.x, corner.x) >= left;
         });
         for (; index < corners.length && corners[index].y === line; index++) {
             const corner = corners[index];
             const x = devicePosition(axes.x, corner.x);
-            if (x > size.width) break;
+            if (x > right) break;
             examined++;
-            const left = corner.selected === "top-left" || corner.selected === "bottom-left";
-            const top = corner.selected === "top-left" || corner.selected === "top-right";
-            add({ x: left ? x : x - 1, y: top ? y : y - 1, width: 1, height: 1 });
+            const leftward = corner.selected === "top-left" || corner.selected === "bottom-left";
+            const upward = corner.selected === "top-left" || corner.selected === "top-right";
+            add(leftward ? x : x - 1, upward ? y : y - 1, 1, 1);
         }
     }
     return examined;
+}
+
+/**
+ * Calls `visit` with each rectangle of the ring of the ants for `boundary` on a canvas of
+ * `size` (`forEachRingRun` with the canvas as the clip), as a rectangle. Returns how many
+ * boundary items were looked at.
+ */
+export function forEachRingRect(
+    boundary: SelectionBoundary,
+    axes: { x: Axis; y: Axis },
+    size: DeviceSize,
+    visit: (rect: DeviceRect) => void,
+): number {
+    return forEachRingRun(
+        boundary,
+        axes,
+        { x: 0, y: 0, width: size.width, height: size.height },
+        (x, y, width, height) => visit({ x, y, width, height }),
+    );
+}
+
+/**
+ * Where the ring of a selection whose selected texels lie in `bounds` (document pixels) can
+ * be on a canvas of `size`: the device rectangle of `bounds` grown by 1 pixel on every side,
+ * cut to the canvas; null when none of it is on the canvas. Worked out in constant time; the
+ * ring's pixels lie in it at every zoom step, also where an overview step keeps a run of 1
+ * pixel past the bounds' last device column or row.
+ */
+export function ringBounds(
+    bounds: Readonly<{ x: number; y: number; width: number; height: number }>,
+    axes: { x: Axis; y: Axis },
+    size: DeviceSize,
+): DeviceRect | null {
+    return onCanvas(
+        {
+            x: devicePosition(axes.x, bounds.x) - 1,
+            y: devicePosition(axes.y, bounds.y) - 1,
+            width:
+                devicePosition(axes.x, bounds.x + bounds.width) -
+                devicePosition(axes.x, bounds.x) +
+                2,
+            height:
+                devicePosition(axes.y, bounds.y + bounds.height) -
+                devicePosition(axes.y, bounds.y) +
+                2,
+        },
+        size,
+    );
 }
 
 /** The ring of the ants (see `forEachRingRect`) as a list of rectangles. */
@@ -192,8 +257,10 @@ export function ringArea(
 }
 
 /**
- * Paints the ring into `rgba`, the straight RGBA pixels of `area` (row by row, `area.width`
- * a row, cleared): opaque white on the ring, the rest left as it is.
+ * Paints the part of the ring in `clip` into `rgba`, the straight RGBA pixels of `area`
+ * (row by row, `area.width` a row): opaque white on the ring, the rest left as it is. `clip`
+ * is `area` itself unless only a part of it is painted (a strip a pan uncovered), and lies in
+ * `area` and on the canvas of `size`. Returns how many runs of the ring it painted.
  */
 export function paintRing(
     boundary: SelectionBoundary,
@@ -201,22 +268,19 @@ export function paintRing(
     size: DeviceSize,
     area: DeviceRect,
     rgba: Uint8ClampedArray,
-): void {
-    forEachRingRect(boundary, axes, size, (rect) => {
-        const left = Math.max(rect.x, area.x);
-        const right = Math.min(rect.x + rect.width, area.x + area.width);
-        const top = Math.max(rect.y, area.y);
-        const bottom = Math.min(rect.y + rect.height, area.y + area.height);
-        for (let y = top; y < bottom; y++) {
-            let at = ((y - area.y) * area.width + left - area.x) * 4;
-            for (let x = left; x < right; x++, at += 4) {
-                rgba[at] = 255;
-                rgba[at + 1] = 255;
-                rgba[at + 2] = 255;
-                rgba[at + 3] = 255;
-            }
+    clip: DeviceRect = area,
+): number {
+    const visible = intersection(onCanvas(clip, size), area);
+    if (!visible) return 0;
+    let runs = 0;
+    forEachRingRun(boundary, axes, visible, (x0, y0, width, height) => {
+        runs++;
+        for (let y = y0; y < y0 + height; y++) {
+            const start = ((y - area.y) * area.width + x0 - area.x) * 4;
+            rgba.fill(255, start, start + width * 4);
         }
     });
+    return runs;
 }
 
 /** Whether the canvas pixel `x, y` is a black dash at `phase` (0 to `ANTS_PERIOD - 1`). */

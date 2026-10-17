@@ -128,9 +128,18 @@ export function attachToolPointer(
 
     const onPointerMove = (event: PointerEvent) => {
         takeModifiers(event);
-        if (event.pointerId !== toolPipeline.strokePointer) return;
+        // The stroke's pointer; between the presses of a gesture, the hovering one (SE-031).
+        if (event.pointerId !== toolPipeline.strokePointer && !toolPipeline.hovering) return;
         const samples = event.getCoalescedEvents?.() ?? [];
         toolPipeline.move((samples.length > 0 ? samples : [event]).map(pointerInput));
+        updateCursor();
+    };
+
+    // A double click closes an open gesture (SPEC §7.1: the polygon lasso). Its two presses
+    // reached the gesture first, as any press does.
+    const onDoubleClick = (event: MouseEvent) => {
+        if (event.button !== 0 || !toolPipeline.gesture) return;
+        toolPipeline.closeGesture();
         updateCursor();
     };
 
@@ -203,6 +212,7 @@ export function attachToolPointer(
     canvas.addEventListener("pointercancel", onPointerCancel);
     // Capture lost without a release (the canvas left the page): the stroke is cancelled.
     canvas.addEventListener("lostpointercapture", onPointerCancel);
+    canvas.addEventListener("dblclick", onDoubleClick);
     container.addEventListener("pointerdown", onPointerAt, true);
     container.addEventListener("pointermove", onPointerAt, true);
     container.addEventListener("pointerleave", onPointerLeave);
@@ -240,6 +250,7 @@ export function attachToolPointer(
         canvas.removeEventListener("pointerup", onPointerUp);
         canvas.removeEventListener("pointercancel", onPointerCancel);
         canvas.removeEventListener("lostpointercapture", onPointerCancel);
+        canvas.removeEventListener("dblclick", onDoubleClick);
         container.removeEventListener("pointerdown", onPointerAt, true);
         container.removeEventListener("pointermove", onPointerAt, true);
         container.removeEventListener("pointerleave", onPointerLeave);

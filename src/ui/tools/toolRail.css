@@ -1,0 +1,31 @@
+/* A tool button with variants (DESIGN §5.1, SE-031): a corner mark at its lower right, and the
+   hidden box over it that the menu of its variants is placed against. */
+.tool-rail__variants {
+    position: relative;
+}
+
+.tool-rail__corner {
+    position: absolute;
+    right: var(--space-2);
+    bottom: var(--space-2);
+    width: 0;
+    height: 0;
+    border-bottom: var(--space-4) solid currentColor;
+    border-left: var(--space-4) solid transparent;
+}
+
+.tool-rail__anchor {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.tool-rail__variant-name {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-8);
+}
+
+.tool-rail__variant[data-state="checked"] {
+    color: var(--accent);
+}

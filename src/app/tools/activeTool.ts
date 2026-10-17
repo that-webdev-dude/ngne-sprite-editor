@@ -1,12 +1,14 @@
 import type { StoreApi } from "zustand/vanilla";
+import { chordKey, normalizeChord } from "../commands/chord";
 import { editorStore } from "../state/editor";
 import type { EditorState } from "../state/editor";
 import { statusStore } from "../state/status";
 import type { StatusState } from "../state/status";
 import { optionValues } from "./options";
+import { slotOf } from "./registry";
 import type { ToolRegistry } from "./registry";
 import { toolRegistry } from "./toolRegistry";
-import type { Tool, ToolOptionValue } from "./types";
+import type { RailSlot, Tool, ToolOptionValue } from "./types";
 
 // Which tool acts (SE-014). The user selects a tool from the rail or with its key; the editor
 // store keeps that choice (`EditorState.tool`). A key held for a temporary tool (Space → hand,
@@ -28,6 +30,18 @@ export interface ToolState {
     held(): readonly string[];
     /** Selects a registered tool; returns false (and changes nothing) for any other id. */
     select(id: string): boolean;
+    /**
+     * The tool a tool's key switches to when it is pressed again while that tool is selected
+     * (SE-031, DESIGN §5.1): the next, after it, of the variants of its rail slot whose key is
+     * the same letter (M and Shift+M; after the last, the first). Null when it has none: no
+     * key, or no other variant of that letter.
+     */
+    nextVariant(id: string): Tool | null;
+    /**
+     * The tool a rail slot's button shows (SE-031): the active tool when it is one of the
+     * slot's, else the slot's tool selected last, else `slot.tool`.
+     */
+    shownInSlot(slot: RailSlot): Tool | null;
     /** Makes a registered tool the active one while its key is held. */
     hold(id: string): void;
     /** The key of a held tool came up: the tool before it acts again. */
@@ -43,6 +57,11 @@ export interface ToolState {
     subscribe(listener: () => void): () => void;
     /** Changes whenever `subscribe` listeners are called; a snapshot for React. */
     version(): number;
+}
+
+/** The key of a tool's chord without its modifiers ("M" for Shift+M); null without a key. */
+function keyOf(tool: Tool | undefined): string | null {
+    return tool?.shortcut === undefined ? null : chordKey(normalizeChord(tool.shortcut));
 }
 
 /** The tool state of an editor store and a registry. The app has one: `toolState`. */
@@ -63,6 +82,14 @@ export function createToolState(editor: StoreApi<EditorState>, registry: ToolReg
         { stored: unknown; values: Record<string, ToolOptionValue> }
     >();
 
+    /** The tool of each rail slot selected last, by slot id (SE-031). */
+    const lastInSlot = new Map<string, string>();
+    const remember = (id: string) => {
+        const tool = registry.get(id);
+        if (tool) lastInSlot.set(slotOf(tool), id);
+    };
+    remember(selectedId());
+
     let tracked: { tool: string; options: EditorState["toolOptions"] } = {
         tool: editor.getState().tool,
         options: editor.getState().toolOptions,
@@ -70,10 +97,21 @@ export function createToolState(editor: StoreApi<EditorState>, registry: ToolReg
     // The colours of the editor store are not the tool state's: only tool changes are passed on.
     editor.subscribe((state) => {
         if (state.tool === tracked.tool && state.toolOptions === tracked.options) return;
+        if (state.tool !== tracked.tool) remember(state.tool);
         tracked = { tool: state.tool, options: state.toolOptions };
         changed();
     });
-    registry.subscribe(changed);
+    registry.subscribe(() => {
+        // A tool selected before it was registered counts once it is.
+        remember(selectedId());
+        changed();
+    });
+
+    const select = (id: string) => {
+        if (!registry.get(id)) return false;
+        editor.getState().setTool(id);
+        return true;
+    };
 
     return {
         registry,
@@ -82,10 +120,23 @@ export function createToolState(editor: StoreApi<EditorState>, registry: ToolReg
         activeId,
         active: () => registry.get(activeId()) ?? null,
         held: () => held,
-        select(id) {
-            if (!registry.get(id)) return false;
-            editor.getState().setTool(id);
-            return true;
+        select,
+        nextVariant(id) {
+            const tool = registry.get(id);
+            const letter = keyOf(tool);
+            if (!tool || letter === null) return null;
+            const slot = registry.railSlots().find((entry) => entry.id === slotOf(tool));
+            const group = (slot?.variants ?? []).filter((variant) => keyOf(variant) === letter);
+            const index = group.indexOf(tool);
+            if (index < 0 || group.length < 2) return null;
+            return group[(index + 1) % group.length] ?? null;
+        },
+        shownInSlot(slot) {
+            const active = registry.get(activeId());
+            if (active && slot.variants.includes(active)) return active;
+            const last = lastInSlot.get(slot.id);
+            const remembered = slot.variants.find((variant) => variant.id === last);
+            return remembered ?? slot.tool;
         },
         hold(id) {
             if (!registry.get(id)) return;

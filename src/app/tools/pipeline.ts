@@ -26,6 +26,17 @@ import type { Tool, ToolButton, ToolContext, ToolModifiers, ToolPointer } from "
 // progress, and the middle button is never taken (it pans, SE-012). The tool of a stroke is
 // the tool active at its pointer down; a held key that changes the active tool acts from the
 // next pointer down.
+//
+// A gesture (SE-031: the polygon lasso; SPEC §7.8, the `gesture` context) is a stroke its
+// tool keeps open past the release (`ToolContext.openGesture`):
+//
+//   first press → onDown … onUp → (open) hover moves → onHover → next press → onDown … onUp
+//     → … → Enter or a double click → onClose → commit → onCommit
+//   Escape, a pointer cancel during a press, the document left, the active tool changed
+//     → onCancel → abort
+//
+// Between its presses every press over the viewport is the gesture's, and the moves with no
+// button held reach its tool; `sources.gesture` is told when one opens and when it ends.
 
 /** `PointerEvent.button` values. */
 const LEFT = 0;
@@ -68,7 +79,8 @@ export interface PipelineSources extends LiveCompositeSources {
     status: StoreApi<StatusState>;
     /** The foreground and background colours. */
     editor: StoreApi<EditorState>;
-    tools: Pick<ToolState, "active" | "options">;
+    /** The active tool; a gesture ends when it changes (`subscribe`). */
+    tools: Pick<ToolState, "active" | "options"> & Partial<Pick<ToolState, "subscribe">>;
     /**
      * The mapping of the image on screen: the overlay's, which maps the pointer through
      * NGNE's stretch after a resize (SPEC §6.3); null while no viewport is on the page.
@@ -78,26 +90,49 @@ export interface PipelineSources extends LiveCompositeSources {
     later(callback: () => void, ms: number): () => void;
     /** Receives what a tool threw or a transaction refused; the default logs it. */
     onError?(error: unknown): void;
+    /**
+     * A gesture opened (true) or ended (false): the app switches the keymap's `gesture`
+     * context with it (SPEC §7.8).
+     */
+    gesture?(open: boolean): void;
 }
 
 export interface ToolPipeline {
-    /** True while a stroke is in progress. */
+    /** True while a stroke is in progress, an open gesture included. */
     readonly stroking: boolean;
     /** The tool of the stroke in progress, or null. */
     readonly strokeTool: Tool | null;
-    /** The pointer of the stroke in progress, or null. */
+    /** The pointer of the stroke in progress while its button is held, or null. */
     readonly strokePointer: number | null;
+    /** True while a gesture is open (`ToolContext.openGesture`). */
+    readonly gesture: boolean;
     /**
-     * A button went down over the viewport. Returns true when it began a stroke: the caller
-     * captures the pointer and prevents the event's default.
+     * True while the pipeline takes moves with no button held (`move`): a gesture is open
+     * between its presses.
+     */
+    readonly hovering: boolean;
+    /**
+     * A button went down over the viewport. Returns true when it began a stroke, or a press of
+     * the open gesture: the caller captures the pointer and prevents the event's default.
      */
     down(input: PointerInput): boolean;
-    /** The pointer moved: its samples, oldest first (the coalesced events of one event). */
+    /**
+     * The pointer moved: its samples, oldest first (the coalesced events of one event). While
+     * `hovering`, samples with no button held go to the gesture's tool.
+     */
     move(inputs: readonly PointerInput[]): void;
-    /** A button came up: the stroke of that pointer ends. */
+    /** A button came up: the stroke of that pointer ends, or the press of a gesture. */
     up(input: PointerInput): void;
-    /** Cancels the stroke in progress (Escape, pointer cancel). Returns whether there was one. */
+    /**
+     * Cancels the stroke in progress (Escape, pointer cancel), an open gesture included.
+     * Returns whether there was one.
+     */
     cancel(): boolean;
+    /**
+     * Closes the open gesture and keeps it (Enter, a double click). Returns whether there was
+     * one.
+     */
+    closeGesture(): boolean;
     /** A key went down or up; returns true when the stroke's tool used it. */
     key(input: KeyInput): boolean;
     /** Stops following the stores; a stroke in progress is cancelled. */
@@ -106,14 +141,19 @@ export interface ToolPipeline {
 
 interface Stroke {
     readonly tool: Tool;
-    readonly pointerId: number;
-    readonly button: ToolButton;
+    /** The pointer and the button of the press in progress (of a gesture, its latest). */
+    pointerId: number;
+    button: ToolButton;
     readonly context: ToolContext;
     readonly document: OpenDocument;
     readonly transaction: Transaction | null;
     readonly live: LiveComposite | null;
     /** The mapping of the last sample, used while none can be read. */
     mapping: ViewMapping;
+    /** The tool made the stroke a gesture: it stays open past its release. */
+    gesture: boolean;
+    /** The button of the press is held; false between the presses of a gesture. */
+    pressed: boolean;
 }
 
 /** The part of `rect` inside `bounds`, or null when there is none. */
@@ -214,10 +254,19 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
         return recorded ? "recorded" : "unchanged";
     };
 
+    /** `ended` is no longer the stroke in progress; an open gesture ends with it. */
+    const release = (ended: Stroke) => {
+        if (stroke === ended) stroke = null;
+        if (ended.gesture) {
+            ended.gesture = false;
+            sources.gesture?.(false);
+        }
+    };
+
     const cancelStroke = (): boolean => {
         const ended = stroke;
         if (!ended) return false;
-        stroke = null;
+        release(ended);
         try {
             ended.tool.onCancel?.(ended.context);
         } catch (error) {
@@ -225,6 +274,18 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
         }
         close(ended, false);
         return true;
+    };
+
+    /** Keeps `ended` as at a release: committed, then `onCommit`. */
+    const keep = (ended: Stroke) => {
+        release(ended);
+        const outcome = close(ended, true);
+        if (outcome === "aborted") return;
+        try {
+            ended.tool.onCommit?.(ended.context, outcome === "recorded");
+        } catch (error) {
+            onError(error);
+        }
     };
 
     /** Runs a handler of the stroke's tool; a handler that throws cancels the stroke. */
@@ -252,20 +313,37 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
             cancelStroke();
             return;
         }
-        stroke = null;
-        const outcome = close(current, true);
-        if (outcome === "aborted") return;
-        try {
-            current.tool.onCommit?.(current.context, outcome === "recorded");
-        } catch (error) {
-            onError(error);
+        // A gesture waits for its next press.
+        if (current.gesture) {
+            current.pressed = false;
+            return;
         }
+        keep(current);
     };
 
     /** The stroke ends with the document it works on: closed, or no longer the active one. */
     const stopSessions = sessions.subscribe((state) => {
         if (stroke && activeDocument(state)?.session !== stroke.context.session) cancelStroke();
     });
+
+    /** A gesture ends when another tool becomes the active one (SE-031). */
+    const stopTools =
+        sources.tools.subscribe?.(() => {
+            if (stroke?.gesture && sources.tools.active() !== stroke.tool) cancelStroke();
+        }) ?? (() => {});
+
+    /** A press of the open gesture `current`: its next `onDown`. */
+    const pressGesture = (current: Stroke, input: PointerInput, button: ToolButton): boolean => {
+        clearFeedback();
+        const mapping = sources.mapping() ?? current.mapping;
+        current.mapping = mapping;
+        current.pointerId = input.pointerId;
+        current.button = button;
+        current.pressed = true;
+        const pointer = toolPointer(input, mapping, button);
+        run(current, () => current.tool.onDown?.(current.context, pointer));
+        return stroke === current;
+    };
 
     return {
         get stroking() {
@@ -275,13 +353,23 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
             return stroke?.tool ?? null;
         },
         get strokePointer() {
-            return stroke?.pointerId ?? null;
+            return stroke?.pressed ? stroke.pointerId : null;
+        },
+        get gesture() {
+            return stroke?.gesture ?? false;
+        },
+        get hovering() {
+            return stroke !== null && stroke.gesture && !stroke.pressed;
         },
 
         down(input) {
-            if (stroke) return false;
             const button: ToolButton | null =
                 input.button === LEFT ? "primary" : input.button === RIGHT ? "secondary" : null;
+            if (stroke) {
+                // Between its presses, a press is the open gesture's next one.
+                if (!button || !stroke.gesture || stroke.pressed) return false;
+                return pressGesture(stroke, input, button);
+            }
             if (!button) return false;
             // A new press over the canvas takes the place of the last refusal's message.
             clearFeedback();
@@ -325,6 +413,8 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
             // is composited and echoed (the opaque echo would hide onion skins and references
             // over pixels that did not change).
             const shownBounds = opened ? (document.session.selection?.bounds ?? null) : null;
+            /** The stroke this context is of, once it is made. */
+            let own: Stroke | null = null;
             const context: ToolContext = {
                 document,
                 session: document.session,
@@ -344,6 +434,11 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
                     },
                 },
                 feedback: showFeedback,
+                openGesture() {
+                    if (!own || stroke !== own || own.gesture) return;
+                    own.gesture = true;
+                    sources.gesture?.(true);
+                },
             };
             const current: Stroke = {
                 tool,
@@ -354,7 +449,10 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
                 transaction,
                 live,
                 mapping,
+                gesture: false,
+                pressed: true,
             };
+            own = current;
             stroke = current;
             run(current, () => tool.onDown?.(context, pointer));
             return stroke === current;
@@ -367,6 +465,12 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
             current.mapping = mapping;
             for (const input of inputs) {
                 if (stroke !== current) return;
+                // Between the presses of a gesture: the pointer hovers.
+                if (!current.pressed) {
+                    const pointer = toolPointer(input, mapping, current.button);
+                    run(current, () => current.tool.onHover?.(current.context, pointer));
+                    continue;
+                }
                 if (input.pointerId !== current.pointerId) continue;
                 // Released with no `pointerup` (another button stayed down): the stroke ends.
                 if ((input.buttons & PRESSED[current.button]) === 0) {
@@ -380,13 +484,30 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
 
         up(input) {
             const current = stroke;
-            if (!current || input.pointerId !== current.pointerId) return;
+            if (!current?.pressed || input.pointerId !== current.pointerId) return;
             // Another button came up while the stroke's own is still held.
             if ((input.buttons & PRESSED[current.button]) !== 0) return;
             finish(current, input);
         },
 
         cancel: cancelStroke,
+
+        closeGesture() {
+            const current = stroke;
+            if (!current?.gesture) return false;
+            let failed = false;
+            try {
+                current.tool.onClose?.(current.context);
+            } catch (error) {
+                failed = true;
+                onError(error);
+            }
+            if (stroke !== current) return true;
+            if (failed) cancelStroke();
+            // A press in progress ends with the gesture: its release finds no stroke.
+            else keep(current);
+            return true;
+        },
 
         key(input) {
             const current = stroke;
@@ -404,6 +525,7 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
 
         dispose() {
             stopSessions();
+            stopTools();
             cancelStroke();
             clearFeedback();
         },

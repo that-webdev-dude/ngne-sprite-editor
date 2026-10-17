@@ -26,7 +26,10 @@ export interface ToolRegistry {
     get(id: string): Tool | undefined;
     /** Every registered tool, by id. */
     list(): readonly Tool[];
-    /** The buttons of the rail in order: registered tools and planned slots. */
+    /**
+     * The buttons of the rail in order: registered tools and planned slots, each with its
+     * variants (SE-031). A variant of a slot that does not exist is not in the rail.
+     */
     railSlots(): readonly RailSlot[];
     /** Calls `listener` when a tool or a slot is added or removed. */
     subscribe(listener: () => void): () => void;
@@ -83,6 +86,11 @@ function resolveTool(spec: ToolSpec, source: string, planned?: PlannedToolSpec):
     if (spec.railOrder !== undefined && !Number.isFinite(spec.railOrder)) {
         fail("has a rail position that is not a number.");
     }
+    if (spec.variantOf !== undefined && spec.variantOf.trim() === "") {
+        fail("is a variant of a slot without an id.");
+    }
+    // A variant shows its slot's icon when it has none of its own.
+    const variant = spec.variantOf !== undefined && spec.variantOf !== spec.id;
     const tool: Tool = {
         ...spec,
         source,
@@ -91,12 +99,27 @@ function resolveTool(spec: ToolSpec, source: string, planned?: PlannedToolSpec):
         railOrder: spec.railOrder ?? planned?.railOrder,
         options,
     };
-    if (tool.railOrder !== undefined && !tool.icon) fail("is in the rail but has no icon.");
+    if (tool.railOrder !== undefined && !tool.icon && !variant) {
+        fail("is in the rail but has no icon.");
+    }
     return tool;
 }
 
 function byId<Item extends { id: string }>(a: Item, b: Item): number {
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/**
+ * The id of the rail slot a tool belongs to: the slot it is a variant of (`variantOf`), or
+ * its own id (SE-031).
+ */
+export function slotOf(tool: Pick<Tool, "id" | "variantOf">): string {
+    return tool.variantOf ?? tool.id;
+}
+
+/** Variants by their rail position (none last), then by id. */
+function byVariantOrder(a: Tool, b: Tool): number {
+    return (a.railOrder ?? Infinity) - (b.railOrder ?? Infinity) || byId(a, b);
 }
 
 export function createToolRegistry(): ToolRegistry {
@@ -171,9 +194,19 @@ export function createToolRegistry(): ToolRegistry {
 
         railSlots() {
             if (slots) return slots;
-            const all: RailSlot[] = [];
+            // The variants of each slot (SE-031): the tools that name it, in their order.
+            const variants = new Map<string, Tool[]>();
             for (const { tool } of specs.values()) {
-                if (tool.railOrder === undefined) continue;
+                const slot = slotOf(tool);
+                if (slot === tool.id) continue;
+                variants.set(slot, [...(variants.get(slot) ?? []), tool]);
+            }
+            for (const list of variants.values()) list.sort(byVariantOrder);
+            const all: RailSlot[] = [];
+            const placed = new Set<string>();
+            for (const { tool } of specs.values()) {
+                if (slotOf(tool) !== tool.id || tool.railOrder === undefined) continue;
+                placed.add(tool.id);
                 all.push({
                     id: tool.id,
                     label: tool.label,
@@ -181,17 +214,20 @@ export function createToolRegistry(): ToolRegistry {
                     icon: tool.icon,
                     railOrder: tool.railOrder,
                     tool,
+                    variants: [tool, ...(variants.get(tool.id) ?? [])],
                 });
             }
             for (const [id, { spec }] of planned) {
-                if (specs.has(id)) continue;
+                if (placed.has(id)) continue;
+                const list = variants.get(id) ?? [];
                 all.push({
                     id,
                     label: spec.label,
                     shortcut: spec.shortcut,
                     icon: spec.icon,
                     railOrder: spec.railOrder,
-                    tool: null,
+                    tool: list[0] ?? null,
+                    variants: list,
                 });
             }
             // Equal positions by id, so the rail does not depend on module order.

@@ -150,8 +150,18 @@ Reload action, leaving the rest of the app usable.
 Groups, top to bottom: draw (pencil, eraser, bucket, eyedropper) · shapes (line, rectangle,
 ellipse) · select (marquee, lasso, wand, move) · navigate (hand, zoom). Tools with variants
 (rectangle/ellipse marquee, lasso/polygon lasso) show a corner mark; press-and-hold or repeat
-the key to switch. Foreground/background chips sit at the bottom with swap (X) and a reset
-button; these are the only FG/BG chips in the interface. The chips are one 28 px button, the
+the key to switch. Such a button shows the variant selected last (its icon, name and key) and
+selects it on a click. A press held 300 ms, a right click or the Menu key (Shift+F10) opens the
+menu of the slot's variants beside the button — icon, name and key, the shown one checked — and
+a choice there selects it (a release over an item after the held press chooses it too; a
+release over the button selects nothing). The menu is not modal: a press outside closes it and
+acts where it lands. Chosen with the pointer, the focus goes to the viewport; from the keyboard,
+back to the button. A tool's key pressed again while that tool is selected selects the next of
+its slot's variants whose key is the same letter, so M and Shift+M each switch between the two
+marquees, and a key never switches to a variant of another letter (SE-031). Run from the
+palette or a menu, a tool's command selects exactly that tool. Foreground/background chips sit
+at the bottom with swap (X) and a reset button; these are the only FG/BG chips in the
+interface. The chips are one 28 px button, the
 foreground over the upper left of the background as in the mockup, that swaps them as X does;
 the reset button (24 px icon) restores black on white. One column stacks them, two columns put
 them side by side. The rail has one column when the planned content stacked in one column fits
@@ -162,7 +172,9 @@ failed keeps the layout). At 1280×720 with the default timeline it does not fit
 ### 5.2 Context bar
 
 Shows only the active tool's options, left-aligned, in a fixed order: size · shape · mode
-toggles · tolerance · ink · opacity. Selection tools show add/subtract/intersect toggles.
+toggles · tolerance · ink · opacity. Selection tools show add/subtract/intersect toggles: one
+segmented control, Mode, of Replace, Add, Subtract and Intersect (SE-031); Shift, Alt and
+Shift+Alt at the press stand in for it for one gesture.
 With a floating selection it switches to transform fields (X, Y, W, H, angle) and Apply / Cancel.
 
 ### 5.3 Colour
@@ -268,6 +280,10 @@ transient tool feedback in `--warn`.
   to nothing keeps 1 px. A draw layer of order 500, over the grids and under the brush cursor;
   its timer exists only while the active document has a selection and motion is allowed
   (SE-030).
+- Pending selection: while a selection tool's gesture is in progress, the pixels it would
+  select show as the ants show a selection — the same ring and dashes, drawn by the same
+  painter — standing still at phase 0, over the ants of the selection there is (draw layer
+  order 600) (SE-031).
 - Brush cursor: 1 px outline of the brush footprint snapped to pixels, two-tone so it shows on
   any content (black just outside the footprint, white outside that; an inverted outline cannot
   be drawn on the overlay, which does not hold NGNE's pixels); a paint tool that draws a brush

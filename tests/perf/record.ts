@@ -14,28 +14,41 @@ export interface PerfEntry {
     measurement: string;
     /** How `resultMs` was taken from the samples, for example `median of 200 runs`. */
     statistic: string;
-    /** The budget the ticket states, in milliseconds. */
-    budgetMs: number;
+    /**
+     * The budget the ticket or the SPEC states, in milliseconds. Without one the record is
+     * for information: it has no `pass`, and the console says "no budget" (SE-031).
+     */
+    budgetMs?: number;
     /** The value compared with the budget, in milliseconds. */
     resultMs: number;
     /** The samples or summary statistics behind the result. */
     details: Record<string, unknown>;
 }
 
-export function record(entry: PerfEntry): void {
+/** The console line of a record. */
+export function recordLine(entry: PerfEntry): string {
+    const result = `${entry.id}: ${entry.resultMs.toFixed(3)} ms (${entry.statistic})`;
+    if (entry.budgetMs === undefined) return `${result}, no budget`;
     const pass = entry.resultMs <= entry.budgetMs;
-    console.log(
-        `${entry.id}: ${entry.resultMs.toFixed(3)} ms (${entry.statistic}), ` +
-            `budget ${entry.budgetMs} ms, ${pass ? "within" : "over"} budget`,
-    );
+    return `${result}, budget ${entry.budgetMs} ms, ${pass ? "within" : "over"} budget`;
+}
+
+/**
+ * Prints `entry`, and with PERF_RECORD=1 writes it to `<directory>/<id>.json` (docs/perf by
+ * default) with the environment and the date, and `pass` when it has a budget.
+ */
+export function record(
+    entry: PerfEntry,
+    directory = fileURLToPath(new URL("../../docs/perf/", import.meta.url)),
+): void {
+    console.log(recordLine(entry));
     if (process.env.PERF_RECORD !== "1") return;
 
-    const directory = fileURLToPath(new URL("../../docs/perf/", import.meta.url));
     mkdirSync(directory, { recursive: true });
     const processors = cpus();
     const file = {
         ...entry,
-        pass,
+        ...(entry.budgetMs === undefined ? {} : { pass: entry.resultMs <= entry.budgetMs }),
         environment: {
             node: process.version,
             platform: `${platform()} ${release()}`,
@@ -45,5 +58,6 @@ export function record(entry: PerfEntry): void {
         },
         date: new Date().toISOString(),
     };
-    writeFileSync(`${directory}${entry.id}.json`, `${JSON.stringify(file, null, 4)}\n`);
+    const separator = directory.endsWith("/") || directory.endsWith("\\") ? "" : "/";
+    writeFileSync(`${directory}${separator}${entry.id}.json`, `${JSON.stringify(file, null, 4)}\n`);
 }

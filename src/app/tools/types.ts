@@ -99,6 +99,16 @@ export interface ToolContext {
     readonly paint: PaintStroke | null;
     /** Shows transient tool feedback in the status bar (DESIGN §4, message channels). */
     feedback(message: string): void;
+    /**
+     * Makes this stroke a gesture of several presses (SE-031; SPEC §7.8, the `gesture`
+     * context): it does not end at the release but takes the next presses too, each with
+     * `onDown`, its moves and `onUp`, and the moves between them (`onHover`), until it is
+     * closed — Enter, or a double click: `onClose`, then it is kept as at a release — or
+     * cancelled: Escape, a pointer cancel during a press, a change of the active tool or of
+     * the document (`onCancel`). Called from a handler of the stroke; after the stroke ended
+     * it does nothing.
+     */
+    openGesture(): void;
 }
 
 /** What a tool's cursor depends on (`ToolSpec.cursor`). */
@@ -175,7 +185,9 @@ export interface ToolHold {
 /**
  * A tool, as its module declares it. Every handler is optional. For one pointer down the
  * pipeline calls `onDown`, `onMove` for every sample (coalesced events included), and then
- * exactly one of `onUp` or `onCancel`; strokes never overlap.
+ * exactly one of `onUp` or `onCancel`; strokes never overlap. A gesture
+ * (`ToolContext.openGesture`) repeats that for each of its presses, with `onHover` between
+ * them, and ends with `onClose` or `onCancel`.
  */
 export interface ToolSpec {
     /** Stable and unique: "pencil". The id of a planned rail slot takes that slot. */
@@ -190,8 +202,17 @@ export interface ToolSpec {
      * Position in the tool rail, ascending; tools whose positions differ in the hundreds are
      * in different groups (DESIGN §5.1: 100 draw, 200 shapes, 300 select, 400 navigate). A
      * tool without one takes the position of the planned slot of its id, or is not in the rail.
+     * For a variant (`variantOf`) it orders the variants of its slot.
      */
     railOrder?: number;
+    /**
+     * The rail slot this tool shares as a variant (DESIGN §5.1, SE-031): the id of the slot's
+     * own tool or planned slot, for example "marquee" for the elliptical marquee. The slot's
+     * button shows the variant selected last, with a corner mark; holding it opens the menu
+     * of its variants, and a tool key pressed while a tool of the slot is selected selects the
+     * slot's next variant. The variant has no slot of its own.
+     */
+    variantOf?: string;
     /** One-line hint for the tool's modifiers, shown in the status bar while it is active. */
     hint?: string;
     /** The options the context bar shows while the tool is active. */
@@ -209,11 +230,24 @@ export interface ToolSpec {
     cursor?: string | ((state: ToolCursorState) => string);
     onDown?(context: ToolContext, pointer: ToolPointer): void;
     onMove?(context: ToolContext, pointer: ToolPointer): void;
-    /** The button was released: the stroke ends, and a paint stroke is committed after this. */
+    /**
+     * The button was released: the stroke ends, and a paint stroke is committed after this;
+     * a gesture (`ToolContext.openGesture`) stays open for its next press.
+     */
     onUp?(context: ToolContext, pointer: ToolPointer): void;
     /**
-     * The stroke was cancelled (Escape, a pointer cancel, the document closed): a paint
-     * stroke's pixels are put back after this.
+     * The pointer moved over the viewport with no button held, between the presses of this
+     * tool's open gesture: every sample, as for `onMove`.
+     */
+    onHover?(context: ToolContext, pointer: ToolPointer): void;
+    /**
+     * The open gesture was closed: Enter (SPEC §7.8, `gesture`) or a double click. The stroke
+     * is kept after this, as at a release: committed, then `onCommit`.
+     */
+    onClose?(context: ToolContext): void;
+    /**
+     * The stroke was cancelled (Escape, a pointer cancel, the document closed; for a gesture
+     * also a change of the active tool): a paint stroke's pixels are put back after this.
      */
     onCancel?(context: ToolContext): void;
     /**
@@ -265,6 +299,15 @@ export interface RailSlot {
     readonly shortcut: string | undefined;
     readonly icon: LucideIcon | undefined;
     readonly railOrder: number;
-    /** The tool, or null while the slot is planned only. */
+    /**
+     * The tool of the slot's id, or the first of its variants when there is none; null while
+     * the slot is planned only.
+     */
     readonly tool: Tool | null;
+    /**
+     * Every tool of the slot (DESIGN §5.1, SE-031): the tool of its id first, then the tools
+     * that name it in `variantOf`, by their `railOrder` and then their id. More than one means
+     * the button switches between them.
+     */
+    readonly variants: readonly Tool[];
 }
