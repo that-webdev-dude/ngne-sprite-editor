@@ -15,11 +15,16 @@ import {
 import type { Layer } from "../../core/model";
 import { appCommands } from "../commands/appCommands";
 import type { CommandSpec } from "../commands/types";
-import { sessionsStore } from "../state/sessions";
 import type { OpenDocument } from "../state/sessions";
 import { effectiveSelection, gridOrder, targetLayerIds } from "./selection";
 import { TIMELINE_COMMANDS as IDS } from "./timelineCommandIds";
-import { activateCel, availableDocument, executeOnActive } from "./timelineDocument";
+import {
+    activateCel,
+    availableDocument,
+    canEdit,
+    executeOnActive,
+    settledDocumentOf,
+} from "./timelineDocument";
 import { setTimelineVisible, timelineStore } from "./timelineState";
 
 // Layer commands of the timeline (SPEC §7.3, §7.8; SE-022): new, duplicate and delete take
@@ -31,8 +36,10 @@ import { setTimelineVisible, timelineStore } from "./timelineState";
 // layer. ↑ and ↓ in the timeline make the layer above or below active (Move the active cell).
 //
 // Every command that changes the document applies a floating selection first and does
-// nothing during a stroke (`timelineDocument.ts`). The registry loads this module; the panel
-// takes the ids from `timelineCommandIds.ts`.
+// nothing during a stroke (`timelineDocument.ts`). Apply Layer Name and Apply Layer Properties
+// do the same on their draft's document when it is the active one; while that document cannot
+// take the edit, they keep the draft (the field or the popover stays). The registry loads this
+// module; the panel takes the ids from `timelineCommandIds.ts`.
 
 // `enabled` and `title` read the timeline state too: an open menu follows its changes. The
 // arguments a row or the duration field hand a command for one run (`withArguments`) are not
@@ -120,27 +127,18 @@ function openProperties(): void {
     });
 }
 
-/** The document of the open properties popover, when its history can take the edit now. */
-function propertiesDocument(): OpenDocument | null {
-    const { properties } = timelineStore.getState();
-    if (!properties) return null;
-    const document = sessionsStore
-        .getState()
-        .documents.find((entry) => entry.id === properties.documentId);
-    return document && !document.history.transaction ? document : null;
-}
-
 /**
  * Apply Layer Properties: closes the popover; its name and opacity become one undo step of
  * the layer's document, or none when neither changed. A name that is empty after trimming is
- * not applied (the layer keeps its name).
+ * not applied (the layer keeps its name). While the document cannot take the edit, the popover
+ * stays open with what it shows.
  */
 function applyProperties(): void {
     const { properties } = timelineStore.getState();
-    const document = propertiesDocument();
     if (!properties) return;
-    timelineStore.setState({ properties: null });
+    const document = settledDocumentOf(properties.documentId);
     if (!document) return;
+    timelineStore.setState({ properties: null });
     const { session } = document;
     const layer = layerOf(document, properties.layerId);
     if (!layer) return;
@@ -173,16 +171,17 @@ function startRename(): void {
     });
 }
 
-/** Apply Layer Name: ends the in-place rename; a valid, changed name is one undo step. */
+/**
+ * Apply Layer Name: ends the in-place rename; a valid, changed name is one undo step. While the
+ * document cannot take the edit, the field stays with what it holds.
+ */
 function applyRename(): void {
     const { rename } = timelineStore.getState();
     if (!rename) return;
+    const document = settledDocumentOf(rename.documentId);
+    if (!document) return;
     timelineStore.setState({ rename: null });
-    const document = sessionsStore
-        .getState()
-        .documents.find((entry) => entry.id === rename.documentId);
-    if (!document || document.history.transaction || !isLayerName(rename.name)) return;
-    if (!layerOf(document, rename.layerId)) return;
+    if (!isLayerName(rename.name) || !layerOf(document, rename.layerId)) return;
     const command = renameLayerCommand(
         document.session,
         rename.layerId,
@@ -248,7 +247,10 @@ export const commands: CommandSpec[] = [
     {
         id: IDS.applyLayerProperties,
         title: "Apply Layer Properties",
-        enabled: () => propertiesDocument() !== null,
+        enabled: () => {
+            const { properties } = timelineStore.getState();
+            return !!properties && canEdit(properties.documentId);
+        },
         run: applyProperties,
     },
     {
@@ -262,11 +264,7 @@ export const commands: CommandSpec[] = [
         title: "Apply Layer Name",
         enabled: () => {
             const { rename } = timelineStore.getState();
-            if (!rename) return false;
-            const document = sessionsStore
-                .getState()
-                .documents.find((entry) => entry.id === rename.documentId);
-            return !!document && !document.history.transaction;
+            return !!rename && canEdit(rename.documentId);
         },
         run: applyRename,
     },

@@ -264,10 +264,12 @@ Behaviour (SE-022):
 
 - While no document is open the panel is empty. Rows are the pixel layers, top of the stack
   first; the transport, the tag bar and the frame numbers stay in place while the grid scrolls
-  under them, and the layer column stays at the left. The grid shows no scrollbars: the wheel
-  (Shift+wheel across) and the keys scroll it, and the active cell is kept in view. The panel
-  follows a change of the document once the canvas has had its next two animation frames, so
-  it never delays the canvas (principle 3).
+  under them, and the layer column stays at the left. The grid has thin scroll bars; the wheel
+  (Shift+wheel across) and the keys scroll it too, and the active cell is kept in full view
+  below and beside the parts that stay in place, whatever their size (a tag bar of several
+  rows). The panel draws a change of the document once the canvas has had its next two
+  animation frames, so it never delays the canvas (principle 3); what the next key acts on
+  follows at once: the active cell (its tab stop, outline and focus) and the duration field.
 - The visibility and lock toggles show their state by their icon (open or struck eye, open or
   closed lock), with no pressed background. They act on their row's layer without making it
   active.
@@ -275,15 +277,33 @@ Behaviour (SE-022):
   it is below 255; it opens the layer properties popover beside the row. Layer → Layer
   Properties… opens it for the active layer. The popover applies its name and opacity when it
   closes (Enter, Escape or a press outside), in one undo step; an empty name is not applied.
+  Escape applies too, as in the swatch editor (§5.4, REVIEW E91): the popover has no Cancel,
+  and nothing changes while it is open (no live opacity preview). A floating selection is
+  applied first; while the layer's document cannot take the edit (a stroke), the popover stays
+  open with its values.
 - Rename in place: a double-click on the name, or the command Rename Layer, turns it into a
-  field. Enter or leaving the field applies the name (one undo step), Escape keeps the old one.
+  field of at most 255 characters (SPEC §5.1). Enter or leaving the field applies the name (one
+  undo step); Escape keeps the old one, as in any text field. A press anywhere outside the
+  field applies it before the press does anything else. A floating selection is applied
+  first; while the document cannot take the edit, the field stays.
+- The duration field acts on the frames it showed when it took the focus (SPEC §7.4), until it
+  loses it. A press anywhere outside it applies what was typed before the press does anything
+  else: a click on another frame selects that frame afterwards, and a press on the canvas
+  strokes after the duration is set. When those frames' durations differ the field shows "—",
+  and a value typed or stepped there applies to all of them.
 - A click on a cel, a frame number or a layer's name makes it active and selects it. Shift
   selects the range from the last item clicked without Shift (a rectangle of cels), Ctrl adds
   or removes one. A selection holds while the cel it was made at stays the active cel: the
-  arrow keys, new frames and layers, and undo end it. Selected cells, frame numbers and rows
-  are tinted with `--bg-active`.
-- The grid is one tab stop, its active cell; F6 enters the timeline there. While a cell has
-  focus, ← → ↑ ↓ Home End move the active cell and the focus follows it, scrolled into view.
+  arrow keys, new frames and layers end it, and it does not come back when that cel is active
+  again. Undo and redo end it too, even when they leave the active cel where it is. Selected
+  cells, frame numbers and rows are tinted with `--bg-active`.
+- The grid is one tab stop, its active cell; F6 enters the timeline there. Of the row headers
+  only the active row's controls (visibility, lock, opacity) are in the tab order, just before
+  the active cell; another row's are reached by moving the active cell there (↑ ↓) or by the
+  pointer. So Tab from the active cell leaves the grid, and Shift+Tab passes those three and
+  the column head (duration, New Layer), whatever the number of layers. While a cell has focus,
+  ← → ↑ ↓ Home End move the active cell and the focus follows it, scrolled into view. A press
+  on a frame number or a layer name gives the focus to the cell it makes active.
 - Tab (viewport focused) and View → Hide Timeline hide the panel; the viewport takes its rows.
   The panel is shown again at every start.
 

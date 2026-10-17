@@ -8,6 +8,7 @@ import {
 import { frameIndex } from "../../core/model";
 import type { CommandSpec } from "../commands/types";
 import type { OpenDocument } from "../state/sessions";
+import { durationFrameIds } from "./frameDuration";
 import { effectiveSelection, targetFrameIds } from "./selection";
 import { TIMELINE_COMMANDS as IDS } from "./timelineCommandIds";
 import { activateCel, availableDocument, executeOnActive } from "./timelineDocument";
@@ -17,7 +18,8 @@ import { timelineStore } from "./timelineState";
 // planned for them. New Frame (Alt+N) duplicates the active frame, New Empty Frame (Alt+B)
 // adds an empty one after it (SPEC §7.4: Aseprite's default is the duplicate). Delete Frame
 // and Apply Frame Duration act on the selected frames, or on the active frame when none is
-// selected (`selection.ts`); the duration field of the panel runs the latter.
+// selected (`selection.ts`); the duration field of the panel runs the latter, on the frames
+// fixed when it took the focus (`frameDuration.ts`).
 //
 // Frame navigation: in the timeline ←, →, Home and End move the active cell to the previous,
 // next, first and last frame; the same commands are the items of the Frame menu. On the canvas
@@ -29,7 +31,7 @@ function selectionOf(document: OpenDocument) {
     return effectiveSelection(timelineStore.getState().selection, document.id, document.session);
 }
 
-/** The frames Delete Frame and Apply Frame Duration act on. */
+/** The frames Delete Frame acts on. */
 function targetFrames(document: OpenDocument): string[] {
     return targetFrameIds(document.session, selectionOf(document));
 }
@@ -67,9 +69,10 @@ function deleteFrames(): void {
 function setDuration(): void {
     const { duration } = timelineStore.getState();
     if (duration === null || !isFrameDuration(duration)) return;
-    executeOnActive((document) =>
-        setFrameDurationCommand(document.session.doc, targetFrames(document), duration),
-    );
+    executeOnActive((document) => {
+        const ids = durationFrameIds(document, timelineStore.getState());
+        return ids.length > 0 ? setFrameDurationCommand(document.session.doc, ids, duration) : null;
+    });
 }
 
 const hasDocument = () => availableDocument() !== null;

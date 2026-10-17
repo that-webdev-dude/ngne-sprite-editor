@@ -8,6 +8,8 @@ import { region } from "./se-006-support";
 // holds.
 
 export const timeline = (page: Page) => region(page, "timeline");
+/** The panel's scroller: the grid scrolls in it under the sticky header and layer column. */
+export const scroller = (page: Page) => timeline(page).locator("[data-timeline]");
 export const grid = (page: Page) => timeline(page).getByRole("grid", { name: "Cels" });
 export const viewport = (page: Page) => page.locator("[data-viewport-focus]");
 
@@ -137,4 +139,46 @@ export function rowNames(page: Page): Promise<string[]> {
     return grid(page)
         .getByRole("rowheader")
         .evaluateAll((headers) => headers.map((header) => header.getAttribute("aria-label") ?? ""));
+}
+
+/** Waits until the page has had `count` more animation frames. */
+export function afterFrames(page: Page, count: number): Promise<void> {
+    return page.evaluate(
+        (count) =>
+            new Promise<void>((resolve) => {
+                let left = count;
+                const next = () => (--left <= 0 ? resolve() : requestAnimationFrame(next));
+                requestAnimationFrame(next);
+            }),
+        count,
+    );
+}
+
+/**
+ * Holds the page's `requestAnimationFrame` callbacks until the returned function runs them: what
+ * the page defers to its next frames does not happen meanwhile. Playwright's own checks run in
+ * another world and are not held.
+ */
+export async function holdAnimationFrames(page: Page): Promise<() => Promise<void>> {
+    await page.evaluate(() => {
+        const request = window.requestAnimationFrame;
+        const cancel = window.cancelAnimationFrame;
+        const held = new Map<number, FrameRequestCallback>();
+        let next = 1_000_000_000;
+        window.requestAnimationFrame = (callback) => {
+            held.set(++next, callback);
+            return next;
+        };
+        window.cancelAnimationFrame = (id) => {
+            if (!held.delete(id)) cancel(id);
+        };
+        (window as unknown as { __se022Release: () => void }).__se022Release = () => {
+            window.requestAnimationFrame = request;
+            window.cancelAnimationFrame = cancel;
+            for (const callback of held.values()) request(callback);
+            held.clear();
+        };
+    });
+    return () =>
+        page.evaluate(() => (window as unknown as { __se022Release: () => void }).__se022Release());
 }

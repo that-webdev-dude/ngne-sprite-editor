@@ -21,6 +21,12 @@ export interface NumberFieldProps extends NumberRange {
     disabled?: boolean;
     /** Keep the label for assistive technology only; the field then has no scrub handle. */
     hideLabel?: boolean;
+    /**
+     * `value` stands for several values that differ (a multiple selection): the field shows
+     * no number but a "—" placeholder, and a value typed or stepped there is applied even when
+     * it equals `value`. Steps start from `value`.
+     */
+    mixed?: boolean;
     className?: string;
     id?: string;
 }
@@ -43,6 +49,7 @@ export function NumberField({
     unit,
     disabled = false,
     hideLabel = false,
+    mixed = false,
     className,
     id,
     min,
@@ -56,14 +63,18 @@ export function NumberField({
     const [draft, setDraft] = useState<string | null>(null);
     const scrub = useRef<Scrub | null>(null);
     const suppressClick = useRef(false);
-    const text = draft ?? formatNumber(value, range);
+    const text = draft ?? (mixed ? "" : formatNumber(value, range));
 
     const change = (next: number) => {
         setDraft(null);
-        if (next !== value) onChange(next);
+        if (next !== value || mixed) onChange(next);
     };
+    // A value that does not parse is dropped, as Escape drops it.
     const commit = () => {
-        if (draft !== null) change(parseNumber(draft, range) ?? value);
+        if (draft === null) return;
+        const parsed = parseNumber(draft, range);
+        if (parsed === null) setDraft(null);
+        else change(parsed);
     };
 
     const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -141,10 +152,13 @@ export function NumberField({
                     autoComplete="off"
                     spellCheck={false}
                     aria-label={hideLabel ? label : undefined}
-                    aria-valuenow={value}
+                    aria-valuenow={mixed ? undefined : value}
                     aria-valuemin={min}
                     aria-valuemax={max}
-                    aria-valuetext={unit ? `${text} ${unit}` : undefined}
+                    aria-valuetext={
+                        mixed && draft === null ? "Mixed" : unit ? `${text} ${unit}` : undefined
+                    }
+                    placeholder={mixed ? "—" : undefined}
                     disabled={disabled}
                     value={text}
                     onChange={(event) => setDraft(event.target.value)}

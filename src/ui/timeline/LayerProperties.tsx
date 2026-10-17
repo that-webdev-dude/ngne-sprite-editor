@@ -2,7 +2,7 @@ import { Popover as RadixPopover } from "radix-ui";
 import { useId, useRef } from "react";
 import { MAX_NAME_LENGTH } from "../../core/model";
 import { TIMELINE_COMMANDS } from "../../app/timeline/timelineCommandIds";
-import { dropProperties, editProperties } from "../../app/timeline/timelineState";
+import { editProperties } from "../../app/timeline/timelineState";
 import type { PropertiesDraft } from "../../app/timeline/timelineState";
 import { runCommand } from "../commands/runCommand";
 import { Slider } from "../primitives/Slider";
@@ -10,10 +10,11 @@ import "../primitives/popover.css";
 
 /**
  * Closes the layer properties popover: its values become one undo step (Apply Layer
- * Properties), or, when the command cannot run now, they are dropped.
+ * Properties). While its document cannot take them (a stroke), the popover stays open with
+ * them; a closed document's are dropped (`timelineLifetime`).
  */
 export function finishProperties(): void {
-    if (!runCommand(TIMELINE_COMMANDS.applyLayerProperties)) dropProperties();
+    runCommand(TIMELINE_COMMANDS.applyLayerProperties);
 }
 
 /**

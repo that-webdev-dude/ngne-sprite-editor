@@ -4,8 +4,10 @@ import type { Page } from "@playwright/test";
 import type * as CoreCels from "../../src/core/cels";
 import { boxOf, collectErrors, region, settleTimers } from "./se-006-support";
 import { menuItem, openEditor, openMenu, openSession, statusBar } from "./se-007-support";
+import { settle } from "./se-011-support";
 import {
     activeCell,
+    afterFrames,
     cell,
     cellsOf,
     documentState,
@@ -13,10 +15,12 @@ import {
     expectFocusOn,
     frameHeader,
     grid,
+    holdAnimationFrames,
     layerHeader,
     propertiesPopover,
     rowNames,
     runCommands,
+    scroller,
     selectedCells,
     selectedFrames,
     selectedLayers,
@@ -238,8 +242,114 @@ test("setting the duration with three frames selected changes exactly those thre
     await expect
         .poll(async () => (await documentState(page)).frames.map((frame) => frame.durationMs))
         .toEqual([100, 100, 100, 100, 100, 100]);
-    // The selection holds while its active cel does: the field shows the active frame's value.
+    // Undo ends the selection (DESIGN §5.6): the field shows the active frame's value.
+    await expect.poll(() => selectedFrames(page)).toEqual([]);
     await expect(durationField(page)).toHaveValue("100");
+    expect(errors).toEqual([]);
+});
+
+/** The durations of the active document's frames, in order. */
+async function durations(page: Page): Promise<number[]> {
+    return (await documentState(page)).frames.map((frame) => frame.durationMs);
+}
+
+test("a value typed in the duration field lands on the frames it showed: a click on another frame applies it first", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openTimeline(page, 1, 6);
+    await frameHeader(page, 2).click();
+    await frameHeader(page, 4).click({ modifiers: ["Shift"] });
+    await expect.poll(() => selectedFrames(page)).toEqual([2, 3, 4]);
+    const before = await documentState(page);
+
+    await durationField(page).fill("250");
+    await frameHeader(page, 6).click();
+    await expect.poll(() => durations(page)).toEqual([100, 250, 250, 250, 100, 100]);
+    const after = await documentState(page);
+    expect(after.undoCount).toBe(before.undoCount + 1);
+    expect(after.undoLabel).toBe("Frame Duration");
+    // The click selected frame 6 as well, once the value was applied.
+    await expect.poll(() => selectedFrames(page)).toEqual([6]);
+    await expect(durationField(page)).toHaveValue("100");
+    expect(errors).toEqual([]);
+});
+
+test("a value typed in the duration field is applied before a press on the canvas begins a stroke", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openTimeline(page, 1, 6);
+    await settle(page);
+    await frameHeader(page, 2).click();
+    await frameHeader(page, 4).click({ modifiers: ["Shift"] });
+    await expect.poll(() => selectedFrames(page)).toEqual([2, 3, 4]);
+    const before = await documentState(page);
+
+    await durationField(page).fill("250");
+    // The pencil, the default tool, paints where the press is.
+    const canvas = await boxOf(viewport(page));
+    await page.mouse.click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+    await expect.poll(() => durations(page)).toEqual([100, 250, 250, 250, 100, 100]);
+    await expect.poll(async () => (await documentState(page)).undoCount).toBe(before.undoCount + 2);
+    const after = await documentState(page);
+    expect(after.undoLabel).toBe("Pencil");
+    // The stroke painted the active cel, frame 4.
+    expect(after.activeFrame).toBe(4);
+    expect(after.cels).toHaveLength(before.cels.length + 1);
+    await expect(cell(page, "Layer 1", 4)).toHaveAttribute("data-cel", "filled");
+    // Undo takes the stroke, then the duration.
+    await page.keyboard.press("Control+KeyZ");
+    await expect.poll(async () => (await documentState(page)).cels).toEqual(before.cels);
+    expect(await durations(page)).toEqual([100, 250, 250, 250, 100, 100]);
+    await page.keyboard.press("Control+KeyZ");
+    await expect.poll(() => durations(page)).toEqual([100, 100, 100, 100, 100, 100]);
+    expect(errors).toEqual([]);
+});
+
+test("with frames of 100, 200 and 300 ms selected the field shows no number, and a typed 100 sets all three", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openTimeline(page, 1, 3);
+    for (const [frame, value] of [
+        [2, "200"],
+        [3, "300"],
+    ] as const) {
+        await frameHeader(page, frame).click();
+        await durationField(page).fill(value);
+        await page.keyboard.press("Enter");
+    }
+    await expect.poll(() => durations(page)).toEqual([100, 200, 300]);
+    await frameHeader(page, 1).click();
+    await frameHeader(page, 3).click({ modifiers: ["Shift"] });
+    await expect.poll(() => selectedFrames(page)).toEqual([1, 2, 3]);
+    await expect(durationField(page)).toHaveValue("");
+    await expect(durationField(page)).toHaveAttribute("placeholder", "—");
+    await expect(durationField(page)).toHaveAttribute("aria-valuetext", "Mixed");
+    const steps = (await documentState(page)).undoCount;
+
+    // 100 is the duration of the first frame, and still applies to all three.
+    await durationField(page).fill("100");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => durations(page)).toEqual([100, 100, 100]);
+    expect((await documentState(page)).undoCount).toBe(steps + 1);
+    await expect(durationField(page)).toHaveValue("100");
+    expect(errors).toEqual([]);
+});
+
+test("two ArrowUp presses in the duration field with no wait between step it twice", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openTimeline(page, 1, 2);
+    const steps = (await documentState(page)).undoCount;
+    await durationField(page).focus();
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("ArrowUp");
+    await expect.poll(() => durations(page)).toEqual([100, 102]);
+    expect((await documentState(page)).undoCount).toBe(steps + 2);
+    await expect(durationField(page)).toHaveValue("102");
     expect(errors).toEqual([]);
 });
 
@@ -357,6 +467,8 @@ test("the visibility and lock toggles act on their row; the opacity opens the la
     await expect(name).toHaveValue("Layer 2");
     await page.keyboard.press("Escape");
     await expect(propertiesPopover(page)).toBeHidden();
+    // The menu item that opened it is gone: the focus goes to the active cell.
+    await expect(activeCell(page)).toBeFocused();
     expect((await documentState(page)).undoCount).toBe(steps + 1);
 
     // A press outside closes it too, and applies what it shows. The popover is modal: the press
@@ -412,6 +524,22 @@ test("a double-click renames a layer in place: Enter or leaving the field applie
     expect(errors).toEqual([]);
 });
 
+test("the in-place field takes at most 255 characters, as a name may have", async ({ page }) => {
+    const errors = collectErrors(page);
+    await openTimeline(page, 1, 1);
+    const field = timeline(page).getByRole("textbox", { name: "Layer name" });
+    await layerHeader(page, "Layer 1").locator(".timeline__name").dblclick();
+    await expect(field).toBeFocused();
+    await page.keyboard.insertText("n".repeat(256));
+    await expect(field).toHaveValue("n".repeat(255));
+    await page.keyboard.press("Enter");
+    await expect(field).toHaveCount(0);
+    const state = await documentState(page);
+    expect(state.layers[0]?.name).toBe("n".repeat(255));
+    expect(state.undoLabel).toBe("Rename Layer");
+    expect(errors).toEqual([]);
+});
+
 test("Tab with the viewport focused hides and shows the timeline; elsewhere it moves the focus", async ({
     page,
 }) => {
@@ -440,12 +568,24 @@ test("Tab with the viewport focused hides and shows the timeline; elsewhere it m
     await menuItem(page, "view.timeline").click();
     await expect(timeline(page)).toBeVisible();
 
-    // In the timeline Tab moves the focus and the panel stays.
+    // In the timeline Tab moves the focus and the panel stays. The grid is one tab stop: from
+    // the cell just clicked the focus goes to what follows the panel, the status bar's Fit,
+    // and stays there. The tab stop moves with the click, not when the panel next draws: the
+    // page's animation frames are held from before the click until after the Tab.
+    const release = await holdAnimationFrames(page);
     await cell(page, "Layer 1", 1).click();
     await expect(cell(page, "Layer 1", 1)).toBeFocused();
     await page.keyboard.press("Tab");
-    await expect(cell(page, "Layer 1", 1)).not.toBeFocused();
+    const fit = region(page, "status-bar").locator('[data-status-action="fit"]');
+    await expect(fit).toBeFocused();
+    await release();
+    await afterFrames(page, 3);
+    await settleTimers(page);
+    await expect(fit).toBeFocused();
     await expect(timeline(page)).toBeVisible();
+    // Shift+Tab comes back to the cell, the active one.
+    await page.keyboard.press("Shift+Tab");
+    await expectFocusOn(page, "Layer 1", 1);
     expect(errors).toEqual([]);
 });
 
@@ -471,10 +611,16 @@ test("F6 enters the timeline at its active cell; the arrows, Home and End move i
     await expectFocusOn(page, "Layer 2", 1);
     await page.keyboard.press("ArrowDown");
     await expectFocusOn(page, "Layer 1", 1);
-    // At an edge the key does nothing.
+    // At an edge the key does nothing (no wrap): ↓ at the bottom row, then ↑ reaches the row
+    // above it; ← at the first frame, then → reaches the second.
     await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowUp");
+    await expectFocusOn(page, "Layer 2", 1);
     await page.keyboard.press("ArrowLeft");
-    await expectFocusOn(page, "Layer 1", 1);
+    await page.keyboard.press("ArrowRight");
+    await expectFocusOn(page, "Layer 2", 2);
+    await page.keyboard.press("ArrowDown");
+    await expectFocusOn(page, "Layer 1", 2);
     await page.keyboard.press("End");
     await expectFocusOn(page, "Layer 1", 4);
     await page.keyboard.press("ArrowUp");
@@ -490,6 +636,187 @@ test("F6 enters the timeline at its active cell; the arrows, Home and End move i
     await expect.poll(async () => (await documentState(page)).activeFrame).toBe(3);
     await expect(cell(page, "Layer 2", 3)).toHaveAttribute("tabindex", "0");
     await expect(viewport(page)).toBeFocused();
+    expect(errors).toEqual([]);
+});
+
+/**
+ * Records, until `stop`, the cells of the grid that take the focus ("layer/frame") and every
+ * scroll position of the panel.
+ */
+async function watchFocusAndScroll(page: Page): Promise<
+    () => Promise<{
+        focused: string[];
+        scrolls: { left: number; top: number }[];
+    }>
+> {
+    await scroller(page).evaluate((element) => {
+        const log = { focused: [] as string[], scrolls: [] as { left: number; top: number }[] };
+        (window as unknown as { __se022Watch: typeof log }).__se022Watch = log;
+        element.addEventListener("focusin", (event) => {
+            const target = event.target as HTMLElement;
+            const row = target.closest('[role="row"]');
+            const name = row?.querySelector('[role="rowheader"]')?.getAttribute("aria-label");
+            const cells = [...(row?.querySelectorAll('[role="gridcell"]') ?? [])];
+            log.focused.push(`${name}/${cells.indexOf(target) + 1}`);
+        });
+        element.addEventListener("scroll", () =>
+            log.scrolls.push({ left: element.scrollLeft, top: element.scrollTop }),
+        );
+    });
+    return () =>
+        page.evaluate(
+            () =>
+                (
+                    window as unknown as {
+                        __se022Watch: {
+                            focused: string[];
+                            scrolls: { left: number; top: number }[];
+                        };
+                    }
+                ).__se022Watch,
+        );
+}
+
+test("a press on a frame number or a layer name focuses its cell at once: the old active cell neither takes the focus nor scrolls into view", async ({
+    page,
+}) => {
+    // 12 rows and 120 frames: more than the panel shows either way.
+    test.setTimeout(60_000);
+    const errors = collectErrors(page);
+    await openTimeline(page, 12, 120);
+    await runCommands(page, ["frame.first"]);
+    await cell(page, "Layer 12", 1).click();
+    await expectFocusOn(page, "Layer 12", 1);
+
+    // Frame 1 scrolled out of view, frame 40 on screen.
+    await scroller(page).evaluate((element) => {
+        element.scrollLeft = 30 * 24;
+    });
+    await afterFrames(page, 2);
+    const header = await boxOf(frameHeader(page, 40));
+    const stop = await watchFocusAndScroll(page);
+    // The mouse itself: a locator's click scrolls its target first.
+    await page.mouse.click(header.x + header.width / 2, header.y + header.height / 2);
+    await expectFocusOn(page, "Layer 12", 40);
+    await afterFrames(page, 3);
+    let seen = await stop();
+    expect(seen.focused).toEqual(["Layer 12/40"]);
+    expect(seen.scrolls.every((scroll) => scroll.left === 30 * 24)).toBe(true);
+    expect(await boxOf(frameHeader(page, 40))).toEqual(header);
+
+    // The active row scrolled out of view, the row of Layer 2 on screen.
+    const bottom = await scroller(page).evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+        return element.scrollTop;
+    });
+    await afterFrames(page, 2);
+    const row = await boxOf(layerHeader(page, "Layer 2"));
+    const name = await boxOf(layerHeader(page, "Layer 2").locator(".timeline__name"));
+    // The layer column lies above the cels scrolled under it: the press reaches the name.
+    const hit = await page.evaluate(
+        ({ x, y }) => document.elementFromPoint(x, y)?.className ?? "",
+        { x: name.x + name.width / 2, y: name.y + name.height / 2 },
+    );
+    expect(hit).toBe("timeline__name");
+    await watchFocusAndScroll(page);
+    await page.mouse.click(name.x + name.width / 2, name.y + name.height / 2);
+    await expectFocusOn(page, "Layer 2", 40);
+    await afterFrames(page, 3);
+    seen = await stop();
+    expect(seen.focused).toEqual(["Layer 2/40"]);
+    expect(seen.scrolls.every((scroll) => scroll.top === bottom)).toBe(true);
+    expect(await boxOf(layerHeader(page, "Layer 2"))).toEqual(row);
+    expect(errors).toEqual([]);
+});
+
+/** How many presses of `key` from the active cell take the focus out of the grid. */
+async function stopsOut(page: Page, key: string): Promise<number> {
+    await activeCell(page).focus();
+    for (let presses = 1; presses <= 200; presses++) {
+        await page.keyboard.press(key);
+        const inGrid = await grid(page).evaluate((element) =>
+            element.contains(document.activeElement),
+        );
+        if (!inGrid) return presses;
+    }
+    return Infinity;
+}
+
+test("the grid is one tab stop: Tab and Shift+Tab leave it in a number of stops that does not grow with the layers", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openTimeline(page, 3, 2);
+    // Tab: straight out. Shift+Tab: the active row's visibility, lock and opacity, the
+    // duration field and New Layer, then out.
+    const few = { tab: await stopsOut(page, "Tab"), back: await stopsOut(page, "Shift+Tab") };
+    expect(few).toEqual({ tab: 1, back: 6 });
+
+    await runCommands(
+        page,
+        Array.from({ length: 27 }, () => "layer.new"),
+    );
+    await expect(grid(page).getByRole("rowheader")).toHaveCount(30);
+    expect({ tab: await stopsOut(page, "Tab"), back: await stopsOut(page, "Shift+Tab") }).toEqual(
+        few,
+    );
+    // With a row in the middle active as well.
+    await layerHeader(page, "Layer 15").locator(".timeline__name").click();
+    await expectFocusOn(page, "Layer 15", 2);
+    expect({ tab: await stopsOut(page, "Tab"), back: await stopsOut(page, "Shift+Tab") }).toEqual(
+        few,
+    );
+    expect(errors).toEqual([]);
+});
+
+test("the active cell is kept fully in view below a taller header and beside a wider layer column", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openTimeline(page, 12, 80);
+    // A test-only style: the header grows (as with SE-023's tag bar), the column widens.
+    await page.addStyleTag({
+        content: `
+            .timeline__bar { height: 76px; }
+            .timeline__row--header { top: 76px; }
+            .timeline__transport, .timeline__corner, .timeline__layer { width: 260px; }
+        `,
+    });
+    await afterFrames(page, 2);
+    /** Where the active cell lies against the parts that stick and the scroller's edges. */
+    const placement = () =>
+        activeCell(page).evaluate((cellElement) => {
+            const panel = cellElement.closest<HTMLElement>("[data-timeline]")!;
+            const box = panel.getBoundingClientRect();
+            const target = cellElement.getBoundingClientRect();
+            const header = panel.querySelector(".timeline__row--header")!.getBoundingClientRect();
+            const column = cellElement
+                .closest('[role="row"]')!
+                .querySelector('[role="rowheader"]')!
+                .getBoundingClientRect();
+            return {
+                left: target.left >= column.right,
+                top: target.top >= header.bottom,
+                right: target.right <= box.left + panel.clientWidth,
+                bottom: target.bottom <= box.top + panel.clientHeight,
+            };
+        });
+    const inView = { left: true, top: true, right: true, bottom: true };
+
+    await activeCell(page).focus();
+    for (const key of ["Home", "End", "Home"]) {
+        await page.keyboard.press(key);
+        await expect.poll(placement, key).toEqual(inView);
+    }
+    for (let row = 0; row < 11; row++) {
+        await page.keyboard.press("ArrowDown");
+        await expect.poll(placement, `down ${row + 1}`).toEqual(inView);
+    }
+    for (let row = 0; row < 11; row++) {
+        await page.keyboard.press("ArrowUp");
+        await expect.poll(placement, `up ${row + 1}`).toEqual(inView);
+    }
+    await expectFocusOn(page, "Layer 12", 1);
     expect(errors).toEqual([]);
 });
 

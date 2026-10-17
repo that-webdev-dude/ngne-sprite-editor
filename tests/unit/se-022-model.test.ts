@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { timelineModel } from "../../src/app/timeline/timelineModel";
+import { createSessionsStore } from "../../src/app/state/sessions";
+import type { OpenDocument } from "../../src/app/state/sessions";
+import { timelineModel, timelineSource } from "../../src/app/timeline/timelineModel";
+import { renameLayerCommand } from "../../src/core/layers";
 import { celKey, createDocument, sequentialIds } from "../../src/core/model";
 import type { DocSession } from "../../src/core/model";
 
@@ -111,5 +114,76 @@ describe("the timeline model", () => {
         const middle = s.doc.layers.find((layer) => layer.id === "middle");
         if (middle) middle.name = "Renamed";
         expect(key(timelineModel("doc", s), "middle")).not.toBe(key(before, "middle"));
+    });
+});
+
+describe("the timeline source the panel renders", () => {
+    /** Paints one pixel of the active cel as a stroke: one step, which may create the cel. */
+    function paint(document: OpenDocument, value: number): void {
+        const { session, history } = document;
+        const stroke = history.begin({
+            layerId: session.activeLayerId,
+            frameId: session.activeFrameId,
+        });
+        stroke.image.data[3] = value;
+        stroke.markDirty({ x: 0, y: 0, width: 1, height: 1 });
+        stroke.commit("Pencil");
+    }
+
+    it("tells of a change only when it can change the timeline, and keeps the model while it shows the same", () => {
+        const store = createSessionsStore();
+        const source = timelineSource(store);
+        let calls = 0;
+        const stop = source.subscribe(() => calls++);
+        expect(source.current()).toBeNull();
+
+        const document = store
+            .getState()
+            .open(createDocument({ name: "a", width: 4, height: 4 }, sequentialIds("a")));
+        expect(calls).toBe(1);
+        paint(document, 255);
+        const painted = source.current();
+        expect(painted?.layers[0]?.cels).toEqual(["filled"]);
+        calls = 0;
+
+        // A pan or a zoom: no call, and the same model.
+        store.getState().setView(document.id, { scale: 4, originX: 12 });
+        store.getState().setView(document.id, { originY: -3 });
+        expect(calls).toBe(0);
+        expect(source.current()).toBe(painted);
+
+        // A step that changes pixels alone: one call, and the same model.
+        paint(document, 128);
+        expect(calls).toBe(1);
+        expect(source.current()).toBe(painted);
+
+        // A change of another document: no call.
+        const other = store
+            .getState()
+            .open(createDocument({ name: "b", width: 4, height: 4 }, sequentialIds("b")), {
+                activate: false,
+            });
+        paint(other, 255);
+        store.getState().setView(other.id, { scale: 2 });
+        expect(calls).toBe(1);
+        expect(source.current()).toBe(painted);
+
+        // A rename: a new model, with the new name.
+        const layerId = document.session.activeLayerId;
+        document.history.execute(renameLayerCommand(document.session, layerId, "Ink")!);
+        expect(calls).toBe(2);
+        const renamed = source.current();
+        expect(renamed).not.toBe(painted);
+        expect(renamed?.layers[0]?.name).toBe("Ink");
+
+        // Another active document: its model.
+        store.getState().activate(other.id);
+        expect(calls).toBe(3);
+        expect(source.current()?.documentId).toBe(other.id);
+        stop();
+
+        // Without a subscriber the model is read anew at each call.
+        store.getState().activate(document.id);
+        expect(source.current()?.documentId).toBe(document.id);
     });
 });

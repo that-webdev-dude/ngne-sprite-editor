@@ -902,8 +902,11 @@ layer would remain.
 - Durations are per frame, 1–65535 ms, editable for a multi-frame selection.
 - In the timeline (SE-022) the selected frames are those of a frame selection or those a cel
   selection has a cel in. The duration field and Delete Frame act on them, or on the active
-  frame when none is selected; the field shows the active frame's duration when it is among
-  them, otherwise the first one's. Delete Frame is disabled when it would delete every frame.
+  frame when none is selected; the field keeps the frames it acts on while it has the focus.
+  It shows their duration, or "—" when their durations differ: a value typed there then
+  applies to all of them, and ↑ ↓ step all of them from the active frame's duration when it is
+  among them, otherwise from the first one's. Delete Frame is disabled when it would delete
+  every frame.
 - Tag expansion (used by editor playback and export): for frames `a b c d`, forward is
   `a b c d`, reverse is `d c b a`, ping-pong is `a b c d c b` (for one frame: `a`; for two:
   `a b`). `repeat = n > 0` writes the sequence n times; `repeat = 0` loops forever.

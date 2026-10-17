@@ -1,12 +1,11 @@
 import { Popover as RadixPopover } from "radix-ui";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useSessions } from "../../app/state/sessions";
-import { effectiveSelection, targetFrameIds } from "../../app/timeline/selection";
+import { activeDocument, sessionsStore, useSessions } from "../../app/state/sessions";
+import { effectiveSelection } from "../../app/timeline/selection";
 import { clickTimeline } from "../../app/timeline/timelineClicks";
 import { TIMELINE_COMMANDS } from "../../app/timeline/timelineCommandIds";
-import type { TimelineModel } from "../../app/timeline/timelineModel";
-import { cancelRename, useTimelineState } from "../../app/timeline/timelineState";
+import { useTimelineState } from "../../app/timeline/timelineState";
 import { runCommand } from "../commands/runCommand";
 import { finishProperties, LayerProperties } from "./LayerProperties";
 import { LayerRow } from "./LayerRow";
@@ -14,63 +13,90 @@ import {
     activeCell,
     CELL_ATTRIBUTE,
     CELL_WIDTH,
-    focusActiveCell,
+    cellOf,
+    focusCell,
     keepInView,
     layerHeaderOf,
     modifiersOf,
+    TIMELINE_FIELD_ATTRIBUTE,
 } from "./timelineDom";
 import { TimelineCorner, Transport } from "./Transport";
-import { useShownTimeline } from "./useShownTimeline";
+import { useLiveCel, useShownTimeline } from "./useShownTimeline";
 import "./timeline.css";
 
 /**
  * The timeline panel (DESIGN §5.6, SE-022): the transport and the tag bar on top, the frame
  * header, and one row per pixel layer, top of the stack first — the layer's visibility, lock,
  * name and opacity, then its cels. The grid is one ARIA grid whose active cell is its only tab
- * stop; ← → ↑ ↓ Home End move the active cell through the registry's `timeline` bindings, and
- * the focus follows it. Nothing is shown while no document is open.
+ * stop besides the controls of the active row's header; ← → ↑ ↓ Home End move the active cell
+ * through the registry's `timeline` bindings, and the focus follows it. Nothing is shown while
+ * no document is open.
  *
  * Every change to a document runs a registered command; clicks and the arrow keys change the
- * active cel and the selection, which are session and editor state (SPEC §5.2).
+ * active cel and the selection, which are session and editor state (SPEC §5.2). The panel
+ * draws the timeline once the canvas has had its frame (`useShownTimeline`); the active cell's
+ * tab stop and the focus follow the session at once (`useLiveCel`).
  */
 export function TimelinePanel() {
-    // The document's timeline as one string, and the selection: shown once the canvas has had
-    // its next two animation frames, and rendered again only when they changed.
-    const { key, selection } = useShownTimeline();
-    // The active document as the store has it now, which the shown timeline may trail.
+    const { model, selection } = useShownTimeline();
+    const live = useLiveCel();
     const liveId = useSessions((state) => state.activeId);
     const rename = useTimelineState((state) => state.rename);
     const properties = useTimelineState((state) => state.properties);
+    const root = useRef<HTMLDivElement>(null);
     const grid = useRef<HTMLDivElement>(null);
 
-    const model = useMemo(() => (key === null ? null : (JSON.parse(key) as TimelineModel)), [key]);
     // The rows keep one array of frame ids while the ids stay the same.
     const frameKey = model ? model.frames.map((frame) => frame.id).join("\n") : "";
     const frameIds = useMemo(() => (frameKey === "" ? [] : frameKey.split("\n")), [frameKey]);
-    const activeKey = model ? `${model.activeLayerId}\n${model.activeFrameId}` : "";
 
-    // The active cell stays in view, and keeps the focus while the focus is on a cell.
+    // A new active cell (in the session, or now drawn) is scrolled into view, and takes the
+    // focus while the focus is on a cell. Checked at every render: the active cel of a new frame
+    // or layer is drawn only once the panel draws the frame or the layer.
+    const shownCell = useRef<HTMLElement | null>(null);
     useLayoutEffect(() => {
         const cell = activeCell(grid.current);
-        const scroller = grid.current?.closest<HTMLElement>("[data-timeline]");
-        if (!cell || !scroller) return;
+        const scroller = root.current;
+        if (!cell || !scroller || cell === shownCell.current) return;
+        shownCell.current = cell;
         const focused = window.document.activeElement;
         if (focused instanceof HTMLElement && focused.hasAttribute(CELL_ATTRIBUTE)) {
             if (focused !== cell) cell.focus({ preventScroll: true });
         }
         keepInView(scroller, cell);
-    }, [activeKey]);
+    });
 
-    // One function for every row, so that the rows' memo holds.
-    const focusGrid = useCallback(() => focusActiveCell(grid.current), []);
+    // A press anywhere outside a focused field of the panel applies what the field holds
+    // before anything else acts on the press: before a click in the grid selects, and before
+    // a press on the canvas begins a stroke (which would leave the history no room for it).
+    useEffect(() => {
+        const onPress = (event: PointerEvent) => {
+            const focused = window.document.activeElement;
+            if (!(focused instanceof HTMLElement) || !root.current?.contains(focused)) return;
+            const field = focused.closest(`[${TIMELINE_FIELD_ATTRIBUTE}]`);
+            if (!field) return;
+            if (event.target instanceof Node && field.contains(event.target)) return;
+            focused.blur();
+        };
+        window.addEventListener("pointerdown", onPress, true);
+        return () => window.removeEventListener("pointerdown", onPress, true);
+    }, []);
 
-    // An edit whose document stops being the active one (or closes) ends: applied when its
-    // document can take it, dropped otherwise.
+    // The focus goes to the cell that is active in the session now, which the rendered grid
+    // may not show yet (a press is handled before the panel renders its result): the old
+    // active cell never takes the focus on the way, nor scrolls into view.
+    const focusActive = useCallback(() => {
+        const document = activeDocument(sessionsStore.getState());
+        if (!document) return;
+        const { activeLayerId, activeFrameId } = document.session;
+        focusCell(cellOf(grid.current, activeLayerId, activeFrameId));
+    }, []);
+
+    // An edit whose document stops being the active one ends: applied when its document can
+    // take it (a closed document's edits are dropped by `timelineLifetime`).
     useEffect(() => {
         if (properties && properties.documentId !== liveId) finishProperties();
-        if (rename && rename.documentId !== liveId) {
-            if (!runCommand(TIMELINE_COMMANDS.applyLayerName)) cancelRename();
-        }
+        if (rename && rename.documentId !== liveId) runCommand(TIMELINE_COMMANDS.applyLayerName);
     }, [properties, rename, liveId]);
     const activeId = model?.documentId ?? null;
 
@@ -95,12 +121,10 @@ export function TimelinePanel() {
     if (!model) return null;
 
     const current = effectiveSelection(selection, model.documentId, model);
+    // Tints: the active row and column as drawn. Tab stop and outline: the active cel now.
     const activeFrameIndex = frameIds.indexOf(model.activeFrameId);
-    const targets = targetFrameIds({ doc: model, activeFrameId: model.activeFrameId }, current);
-    const durationFrame =
-        model.frames.find(
-            (frame) => frame.id === model.activeFrameId && targets.includes(frame.id),
-        ) ?? model.frames.find((frame) => frame.id === targets[0]);
+    const liveLayerId = live?.documentId === model.documentId ? live.layerId : null;
+    const liveFrameIndex = live ? frameIds.indexOf(live.frameId) : -1;
     const renaming = rename?.documentId === model.documentId ? rename : null;
     const editing = properties?.documentId === model.documentId ? properties : null;
 
@@ -108,11 +132,11 @@ export function TimelinePanel() {
     const onFramePress = (frameId: string) => (event: ReactPointerEvent) => {
         if (event.button !== 0) return;
         clickTimeline({ kind: "frames", frameId }, modifiersOf(event));
-        focusActiveCell(grid.current);
+        focusActive();
     };
 
     return (
-        <div className="timeline" data-timeline="">
+        <div ref={root} className="timeline" data-timeline="">
             <div className="timeline__bar">
                 <Transport />
                 {/* The tag bar (SE-023) spans the frame columns. */}
@@ -138,7 +162,7 @@ export function TimelinePanel() {
                     aria-multiselectable="true"
                 >
                     <div className="timeline__row timeline__row--header" role="row">
-                        <TimelineCorner durationMs={durationFrame?.durationMs ?? null} />
+                        <TimelineCorner />
                         {model.frames.map((frame, index) => (
                             <div
                                 key={frame.id}
@@ -163,16 +187,18 @@ export function TimelinePanel() {
                             key={layer.id}
                             layer={layer}
                             frameIds={frameIds}
-                            active={layer.id === model.activeLayerId}
+                            tinted={layer.id === model.activeLayerId}
                             activeFrameIndex={activeFrameIndex}
+                            focusRow={layer.id === liveLayerId}
+                            focusIndex={layer.id === liveLayerId ? liveFrameIndex : -1}
                             selection={current}
                             renaming={renaming?.layerId === layer.id ? renaming.name : null}
-                            onHeaderPress={focusGrid}
-                            onRenameEnd={focusGrid}
+                            onHeaderPress={focusActive}
+                            onRenameEnd={focusActive}
                         />
                     ))}
                 </div>
-                {editing ? <LayerProperties draft={editing} fallback={focusGrid} /> : null}
+                {editing ? <LayerProperties draft={editing} fallback={focusActive} /> : null}
             </RadixPopover.Root>
         </div>
     );

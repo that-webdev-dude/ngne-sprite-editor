@@ -1,6 +1,7 @@
 import { Eye, EyeOff, Lock, LockOpen } from "lucide-react";
 import { memo } from "react";
 import type { MouseEvent, PointerEvent as ReactPointerEvent } from "react";
+import { MAX_NAME_LENGTH } from "../../core/model";
 import { isCelSelected } from "../../app/timeline/selection";
 import type { TimelineSelection } from "../../app/timeline/selection";
 import { clickTimeline } from "../../app/timeline/timelineClicks";
@@ -10,20 +11,31 @@ import { cancelRename, setRenameText, withArguments } from "../../app/timeline/t
 import { runCommand } from "../commands/runCommand";
 import { Icon } from "../primitives/Icon";
 import { Toggle } from "../primitives/Toggle";
-import { CELL_ATTRIBUTE, modifiersOf } from "./timelineDom";
+import { CELL_ATTRIBUTE, modifiersOf, TIMELINE_FIELD_ATTRIBUTE } from "./timelineDom";
 
 export interface LayerRowProps {
     layer: TimelineLayer;
     frameIds: readonly string[];
-    /** The active layer's row: tinted, and its cel at the active frame is the active cell. */
-    active: boolean;
+    /** The active layer's row as the panel draws it: tinted. */
+    tinted: boolean;
+    /** The active frame's column as the panel draws it: tinted. */
     activeFrameIndex: number;
+    /**
+     * The row of the active layer in the session now: its header's controls are the only ones
+     * of the layer column in the tab order.
+     */
+    focusRow: boolean;
+    /**
+     * The column of the active cel in the session now when this is its row, otherwise -1: the
+     * active cell, the grid's tab stop, with the accent outline.
+     */
+    focusIndex: number;
     selection: TimelineSelection | null;
     /** The text of the in-place rename of this layer, or null. */
     renaming: string | null;
-    /** A press on the row header selected the layer. */
+    /** A press on the row header selected the layer: the focus goes to the active cell. */
     onHeaderPress(): void;
-    /** The in-place rename ended from the keyboard. */
+    /** The in-place rename ended from the keyboard: the focus goes to the active cell. */
     onRenameEnd(): void;
 }
 
@@ -45,6 +57,9 @@ function RenameField({ name, onEnd }: { name: string; onEnd(): void }) {
             aria-label="Layer name"
             autoComplete="off"
             spellCheck={false}
+            // As the layer properties popover: a longer name would be refused (SPEC §5.1).
+            maxLength={MAX_NAME_LENGTH}
+            {...{ [TIMELINE_FIELD_ATTRIBUTE]: "" }}
             // The field appears where the name was, for typing at once.
             autoFocus
             value={name}
@@ -71,14 +86,19 @@ function RenameField({ name, onEnd }: { name: string; onEnd(): void }) {
 function LayerRowView({
     layer,
     frameIds,
-    active,
+    tinted,
     activeFrameIndex,
+    focusRow,
+    focusIndex,
     selection,
     renaming,
     onHeaderPress,
     onRenameEnd,
 }: LayerRowProps) {
     const selected = selection?.kind === "layers" && selection.layerIds.includes(layer.id);
+    // The grid is one tab stop (DESIGN §5.6): of the row headers only the active row's
+    // controls are in the tab order, right before the active cell.
+    const tabIndex = focusRow ? 0 : -1;
 
     const onHeaderPointerDown = (event: ReactPointerEvent) => {
         if (event.button !== 0 || onControl(event)) return;
@@ -102,6 +122,7 @@ function LayerRowView({
         >
             <Toggle
                 label="Visible"
+                tabIndex={tabIndex}
                 pressed={layer.visible}
                 onPressedChange={() => runOnLayer(layer.id, TIMELINE_COMMANDS.toggleVisible)}
             >
@@ -109,6 +130,7 @@ function LayerRowView({
             </Toggle>
             <Toggle
                 label="Locked"
+                tabIndex={tabIndex}
                 pressed={layer.locked}
                 onPressedChange={() => runOnLayer(layer.id, TIMELINE_COMMANDS.toggleLocked)}
             >
@@ -128,6 +150,7 @@ function LayerRowView({
             <button
                 type="button"
                 className="timeline__opacity"
+                tabIndex={tabIndex}
                 aria-label={`Opacity ${layer.opacity}`}
                 aria-haspopup="dialog"
                 data-partial={layer.opacity < 255 || undefined}
@@ -142,12 +165,12 @@ function LayerRowView({
             className="timeline__row"
             role="row"
             data-layer={layer.id}
-            data-active-layer={active || undefined}
+            data-active-layer={tinted || undefined}
         >
             {header}
             {frameIds.map((frameId, index) => {
                 const state = layer.cels[index] ?? "empty";
-                const isActive = active && index === activeFrameIndex;
+                const isActive = index === focusIndex;
                 return (
                     <div
                         key={frameId}
@@ -186,8 +209,10 @@ export const LayerRow = memo(
     (before, after) =>
         before.layer.key === after.layer.key &&
         before.frameIds === after.frameIds &&
-        before.active === after.active &&
+        before.tinted === after.tinted &&
         before.activeFrameIndex === after.activeFrameIndex &&
+        before.focusRow === after.focusRow &&
+        before.focusIndex === after.focusIndex &&
         before.selection === after.selection &&
         before.renaming === after.renaming &&
         before.onHeaderPress === after.onHeaderPress &&

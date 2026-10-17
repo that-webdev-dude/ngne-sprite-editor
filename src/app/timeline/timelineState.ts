@@ -16,6 +16,15 @@ export interface RenameDraft {
     readonly name: string;
 }
 
+/**
+ * The duration field while it has the focus: the frames it acts on, fixed when it took the
+ * focus, so what is typed there lands on them whatever is selected when it is applied.
+ */
+export interface DurationEdit {
+    readonly documentId: string;
+    readonly frameIds: readonly string[];
+}
+
 /** The layer properties popover (DESIGN §7): what it shows, applied when it closes. */
 export interface PropertiesDraft {
     readonly documentId: string;
@@ -39,6 +48,8 @@ export interface TimelineState {
     layerTarget: string | null;
     /** The duration the next Apply Frame Duration sets, set by the duration field. */
     duration: number | null;
+    /** The frames of the focused duration field; null while it does not have the focus. */
+    durationEdit: DurationEdit | null;
 }
 
 export function initialTimelineState(): TimelineState {
@@ -49,6 +60,7 @@ export function initialTimelineState(): TimelineState {
         properties: null,
         layerTarget: null,
         duration: null,
+        durationEdit: null,
     };
 }
 
@@ -88,6 +100,16 @@ export function editProperties(change: Partial<Pick<PropertiesDraft, "name" | "o
 /** Closes the layer properties popover without applying it. Changes no document. */
 export function dropProperties(): void {
     if (timelineStore.getState().properties) timelineStore.setState({ properties: null });
+}
+
+/** The duration field took the focus: it acts on `edit.frameIds` until it loses it. */
+export function startDurationEdit(edit: DurationEdit): void {
+    timelineStore.setState({ durationEdit: edit });
+}
+
+/** The duration field lost the focus; what it held has been applied. */
+export function endDurationEdit(): void {
+    if (timelineStore.getState().durationEdit) timelineStore.setState({ durationEdit: null });
 }
 
 /**

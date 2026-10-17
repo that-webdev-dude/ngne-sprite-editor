@@ -2,18 +2,20 @@
  * Timeline panel (DESIGN §5.6, SE-022): a 200 px layer column, 28 px rows and 24 px cells, as in
  * docs/design/mockup.html. One scroller holds everything: the bar (transport, tag bar) and the
  * frame header stick to the top, the layer column to the left. Borders lie inside the sizes.
+ * Stacking, top first: the bar, the frame header, the layer column, the cels' dots (which lie
+ * above their cell's outline and link line), so nothing scrolled under a sticky part shows.
  *
- * The scroller has no scrollbars; the wheel (Shift+wheel across) and the keys scroll it, and
- * the active cell is kept in view. Its scrollbars cost the canvas a frame: with them a history
- * step was drawn in the third animation frame about one time in four (144 Hz display), against
- * the two the SE-022 acceptance allows.
+ * The scroller has thin scroll bars in the shell's colours, so a pointer reaches the frames
+ * and layers off screen. Its layout and paint are contained: nothing in it changes the shell
+ * around it.
  */
 .timeline {
     position: relative;
     height: 100%;
     overflow: auto;
     background: var(--bg-panel);
-    scrollbar-width: none;
+    contain: strict;
+    scrollbar-width: thin;
 }
 
 .timeline__bar,
@@ -27,14 +29,14 @@
 .timeline__bar {
     position: sticky;
     top: 0;
-    z-index: 3;
+    z-index: 4;
     background: var(--bg-panel);
 }
 
 .timeline__row--header {
     position: sticky;
     top: var(--row-height);
-    z-index: 2;
+    z-index: 3;
     background: var(--bg-panel);
 }
 
@@ -60,7 +62,7 @@
 .timeline__layer {
     position: sticky;
     left: 0;
-    z-index: 1;
+    z-index: 2;
     display: flex;
     flex: none;
     align-items: center;
@@ -73,6 +75,11 @@
 
 .timeline__corner {
     justify-content: space-between;
+}
+
+/* Watches the focus of the duration field; it takes no box of its own. */
+.timeline__duration-box {
+    display: contents;
 }
 
 /* Its width, the frame columns', is set by the panel. */

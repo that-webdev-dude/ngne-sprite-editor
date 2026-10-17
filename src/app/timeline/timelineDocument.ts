@@ -4,6 +4,7 @@ import { applyFloating } from "../selection/floating";
 import { activeDocument, sessionsStore } from "../state/sessions";
 import type { OpenDocument } from "../state/sessions";
 import type { CelRef } from "./selection";
+import { endStaleSelection } from "./timelineLifetime";
 
 // The active document as the timeline's commands and clicks use it (SE-022).
 
@@ -29,6 +30,31 @@ export function settledDocument(): OpenDocument | null {
     return document && !document.history.transaction ? document : null;
 }
 
+/**
+ * Whether the open document `documentId` can take an edit of the panel now (a rename, the
+ * layer properties): its history is idle, or it is the active document and the transaction
+ * open in it holds a floating selection, which `settledDocumentOf` applies first.
+ */
+export function canEdit(documentId: string): boolean {
+    const state = sessionsStore.getState();
+    const document = state.documents.find((entry) => entry.id === documentId);
+    if (!document) return false;
+    if (!document.history.transaction) return true;
+    return state.activeId === documentId && keyContextStore.getState().floating;
+}
+
+/**
+ * The open document `documentId` when its history can take a command now: the active document
+ * after its floating selection was applied (`settledDocument`), another one when it is idle.
+ * Null when it is closed or still busy.
+ */
+export function settledDocumentOf(documentId: string): OpenDocument | null {
+    const state = sessionsStore.getState();
+    if (state.activeId === documentId) return settledDocument();
+    const document = state.documents.find((entry) => entry.id === documentId);
+    return document && !document.history.transaction ? document : null;
+}
+
 /** Executes a command made from the settled document; returns whether a step was recorded. */
 export function executeOnActive(make: (document: OpenDocument) => Command | null): boolean {
     const document = settledDocument();
@@ -43,8 +69,9 @@ export function executeOnActive(make: (document: OpenDocument) => Command | null
  * Makes a layer, a frame or both the active ones: session state, outside the history (SPEC
  * §5.2). A real switch applies a floating selection first; the viewport then shows the frame
  * from the composite cache (`viewportController`). An id the document does not have is
- * ignored. Returns the cel that is active afterwards, or null when nothing could be switched
- * (no document, or a stroke in progress).
+ * ignored. A timeline selection made at another cel ends (DESIGN §5.6). Returns the cel that
+ * is active afterwards, or null when nothing could be switched (no document, or a stroke in
+ * progress).
  */
 export function activateCel(target: Partial<CelRef>): CelRef | null {
     const before = availableDocument();
@@ -70,5 +97,6 @@ export function activateCel(target: Partial<CelRef>): CelRef | null {
     document.session.activeLayerId = cel.layerId;
     document.session.activeFrameId = cel.frameId;
     sessionsStore.getState().touch(document.id);
+    endStaleSelection();
     return cel;
 }

@@ -6,12 +6,14 @@ import type { Command } from "../../src/app/commands/types";
 import { setKeyContext } from "../../src/app/keymap/contextState";
 import { activeDocument, sessionsStore } from "../../src/app/state/sessions";
 import type { OpenDocument } from "../../src/app/state/sessions";
+import { beginDurationEdit, shownDuration } from "../../src/app/timeline/frameDuration";
 import { clickTimeline } from "../../src/app/timeline/timelineClicks";
 import { TIMELINE_COMMANDS as IDS } from "../../src/app/timeline/timelineCommandIds";
 import { activateCel } from "../../src/app/timeline/timelineDocument";
 import {
     cancelRename,
     editProperties,
+    endDurationEdit,
     initialTimelineState,
     setRenameText,
     timelineStore,
@@ -27,9 +29,11 @@ import { readSpecKeyTable } from "../e2e/se-007-spec-keys";
 
 /**
  * Calls of `applyFloating` (SE-032's hook), each with the active frame's index and the active
- * layer's name at the call: what the session was before the switch.
+ * layer's name at the call: what the session was before the switch. With `commit`, the hook
+ * does what SE-032's will: it commits the transaction that holds the floating pixels, as one
+ * step ("Move").
  */
-const floating = vi.hoisted(() => ({ calls: [] as string[] }));
+const floating = vi.hoisted(() => ({ calls: [] as string[], commit: false }));
 vi.mock("../../src/app/selection/floating", async () => {
     const sessions = await import("../../src/app/state/sessions");
     return {
@@ -40,6 +44,11 @@ vi.mock("../../src/app/selection/floating", async () => {
             const frame = doc.frames.findIndex((entry) => entry.id === activeFrameId);
             const layer = doc.layers.find((entry) => entry.id === activeLayerId)?.name;
             floating.calls.push(`frame ${frame + 1}, ${layer}`);
+            const transaction = document.history.transaction;
+            if (!floating.commit || !transaction) return;
+            transaction.image.data[3] = transaction.image.data[3] === 255 ? 0 : 255;
+            transaction.markDirty({ x: 0, y: 0, width: 1, height: 1 });
+            transaction.commit("Move");
         },
     };
 });
@@ -51,6 +60,7 @@ afterEach(() => {
     timelineStore.setState(initialTimelineState());
     setKeyContext("floating", false);
     floating.calls.length = 0;
+    floating.commit = false;
 });
 
 function command(id: string): Command {
@@ -323,6 +333,47 @@ describe("frame durations", () => {
         expect(durations()).toEqual([60, 60, 100, 40]);
     });
 
+    it("the duration field acts on the frames it acted on when it took the focus", () => {
+        openWith(1, 6);
+        const durations = () => active().session.doc.frames.map((frame) => frame.durationMs);
+        clickTimeline({ kind: "frames", frameId: frameAt(1) }, { shift: false, toggle: false });
+        clickTimeline({ kind: "frames", frameId: frameAt(3) }, { shift: true, toggle: false });
+        beginDurationEdit();
+        expect(timelineStore.getState().durationEdit?.frameIds).toEqual(
+            [1, 2, 3].map((index) => frameAt(index)),
+        );
+        // A click on frame 6 before the typed value is applied.
+        clickTimeline({ kind: "frames", frameId: frameAt(5) }, { shift: false, toggle: false });
+        withArguments({ duration: 250 }, () => void run(IDS.setDuration));
+        expect(durations()).toEqual([100, 250, 250, 250, 100, 100]);
+        endDurationEdit();
+        expect(timelineStore.getState().durationEdit).toBeNull();
+        // Without the focus, the selection: frame 6.
+        withArguments({ duration: 300 }, () => void run(IDS.setDuration));
+        expect(durations()).toEqual([100, 250, 250, 250, 100, 300]);
+    });
+
+    it("the field shows the active frame's duration, and no number when the frames' durations differ", () => {
+        openWith(1, 3);
+        const document = active();
+        const shown = () => shownDuration(document, timelineStore.getState());
+        expect(shown()).toEqual({ durationMs: 100, mixed: false });
+        withArguments({ duration: 300 }, () => void run(IDS.setDuration));
+        clickTimeline({ kind: "frames", frameId: frameAt(1) }, { shift: false, toggle: false });
+        withArguments({ duration: 200 }, () => void run(IDS.setDuration));
+        clickTimeline({ kind: "frames", frameId: frameAt(0) }, { shift: false, toggle: false });
+        clickTimeline({ kind: "frames", frameId: frameAt(2) }, { shift: true, toggle: false });
+        // 100, 200, 300 with frame 3 active: its value is where the arrow keys step from.
+        expect(shown()).toEqual({ durationMs: 300, mixed: true });
+        const steps = active().history.undoCount;
+        withArguments({ duration: 100 }, () => void run(IDS.setDuration));
+        expect(active().session.doc.frames.map((frame) => frame.durationMs)).toEqual([
+            100, 100, 100,
+        ]);
+        expect(active().history.undoCount).toBe(steps + 1);
+        expect(shown()).toEqual({ durationMs: 100, mixed: false });
+    });
+
     it("is disabled without a value, and refuses a value outside 1..65535", () => {
         openWith(1, 2);
         expect(command(IDS.setDuration).enabled()).toBe(false);
@@ -434,6 +485,51 @@ describe("navigation", () => {
         // Only the active frame: the selection of frames 2–3 ended with the move.
         expect(durations()).toEqual([100, 100, 100, 30]);
     });
+
+    it("a selection does not come back when the active cel returns to where it was made", () => {
+        openWith(1, 4);
+        clickTimeline({ kind: "frames", frameId: frameAt(1) }, { shift: false, toggle: false });
+        clickTimeline({ kind: "frames", frameId: frameAt(2) }, { shift: true, toggle: false });
+        const durations = () => active().session.doc.frames.map((frame) => frame.durationMs);
+        // → then ←: the active cel is where the selection was made again.
+        run(IDS.nextFrame);
+        run(IDS.previousFrame);
+        expect(frameIndex()).toBe(2);
+        expect(timelineStore.getState().selection).toBeNull();
+        withArguments({ duration: 30 }, () => void run(IDS.setDuration));
+        expect(durations()).toEqual([100, 100, 30, 100]);
+    });
+
+    it("New Layer then undo leaves no selection; undo and redo end a selection where they leave the active cel", () => {
+        openWith(1, 4);
+        const select = () => {
+            clickTimeline({ kind: "frames", frameId: frameAt(1) }, { shift: false, toggle: false });
+            clickTimeline({ kind: "frames", frameId: frameAt(2) }, { shift: true, toggle: false });
+            expect(timelineStore.getState().selection).toMatchObject({ kind: "frames" });
+        };
+        select();
+        run(IDS.newLayer);
+        expect(timelineStore.getState().selection).toBeNull();
+        run("edit.undo");
+        expect(layerName()).toBe("Layer 1");
+        expect(frameIndex()).toBe(2);
+        expect(timelineStore.getState().selection).toBeNull();
+        const durations = () => active().session.doc.frames.map((frame) => frame.durationMs);
+        withArguments({ duration: 40 }, () => void run(IDS.setDuration));
+        expect(durations()).toEqual([100, 100, 40, 100]);
+
+        // A step that leaves the active cel where it is keeps the selection; its undo ends it.
+        select();
+        withArguments({ duration: 50 }, () => void run(IDS.setDuration));
+        expect(durations()).toEqual([100, 50, 50, 100]);
+        expect(timelineStore.getState().selection).not.toBeNull();
+        run("edit.undo");
+        expect(timelineStore.getState().selection).toBeNull();
+        select();
+        run("edit.redo");
+        expect(durations()).toEqual([100, 50, 50, 100]);
+        expect(timelineStore.getState().selection).toBeNull();
+    });
 });
 
 describe("layer properties, rename, visibility and lock", () => {
@@ -485,6 +581,66 @@ describe("layer properties, rename, visibility and lock", () => {
         run(IDS.applyLayerProperties);
         expect(active().history.undoCount).toBe(after);
         expect(command(IDS.applyLayerProperties).enabled()).toBe(false);
+    });
+
+    it("Apply Layer Name and Apply Layer Properties apply a floating selection first, and keep the draft while it stays", () => {
+        openWith(1, 1);
+        const { session, history } = active();
+        /** A floating selection: lifted pixels in an open transaction (SPEC §5.2). */
+        const float = () => {
+            history.begin({ layerId: session.activeLayerId, frameId: session.activeFrameId });
+            setKeyContext("floating", true);
+        };
+        const layer = () => session.doc.layers[0];
+
+        float();
+        expect(command(IDS.renameLayer).enabled()).toBe(true);
+        run(IDS.renameLayer);
+        setRenameText("Ink");
+        expect(command(IDS.applyLayerName).enabled()).toBe(true);
+        // The hook leaves the selection floating: the name cannot be applied, the field stays.
+        run(IDS.applyLayerName);
+        expect(timelineStore.getState().rename).toMatchObject({ name: "Ink" });
+        expect(layer()?.name).toBe("Layer 1");
+        // It commits the float, as SE-032's will: the move is a step, then the name.
+        floating.commit = true;
+        let steps = history.undoCount;
+        run(IDS.applyLayerName);
+        expect(layer()?.name).toBe("Ink");
+        expect(timelineStore.getState().rename).toBeNull();
+        expect(history.undoCount).toBe(steps + 2);
+        expect(history.undoLabel).toBe("Rename Layer");
+        setKeyContext("floating", false);
+
+        floating.commit = false;
+        float();
+        run(IDS.layerProperties);
+        editProperties({ opacity: 100 });
+        run(IDS.applyLayerProperties);
+        expect(timelineStore.getState().properties).toMatchObject({ opacity: 100 });
+        expect(layer()?.opacity).toBe(255);
+        floating.commit = true;
+        steps = history.undoCount;
+        run(IDS.applyLayerProperties);
+        expect(layer()?.opacity).toBe(100);
+        expect(timelineStore.getState().properties).toBeNull();
+        expect(history.undoCount).toBe(steps + 2);
+        setKeyContext("floating", false);
+
+        // During a stroke the edit cannot be taken: the commands are disabled, the draft stays.
+        const stroke = history.begin({
+            layerId: session.activeLayerId,
+            frameId: session.activeFrameId,
+        });
+        expect(command(IDS.renameLayer).enabled()).toBe(false);
+        timelineStore.setState({
+            rename: { documentId: active().id, layerId: session.activeLayerId, name: "Late" },
+        });
+        expect(command(IDS.applyLayerName).enabled()).toBe(false);
+        expect(timelineStore.getState().rename).toMatchObject({ name: "Late" });
+        stroke.abort();
+        expect(run(IDS.applyLayerName)).toBe(true);
+        expect(layer()?.name).toBe("Late");
     });
 
     it("Rename Layer opens the in-place field; applying is one step, cancelling changes nothing", () => {

@@ -5,12 +5,17 @@ import type { ClickModifiers } from "../../app/timeline/selection";
 /** Marks a cell of the grid; the active cell is the one with `tabindex="0"`. */
 export const CELL_ATTRIBUTE = "data-timeline-cell";
 
-/** Metrics of DESIGN §5.6, as timeline.css lays them out: cells 24 px wide in 28 px rows. */
+/**
+ * Marks a field of the panel (the duration, a name renamed in place): a press anywhere outside
+ * it applies what it holds before the press does anything else.
+ */
+export const TIMELINE_FIELD_ATTRIBUTE = "data-timeline-field";
+
+/** DESIGN §5.6: cells are 24 px wide, as timeline.css lays them out. */
 export const CELL_WIDTH = 24;
-export const ROW_HEIGHT = 28;
-/** What the layer column and the two header rows cover of the scroller. */
-export const LAYER_COLUMN_WIDTH = 200;
-export const HEADER_HEIGHT = 2 * ROW_HEIGHT;
+
+/** The parts that stick to the top of the scroller while the grid scrolls under them. */
+const STICKY_TOP = ".timeline__bar, .timeline__row--header";
 
 /** Shift extends to a range; Ctrl (Cmd on a Mac) adds or removes one. */
 export function modifiersOf(event: {
@@ -26,17 +31,34 @@ export function activeCell(grid: HTMLElement | null): HTMLElement | null {
     return grid?.querySelector<HTMLElement>(`[${CELL_ATTRIBUTE}][tabindex="0"]`) ?? null;
 }
 
+/** The cell of `layerId` at `frameId`, if its row is rendered. */
+export function cellOf(grid: HTMLElement | null, layerId: string, frameId: string) {
+    for (const row of grid?.querySelectorAll<HTMLElement>('[role="row"][data-layer]') ?? []) {
+        if (row.dataset.layer !== layerId) continue;
+        for (const cell of row.querySelectorAll<HTMLElement>(`[${CELL_ATTRIBUTE}]`)) {
+            if (cell.dataset.frame === frameId) return cell;
+        }
+    }
+    return null;
+}
+
 /**
  * Scrolls `scroller` the least that shows `cell` beside the sticky layer column and below the
- * sticky header rows. Only the scroller moves: `scrollIntoView` would scroll the shell too.
+ * sticky rows on top, as they are laid out now (a tag bar makes the top taller). Only the
+ * scroller moves: `scrollIntoView` would scroll the shell too.
  */
 export function keepInView(scroller: HTMLElement, cell: HTMLElement): void {
     const box = scroller.getBoundingClientRect();
     const target = cell.getBoundingClientRect();
-    const left = box.left + LAYER_COLUMN_WIDTH;
-    const right = box.left + scroller.clientWidth;
-    const top = box.top + HEADER_HEIGHT;
-    const bottom = box.top + scroller.clientHeight;
+    const column = cell.closest('[role="row"]')?.querySelector('[role="rowheader"]');
+    const inner = { left: box.left + scroller.clientLeft, top: box.top + scroller.clientTop };
+    const left = column ? column.getBoundingClientRect().right : inner.left;
+    let top = inner.top;
+    for (const sticky of scroller.querySelectorAll(STICKY_TOP)) {
+        top = Math.max(top, sticky.getBoundingClientRect().bottom);
+    }
+    const right = inner.left + scroller.clientWidth;
+    const bottom = inner.top + scroller.clientHeight;
     if (target.left < left) scroller.scrollLeft -= left - target.left;
     else if (target.right > right) scroller.scrollLeft += target.right - right;
     if (target.top < top) scroller.scrollTop -= top - target.top;
@@ -51,11 +73,10 @@ export function layerHeaderOf(grid: HTMLElement | null, layerId: string): HTMLEl
     return null;
 }
 
-/** Gives the focus to the active cell of the grid, keeping it in view. */
-export function focusActiveCell(grid: HTMLElement | null): void {
-    const cell = activeCell(grid);
+/** Gives the focus to a cell of the grid, keeping it in view. */
+export function focusCell(cell: HTMLElement | null): void {
     if (!cell) return;
     cell.focus({ preventScroll: true });
-    const scroller = grid?.closest<HTMLElement>("[data-timeline]");
+    const scroller = cell.closest<HTMLElement>("[data-timeline]");
     if (scroller) keepInView(scroller, cell);
 }
