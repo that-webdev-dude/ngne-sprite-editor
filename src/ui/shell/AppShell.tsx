@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { useTimelineState } from "../../app/timeline/timelineState";
 import { useWindowHeight } from "../platform/useWindowSize";
 import { Splitter } from "../primitives/Splitter";
 import {
@@ -52,9 +53,11 @@ export function AppShell({ regions = {}, hidden = false }: AppShellProps) {
     );
     const setDockWidth = useLayout((state) => state.setDockWidth);
     const setTimelineHeight = useLayout((state) => state.setTimelineHeight);
+    // Tab toggles the timeline (SPEC §7.8, SE-022); hidden, its row of the grid is empty.
+    const timelineVisible = useTimelineState((state) => state.visible);
     const sizes = {
         "--shell-dock-width": `${dockWidth}px`,
-        "--shell-timeline-height": `${timelineHeight}px`,
+        "--shell-timeline-height": timelineVisible ? `${timelineHeight}px` : "0px",
     } as CSSProperties;
 
     return (
@@ -89,7 +92,12 @@ export function AppShell({ regions = {}, hidden = false }: AppShellProps) {
                     <RegionBoundary name="Panels">{regions.dock ?? <Dock />}</RegionBoundary>
                 </div>
             </aside>
-            <section className="shell-timeline" data-region="timeline" aria-label="Timeline">
+            <section
+                className="shell-timeline"
+                data-region="timeline"
+                aria-label="Timeline"
+                hidden={!timelineVisible}
+            >
                 <Splitter
                     className="shell-timeline__splitter"
                     orientation="horizontal"

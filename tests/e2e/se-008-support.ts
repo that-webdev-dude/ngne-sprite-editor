@@ -153,7 +153,12 @@ function isOnScreen(page: Page, selector: string): Promise<boolean> {
  * judged, and the nodes on screen it could not decide on (those would hide a failure).
  */
 export async function audit(page: Page, scope?: string) {
-    const builder = new AxeBuilder({ page }).withTags(AA_TAGS);
+    // Text made only of symbols ("←", the key of a shortcut) is judged as well: by default the
+    // contrast rule leaves it undecided (`ignoreUnicode`), which would hide a failure (SE-022).
+    const judgeSymbols = {
+        checks: { "color-contrast": { options: { ignoreUnicode: false } } },
+    } as Parameters<AxeBuilder["options"]>[0];
+    const builder = new AxeBuilder({ page }).options(judgeSymbols).withTags(AA_TAGS);
     const results = await (scope ? builder.include(scope) : builder).analyze();
     const contrast = (list: typeof results.passes) =>
         list.filter((rule) => rule.id === "color-contrast").flatMap((rule) => rule.nodes);

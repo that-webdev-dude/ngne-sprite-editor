@@ -255,8 +255,37 @@ too large to preview, the canvas area shows that message instead.
   cels are joined by a line. Active cell has an accent outline; the active frame column and
   layer row are tinted with `--bg-raised`.
 - Transport on the left of the tag bar: first, previous, play/pause, next, last, onion-skin
-  toggle (its popover holds the settings), frame duration field.
+  toggle (its popover holds the settings). The frame duration field sits in the head of the
+  layer column, beside the frame numbers, with New Layer (+) at its right: the six transport
+  buttons leave it no room in 200 px (SE-022).
 - Drag frames or layers to reorder; drag cels to move, Ctrl-drag to copy.
+
+Behaviour (SE-022):
+
+- While no document is open the panel is empty. Rows are the pixel layers, top of the stack
+  first; the transport, the tag bar and the frame numbers stay in place while the grid scrolls
+  under them, and the layer column stays at the left. The grid shows no scrollbars: the wheel
+  (Shift+wheel across) and the keys scroll it, and the active cell is kept in view. The panel
+  follows a change of the document once the canvas has had its next two animation frames, so
+  it never delays the canvas (principle 3).
+- The visibility and lock toggles show their state by their icon (open or struck eye, open or
+  closed lock), with no pressed background. They act on their row's layer without making it
+  active.
+- The opacity value (0–255) is shown in the row on hover and keyboard focus, and always when
+  it is below 255; it opens the layer properties popover beside the row. Layer → Layer
+  Properties… opens it for the active layer. The popover applies its name and opacity when it
+  closes (Enter, Escape or a press outside), in one undo step; an empty name is not applied.
+- Rename in place: a double-click on the name, or the command Rename Layer, turns it into a
+  field. Enter or leaving the field applies the name (one undo step), Escape keeps the old one.
+- A click on a cel, a frame number or a layer's name makes it active and selects it. Shift
+  selects the range from the last item clicked without Shift (a rectangle of cels), Ctrl adds
+  or removes one. A selection holds while the cel it was made at stays the active cel: the
+  arrow keys, new frames and layers, and undo end it. Selected cells, frame numbers and rows
+  are tinted with `--bg-active`.
+- The grid is one tab stop, its active cell; F6 enters the timeline there. While a cell has
+  focus, ← → ↑ ↓ Home End move the active cell and the focus follows it, scrolled into view.
+- Tab (viewport focused) and View → Hide Timeline hide the panel; the viewport takes its rows.
+  The panel is shown again at every start.
 
 ### 5.7 Status bar
 

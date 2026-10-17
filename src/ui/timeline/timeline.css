@@ -1,0 +1,245 @@
+/*
+ * Timeline panel (DESIGN §5.6, SE-022): a 200 px layer column, 28 px rows and 24 px cells, as in
+ * docs/design/mockup.html. One scroller holds everything: the bar (transport, tag bar) and the
+ * frame header stick to the top, the layer column to the left. Borders lie inside the sizes.
+ *
+ * The scroller has no scrollbars; the wheel (Shift+wheel across) and the keys scroll it, and
+ * the active cell is kept in view. Its scrollbars cost the canvas a frame: with them a history
+ * step was drawn in the third animation frame about one time in four (144 Hz display), against
+ * the two the SE-022 acceptance allows.
+ */
+.timeline {
+    position: relative;
+    height: 100%;
+    overflow: auto;
+    background: var(--bg-panel);
+    scrollbar-width: none;
+}
+
+.timeline__bar,
+.timeline__row {
+    display: flex;
+    width: max-content;
+    min-width: 100%;
+    height: var(--row-height);
+}
+
+.timeline__bar {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--bg-panel);
+}
+
+.timeline__row--header {
+    position: sticky;
+    top: var(--row-height);
+    z-index: 2;
+    background: var(--bg-panel);
+}
+
+.timeline__bar,
+.timeline__row--header {
+    border-bottom: var(--border-width) solid var(--border);
+}
+
+/* The state of a row's toggles is in their icons (an open or a struck eye, a lock). */
+.timeline__layer .ui-toggle[aria-pressed="true"] {
+    background: transparent;
+    color: inherit;
+}
+
+.timeline__layer .ui-toggle:hover:not(:disabled) {
+    background: var(--bg-active);
+    color: var(--text);
+}
+
+/* The layer column: the transport, the column head and each row's header. */
+.timeline__transport,
+.timeline__corner,
+.timeline__layer {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-2);
+    width: 200px;
+    padding: 0 var(--space-8);
+    border-right: var(--border-width) solid var(--border);
+    background: var(--bg-panel);
+}
+
+.timeline__corner {
+    justify-content: space-between;
+}
+
+/* Its width, the frame columns', is set by the panel. */
+.timeline__tags {
+    flex: none;
+}
+
+/* Frame numbers. */
+.timeline__frame {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 24px;
+    color: var(--text-muted);
+    font-size: var(--font-size-label);
+}
+
+.timeline__frame[data-active-frame] {
+    background: var(--bg-raised);
+    color: var(--text);
+    font-weight: var(--font-weight-strong);
+}
+
+/* Layer headers. */
+.timeline__layer {
+    color: var(--text-muted);
+}
+
+.timeline__row[data-active-layer] .timeline__layer {
+    background: var(--bg-raised);
+    color: var(--text);
+}
+
+.timeline__name {
+    flex: 1;
+    min-width: 0;
+    margin-left: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.timeline__row[data-active-layer] .timeline__name {
+    font-weight: var(--font-weight-strong);
+}
+
+.timeline__rename {
+    flex: 1;
+    min-width: 0;
+    height: var(--control-height);
+    margin-left: var(--space-2);
+    padding: 0 var(--space-4);
+    border: var(--border-width) solid var(--border-input);
+    border-radius: var(--radius-control);
+    background: var(--bg-raised);
+    color: var(--text);
+    user-select: text;
+}
+
+/* The opacity readout opens the layer properties: shown on hover and focus, or when not full. */
+.timeline__opacity {
+    flex: none;
+    min-width: var(--control-height);
+    height: var(--control-height);
+    margin-left: auto;
+    padding: 0 var(--space-4);
+    border-radius: var(--radius-control);
+    color: var(--text-muted);
+    font-size: var(--font-size-label);
+    opacity: 0;
+    transition:
+        background-color var(--motion-fast) var(--motion-ease),
+        color var(--motion-fast) var(--motion-ease);
+}
+
+.timeline__layer:hover .timeline__opacity,
+.timeline__layer:focus-within .timeline__opacity,
+.timeline__opacity[data-partial],
+.timeline__opacity[aria-expanded="true"] {
+    opacity: 1;
+}
+
+.timeline__opacity:hover {
+    background: var(--bg-active);
+    color: var(--text);
+}
+
+/* Cels. */
+.timeline__cell {
+    position: relative;
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 24px;
+}
+
+.timeline__cell[data-active-frame],
+.timeline__row[data-active-layer] .timeline__cell {
+    background: var(--bg-raised);
+}
+
+.timeline__cell[aria-selected="true"],
+.timeline__frame[aria-selected="true"],
+.timeline__layer[aria-selected="true"],
+.timeline__row[data-active-layer] .timeline__layer[aria-selected="true"],
+.timeline__row[data-active-layer] .timeline__cell[aria-selected="true"] {
+    background: var(--bg-active);
+}
+
+/* The active cell: an accent outline inside the cell, beside the keyboard focus ring. */
+.timeline__cell[data-active-cel]::before {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    border: var(--border-width) solid var(--accent);
+    border-radius: var(--radius-surface);
+}
+
+.timeline__dot {
+    position: relative;
+    z-index: 1;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.timeline__cell[data-cel="empty"] .timeline__dot {
+    border: var(--border-width) solid var(--text-faint);
+}
+
+.timeline__cell[data-cel="filled"] .timeline__dot,
+.timeline__cell[data-cel="linked"] .timeline__dot {
+    background: var(--text-muted);
+}
+
+/* Linked cels of neighbouring frames are joined by a line. */
+.timeline__cell[data-link-next]::after {
+    content: "";
+    position: absolute;
+    top: calc(50% - 1px);
+    left: 50%;
+    width: 24px;
+    height: 2px;
+    background: var(--text-muted);
+}
+
+/* The layer properties popover. */
+.timeline-properties__form {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--space-12);
+    align-items: center;
+    width: 248px;
+}
+
+.timeline-properties__text {
+    width: 100%;
+    min-width: 0;
+    height: var(--control-height);
+    padding: 0 var(--space-8);
+    border: var(--border-width) solid var(--border-input);
+    border-radius: var(--radius-control);
+    background: var(--bg-raised);
+    color: var(--text);
+    user-select: text;
+}
+
+.timeline-properties__slider {
+    grid-column: 1 / -1;
+}

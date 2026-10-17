@@ -890,11 +890,20 @@ Selection model (SE-030):
 Add, delete, duplicate, rename, reorder (drag), visibility, lock, opacity, merge down, flatten.
 The last pixel layer cannot be deleted. Merge down and flatten bake opacity and blend mode.
 
+From the timeline (SE-022): New Layer adds above the active layer and Duplicate Layer copies
+the active layer, as in Aseprite. Delete Layer removes the layers selected in the timeline, or
+the active layer when no layer is selected, in one undo step; it is disabled when no pixel
+layer would remain.
+
 ### 7.4 Frames, cels and tags
 
 - New frame: empty or a duplicate of the current frame (Aseprite default: duplicate).
 - Linked cels share one image; editing either edits both. "Unlink" copies the image.
 - Durations are per frame, 1–65535 ms, editable for a multi-frame selection.
+- In the timeline (SE-022) the selected frames are those of a frame selection or those a cel
+  selection has a cel in. The duration field and Delete Frame act on them, or on the active
+  frame when none is selected; the field shows the active frame's duration when it is among
+  them, otherwise the first one's. Delete Frame is disabled when it would delete every frame.
 - Tag expansion (used by editor playback and export): for frames `a b c d`, forward is
   `a b c d`, reverse is `d c b a`, ping-pong is `a b c d c b` (for one frame: `a`; for two:
   `a b`). `repeat = n > 0` writes the sequence n times; `repeat = 0` loops forever.
@@ -1003,6 +1012,12 @@ Focus rules that make `canvas` the normal state:
 | ?                           | canvas     | Shortcut sheet                                     |
 
 - † also acts while a text field has focus.
+- Frame and layer navigation (SE-022) stops at the first and last frame and at the top and
+  bottom pixel layer; it does not wrap. In the timeline ← → Home End are the Frame menu's
+  Previous, Next, First and Last Frame. On the canvas ← → are commands of their own, enabled
+  only without a selection, so the menu items stay enabled while a selection exists. Every
+  switch of the active frame or layer applies a floating selection first (§5.2) and does
+  nothing during a stroke.
 - Differences from Aseprite forced by the browser: invert selection is Ctrl+I (Ctrl+Shift+I
   opens DevTools); new sprite and close use the alternates above; D is the contour tool, so
   reset colours has no default key.

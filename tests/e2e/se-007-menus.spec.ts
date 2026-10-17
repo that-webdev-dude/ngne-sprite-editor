@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
+import { formatChord } from "../../src/app/commands/chord";
 import { boxOf, collectErrors, region } from "./se-006-support";
 import {
     closeMenu,
@@ -136,7 +137,10 @@ test("every menu item corresponds to a registry entry", async ({ page }) => {
             ).toBeDefined();
             expect(entry?.menu, `${item.command} is listed in its own menu`).toBe(name);
             expect(item.title, `${item.command} title`).toBe(entry?.title);
-            expect(item.shortcut, `${item.command} shortcut`).toBe(entry?.shortcut);
+            // As menus show a chord: "←" for ArrowLeft (formatChord).
+            expect(item.shortcut, `${item.command} shortcut`).toBe(
+                entry?.shortcut ? formatChord(entry.shortcut) : "",
+            );
             expect(item.disabled, `${item.command} disabled`).toBe(!entry?.enabled);
             seen.push(item.command ?? "");
         }

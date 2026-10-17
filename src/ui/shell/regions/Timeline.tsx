@@ -1,4 +1,6 @@
-/** Timeline content. Empty until SE-022 adds the transport, tag bar and cel grid. */
+import { TimelinePanel } from "../../timeline/TimelinePanel";
+
+/** Timeline content (DESIGN §5.6): the panel of SE-022, empty while no document is open. */
 export function Timeline() {
-    return null;
+    return <TimelinePanel />;
 }
