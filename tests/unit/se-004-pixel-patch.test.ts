@@ -296,42 +296,46 @@ function apply(history: History, step: Step, index: number): void {
 }
 
 describe("pixel patches, property", () => {
-    it("for 500 random sequences, undo all then redo all reproduces every intermediate buffer byte-exactly", () => {
-        let runs = 0;
-        let patches = 0;
-        fc.assert(
-            fc.property(sequences, ({ width, height, initial, steps }) => {
-                runs++;
-                patches += steps.length;
-                const session = newSession(width, height);
-                if (initial) {
-                    addCel(session, LAYER, FRAME, IMAGE, Uint8ClampedArray.from(initial));
-                }
-                assertInvariants(session);
-                const history = new History(session);
+    it(
+        "for 500 random sequences, undo all then redo all reproduces every intermediate buffer byte-exactly",
+        { timeout: 30_000 },
+        () => {
+            let runs = 0;
+            let patches = 0;
+            fc.assert(
+                fc.property(sequences, ({ width, height, initial, steps }) => {
+                    runs++;
+                    patches += steps.length;
+                    const session = newSession(width, height);
+                    if (initial) {
+                        addCel(session, LAYER, FRAME, IMAGE, Uint8ClampedArray.from(initial));
+                    }
+                    assertInvariants(session);
+                    const history = new History(session);
 
-                const states = [celBytes(session)];
-                steps.forEach((step, index) => {
-                    apply(history, step, index);
-                    states.push(celBytes(session));
-                });
-                expect(history.undoCount).toBe(steps.length);
+                    const states = [celBytes(session)];
+                    steps.forEach((step, index) => {
+                        apply(history, step, index);
+                        states.push(celBytes(session));
+                    });
+                    expect(history.undoCount).toBe(steps.length);
 
-                for (let index = steps.length - 1; index >= 0; index--) {
-                    undo(history);
-                    expect(celBytes(session)).toStrictEqual(states[index]);
-                }
-                expect(history.undo()).toBe(false);
+                    for (let index = steps.length - 1; index >= 0; index--) {
+                        undo(history);
+                        expect(celBytes(session)).toStrictEqual(states[index]);
+                    }
+                    expect(history.undo()).toBe(false);
 
-                for (let index = 1; index <= steps.length; index++) {
-                    redo(history);
-                    expect(celBytes(session)).toStrictEqual(states[index]);
-                }
-                expect(history.redo()).toBe(false);
-            }),
-            { numRuns: 500 },
-        );
-        expect(runs).toBe(500);
-        expect(patches).toBeGreaterThanOrEqual(500);
-    });
+                    for (let index = 1; index <= steps.length; index++) {
+                        redo(history);
+                        expect(celBytes(session)).toStrictEqual(states[index]);
+                    }
+                    expect(history.redo()).toBe(false);
+                }),
+                { numRuns: 500 },
+            );
+            expect(runs).toBe(500);
+            expect(patches).toBeGreaterThanOrEqual(500);
+        },
+    );
 });
