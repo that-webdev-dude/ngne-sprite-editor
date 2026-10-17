@@ -69,7 +69,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-026 | Timeline editing interactions                     | M    | 022, 023                           | —             | Ready  |
 | **M3** | **[Selection and transform](M3-selection-and-transform.md)** | |                                |               |        |
 | SE-030 | Selection model and marching ants                 | M    | 004, 013, 014                      | —             | Done   |
-| SE-031 | Selection tools                                   | M    | 014, 017, 030                      | —             | In progress |
+| SE-031 | Selection tools                                   | M    | 014, 017, 030                      | —             | Done   |
 | SE-032 | Move, floating selection and clipboard            | L    | 005, 031                           | —             | Ready  |
 | SE-033 | Selection transforms                              | M    | 032                                | —             | Ready  |
 | SE-034 | Sprite operations                                 | L    | 006, 007, 020, 021, 030, 040       | —             | Done   |

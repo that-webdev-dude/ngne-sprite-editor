@@ -1,0 +1,118 @@
+{
+    "id": "se-031-wand-pan-rtx-4060",
+    "ticket": "SE-031",
+    "measurement": "The JavaScript time of the overlay's redraw (the sum of its draw layers' draws; not the putImageData upload or the GPU blit the browser may do later) at each step of a pan of 3 device px per animation frame over a non-contiguous magic-wand selection of a checkerboard (half the pixels, none touching by an edge) on a 1024² document at 1×, reduced motion, on RTX 4060; a 256² document at 4× in the details.",
+    "statistic": "p95 over 120 pan steps of the 1024² document",
+    "resultMs": 3.9,
+    "details": {
+        "side256": {
+            "document": "256×256 checkerboard at 4×, its corner at device pixel 32, 32",
+            "overlayCanvas": "1612×784 device px",
+            "visibleDocument": {
+                "x": 32,
+                "y": 32,
+                "width": 1024,
+                "height": 752
+            },
+            "selectedPixels": 32768,
+            "steps": 120,
+            "overlayRedraw": {
+                "count": 120,
+                "medianMs": 2.1,
+                "p95Ms": 3.5,
+                "maxMs": 4.6
+            },
+            "antsLayer": {
+                "count": 120,
+                "medianMs": 2,
+                "p95Ms": 3.5,
+                "maxMs": 4.5
+            },
+            "antsRingWork": {
+                "moved": 120
+            },
+            "redrawsOfThePick": {
+                "note": "the pending area until the release, then the new selection's boundary and ring",
+                "overlayRedraw": {
+                    "count": 1,
+                    "medianMs": 17.9,
+                    "p95Ms": 17.9,
+                    "maxMs": 17.9
+                },
+                "antsLayer": {
+                    "count": 1,
+                    "medianMs": 17.9,
+                    "p95Ms": 17.9,
+                    "maxMs": 17.9
+                },
+                "previewLayer": {
+                    "count": 1,
+                    "medianMs": 0,
+                    "p95Ms": 0,
+                    "maxMs": 0
+                }
+            }
+        },
+        "side1024": {
+            "document": "1024×1024 checkerboard at 1×, its corner at device pixel 32, 32",
+            "overlayCanvas": "1612×784 device px",
+            "visibleDocument": {
+                "x": 32,
+                "y": 32,
+                "width": 1024,
+                "height": 752
+            },
+            "selectedPixels": 524288,
+            "steps": 120,
+            "overlayRedraw": {
+                "count": 120,
+                "medianMs": 2.6,
+                "p95Ms": 3.9,
+                "maxMs": 5.4
+            },
+            "antsLayer": {
+                "count": 120,
+                "medianMs": 2.6,
+                "p95Ms": 3.8,
+                "maxMs": 5.4
+            },
+            "antsRingWork": {
+                "moved": 120
+            },
+            "redrawsOfThePick": {
+                "note": "the pending area until the release, then the new selection's boundary and ring",
+                "overlayRedraw": {
+                    "count": 1,
+                    "medianMs": 98.9,
+                    "p95Ms": 98.9,
+                    "maxMs": 98.9
+                },
+                "antsLayer": {
+                    "count": 1,
+                    "medianMs": 98.9,
+                    "p95Ms": 98.9,
+                    "maxMs": 98.9
+                },
+                "previewLayer": {
+                    "count": 1,
+                    "medianMs": 0,
+                    "p95Ms": 0,
+                    "maxMs": 0
+                }
+            }
+        },
+        "budget": "none: neither the ticket nor SPEC §6.6 states one",
+        "devicePixelRatio": 1,
+        "window": "1920×1080 CSS px",
+        "adapter": "nvidia / lovelace ()",
+        "chrome": "155.0.8059.82, new headless, --force-color-profile=srgb --force-high-performance-gpu --force-device-scale-factor=1"
+    },
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-10-17T21:13:45.809Z"
+}

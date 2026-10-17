@@ -15,6 +15,9 @@ Node benchmarks: `PERF_RECORD=1 npx vitest run --config vitest.perf.config.ts te
 | `se-015-stroke-latency-intel-uhd` | SE-015 | Pointer event to the first frame showing it, NGNE's submit or the overlay echo's redraw, whichever is earlier; otherwise as above, with the stroke echo (72ca19b) | 33 ms | 17.6 ms | as above; longest pointer-to-submitted gap 8.6 ms | 2026-10-15 |
 | `se-015-stroke-latency-rtx-4060`  | SE-015 | The same on RTX 4060                                     | 33 ms | 20.2 ms  | as above; longest gap 8.6 ms      | 2026-10-15 |
 | `se-017-flood-fill`      | SE-017 | `floodMask` (contiguous, tolerance 0) of a 1024×1024 image from one pixel, then `paintMask` over the mask; transparent and opaque flat images, Node | 100 ms | 20.4 ms | larger of the two images' slowest of 20 fills, cold run included | 2026-10-15 |
+| `se-031-magic-wand`      | SE-031 | Magic wand click (press and release) through the tool pipeline on an opaque flat 1024×1024 document, tolerance 0: flood mask, pending area and the selection command at the release; Contiguous on and off, Node, no viewport | 100 ms | 20.6 ms | larger of the two modes' slowest of 10 clicks, each on a fresh document, cold click included | 2026-10-17 |
+| `se-031-wand-pan-intel-uhd` | SE-031 | JavaScript time of the overlay redraw at each 3 px pan step over a non-contiguous wand pick of a checkerboard on a 1024² document at 1× (256² at 4× in `details`), Chrome on Intel UHD | none | 3.9 ms | p95 of 120 pan steps, JavaScript of the draws only | 2026-10-17 |
+| `se-031-wand-pan-rtx-4060`  | SE-031 | The same on RTX 4060 | none | 3.9 ms | as above | 2026-10-17 |
 
 `se-043-import` was measured again on 2026-10-13 after the colour key moved before the resample
 (first record, 2026-10-12: 56.9 ms).
@@ -23,6 +26,12 @@ Node benchmarks: `PERF_RECORD=1 npx vitest run --config vitest.perf.config.ts te
 pipeline in Node (fill, live composite, commit comparison and undo patches; no viewport):
 68.8 ms, slowest of 10. An unrecorded run right after the record gave 27.3 ms for the fill and
 72.1 ms for the press (REVIEW.md E90).
+
+`se-031-wand-pan-*` have no budget: neither SE-031 nor SPEC §6.6 states one, and the record is
+informational (no `pass`). Before SE-031's review fix the same pan cost about 95 ms median and
+192 ms p95 per step at 1024², the ants ring being painted again at every view change (REVIEW.md
+F3). Unrecorded runs right after the records gave 21.4 ms for the wand and 4.4 and 4.1 ms for the
+pan.
 
 Browser benchmark: `PERF_RECORD=1 PERF_GPU=<intel-uhd|rtx-4060> npx vitest run --config
 vitest.perf.config.ts tests/perf/se-015-stroke-latency.perf.ts`; `PERF_ECHO=off` measures
