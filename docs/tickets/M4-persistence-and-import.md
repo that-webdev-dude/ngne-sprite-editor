@@ -49,7 +49,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | Ready                                                    |
+| Status       | In progress                                              |
 | Depends on   | SE-007, SE-008, SE-040                                   |
 | Blocks       | SE-042, SE-044, SE-047, SE-052                           |
 | Blocked until | Gate G1 passed                                          |
