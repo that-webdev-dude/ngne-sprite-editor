@@ -163,7 +163,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Ready                                                    |
+| Status       | In progress                                              |
 | Depends on   | SE-017                                                   |
 | Blocks       | —                                                        |
 | Blocked until | —                                                       |
@@ -174,6 +174,15 @@ Scope
   closed shape, filled; key D), polygon (click vertices, outline or filled), spray (radius,
   density, seeded RNG per stroke so undo/redo and tests are deterministic).
 - Variants grouped under their neighbours in the tool rail.
+- From SE-031 (REVIEW F2, F5, F6): a variant joins a slot through `variantOf` in its own
+  `*.tools.ts` module; `planned.tools.ts` keeps its 13 slots. A key pressed again while its
+  tool is selected cycles only among the slot's variants of the same letter
+  (`tool.<id>.next`), so B and Shift+B, L and Shift+L, D and Shift+D switch within a slot only
+  when both tools share it; decide the grouping with that in mind and run the E2E files that
+  press B or L while that tool is selected (`se-007-keymap`, `se-015-pencil`). The polygon
+  tool and the curve open their gestures through `ToolContext.openGesture` and close with
+  `tool.gesture.close`; the polygon lasso's vertex rule (a vertex at every press and release)
+  is a model for the polygon tool.
 
 Acceptance
 - Golden tests: rasterized curve for fixed control points; filled polygon for a concave shape

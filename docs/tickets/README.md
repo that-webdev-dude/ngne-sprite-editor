@@ -94,7 +94,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-062 | Symmetry and tiled mode                           | M    | 011, 015, 017                      | —             | Ready  |
 | SE-063 | GIF export                                        | M    | 043, 052                           | —             | Ready  |
 | SE-064 | Preferences dialog, command palette and shortcut sheet | M | 007                              | —             | Done   |
-| SE-065 | Tools II: curve, contour, polygon, spray          | M    | 017                                | —             | Ready  |
+| SE-065 | Tools II: curve, contour, polygon, spray          | M    | 017                                | —             | In progress |
 | SE-066 | Palette files, replace colour and sort            | M    | 030, 060                           | —             | Ready  |
 | **M7** | **[Hardening and release](M7-hardening-and-release.md)** | |                                    |               |        |
 | SE-070 | End-to-end regression suite and performance record | L   | 023, 025, 033, 044, 052, 053, 054  | —             | Ready  |
