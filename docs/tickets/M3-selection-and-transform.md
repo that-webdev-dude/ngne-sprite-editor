@@ -121,7 +121,7 @@ Scope
   `image/png` read/write when permitted, encoded with SE-005.
 - Paste creates a floating selection at the viewport centre, aligned to whole pixels; an image
   larger than the canvas is allowed and clipped on apply.
-- From SE-022 and SE-041 (REVIEW F12, F17): `src/app/selection/floating.ts` holds
+- From SE-022 and SE-041 (REVIEW F12, F18): `src/app/selection/floating.ts` holds
   `applyFloating()` and `isFloating()`, both no-ops until this ticket fills them. Save and
   Save As are enabled while a selection floats through `isFloating()` and apply it first; the
   timeline's apply commands (layer name, layer properties, frame duration) and its clicks

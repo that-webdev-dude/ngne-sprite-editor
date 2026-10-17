@@ -94,7 +94,7 @@ Scope
   into its mark pass (mirror the outline pixels and filled runs before marking). The bucket
   reads its source in place: with symmetric seeds, compute every seed's flood mask before any
   paint and paint their union, or a later seed reads what an earlier one wrote.
-- From SE-065 (REVIEW F19): symmetry and wrap also apply to its four tools. The spray and the
+- From SE-065 (REVIEW F20): symmetry and wrap also apply to its four tools. The spray and the
   contour's outline stamp through `Stamper`; the contour's inside is written by
   `Stamper.inkRun` (and the row range the Stamper owns), a second write path that must mirror
   and wrap too; the curve and the polygon draw through `ShapeStroke`. Read the symmetry and
