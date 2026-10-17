@@ -145,10 +145,11 @@ Implement SE-001 from docs/tickets/M0-foundation.md, including the three additio
 docs/tickets/EXECUTION.md. Follow AGENTS.md. Do not push; stop at checkpoint A.
 ```
 
-Runs 1–4 (replace N):
+Run 1 (one session). Runs 2 to 4 do not fit one usage window: they are carried out in legs,
+each started with the leg prompt of [Legs](#legs).
 
 ```text
-ultracode: execute run N of docs/tickets/EXECUTION.md. One agent per ticket, each in its own
+ultracode: execute run 1 of docs/tickets/EXECUTION.md. One agent per ticket, each in its own
 worktree, following AGENTS.md and the orchestration, shared-module and measurement rules of
 that file. Stop at the run's checkpoint and report per ticket: Done or the unmet acceptance
 items.
@@ -158,9 +159,10 @@ items.
 
 A run that does not fit one 5-hour usage window is carried out in legs. A leg is one session:
 it takes as many tickets to Done as the usage gate allows and stops at a ticket boundary.
-Run 2 is carried out this way (owner decision of 2026-10-13); expect 4 to 5 legs. Measured in
-run 1: one ticket taken to Done costs about 25% of a window, an engine or interface ticket
-about 30–40%.
+Run 2 was carried out this way (owner decision of 2026-10-13) in 5 legs; run 3 is carried out
+the same way. Measured in run 2, each ticket with its review and fixes: an M ticket about 18%
+of a window, an L ticket about 25–35%. Run 3's 21 tickets take about 8 to 10 legs, so the
+weekly limit, not the 5-hour one, is likely to end some legs.
 
 Each leg:
 
@@ -178,8 +180,15 @@ Rules of a leg, beside those of Orchestration:
   in parallel only at or below 40%, a review or a review fix only at or below 80%, nothing new
   above 90% of the weekly limit.
 - A ticket is set to In progress when its agent starts, so the next leg knows what to resume.
-- One read-only review per ticket before Done (the chain of run 2 has one ticket per wave).
-- At most two agents at a time. SE-053 may run beside SE-011: both are ready.
+- A ticket starts when its dependencies are Done; it need not wait for the rest of its wave.
+  Two tickets that share a module ([Shared modules](#shared-modules)) never run together.
+- One read-only review per ticket before Done, in place of one per wave: a leg merges one or
+  two tickets at a time.
+- Before a ticket is Done the orchestrator runs `npm run check` and the full E2E suite with
+  `CI=1` (SwiftShader, one worker) in the main checkout.
+- Measurements ([Measurements](#measurements)) are taken by the orchestrator alone, after the
+  ticket is merged and with no agent running.
+- At most two agents at a time.
 - Nothing is scheduled. The owner starts every leg.
 
 The stop report holds: the tickets Done in the leg; any ticket In progress and its exact
@@ -194,21 +203,27 @@ commits waiting for the push.
 | The push was forgotten         | The next leg continues from local `main` and says so                              |
 | Weekly limit above 90%         | The leg starts no ticket and names the weekly reset                               |
 
-Leg prompt for run 2:
+Leg prompt for run 3 (run 2's, with its own tickets, decisions and checkpoint, is in the git
+history of this file):
 
 ```text
-ultracode: continue run 2 of docs/tickets/EXECUTION.md (SE-011, SE-053, SE-012, SE-013,
-SE-014, SE-015, SE-016, SE-030, SE-017, SE-034, SE-060) from the state of the ticket index.
+ultracode: continue run 3 of docs/tickets/EXECUTION.md (every ticket of W10–W13: SE-022,
+SE-031, SE-041, SE-054, SE-062, SE-065, SE-066, SE-023, SE-032, SE-042, SE-045, SE-047,
+SE-052, SE-061, SE-024, SE-026, SE-033, SE-044, SE-046, SE-063, SE-025) from the state of
+the ticket index.
 
-Autonomy and hard limits: as recorded in docs/REVIEW.md, "Run 1 decisions (W2–W4)", and in
-your memory notes for this project. Decide instead of "stop and report"; never push; no
-package.json change; never weaken a test; never record a number that was not measured.
-Record decisions in docs/REVIEW.md under "Run 2 decisions". At most two agents at a time.
+Autonomy and hard limits: as recorded in docs/REVIEW.md, "Run 1 decisions (W2–W4)" and
+"Run 2 decisions", and in your memory notes for this project. Decide instead of "stop and
+report"; never push; no package.json change except SE-063's, as its ticket states; never
+weaken a test; never record a number that was not measured. Record decisions in
+docs/REVIEW.md under "Run 3 decisions", one subsection per leg. At most two agents at a time.
 
 Start: read the ticket index, git worktree list and the se-0xx branches. I push after each
 leg: confirm main equals origin/main and that CI for the HEAD is green. If CI is red, fix
 the cause first; if main is ahead, continue from local main and say so. Resume any ticket
-marked In progress before starting a new one. SE-053 may run beside SE-011.
+marked In progress before starting a new one. Start a ticket only when its dependencies are
+Done, and never run together two tickets that share a module (EXECUTION.md, Shared modules:
+031 → 065 → 062, 023 → 045 → 061, 024 → 026, 033 → 046).
 
 Usage gate: read the plan usage before each start.
 - Start one ticket only if the 5-hour limit is at or below 55% used; two in parallel only
@@ -216,11 +231,16 @@ Usage gate: read the plan usage before each start.
 - Start a review or a review fix only at or below 80%.
 - Start nothing new if the weekly limit is above 90%.
 Set a ticket to In progress when its agent starts. One read-only review per ticket before
-Done; SE-015 runs alone and its latency is measured by the orchestrator.
+Done. The orchestrator takes the measurements of SE-024, SE-026, SE-031, SE-042 and SE-044
+alone, after the ticket is merged and with no agent running.
 
-Stop when the gate refuses the next start, or at checkpoint C. Do not schedule anything.
+Stop when the gate refuses the next start, or at checkpoint D. Do not schedule anything.
 On stop: main clean, no process left running, worktrees of Done tickets removed. Report:
 tickets Done in this leg; any ticket In progress and its exact state; a warning with the
 5-hour and weekly percent used and the reset time in local time; the commits waiting for
 my push.
 ```
+
+For run 4, replace the ticket list (SE-070, SE-071, SE-072, SE-073), the decisions heading,
+the shared-module line (none), the measurements (SE-070) and the checkpoint (E, which stops
+before the release tag and the deployment).
