@@ -244,7 +244,8 @@ export interface ToolSpec {
     onUp?(context: ToolContext, pointer: ToolPointer): void;
     /**
      * The pointer moved over the viewport with no button held, between the presses of this
-     * tool's open gesture: every sample, as for `onMove`.
+     * tool's open gesture: once per pointer event, at the last of its coalesced samples (only
+     * where the pointer is now matters between presses; SE-065 review).
      */
     onHover?(context: ToolContext, pointer: ToolPointer): void;
     /**

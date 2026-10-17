@@ -1,7 +1,6 @@
 import { SprayCan } from "lucide-react";
 import { clonePixelBuffer } from "../../../core/pixels";
 import {
-    paintInk,
     SPRAY_MAX_DENSITY,
     SPRAY_MAX_RADIUS,
     SPRAY_MIN_DENSITY,
@@ -9,16 +8,8 @@ import {
     SprayStroke,
 } from "../../../core/raster";
 import type { Rect } from "../../../core/model";
-import {
-    BRUSH_SHAPE,
-    BRUSH_SIZE,
-    brushOf,
-    INK,
-    inkOf,
-    OPACITY,
-    opacityOf,
-    paintCursor,
-} from "../brush/brushOptions";
+import { BRUSH_SHAPE, BRUSH_SIZE, INK, OPACITY, paintCursor } from "../brush/brushOptions";
+import { paintStrokeOptions } from "../brush/strokeOptions";
 import type { NumberToolOption, ToolContext, ToolOptionValue, ToolSpec } from "../types";
 
 // The spray (SPEC §7.1, SE-065): dots of the brush scattered over a disk around the pointer's
@@ -26,8 +17,8 @@ import type { NumberToolOption, ToolContext, ToolOptionValue, ToolSpec } from ".
 // background colour, with the ink and opacity chosen. Each stroke takes a seed of its own for
 // the dots, from the seed source the tool is made with, so a stroke is drawn the same for the
 // same seed and samples; the stroke is one undo step, and undo and redo put back the very
-// pixels it wrote. A variant of the pencil's rail slot (Shift+B; B and Shift+B switch between
-// the two, DESIGN §5.1).
+// pixels it wrote. A variant of the eraser's rail slot (Shift+B), whose keys have other
+// letters, so B keeps the pencil (DESIGN §5.1).
 
 /** The disk the dots fall in: its radius, in pixels. */
 export const SPRAY_RADIUS: NumberToolOption = {
@@ -75,8 +66,8 @@ export function createSprayTool(seeds: SpraySeeds): ToolSpec {
         label: "Spray",
         icon: SprayCan,
         shortcut: "Shift+B",
-        variantOf: "pencil",
-        railOrder: 101,
+        variantOf: "eraser",
+        railOrder: 111,
         paints: true,
         options: [BRUSH_SIZE, BRUSH_SHAPE, SPRAY_RADIUS, SPRAY_DENSITY, INK, OPACITY],
         cursor: paintCursor,
@@ -85,8 +76,7 @@ export function createSprayTool(seeds: SpraySeeds): ToolSpec {
             if (!paint) return;
             // The image as the stroke found it, which the ink reads.
             const stroke = new SprayStroke(paint.image, clonePixelBuffer(paint.image), {
-                brush: brushOf(values),
-                ink: paintInk(inkOf(values), context.colour, opacityOf(values)),
+                ...paintStrokeOptions(context),
                 radius: whole(SPRAY_RADIUS, values[SPRAY_RADIUS.key]),
                 density: whole(SPRAY_DENSITY, values[SPRAY_DENSITY.key]),
                 seed: seeds.next(),

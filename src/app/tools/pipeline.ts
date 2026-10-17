@@ -119,7 +119,7 @@ export interface ToolPipeline {
     down(input: PointerInput): boolean;
     /**
      * The pointer moved: its samples, oldest first (the coalesced events of one event). While
-     * `hovering`, samples with no button held go to the gesture's tool.
+     * `hovering`, the last of them goes to the gesture's tool.
      */
     move(inputs: readonly PointerInput[]): void;
     /** A button came up: the stroke of that pointer ends, or the press of a gesture. */
@@ -483,14 +483,18 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
             if (!current) return;
             const mapping = sources.mapping() ?? current.mapping;
             current.mapping = mapping;
+            // Between the presses of a gesture the pointer hovers: only where it is now
+            // matters, so the samples of one event reach `onHover` once, as the last of them
+            // (SE-065 review: the curve and the polygon redraw their whole shape at a hover).
+            if (!current.pressed) {
+                const last = inputs[inputs.length - 1];
+                if (!last) return;
+                const pointer = toolPointer(last, mapping, current.button);
+                run(current, () => current.tool.onHover?.(current.context, pointer));
+                return;
+            }
             for (const input of inputs) {
                 if (stroke !== current) return;
-                // Between the presses of a gesture: the pointer hovers.
-                if (!current.pressed) {
-                    const pointer = toolPointer(input, mapping, current.button);
-                    run(current, () => current.tool.onHover?.(current.context, pointer));
-                    continue;
-                }
                 if (input.pointerId !== current.pointerId) continue;
                 // Released with no `pointerup` (another button stayed down): the stroke ends.
                 if ((input.buttons & PRESSED[current.button]) === 0) {

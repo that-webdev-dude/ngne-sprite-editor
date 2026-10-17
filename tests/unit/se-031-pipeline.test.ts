@@ -114,7 +114,7 @@ describe("a gesture of several presses", () => {
         expect(calls).toEqual([
             "down 1,1 primary",
             "up 1,1",
-            "hover 2,1",
+            // The samples of one event: the hover gets the last of them (SE-065 review).
             "hover 3,2",
             "down 3,2 secondary",
             "move 4,2",

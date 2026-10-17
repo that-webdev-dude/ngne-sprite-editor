@@ -8,11 +8,11 @@ import {
     OPACITY,
 } from "../../src/app/tools/brush/brushOptions";
 import { contourTool } from "../../src/app/tools/contour/contour.tools";
-import { CURVE_HINT, curveTool } from "../../src/app/tools/curve/curve.tools";
+import { curveTool } from "../../src/app/tools/curve/curve.tools";
 import { PAINT_REFUSED } from "../../src/app/tools/paintTarget";
 import type { PointerInput } from "../../src/app/tools/pipeline";
 import { plannedTools } from "../../src/app/tools/planned.tools";
-import { POLYGON_HINT, polygonTool } from "../../src/app/tools/polygon/polygon.tools";
+import { polygonTool } from "../../src/app/tools/polygon/polygon.tools";
 import { FILLED } from "../../src/app/tools/shapes/shapeTool";
 import { spraySeeds, sprayTool } from "../../src/app/tools/spray/spray.tools";
 import { createSprayTool, SPRAY_DENSITY, SPRAY_RADIUS } from "../../src/app/tools/spray/sprayTool";
@@ -23,7 +23,13 @@ import { compositeFrame } from "../../src/core/composite";
 import { createDocument, sequentialIds } from "../../src/core/model";
 import type { DocSession, PixelBuffer } from "../../src/core/model";
 import { clonePixelBuffer } from "../../src/core/pixels";
-import { ContourStroke, paintInk, ShapeStroke, SprayStroke } from "../../src/core/raster";
+import {
+    ContourStroke,
+    createBrush,
+    paintInk,
+    ShapeStroke,
+    SprayStroke,
+} from "../../src/core/raster";
 import type { PathShape, PixelPoint } from "../../src/core/raster";
 import { selectionOf } from "../../src/core/selection";
 import { readSpecKeyTable } from "../e2e/se-007-spec-keys";
@@ -39,8 +45,9 @@ import { maskOf } from "./se-030-support";
 // by their last release (the curve), Enter or a double click (`closeGesture`); the contour
 // fills at its release what the polygon through the same points fills; the spray with a fixed
 // seed draws the same stroke twice. Each is one undo step labelled with its name, Escape takes
-// it back, and paint stays inside the selection and off a guarded layer. The app's rail holds
-// them as variants of the pencil's, the line's and the rectangle's slots.
+// it back, and paint stays inside the selection and off a guarded layer; a stroke over its own
+// colour records nothing. The app's rail holds them as variants of the eraser's, the ellipse's
+// and the rectangle's slots (SE-065 review: B and L stay idempotent).
 
 const WIDTH = 24;
 const HEIGHT = 16;
@@ -215,24 +222,48 @@ describe("curve", () => {
         expect(history.undoCount).toBe(1);
     });
 
-    it("Escape, a change of tool and a pointer cancel take the curve back and record nothing", () => {
+    it("Escape, a change of tool, a pointer cancel during a press and a document switch take the curve back and record nothing", () => {
         const h = tools("curve");
         const session = patterned();
         const { history } = h.open(session);
         const before = Array.from(image(session).data);
-        h.pipeline.down(at(h, START, { button: 0 }));
-        h.pipeline.up(at(h, END, { button: 0, buttons: 0 }));
-        hover(h, C1);
+        const opened = () => {
+            h.pipeline.down(at(h, START, { button: 0 }));
+            h.pipeline.up(at(h, END, { button: 0, buttons: 0 }));
+            hover(h, C1);
+            expect(h.pipeline.gesture).toBe(true);
+            expect(Array.from(image(session).data)).not.toEqual(before);
+        };
+        const takenBack = () => {
+            expect(h.pipeline.stroking).toBe(false);
+            expect(h.pipeline.gesture).toBe(false);
+            expect(Array.from(image(session).data)).toEqual(before);
+            expect(history.undoCount).toBe(0);
+            expect(history.transaction).toBeNull();
+        };
+        // Escape (`tool.cancel`), between the presses.
+        opened();
         expect(h.pipeline.cancel()).toBe(true);
-        expect(Array.from(image(session).data)).toEqual(before);
-        h.pipeline.down(at(h, START, { button: 0 }));
-        h.pipeline.up(at(h, END, { button: 0, buttons: 0 }));
+        takenBack();
+        // Another tool selected.
+        opened();
         click(h, C1);
         h.tools.select("polygon");
-        expect(h.pipeline.stroking).toBe(false);
-        expect(Array.from(image(session).data)).toEqual(before);
-        expect(history.undoCount).toBe(0);
-        expect(history.transaction).toBeNull();
+        takenBack();
+        h.tools.select("curve");
+        // A pointer cancel during a press: the overlay cancels the stroke of the pointer that
+        // is down (`attachToolPointer`).
+        opened();
+        h.pipeline.down(at(h, C1, { button: 0 }));
+        expect(h.pipeline.strokePointer).toBe(1);
+        h.pipeline.move([at(h, C2, { buttons: 1 })]);
+        expect(h.pipeline.cancel()).toBe(true);
+        takenBack();
+        // Another document made the active one: the transaction is aborted, nothing recorded.
+        opened();
+        h.open(blank());
+        expect(h.document().session).not.toBe(session);
+        takenBack();
     });
 
     it("the right button draws in the background colour; later presses keep the first press's colour", () => {
@@ -318,7 +349,55 @@ describe("polygon", () => {
         );
     });
 
-    it("fewer than 3 vertices draw their line; Escape and a change of tool take it back", () => {
+    for (const id of ["polygon", "curve"]) {
+        it(`${id}: keeps the options of its first press; a change while it is open applies from the next one`, () => {
+            const h = tools(id);
+            const session = patterned();
+            const { history } = h.open(session);
+            const before = clonePixelBuffer(image(session));
+            const tool = h.tools.active()!;
+            const points = [p(2, 2), p(20, 3), p(12, 13)];
+            const shape = (filled: boolean): PathShape =>
+                id === "polygon"
+                    ? { kind: "polygon", points, filled }
+                    : { kind: "curve", points: [points[0], points[2], points[2], points[1]] };
+            const drawn = (size: number, filled: boolean) => {
+                const result = clonePixelBuffer(before);
+                new ShapeStroke(result, before, {
+                    brush: createBrush("circle", size),
+                    ink: paintInk("simple", RED, 255),
+                }).draw(shape(filled));
+                return Array.from(result.data);
+            };
+            const gesture = () => {
+                if (id === "polygon") {
+                    click(h, points[0]);
+                    click(h, points[1]);
+                } else {
+                    h.pipeline.down(at(h, points[0], { button: 0 }));
+                    h.pipeline.up(at(h, points[1], { button: 0, buttons: 0 }));
+                }
+                // The context bar changes while the gesture is open.
+                h.tools.setOption(tool, BRUSH_SIZE.key, 4);
+                h.tools.setOption(tool, FILLED.key, true);
+                expect(h.tools.options(tool)[BRUSH_SIZE.key]).toBe(4);
+                if (id === "polygon") click(h, points[2]);
+                else hover(h, points[2]);
+            };
+            gesture();
+            expect(Array.from(image(session).data)).toEqual(drawn(1, false));
+            h.pipeline.closeGesture();
+            expect(Array.from(image(session).data)).toEqual(drawn(1, false));
+            expect(history.undoCount).toBe(1);
+            history.undo();
+            // The next one takes the new values.
+            gesture();
+            h.pipeline.closeGesture();
+            expect(Array.from(image(session).data)).toEqual(drawn(4, id === "polygon"));
+        });
+    }
+
+    it("fewer than 3 vertices draw their line; Escape, a change of tool, a pointer cancel during a press and a document switch take it back", () => {
         const h = tools("polygon");
         const session = patterned();
         const { history } = h.open(session);
@@ -341,6 +420,23 @@ describe("polygon", () => {
         h.tools.select("curve");
         expect(Array.from(image(session).data)).toEqual(kept);
         expect(history.undoCount).toBe(1);
+        h.tools.select("polygon");
+        // A pointer cancel during the third press.
+        click(h, p(3, 3));
+        click(h, p(15, 3));
+        h.pipeline.down(at(h, p(15, 9), { button: 0 }));
+        expect(h.pipeline.cancel()).toBe(true);
+        expect(Array.from(image(session).data)).toEqual(kept);
+        // Another document made the active one.
+        click(h, p(3, 3));
+        click(h, p(15, 3));
+        hover(h, p(15, 9));
+        expect(Array.from(image(session).data)).not.toEqual(kept);
+        h.open(blank());
+        expect(h.pipeline.stroking).toBe(false);
+        expect(Array.from(image(session).data)).toEqual(kept);
+        expect(history.undoCount).toBe(1);
+        expect(history.transaction).toBeNull();
     });
 });
 
@@ -529,49 +625,109 @@ describe("selection clipping and layer guards", () => {
     );
     const isSelected = ({ x, y }: PixelPoint) => rows[y][x] === "#";
 
-    /** Each tool's way through a document, across the selection's edges. */
-    const draws: [string, (h: Harness) => void][] = [
-        ["curve", (h) => curveGesture(h, p(1, 14), p(22, 2), p(2, 1), p(20, 15))],
+    /**
+     * Each tool's way through a document, across the selection's edges: `open` leaves the
+     * stroke or the gesture in progress (the curve after its first drag and a hover, the
+     * polygon with a pending vertex at the pointer, the contour and the spray before the
+     * release), `finish` ends it.
+     */
+    const draws: [string, { open(h: Harness): void; finish(h: Harness): void }][] = [
         [
-            "polygon",
-            (h) => {
-                h.tools.setOption(h.tools.active()!, FILLED.key, true);
-                for (const vertex of [p(1, 1), p(22, 2), p(20, 14), p(2, 13)]) click(h, vertex);
-                h.pipeline.closeGesture();
+            "curve",
+            {
+                open(h) {
+                    h.pipeline.down(at(h, p(1, 7), { button: 0 }));
+                    h.pipeline.move([at(h, p(22, 7), { buttons: 1 })]);
+                    h.pipeline.up(at(h, p(22, 7), { button: 0, buttons: 0 }));
+                    hover(h, p(10, 2));
+                },
+                finish(h) {
+                    click(h, p(10, 2));
+                    hover(h, p(12, 14));
+                    click(h, p(12, 14));
+                },
             },
         ],
-        ["contour", (h) => stroke(h, [p(1, 1), p(22, 2), p(20, 14), p(2, 13)])],
+        [
+            "polygon",
+            {
+                open(h) {
+                    h.tools.setOption(h.tools.active()!, FILLED.key, true);
+                    for (const vertex of [p(1, 1), p(22, 2), p(20, 14)]) click(h, vertex);
+                    hover(h, p(2, 13));
+                },
+                finish(h) {
+                    click(h, p(2, 13));
+                    h.pipeline.closeGesture();
+                },
+            },
+        ],
+        [
+            "contour",
+            {
+                open(h) {
+                    // The first side crosses the selection.
+                    h.pipeline.down(at(h, p(1, 5), { button: 0 }));
+                    for (const point of [p(22, 8), p(20, 14), p(2, 13)]) {
+                        h.pipeline.move([at(h, point, { buttons: 1 })]);
+                    }
+                },
+                finish: (h) => h.pipeline.up(at(h, p(2, 13), { button: 0, buttons: 0 })),
+            },
+        ],
         [
             "spray",
-            (h) => {
-                h.tools.setOption(h.tools.active()!, SPRAY_DENSITY.key, 100);
-                stroke(h, [p(1, 7), p(22, 7)]);
+            {
+                open(h) {
+                    h.tools.setOption(h.tools.active()!, SPRAY_DENSITY.key, 100);
+                    h.pipeline.down(at(h, p(1, 7), { button: 0 }));
+                    h.pipeline.move([at(h, p(22, 7), { buttons: 1 })]);
+                },
+                finish: (h) => h.pipeline.up(at(h, p(22, 7), { button: 0, buttons: 0 })),
             },
         ],
     ];
 
-    for (const [id, draw] of draws) {
-        it(`${id}: changes pixels only inside the selection, the preview included`, () => {
+    /** How many pixels changed inside the selection; every changed pixel must lie inside. */
+    function changedInside(before: readonly number[], after: readonly number[]): number {
+        let inside = 0;
+        for (let y = 0; y < HEIGHT; y++) {
+            for (let x = 0; x < WIDTH; x++) {
+                const at4 = (y * WIDTH + x) * 4;
+                const same = [0, 1, 2, 3].every((c) => before[at4 + c] === after[at4 + c]);
+                if (same) continue;
+                expect(isSelected(p(x, y)), `${x}, ${y}`).toBe(true);
+                inside++;
+            }
+        }
+        return inside;
+    }
+
+    for (const [id, steps] of draws) {
+        const draw = (h: Harness) => {
+            steps.open(h);
+            steps.finish(h);
+        };
+
+        it(`${id}: changes pixels only inside the selection, while it is in progress and once kept`, () => {
             const h = tools(id);
             const session = patterned();
             session.selection = selectionOf(maskOf(rows));
             const { history } = h.open(session);
             const before = Array.from(image(session).data);
-            draw(h);
+            steps.open(h);
+            expect(history.transaction).not.toBeNull();
+            expect(changedInside(before, Array.from(image(session).data))).toBeGreaterThan(0);
+            // The live composite shows the clipped pixels too.
+            h.frames.run();
+            const composite = h.composites.cacheOf(session)?.get(FRAME);
+            expect(composite && Array.from(composite.data)).toEqual(
+                Array.from(compositeFrame(session.doc, FRAME).data),
+            );
+            steps.finish(h);
             expect(history.undoCount).toBe(1);
-            const after = Array.from(image(session).data);
-            let inside = 0;
-            for (let y = 0; y < HEIGHT; y++) {
-                for (let x = 0; x < WIDTH; x++) {
-                    const at4 = (y * WIDTH + x) * 4;
-                    const same = [0, 1, 2, 3].every((c) => before[at4 + c] === after[at4 + c]);
-                    if (!same) {
-                        expect(isSelected(p(x, y)), `${x}, ${y}`).toBe(true);
-                        inside++;
-                    }
-                }
-            }
-            expect(inside).toBeGreaterThan(0);
+            expect(history.transaction).toBeNull();
+            expect(changedInside(before, Array.from(image(session).data))).toBeGreaterThan(0);
         });
 
         for (const [guard, change, message] of [
@@ -627,6 +783,111 @@ describe("selection clipping and layer guards", () => {
             expect(zoomed.status.getState().feedback).toBe(PAINT_REFUSED.overview);
         });
     }
+});
+
+describe("a stroke that changes nothing records nothing (SPEC §7.1, E55)", () => {
+    /** One layer of the foreground colour, red, everywhere. */
+    function red(): DocSession {
+        const doc = sprite(WIDTH, HEIGHT, [
+            { pixels: Array.from({ length: WIDTH * HEIGHT }, (): Rgba => [255, 0, 0, 255]) },
+        ]);
+        return { doc, selection: null, activeLayerId: layerId(0), activeFrameId: FRAME };
+    }
+
+    const strokes: [ToolSpec, (h: Harness) => void][] = [
+        [curveTool, (h) => curveGesture(h, p(2, 13), p(21, 12), p(4, 1), p(18, 2))],
+        [
+            polygonTool,
+            (h) => {
+                h.tools.setOption(h.tools.active()!, FILLED.key, true);
+                for (const vertex of [p(2, 2), p(20, 3), p(19, 13), p(3, 12)]) click(h, vertex);
+                h.pipeline.closeGesture();
+            },
+        ],
+        [contourTool, (h) => stroke(h, [p(2, 2), p(20, 3), p(19, 13), p(3, 12)])],
+        [
+            createSprayTool(counting(9)),
+            (h) => {
+                h.tools.setOption(h.tools.active()!, SPRAY_DENSITY.key, 100);
+                stroke(h, [p(3, 3), p(20, 12)]);
+            },
+        ],
+    ];
+
+    for (const [tool, draw] of strokes) {
+        it(`${tool.id}: over pixels of its own colour, no entry; it is kept unchanged (onCommit, recorded false)`, () => {
+            const commits: boolean[] = [];
+            const probe: ToolSpec = {
+                ...tool,
+                onCommit: (_context, recorded) => void commits.push(recorded),
+            };
+            const h = harness([probe]);
+            h.tools.select(tool.id);
+            h.editor.getState().setForeground(RED);
+            const session = red();
+            const { history } = h.open(session);
+            draw(h);
+            expect(h.pipeline.stroking).toBe(false);
+            expect(history.undoCount).toBe(0);
+            expect(history.transaction).toBeNull();
+            expect(commits).toEqual([false]);
+            expect(h.errors).toEqual([]);
+            // In another colour the same stroke is one entry.
+            h.editor.getState().setForeground(GREEN);
+            draw(h);
+            expect(history.undoCount).toBe(1);
+            expect(commits).toEqual([false, true]);
+        });
+    }
+});
+
+describe("hover samples (SE-065 review)", () => {
+    it("a batch of coalesced hover samples reaches onHover once, with the last of them", () => {
+        const hovers: string[] = [];
+        const probe: ToolSpec = {
+            id: "probe",
+            label: "Probe",
+            onDown: (context) => context.openGesture(),
+            onHover: (_context, pointer) =>
+                void hovers.push(`${pointer.pixel.x},${pointer.pixel.y}`),
+        };
+        const h = harness([probe]);
+        h.tools.select("probe");
+        h.open(blank());
+        click(h, p(1, 1));
+        h.pipeline.move([
+            at(h, p(2, 2), { buttons: 0 }),
+            at(h, p(3, 2), { buttons: 0 }),
+            at(h, p(4, 3), { buttons: 0 }),
+            at(h, p(5, 3), { buttons: 0 }),
+        ]);
+        expect(hovers).toEqual(["5,3"]);
+        hover(h, p(6, 4));
+        expect(hovers).toEqual(["5,3", "6,4"]);
+        h.pipeline.move([]);
+        expect(hovers).toEqual(["5,3", "6,4"]);
+    });
+
+    it("the polygon's preview follows the last sample of a batch", () => {
+        const h = tools("polygon");
+        const session = patterned();
+        h.open(session);
+        const before = clonePixelBuffer(image(session));
+        click(h, p(2, 2));
+        click(h, p(20, 3));
+        h.pipeline.move([
+            at(h, p(10, 10), { buttons: 0 }),
+            at(h, p(8, 12), { buttons: 0 }),
+            at(h, p(5, 13), { buttons: 0 }),
+        ]);
+        expect(Array.from(image(session).data)).toEqual(
+            drawnShape(h, before, {
+                kind: "polygon",
+                points: [p(2, 2), p(20, 3), p(5, 13)],
+                filled: false,
+            }),
+        );
+    });
 });
 
 describe("a tool closing its own gesture (ToolContext.closeGesture)", () => {
@@ -690,8 +951,8 @@ describe("in the app", () => {
         toolRegistry.railSlots().find((slot) => slot.variants.some((tool) => tool.id === id));
 
     for (const [id, slot, key, label] of [
-        ["spray", "pencil", "Shift+B", "Spray"],
-        ["curve", "line", "Shift+L", "Curve"],
+        ["spray", "eraser", "Shift+B", "Spray"],
+        ["curve", "ellipse", "Shift+L", "Curve"],
         ["contour", "rectangle", "D", "Contour"],
         ["polygon", "rectangle", "Shift+D", "Polygon"],
     ] as const) {
@@ -716,23 +977,24 @@ describe("in the app", () => {
         );
     });
 
-    it("a key pressed again switches within its slot only among its letter: B, L and D", () => {
+    it("a key pressed again switches within its slot only among its letter: D and Shift+D only; B and L stay", () => {
         const state = createToolState(createEditorStore(), toolRegistry);
         const next = (id: string) => state.nextVariant(id)?.id ?? null;
-        expect(next("pencil")).toBe("spray");
-        expect(next("spray")).toBe("pencil");
-        expect(next("line")).toBe("curve");
-        expect(next("curve")).toBe("line");
+        // B pressed twice keeps the pencil, L twice the line (SE-065 review): no tool of the
+        // same letter shares their slots, nor the spray's and the curve's.
+        for (const id of ["pencil", "line", "spray", "curve", "eraser", "ellipse", "rectangle"]) {
+            expect(next(id), id).toBeNull();
+        }
         expect(next("contour")).toBe("polygon");
         expect(next("polygon")).toBe("contour");
-        // U is the rectangle's alone in its slot.
-        expect(next("rectangle")).toBeNull();
     });
 
-    it("the curve and the polygon name their gesture's keys in the hint", () => {
-        expect(curveTool.hint).toBe(CURVE_HINT);
-        expect(CURVE_HINT).toContain("Enter");
-        expect(polygonTool.hint).toBe(POLYGON_HINT);
-        expect(POLYGON_HINT).toContain("Enter or double-click: close");
+    it("the curve and the polygon name their gesture's steps and keys in the hint", () => {
+        expect(curveTool.hint).toBe(
+            "Drag from end to end, then click each control point · Enter or double-click: keep",
+        );
+        expect(polygonTool.hint).toBe("Click the vertices · Enter or double-click: close");
+        expect(contourTool.hint).toBeUndefined();
+        expect(sprayTool.hint).toBeUndefined();
     });
 });

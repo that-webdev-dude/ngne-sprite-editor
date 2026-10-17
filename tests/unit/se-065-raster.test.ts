@@ -184,6 +184,39 @@ describe("curve", () => {
         }
     });
 
+    it("left of the canvas rounds where Aseprite truncates toward 0: there its samples lie a pixel nearer 0", () => {
+        // A straight curve with even control points: x = −21 + 21t, sampled at t = k / 4.
+        const line = [p(-21, 0), p(-14, 0), p(-7, 0), p(0, 0)];
+        // −15.75 and −5.25 (+ 0.5: −15.25, −4.75): ⌊⌋ gives −16 and −5, Aseprite's truncation
+        // −15 and −4; −10.5 (+ 0.5: −10) is whole, so both give −10.
+        expect(curveSamples(line).map(({ x }) => x)).toEqual([-21, -16, -10, -5, 0]);
+        expect(asepriteSpline(line).map(({ x }) => x)).toEqual([-21, -15, -10, -4, 0]);
+        // Any curve: where a sample lies left of or above the canvas, Aseprite's is the same or
+        // one pixel nearer 0; elsewhere it is within the rounding error of a half.
+        const random = seeded(1965);
+        let nearer = 0;
+        for (let run = 0; run < 500; run++) {
+            const points = Array.from({ length: 4 }, () =>
+                p(Math.floor(random() * 200) - 150, Math.floor(random() * 200) - 150),
+            );
+            const ours = curveSamples(points);
+            const theirs = asepriteSpline(points);
+            expect(theirs.length).toBe(ours.length);
+            ours.forEach((sample, index) => {
+                for (const axis of ["x", "y"] as const) {
+                    const difference = theirs[index][axis] - sample[axis];
+                    if (sample[axis] < 0) {
+                        expect([0, 1]).toContain(difference);
+                        if (difference === 1) nearer++;
+                    } else {
+                        expect(Math.abs(difference)).toBeLessThanOrEqual(1);
+                    }
+                }
+            });
+        }
+        expect(nearer).toBeGreaterThan(100);
+    });
+
     it("golden: the curve through fixed control points, its samples joined by lines", () => {
         expect(grid(24, 14, (set) => forEachCurvePixel(GOLDEN_CURVE, set))).toEqual([
             "........................",
@@ -484,6 +517,27 @@ describe("contour", () => {
     });
 });
 
+describe("Stamper.inkPolygon", () => {
+    it("inks the polygon's inside on the image's rows, without the brush, and reports it", () => {
+        const [image, original] = transparent(18, 9);
+        const stamper = new Stamper(image, original, {
+            brush: createBrush("square", 5),
+            ink: paintInk("simple", RED, 255),
+        });
+        const changes = new Changes();
+        // The arrowhead, moved 3 rows up: its top rows lie above the image.
+        const points = ARROWHEAD.map(({ x, y }) => p(x, y - 3));
+        stamper.inkPolygon(points, changes);
+        const inside = grid(18, 9, (set) =>
+            forEachPolygonRun(points, (y, x, end) => {
+                for (let px = x; px < end; px++) set(px, y);
+            }),
+        );
+        expect(changedRows(original, image)).toEqual(inside);
+        expect(changes.rect()).toEqual(difference(original, image));
+    });
+});
+
 /** An ink that counts the pixels it is applied to, and marks them opaque white. */
 function countingInk(): Ink & { applied: number } {
     const ink = {
@@ -502,16 +556,30 @@ describe("spray", () => {
         expect([1, 2, 3, 4, 5, 8, 10].map(sprayDiskArea)).toEqual([5, 13, 29, 49, 81, 197, 317]);
     });
 
-    it("draws from mulberry32: numbers in [0, 1), the same for the same seed", () => {
-        const ours = createRandom(42);
-        const reference = seeded(42);
+    it("draws from mulberry32: the reference outputs, as numbers in [0, 1)", () => {
+        // The first outputs of Tommy Ettinger's C reference (`z = (x += 0x6D2B79F5); z = (z ^
+        // z >> 15) * (z | 1); z ^= z + (z ^ z >> 7) * (z | 61); return z ^ z >> 14;`, uint32),
+        // worked out apart from this code; seed 0's first is mulberry32's often quoted
+        // 0.26642920868471265.
+        const reference: Record<number, number[]> = {
+            0: [1144304738, 1416247, 958946056, 627933444, 2007157716],
+            42: [2581720956, 1925393290, 3661312704, 2876485805, 750819978],
+            2026: [1955961175, 1324980858, 2839649622, 2656330836, 654038057],
+        };
+        for (const [seed, outputs] of Object.entries(reference)) {
+            const random = createRandom(Number(seed));
+            expect(
+                outputs.map(() => random() * 2 ** 32),
+                seed,
+            ).toEqual(outputs);
+        }
+        expect(createRandom(0)()).toBe(0.26642920868471265);
+        const random = createRandom(7);
         for (let i = 0; i < 1000; i++) {
-            const value = ours();
-            expect(value).toBe(reference());
+            const value = random();
             expect(value).toBeGreaterThanOrEqual(0);
             expect(value).toBeLessThan(1);
         }
-        expect(createRandom(1)()).not.toBe(createRandom(2)());
     });
 
     const SAMPLES = [p(20, 20), p(26, 21), p(31, 27), p(31, 27), p(24, 33)];
@@ -572,37 +640,113 @@ describe("spray", () => {
         expect(ink.applied).toBe(14);
     });
 
-    it("sprays density % of the disk at the press and of 2r + 1 for each pixel the path moves on, inside the disk", () => {
-        for (const [radius, density] of [
-            [1, 100],
-            [4, 30],
-            [9, 7],
-        ]) {
-            const [image, original] = transparent(80, 80);
+    /** The pixels a brush covers, from its runs. */
+    const brushPixels = (brush: Brush) =>
+        brushRuns(brush, 0, 0).reduce((sum, run) => sum + run.end - run.x, 0);
+
+    it("sprays density % of the disk at the press and of 2r + 1 for each pixel the path moves on, divided by the brush's pixels", () => {
+        for (const [radius, density, shape, size] of [
+            [1, 100, "square", 1],
+            [4, 30, "square", 1],
+            [9, 7, "square", 1],
+            [6, 60, "square", 3],
+            [8, 20, "circle", 8],
+            [12, 45, "circle", 5],
+        ] as const) {
+            const [image, original] = transparent(120, 120);
             const ink = countingInk();
+            const brush = createBrush(shape, size);
+            const pixels = brushPixels(brush);
             const stroke = new SprayStroke(image, original, {
-                brush: createBrush("square", 1),
+                brush,
                 ink,
                 radius,
                 density,
                 seed: radius * 31 + density,
             });
-            stroke.start(p(40, 40));
+            stroke.start(p(50, 60));
             const area = sprayDiskArea(radius);
-            expect(ink.applied).toBe(Math.floor((density * area) / 100));
+            // Every dot lies on the image: each inks the brush's pixels.
+            const dots = (swept: number) => Math.floor((density * swept) / (100 * pixels));
+            expect(ink.applied, `${radius} ${density} ${shape} ${size}`).toBe(dots(area) * pixels);
+            // The press covers at most density % of the disk, however large the brush.
+            const pressed = changedRows(original, image).join("").split("#").length - 1;
+            expect(pressed).toBeLessThanOrEqual((density * area) / 100);
             // Along a row: 17 pixels after the press.
-            stroke.to(p(57, 40));
-            expect(ink.applied).toBe(Math.floor((density * (area + 17 * (2 * radius + 1))) / 100));
+            stroke.to(p(67, 60));
+            expect(ink.applied).toBe(dots(area + 17 * (2 * radius + 1)) * pixels);
+            if (size > 1) continue;
             // Every dot lies within the radius of a pixel of the path.
             const rows = changedRows(original, image);
             rows.forEach((row, y) => {
                 for (let x = 0; x < row.length; x++) {
                     if (row[x] !== "#") continue;
-                    const near = Math.max(40, Math.min(57, x));
-                    expect((x - near) ** 2 + (y - 40) ** 2).toBeLessThanOrEqual(radius * radius);
+                    const near = Math.max(50, Math.min(67, x));
+                    expect((x - near) ** 2 + (y - 60) ** 2).toBeLessThanOrEqual(radius * radius);
                 }
             });
         }
+    });
+
+    it("costs the disk's area, not the brush's: radius 64, density 100, a 64 px brush sprays 3 dots at the press", () => {
+        const [image, original] = transparent(300, 300);
+        const ink = countingInk();
+        const stroke = new SprayStroke(image, original, {
+            brush: createBrush("square", 64),
+            ink,
+            radius: 64,
+            density: 100,
+            seed: 64,
+        });
+        stroke.start(p(150, 150));
+        // The disk's offsets, counted here one by one: 12 853; 4096 pixels a dot.
+        let offsets = 0;
+        for (let dy = -64; dy <= 64; dy++) {
+            for (let dx = -64; dx <= 64; dx++) if (dx * dx + dy * dy <= 64 * 64) offsets++;
+        }
+        expect(offsets).toBe(12853);
+        expect(sprayDiskArea(64)).toBe(offsets);
+        expect(ink.applied).toBe(3 * 4096);
+        // Each pixel of the path owes 129 / 4096 of a dot; with what the press left over, the
+        // 28th pixel completes the next dot, and 31 pixels spray just that one.
+        ink.applied = 0;
+        stroke.to(p(150 + 27, 150));
+        expect(ink.applied).toBe(0);
+        stroke.to(p(150 + 31, 150));
+        expect(ink.applied).toBe(4096);
+    });
+
+    it("golden: a press with seed 2026, radius 6, density 60, a 3 px square brush", () => {
+        const [image, original] = transparent(17, 17);
+        const ink = countingInk();
+        new SprayStroke(image, original, {
+            brush: createBrush("square", 3),
+            ink,
+            radius: 6,
+            density: 60,
+            seed: 2026,
+        }).start(p(8, 8));
+        // 60 % of the 113 offsets of the disk, 9 pixels a dot: 7 dots, some overlapping.
+        expect(ink.applied).toBe(7 * 9);
+        expect(changedRows(original, image)).toEqual([
+            ".................",
+            ".................",
+            "......###........",
+            "......###........",
+            "...######........",
+            "...######........",
+            "...######........",
+            "...######........",
+            ".................",
+            ".........###.....",
+            ".........###.....",
+            ".........###.....",
+            "......######.....",
+            "......######.....",
+            "......###........",
+            ".................",
+            ".................",
+        ]);
     });
 
     it("sprays along a straight run the same, sampled once or pixel by pixel", () => {

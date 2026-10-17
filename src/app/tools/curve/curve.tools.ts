@@ -1,17 +1,9 @@
 import { Spline } from "lucide-react";
 import { clonePixelBuffer } from "../../../core/pixels";
-import { paintInk, ShapeStroke } from "../../../core/raster";
+import { ShapeStroke } from "../../../core/raster";
 import type { PixelPoint } from "../../../core/raster";
-import {
-    BRUSH_SHAPE,
-    BRUSH_SIZE,
-    brushOf,
-    INK,
-    inkOf,
-    OPACITY,
-    opacityOf,
-    paintCursor,
-} from "../brush/brushOptions";
+import { BRUSH_SHAPE, BRUSH_SIZE, INK, OPACITY, paintCursor } from "../brush/brushOptions";
+import { paintStrokeOptions } from "../brush/strokeOptions";
 import type { ToolContext, ToolPointer, ToolSpec } from "../types";
 
 // The curve (SPEC §7.1, SE-065): a cubic Bézier drawn with the brush, in Aseprite's flow of a
@@ -25,10 +17,11 @@ import type { ToolContext, ToolPointer, ToolSpec } from "../types";
 //                          curve (`ToolContext.closeGesture`)
 //
 // A press and its drag move what the pointer moved before the press. Enter or a double click
-// keeps the curve as it is shown; Escape, a change of tool or document takes it back. The
-// curve is a rubber band (`ShapeStroke`, as the line's): each change draws it again from the
-// image as the first press found it. A variant of the line's rail slot (Shift+L; L and
-// Shift+L switch between the two, DESIGN §5.1).
+// keeps the curve as it is shown; Escape, a pointer cancel during a press, a change of tool or
+// document takes it back (the Space and Alt holds do nothing meanwhile). The curve is a rubber
+// band (`ShapeStroke`, as the line's): each change draws it again from the image as the first
+// press found it, with the options read at that press. A variant of the ellipse's rail slot
+// (Shift+L), whose keys have other letters, so L keeps the line (DESIGN §5.1).
 
 /** The status-bar hint of the curve. */
 export const CURVE_HINT =
@@ -83,14 +76,14 @@ export const curveTool: ToolSpec = {
     label: "Curve",
     icon: Spline,
     shortcut: "Shift+L",
-    variantOf: "line",
-    railOrder: 201,
+    variantOf: "ellipse",
+    railOrder: 221,
     paints: true,
     hint: CURVE_HINT,
     options: [BRUSH_SIZE, BRUSH_SHAPE, INK, OPACITY],
     cursor: paintCursor,
     onDown(context, pointer) {
-        const { paint, options: values } = context;
+        const { paint } = context;
         if (!paint) return;
         if (curves.has(context)) {
             follow(context, pointer);
@@ -98,10 +91,11 @@ export const curveTool: ToolSpec = {
         }
         // The image as the first press found it: the ink reads it, and each draw puts back
         // from it what the previous one covered.
-        const stroke = new ShapeStroke(paint.image, clonePixelBuffer(paint.image), {
-            brush: brushOf(values),
-            ink: paintInk(inkOf(values), context.colour, opacityOf(values)),
-        });
+        const stroke = new ShapeStroke(
+            paint.image,
+            clonePixelBuffer(paint.image),
+            paintStrokeOptions(context),
+        );
         const start = { x: pointer.pixel.x, y: pointer.pixel.y };
         const curve: Curve = {
             stroke,

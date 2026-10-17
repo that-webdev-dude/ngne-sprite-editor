@@ -149,10 +149,14 @@ Reload action, leaving the rest of the app usable.
 
 Groups, top to bottom: draw (pencil, eraser, bucket, eyedropper) · shapes (line, rectangle,
 ellipse) · select (marquee, lasso, wand, move) · navigate (hand, zoom). Tools with variants
-(rectangle/ellipse marquee, lasso/polygon lasso; pencil/spray, line/curve, and
+(rectangle/ellipse marquee, lasso/polygon lasso; eraser/spray, ellipse/curve, and
 rectangle/contour/polygon, SE-065) show a corner mark; press-and-hold or repeat the key to
-switch. The variants of SE-065 follow Aseprite's groups; its contour and polygon group joins the
-rectangle's slot, as the rail keeps its 13 slots. Such a button shows the variant selected last (its icon, name and key) and
+switch. The variants of SE-065 sit in the rail's 13 slots so that B and L, the keys used most,
+stay idempotent: the spray (Shift+B) joins the eraser and the curve (Shift+L) the ellipse,
+whose keys have other letters, while the contour (D) and the polygon (Shift+D) share the
+rectangle's slot and switch between each other as the marquees do (Aseprite's groups would put
+the spray with the pencil and the curve with the line; SE-065 review). Such a button shows the
+variant selected last (its icon, name and key) and
 selects it on a click. A press held 300 ms, a right click or the Menu key (Shift+F10) opens the
 menu of the slot's variants beside the button — icon, name and key, the shown one checked — and
 a choice there selects it (a release over an item after the held press chooses it too; a
@@ -174,7 +178,10 @@ failed keeps the layout). At 1280×720 with the default timeline it does not fit
 ### 5.2 Context bar
 
 Shows only the active tool's options, left-aligned, in a fixed order: size · shape · mode
-toggles · tolerance · ink · opacity. The spray's radius and density follow the shape (SE-065). Selection tools show add/subtract/intersect toggles: one
+toggles · tolerance · ink · opacity. The spray's radius and density follow the shape (SE-065).
+A change made while the curve or the polygon is open shows here but applies from the next one:
+a gesture keeps the options of its first press (SE-065 review). Selection tools show
+add/subtract/intersect toggles: one
 segmented control, Mode, of Replace, Add, Subtract and Intersect (SE-031); Shift, Alt and
 Shift+Alt at the press stand in for it for one gesture.
 With a floating selection it switches to transform fields (X, Y, W, H, angle) and Apply / Cancel.

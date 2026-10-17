@@ -1,17 +1,9 @@
 import { Bean } from "lucide-react";
 import { clonePixelBuffer } from "../../../core/pixels";
-import { ContourStroke, paintInk } from "../../../core/raster";
+import { ContourStroke } from "../../../core/raster";
 import type { Rect } from "../../../core/model";
-import {
-    BRUSH_SHAPE,
-    BRUSH_SIZE,
-    brushOf,
-    INK,
-    inkOf,
-    OPACITY,
-    opacityOf,
-    paintCursor,
-} from "../brush/brushOptions";
+import { BRUSH_SHAPE, BRUSH_SIZE, INK, OPACITY, paintCursor } from "../brush/brushOptions";
+import { paintStrokeOptions } from "../brush/strokeOptions";
 import type { ToolContext, ToolSpec } from "../types";
 
 // The contour (SPEC §7.1, SE-065): a freehand closed shape, filled. While the button is held
@@ -39,13 +31,14 @@ export const contourTool: ToolSpec = {
     options: [BRUSH_SIZE, BRUSH_SHAPE, INK, OPACITY],
     cursor: paintCursor,
     onDown(context, pointer) {
-        const { paint, options: values } = context;
+        const { paint } = context;
         if (!paint) return;
         // The image as the stroke found it, which the ink reads.
-        const stroke = new ContourStroke(paint.image, clonePixelBuffer(paint.image), {
-            brush: brushOf(values),
-            ink: paintInk(inkOf(values), context.colour, opacityOf(values)),
-        });
+        const stroke = new ContourStroke(
+            paint.image,
+            clonePixelBuffer(paint.image),
+            paintStrokeOptions(context),
+        );
         strokes.set(context, stroke);
         report(context, stroke.to(pointer.pixel));
     },

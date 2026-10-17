@@ -30,7 +30,7 @@ import { setSelection } from "./se-030-support";
 
 // SE-065: the curve, polygon, contour and spray as the user works with them (SPEC §7.1,
 // Curve, contour, polygon and spray). Each is selected by its key from the rail slot it shares
-// (Shift+L in the line's, D and Shift+D in the rectangle's, Shift+B in the pencil's), and a
+// (Shift+L in the ellipse's, D and Shift+D in the rectangle's, Shift+B in the eraser's), and a
 // key pressed again switches within the slot. The curve is a drag and two clicks, the polygon
 // clicks closed by Enter (which then reaches no `canvas` binding) or a double click; both show
 // the shape while it is made and keep it as one undo step, and Escape takes it back. The
@@ -149,13 +149,13 @@ const restoreCanvasEnter = (page: Page) =>
 const canvasEnters = (page: Page) =>
     page.evaluate(() => (window as unknown as { __se065Enter: string[] }).__se065Enter.length);
 
-test("curve: Shift+L in the line's slot; a drag and two clicks draw it, shown as it is made, kept as one undo step", async ({
+test("curve: Shift+L in the ellipse's slot; a drag and two clicks draw it, shown as it is made, kept as one undo step", async ({
     page,
 }) => {
     const errors = collectErrors(page);
     const { document, before } = await setUp(page);
     await pressToolKey(page, "Shift+KeyL", "curve");
-    await expect(slotButton(page, "line")).toHaveAttribute("data-tool-variant", "curve");
+    await expect(slotButton(page, "ellipse")).toHaveAttribute("data-tool-variant", "curve");
     await expect(region(page, "context-bar").locator("[data-context-tool]")).toHaveText("Curve");
 
     const start = { x: 2, y: 13 };
@@ -196,11 +196,15 @@ test("curve: Shift+L in the line's slot; a drag and two clicks draw it, shown as
     await redo(page);
     expect(await celBytes(page, document.id)).toEqual(after);
 
-    // L selects the line, L again its slot's curve, Shift+L there the line again.
+    // L selects the line, and L pressed again keeps it (SE-065 review): the curve shares no
+    // slot with a tool of its letter. Shift+L pressed again keeps the curve.
     await pressToolKey(page, "KeyL", "line");
-    await pressToolKey(page, "KeyL", "curve");
-    await pressToolKey(page, "Shift+KeyL", "line");
-    await expect(slotButton(page, "line")).toHaveAttribute("data-tool-variant", "line");
+    await pressToolKey(page, "KeyL", "line");
+    await pressToolKey(page, "KeyL", "line");
+    await expect(slotButton(page, "line")).toHaveAttribute("aria-pressed", "true");
+    await pressToolKey(page, "Shift+KeyL", "curve");
+    await pressToolKey(page, "Shift+KeyL", "curve");
+    await expect(slotButton(page, "ellipse")).toHaveAttribute("data-tool-variant", "curve");
     expect(errors).toEqual([]);
 });
 
@@ -266,6 +270,14 @@ test("polygon: Shift+D, clicks add vertices; Enter closes it and does not reach 
     await click(page, { x: 3, y: 12 });
     await moveOver(page, VIEW, [{ x: 22, y: 14 }]);
     await expect(viewportArea(page)).toBeFocused();
+    // Space and Alt held while it is open do nothing (SE-065 review): it keeps its tool.
+    for (const held of ["Space", "Alt"]) {
+        await page.keyboard.down(held);
+        expect((await toolsState(page)).active, held).toBe("polygon");
+        expect(await gestureContext(page), held).toBe(true);
+        await page.keyboard.up(held);
+    }
+    expect(await historyOf(page, document.id)).toEqual({ undo: 1, open: true });
     await page.keyboard.press("Enter");
     expect(await canvasEnters(page)).toBe(0);
     expect(await gestureContext(page)).toBe(false);
@@ -420,7 +432,7 @@ test("contour: refused on a locked layer; with a selection it fills only inside 
     expect(errors).toEqual([]);
 });
 
-test("spray: Shift+B in the pencil's slot; with a fixed seed a stroke is drawn again the same, one undo step each", async ({
+test("spray: Shift+B in the eraser's slot; with a fixed seed a stroke is drawn again the same, one undo step each", async ({
     page,
 }) => {
     const errors = collectErrors(page);
@@ -432,7 +444,7 @@ test("spray: Shift+B in the pencil's slot; with a fixed seed a stroke is drawn a
         module.spraySeeds.next = () => seed;
     }, SEED);
     await pressToolKey(page, "Shift+KeyB", "spray");
-    await expect(slotButton(page, "pencil")).toHaveAttribute("data-tool-variant", "spray");
+    await expect(slotButton(page, "eraser")).toHaveAttribute("data-tool-variant", "spray");
     await expect(region(page, "context-bar").locator("[data-context-tool]")).toHaveText("Spray");
     const options = await region(page, "context-bar")
         .locator("[data-tool-option]")
@@ -476,9 +488,14 @@ test("spray: Shift+B in the pencil's slot; with a fixed seed a stroke is drawn a
     expect(await historyOf(page, document.id)).toEqual({ undo: 2, open: false });
     expect(await celBytes(page, document.id)).toEqual(sprayed);
 
-    // B selects the pencil, B again its slot's spray.
+    // B selects the pencil, and B pressed again keeps it (SE-065 review); Shift+B again keeps
+    // the spray.
     await pressToolKey(page, "KeyB", "pencil");
-    await pressToolKey(page, "KeyB", "spray");
+    await pressToolKey(page, "KeyB", "pencil");
+    await pressToolKey(page, "KeyB", "pencil");
+    await expect(slotButton(page, "pencil")).toHaveAttribute("aria-pressed", "true");
+    await pressToolKey(page, "Shift+KeyB", "spray");
+    await pressToolKey(page, "Shift+KeyB", "spray");
     expect(errors).toEqual([]);
 });
 

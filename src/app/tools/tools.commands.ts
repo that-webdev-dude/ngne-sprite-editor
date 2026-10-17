@@ -21,7 +21,9 @@ import type { Tool } from "./types";
 // hold command is listed but inert. Any other key (Alt) acts throughout the `canvas` context,
 // whatever control has the focus (SE-016). The command palette runs such a hold and releases
 // it at once, as for a key pressed and let go (`runPaletteCommand`), which leaves the active
-// tool as it was.
+// tool as it was. No hold acts while a gesture of several presses is open (the curve, the
+// polygon, the polygon lasso; SE-065 review): it would change the active tool, which cancels
+// the gesture. The wheel and the middle button still pan then.
 
 /** Whether the viewport element itself has the focus. */
 function viewportFocused(): boolean {
@@ -95,7 +97,9 @@ function holdCommand(tool: Tool): CommandSpec[] {
             shortcut: hold.key,
             context: "canvas",
             enabled: () =>
-                (!native || viewportFocused()) && (hold.when?.(toolState.selected()) ?? true),
+                !toolPipeline.gesture &&
+                (!native || viewportFocused()) &&
+                (hold.when?.(toolState.selected()) ?? true),
             run: () => toolState.hold(tool.id),
             release: () => toolState.release(tool.id),
         },

@@ -5,6 +5,7 @@ import type { Ink } from "./ink";
 import { forEachLinePixel } from "./line";
 import type { PixelPoint } from "./line";
 import { PixelPerfectFilter } from "./pixelPerfect";
+import { forEachPolygonRun } from "./polygon";
 
 // Brush strokes (SPEC §7.1, SE-015): a path of pixels drawn with a brush and an ink into an
 // image. The pointer gives a stroke one sample at a time; between two samples the path follows
@@ -96,6 +97,20 @@ export class Stamper {
         for (let px = Math.max(0, from); px < end; px++) {
             if (ink.apply(data, original, (y * width + px) * 4)) changes.add(px, y);
         }
+    }
+
+    /**
+     * Inks the inside of the polygon through `points` without the brush (the pixels whose
+     * centres lie inside it by the even-odd rule, `polygon.ts`): the contour's fill (SE-065).
+     * Only the image's rows are looked at.
+     */
+    inkPolygon(points: readonly PixelPoint[], changes: Changes): void {
+        forEachPolygonRun(
+            points,
+            (y, x, end) => this.inkRun(y, x, end, changes),
+            0,
+            this.#image.height - 1,
+        );
     }
 
     /** Takes back a stamp: a pixel no other stamp covers gets its original value back. */

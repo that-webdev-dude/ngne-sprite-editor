@@ -1,35 +1,29 @@
 import type { PixelBuffer, Rect } from "../model";
-import type { Brush } from "./brush";
 import { Changes } from "./changes";
-import type { Ink } from "./ink";
 import { forEachLinePixel } from "./line";
 import type { PixelPoint } from "./line";
-import { forEachPolygonRun } from "./polygon";
 import { Stamper } from "./stroke";
+import type { BrushStrokeOptions } from "./stroke";
 
 // The contour (SPEC §7.1, SE-065): a freehand closed shape, filled. While the button is held
 // the pointer's path is drawn as a pencil draws it, the brush stamped along the lines that
 // join its points (a point for the press and for every sample on another pixel than the point
 // before); the release closes it — the line from the last point back to the first — and inks
-// every pixel inside it by the even-odd rule (`polygon.ts`). So the closed contour covers what
-// the polygon tool's filled polygon through the same points covers: the brush along the
-// sides, and the inside. Every pixel is inked from its value at the stroke's start
-// (`original`), so a pixel covered twice is written once.
+// every pixel inside it by the even-odd rule (`Stamper.inkPolygon`). So the closed contour
+// covers what the polygon tool's filled polygon through the same points covers: the brush
+// along the sides, and the inside. Every pixel is inked from its value at the stroke's start
+// (`original`), so a pixel covered twice is written once. All of it goes through `Stamper`.
 
-export interface ContourStrokeOptions {
-    brush: Brush;
-    ink: Ink;
-}
+/** A brush stroke's options, without pixel-perfect: a contour has none. */
+export type ContourStrokeOptions = Omit<BrushStrokeOptions, "pixelPerfect">;
 
 export class ContourStroke {
     readonly #stamper: Stamper;
-    readonly #height: number;
     readonly #points: PixelPoint[] = [];
     #closed = false;
 
     constructor(image: PixelBuffer, original: PixelBuffer, options: ContourStrokeOptions) {
         this.#stamper = new Stamper(image, original, { ...options, pixelPerfect: false });
-        this.#height = image.height;
     }
 
     /** The points of the path so far, the press first. */
@@ -83,12 +77,7 @@ export class ContourStroke {
         forEachLinePixel(last.x, last.y, first.x, first.y, (x, y) => {
             this.#stamper.stamp(x, y, changes);
         });
-        forEachPolygonRun(
-            points,
-            (y, x, end) => this.#stamper.inkRun(y, x, end, changes),
-            0,
-            this.#height - 1,
-        );
+        this.#stamper.inkPolygon(points, changes);
         return changes.rect();
     }
 }

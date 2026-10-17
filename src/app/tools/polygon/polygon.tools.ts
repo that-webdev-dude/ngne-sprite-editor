@@ -1,17 +1,9 @@
 import { Hexagon } from "lucide-react";
 import { clonePixelBuffer } from "../../../core/pixels";
-import { paintInk, ShapeStroke } from "../../../core/raster";
+import { ShapeStroke } from "../../../core/raster";
 import type { PixelPoint } from "../../../core/raster";
-import {
-    BRUSH_SHAPE,
-    BRUSH_SIZE,
-    brushOf,
-    INK,
-    inkOf,
-    OPACITY,
-    opacityOf,
-    paintCursor,
-} from "../brush/brushOptions";
+import { BRUSH_SHAPE, BRUSH_SIZE, INK, OPACITY, paintCursor } from "../brush/brushOptions";
+import { paintStrokeOptions } from "../brush/strokeOptions";
 import { FILLED } from "../shapes/shapeTool";
 import type { ToolContext, ToolPointer, ToolSpec } from "../types";
 
@@ -21,8 +13,10 @@ import type { ToolContext, ToolPointer, ToolSpec } from "../types";
 // release adds the pixel under the pointer as a vertex unless it is the last vertex already,
 // so a click adds one and a drag two. Until it is closed the polygon runs through the vertices
 // and the pointer, drawn as a rubber band (`ShapeStroke`, as the rectangle's) from the image
-// as the first press found it: the preview is the result. Enter or a double click closes it
-// through the vertices; Escape, a change of tool or document takes it back. The brush is
+// as the first press found it, with the options read at that press: the preview is the result.
+// Enter or a double click closes it through the vertices; Escape, a pointer cancel during a
+// press, a change of tool or document takes it back (the Space and Alt holds do nothing
+// meanwhile). The brush is
 // stamped along the sides (`core/raster/polygon.ts`); Filled adds the pixels whose centres lie
 // inside by the even-odd rule, the polygon lasso's shape. Fewer than 3 vertices draw their
 // line or their pixel. A variant of the rectangle's rail slot (Shift+D; D and Shift+D switch
@@ -83,10 +77,11 @@ export const polygonTool: ToolSpec = {
             // The first press opens the gesture; the image as it found it is what the ink
             // reads and what each draw puts back.
             traces.set(context, {
-                stroke: new ShapeStroke(paint.image, clonePixelBuffer(paint.image), {
-                    brush: brushOf(values),
-                    ink: paintInk(inkOf(values), context.colour, opacityOf(values)),
-                }),
+                stroke: new ShapeStroke(
+                    paint.image,
+                    clonePixelBuffer(paint.image),
+                    paintStrokeOptions(context),
+                ),
                 filled: values[FILLED.key] === true,
                 vertices: [],
             });

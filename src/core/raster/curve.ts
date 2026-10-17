@@ -5,10 +5,13 @@ import type { PixelPoint } from "./line";
 // control points to its end, drawn as Aseprite draws it (`doc::algo_spline`, after Allegro's
 // `calc_spline`; checked in its source): the curve is sampled at `n` points evenly spaced in
 // its parameter, where n = ⌊1.2 · √(|P0P1| + |P1P2| + |P2P3|)⌋ held to 4..64, and the samples
-// are joined by Bresenham lines. Each sample is rounded to the nearest pixel, halves up.
-// Aseprite reaches its samples by forward differencing and truncates `x + 0.5`; here each one
-// is evaluated directly, so the first is exactly the start and the last exactly the end, and
-// a sample within rounding error of a half may fall on the other pixel.
+// are joined by Bresenham lines. Each sample is rounded to the nearest pixel, halves up
+// (⌊x + 0.5⌋). Aseprite reaches its samples by forward differencing and truncates `x + 0.5`
+// toward 0. Here each one is evaluated directly, so the first is exactly the start and the last
+// exactly the end. Right of and below the canvas's origin the two agree but for a sample
+// within rounding error of a half; left of or above it Aseprite's truncation rounds toward 0
+// over the whole pixel, so wherever x + 0.5 is negative and not whole its sample lies one
+// pixel nearer 0 than this one (a sample at −1.7 is −1 there, −2 here).
 
 /** The fewest and the most points a curve is sampled at (Aseprite's `MAX_POINTS`). */
 export const CURVE_MIN_POINTS = 4;

@@ -37,6 +37,7 @@ export type { CurveShape, PathShape, PolygonShape, Shape, ShapeKind } from "./sh
 export { ShapeStroke } from "./shapeStroke";
 export type { ShapeStrokeOptions } from "./shapeStroke";
 export {
+    brushArea,
     createRandom,
     SPRAY_MAX_DENSITY,
     SPRAY_MAX_RADIUS,

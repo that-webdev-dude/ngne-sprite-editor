@@ -645,7 +645,10 @@ Tool framework (SE-014):
   controls consume natively (Space) only while the viewport element has the focus, so the
   palette lists its hold disabled; any other (Alt) whatever control has the focus (SE-016). The
   palette lists such a hold enabled and runs it with its release at once, which leaves the
-  active tool as it was; hold commands stay in the palette and on the shortcut sheet.
+  active tool as it was; hold commands stay in the palette and on the shortcut sheet. While a
+  gesture of several presses is open (the polygon lasso, the polygon, the curve) no hold acts,
+  Space and Alt included, so neither the hand nor the eyedropper takes the gesture's place and
+  cancels it; the wheel and the middle button still pan (SE-065 review).
 - Tool options are stored per tool id; an invalid stored value reads as the nearest valid one or
   the default. The context bar shows the active tool's name and its options in order.
 - Refusal messages ("Layer is locked", "Layer is hidden", "Reference layers cannot be painted
@@ -805,8 +808,9 @@ Selection tools (SE-031):
 - Polygon lasso: a gesture of several presses. Every press and every release adds the pixel
   under the pointer as a vertex unless it is the last vertex already, so a click adds one and a
   drag two. Enter (the `gesture` context of §7.8) or a double click closes the polygon through
-  the vertices. Escape, a pointer cancel during a press, a change of the active tool (a held
-  one, Space, included) or of the active document cancels it. While it is open every press over
+  the vertices. Escape, a pointer cancel during a press, a change of the active tool or of the
+  active document cancels it; the holds (Space, Alt) do nothing while it is open (SE-065
+  review), so they do not change the active tool then. While it is open every press over
   the viewport is its own (the wheel and the middle button still navigate), and Enter does not
   reach play/pause.
 - Magic wand: the press takes the flood mask (Flood fill above) of the pixel under the pointer
@@ -829,7 +833,8 @@ Selection tools (SE-031):
   for last).
 - Tool framework: a tool may make its stroke a gesture (`ToolContext.openGesture`). It stays
   open past the release; the next presses over the viewport are its own, and the moves between
-  them reach its `onHover`. Enter and a double click close it (`onClose`, then it is kept as at
+  them reach its `onHover`, once per pointer event with the last of its coalesced samples
+  (SE-065 review). Enter and a double click close it (`onClose`, then it is kept as at
   a release); Escape (`tool.cancel`), a pointer cancel during a press, the document left and a
   change of the active tool cancel it. While one is open the keymap's `gesture` context
   applies. A tool shares a rail slot as a variant by naming it (`variantOf`).
@@ -848,18 +853,25 @@ pan that leaves nothing kept where the ring now is, or another mask paints afres
 
 Curve, contour, polygon and spray (SE-065):
 
-- Rail and keys: the spray (Shift+B) is a variant of the pencil's slot, the curve (Shift+L) of
-  the line's, the contour (D) and the polygon (Shift+D) of the rectangle's (DESIGN §5.1). These
-  are Aseprite's groups (pencil and spray; line and curve; contour and polygon, a group of its
-  own there, which the 13 slots of this rail do not have room for), so B, L and D pressed again
-  switch within a slot (SE-031), and U never reaches the contour or the polygon.
+- Rail and keys: the spray (Shift+B) is a variant of the eraser's slot, the curve (Shift+L) of
+  the ellipse's, the contour (D) and the polygon (Shift+D) of the rectangle's (DESIGN §5.1). Of
+  those slots only the rectangle's holds two tools whose keys share a letter (D, Shift+D), so B
+  pressed again keeps the pencil and L the line, and D and Shift+D switch between the contour
+  and the polygon as M and Shift+M between the marquees (SE-031); U never reaches either. Aseprite
+  groups pencil and spray, line and curve, and contour and polygon (a group of its own, which
+  the 13 slots of this rail do not have room for); here B and L, the keys used most, stay
+  idempotent instead (SE-065 review).
 - All four paint as the other brush tools do: brush size and shape placed as for the pencil,
   ink and opacity, values per tool id; the left button paints the foreground and the right the
-  background (for a gesture, the colour of its first press). Each stroke or gesture is one undo
-  step labelled with the tool's name, and records nothing when it changes nothing. Escape takes
-  it back, as do the other cancels of a stroke or a gesture; paint is clipped to the selection,
-  and the press that would begin one is refused on a locked, hidden or reference layer and
-  below 1×.
+  background (for a gesture, the colour of its first press). A stroke's options are read at
+  its press, a gesture's at its first press: a change in the context bar while the curve or
+  the polygon is open shows there but applies from the next one. Each stroke or gesture is one
+  undo step labelled with the tool's name, and records nothing when it changes nothing (a
+  shape over pixels of its own colour). Escape takes it back, as do the other cancels of a
+  stroke or a gesture (a pointer cancel during a press, the document left, another tool
+  selected); the Space and Alt holds do nothing while a gesture is open (§7.1, tool
+  framework). Paint is clipped to the selection, the preview included, and the press that would
+  begin one is refused on a locked, hidden or reference layer and below 1×.
 - Curve: options size, shape, ink, opacity. A gesture of three presses: the first press fixes
   the start and its drag moves the end, with both control points on it (a straight line); after
   its release the pointer moves both control points, and the second release fixes the first;
@@ -869,9 +881,11 @@ Curve, contour, polygon and spray (SE-065):
   is a rubber band (`ShapeStroke`), drawn as Aseprite's `algo_spline` draws it (checked in its
   source): n = ⌊1.2 · √(|P0P1| + |P1P2| + |P2P3|)⌋ samples, held to 4..64, evenly spaced in
   the curve's parameter, joined by Bresenham lines, the brush stamped at every pixel. Each
-  sample is evaluated directly and rounded to the nearest pixel, halves up; Aseprite reaches
-  them by forward differencing and truncates x + 0.5, so the first and last are exactly the
-  ends here, and a sample within rounding error of a half may fall on the other pixel.
+  sample is evaluated directly and rounded to the nearest pixel, halves up (⌊x + 0.5⌋), so the
+  first and last are exactly the ends. Aseprite reaches them by forward differencing and
+  truncates x + 0.5 toward 0. Where x + 0.5 is 0 or more the two differ only for a sample
+  within rounding error of a half; left of or above the canvas, where it is negative and not
+  whole, Aseprite's sample lies one pixel nearer 0 (a sample at −1.7 is −1 there, −2 here).
 - Polygon: options size, shape, Filled (off by default), ink, opacity. A gesture: every press
   and every release adds the pixel under the pointer as a vertex unless it is the last vertex
   already (the polygon lasso's rule). Until it is closed the polygon runs through the vertices
@@ -890,18 +904,23 @@ Curve, contour, polygon and spray (SE-065):
 - Spray: options size, shape, Radius (1–64 px, 8), Density (1–100 %, 20), ink, opacity. Its
   dots are brush stamps at offsets drawn uniformly from the disk dx² + dy² ≤ radius² around
   the pixels of the pointer's path (samples joined by Bresenham lines). The density is the
-  share of the area under the spray that dots fall on, before they overlap: the press sprays
-  density % of the disk's offsets, and each pixel the path moves on density % of 2 · radius +
-  1, the width it sweeps anew; fractions of a dot carry over. A pointer held still sprays
-  nothing more. Each stroke takes a seed (a random one in the app), and a generator seeded with
-  it (mulberry32, integer arithmetic) draws the offsets, so the same seed and samples give the
-  same pixels in Node and in the browser. Aseprite sprays width²/4 · speed/100 points per
-  pointer event, at a uniform angle and radius; this editor's own rule counts per pixel of the
-  path, so the dots do not depend on how often the pointer reports.
+  share of the area under the spray that the dots cover, counted before they overlap, for any
+  brush: the press sprays density % of the disk's offsets divided by the brush's pixels in
+  dots, and each pixel the path moves on density % of 2 · radius + 1, the width it sweeps
+  anew, divided the same way; fractions of a dot carry over. So a dot of a larger brush counts
+  for more, and the work of a spray grows with its area and density, not with the brush. A
+  pointer held still sprays nothing more. Each stroke takes a seed (a random one in the app),
+  and a generator seeded with it (mulberry32, integer arithmetic) draws the offsets, so the
+  same seed and samples give the same pixels in Node and in the browser. Aseprite sprays
+  width²/4 · speed/100 points per pointer event, at a uniform angle and radius; this editor's
+  own rule counts per pixel of the path, so the dots do not depend on how often the pointer
+  reports.
 - Tool framework: a tool may close its own gesture (`ToolContext.closeGesture`), as Enter does
-  (`onClose`, then it is kept); the curve does so at its third release. The contour and the
-  spray stamp through `Stamper` and the curve and the polygon draw through `ShapeStroke`
-  (`core/raster`), where SE-062 adds symmetry.
+  (`onClose`, then it is kept); the curve does so at its third release. Between the presses
+  of a gesture `onHover` takes the last sample of each pointer event. The contour and the
+  spray stamp through `Stamper` (the contour's inside with `Stamper.inkPolygon`), and the curve
+  and the polygon draw through `ShapeStroke` (`core/raster`), where SE-062 adds symmetry; the
+  four tools take their stroke options from one function (`brush/strokeOptions.ts`).
 
 ### 7.2 Selection
 
@@ -1076,6 +1095,8 @@ Focus rules that make `canvas` the normal state:
 | ?                           | canvas     | Shortcut sheet                                     |
 
 - † also acts while a text field has focus.
+- Space (hold) and Alt (hold) do nothing while a `gesture` is open: the gesture keeps its tool
+  (§7.1, SE-065 review).
 - Frame and layer navigation (SE-022) stops at the first and last frame and at the top and
   bottom pixel layer; it does not wrap. In the timeline ← → Home End are the Frame menu's
   Previous, Next, First and Last Frame. On the canvas ← → are commands of their own, enabled
