@@ -27,6 +27,8 @@ export interface NumberFieldProps extends NumberRange {
      * it equals `value`. Steps start from `value`.
      */
     mixed?: boolean;
+    /** Id of an element that describes the field (a hint beside it): its `aria-describedby`. */
+    describedBy?: string;
     className?: string;
     id?: string;
 }
@@ -50,6 +52,7 @@ export function NumberField({
     disabled = false,
     hideLabel = false,
     mixed = false,
+    describedBy,
     className,
     id,
     min,
@@ -152,6 +155,7 @@ export function NumberField({
                     autoComplete="off"
                     spellCheck={false}
                     aria-label={hideLabel ? label : undefined}
+                    aria-describedby={describedBy}
                     aria-valuenow={mixed ? undefined : value}
                     aria-valuemin={min}
                     aria-valuemax={max}

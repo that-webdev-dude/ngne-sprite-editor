@@ -1057,8 +1057,10 @@ layer would remain.
   taken), forward and repeat 0; Create adds the tag in one undo step. Tag Properties… and Delete
   Tag follow it in the Frame menu. They act on the tag whose span ran them (a double-click on a
   span opens Tag Properties… for its tag), otherwise on the active tag at the active frame, and
-  are disabled while there is none. The dialog's answer is one undo step, or none when it
-  changes nothing; a name is stored without surrounding white space. Dragging either end of a
+  are disabled while there is none. The dialog of Tag Properties… can choose any tag at the
+  active frame instead (and that span's tag), and its Delete button deletes the tag chosen, so
+  a tag that a shorter one covers is reached as well. The dialog's answer is one undo step, or
+  none when it changes nothing; a name is stored without surrounding white space. Dragging either end of a
   span sets the tag's range in one undo step at the release (Apply Tag Range, a command outside
   the menus); the end stops at the first and the last frame and at the other end, and Escape
   during the drag cancels it. Each of these applies a floating selection first and does nothing

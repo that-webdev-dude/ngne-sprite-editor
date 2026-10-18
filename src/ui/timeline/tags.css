@@ -114,6 +114,17 @@
     border-color: var(--danger);
 }
 
+/* The choice of tag: as wide as its longest name allows, never wider than the column. */
+.tag-form__choice,
+.tag-form__choice .ui-select {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.tag-form__choice .ui-select {
+    overflow: hidden;
+}
+
 .tag-form__hex {
     width: 96px;
     font-variant-numeric: tabular-nums;

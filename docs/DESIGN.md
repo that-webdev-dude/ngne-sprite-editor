@@ -324,8 +324,9 @@ Tag bar (SE-023):
   kept but not drawn. The name is black or white, whichever has the higher contrast with the
   span (WCAG 2.1 relative luminance; black on a tie), which is at least 4.58:1 on any colour.
 - Overlapping tags take different rows. Tags are placed by their first frame, the longer first
-  at an equal first frame (a tag sits above the tags nested in it), then in creation order, each
-  in the first row where it overlaps no tag. With one row the bar keeps the transport's 28 px;
+  at an equal first frame (of two tags that start at the same frame, the longer sits above),
+  then in creation order, each in the first row where it overlaps no tag. A tag nested in
+  another that starts earlier may sit above it, in a row the other's start left free. With one row the bar keeps the transport's 28 px;
   each further row adds 18 px, up to three rows (64 px); then the tag bar scrolls vertically and
   the frame header stays right below it. The transport stays on the first row.
 - The active tag at the active frame (SPEC §7.4) is marked by weight 500 and a 1 px ring inside
@@ -333,10 +334,15 @@ Tag bar (SE-023):
 - Each end of a span is a drag handle 6 px wide inside the span (resize cursor); while the
   button is held the span shows the range the release will set. A double-click on a span opens
   Tag Properties… for its tag. A press on the bar gives the focus to the active cell without
-  scrolling the panel, and selects nothing.
-- The spans are 16 px tall, under the 24 px pointer target of §8: what they do is also in the
-  Frame menu for the active tag (Tag Properties…, Delete Tag), and the range in the dialog's
-  From and To fields. Context menus on tags are SE-026's.
+  scrolling the panel, and selects nothing. After the release the span keeps the range it set
+  until the panel draws it.
+- Each span is a list item of the list "Tags", named by its tag and frames ("walk, frames
+  2–5"); it is not a tab stop. The spans are 16 px tall, under the 24 px pointer target of §8,
+  and what they do is operable from the keyboard: Frame → Tag Properties… edits any tag at the
+  active frame — when there are several, its dialog's Tag select chooses one (the active tag
+  first), a tag that a shorter one covers too — sets the range in From and To, and deletes the
+  tag chosen with its Delete button; Frame → Delete Tag deletes the active tag. Context menus on
+  tags are SE-026's.
 
 ### 5.7 Status bar
 
@@ -383,7 +389,7 @@ transient tool feedback in `--warn`.
 | Export          | Large dialog | Bundle options (SPEC §9.4), file toggles, frames (all / one tag), pivot (edits the same value as Sprite properties), atlas thumbnail with rectangles, resulting file list with sizes, final frame/animation IDs, destination folder, "Export on save" |
 | Overwrite confirm | Dialog | Lists existing files in the chosen folder once per folder                       |
 | Canvas / Sprite size | Dialog | Numeric fields, anchor grid, resample method                                |
-| Tag             | Dialog   | Name, colour, range, direction, repeat. Colour: a hex field (3, 4, 6 or 8 digits, as the colour panel's), a sample of the span and eight preset colours; range: From and To, frame numbers; direction: Forward, Reverse, Ping-pong; repeat 0–255, 0 repeating without end. Titled "New tag" (Create) or "Tag properties" (OK). An empty name, a colour that is not one and a From after To are named in a message line under the form (the name and colour fields marked invalid), and the dialog cannot be confirmed until they are fixed (SE-023) |
+| Tag             | Dialog   | Name, colour, range, direction, repeat. Colour: a hex field (3, 4, 6 or 8 digits, as the colour panel's), a sample of the span and eight preset colours; range: From and To, frame numbers; direction: Forward, Reverse, Ping-pong; repeat 0–255, 0 repeating without end. Titled "New tag" (Create) or "Tag properties" (OK, and Delete for the tag shown; when several tags are at the active frame a Tag select comes first, and choosing a tag shows its values, dropping changes made for the one before). An empty name, a colour that is not one and a From after To are named in a message line under the form (the name and colour fields marked invalid), and the dialog cannot be confirmed until they are fixed (SE-023) |
 | Layer properties | Popover | Name, opacity, blend mode; for reference layers: X, Y, scale, placement         |
 | Cel properties  | Popover  | Cel opacity; linked state with Unlink                                           |
 | Onion skin      | Popover  | Frames before/after, opacity, falloff, tint, placement, within tag              |
@@ -406,7 +412,8 @@ including deleting layers and frames, relies on undo.
 - Text contrast per §3.1 in both themes.
 - Pointer targets are at least 24×24 px. Exceptions, each also operable from the keyboard:
   palette swatches (16 px, arrow-key navigation), timeline cells (24×28), splitters (8 px,
-  keyboard resize with arrow keys when focused).
+  keyboard resize with arrow keys when focused), tag spans and their 6 px drag handles (16 px
+  tall; Frame → Tag Properties… edits, resizes and deletes any tag at the active frame, §5.6).
 - Layout is verified at 1280×720 and at 125% browser zoom on a 1920×1080 display.
 - The canvas itself is a pointer surface and is not screen-reader operable; this is stated in
   the README rather than faked.

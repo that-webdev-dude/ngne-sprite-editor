@@ -11,6 +11,7 @@ import { Button } from "../primitives/Button";
 import { Dialog } from "../primitives/Dialog";
 import { NumberField } from "../primitives/NumberField";
 import { SegmentedControl } from "../primitives/SegmentedControl";
+import { Select } from "../primitives/Select";
 import "../primitives/field.css";
 import "./tags.css";
 
@@ -26,8 +27,14 @@ const DIRECTIONS: readonly { value: TagDirection; label: string }[] = [
  * and a From after To are named in the message line under the form, and the dialog cannot be
  * confirmed until they are fixed. Nothing changes until it is; the command that opened the
  * dialog applies the values.
+ *
+ * Tag properties: when more than one tag can be edited (the tags at the active frame), a Tag
+ * select comes first, and choosing a tag there shows its values, dropping what was changed for
+ * the one before; Delete deletes the tag chosen. So the keyboard reaches a tag that a shorter
+ * one covers, which is never the active tag.
  */
 export function TagDialog({ request }: { request: TagRequest }) {
+    const [tagId, setTagId] = useState(request.chosen);
     const [values, setValues] = useState<TagValues>(request.initial);
     // The colour as typed; the colour is what it parses to.
     const [colourText, setColourText] = useState(() => formatHex(request.initial.color));
@@ -35,6 +42,7 @@ export function TagDialog({ request }: { request: TagRequest }) {
     const nameId = useId();
     const colourId = useId();
     const rangeId = useId();
+    const repeatHintId = useId();
     const messageId = useId();
 
     const colour = parseHex(colourText);
@@ -43,11 +51,21 @@ export function TagDialog({ request }: { request: TagRequest }) {
     const preset = TAG_COLOURS.findIndex((entry) => entry.color === colour);
     const change = (patch: Partial<TagValues>) =>
         setValues((current) => ({ ...current, ...patch }));
+    const choose = (id: string) => {
+        const choice = request.choices.find((entry) => entry.id === id);
+        if (!choice) return;
+        setTagId(choice.id);
+        setValues(choice.values);
+        setColourText(formatHex(choice.values.color));
+    };
     const submit = () => {
-        if (valid && colour !== null) request.answer({ ...values, color: colour });
+        if (valid && colour !== null) {
+            request.answer({ action: "apply", tagId, values: { ...values, color: colour } });
+        }
     };
     const creating = request.mode === "new";
     const label = colour === null ? null : labelColourOn(colour) === "black" ? BLACK : WHITE;
+    const options = request.choices.map((choice) => ({ value: choice.id, label: choice.label }));
 
     return (
         <Dialog
@@ -58,6 +76,11 @@ export function TagDialog({ request }: { request: TagRequest }) {
             title={creating ? "New tag" : "Tag properties"}
             actions={
                 <>
+                    {tagId === null ? null : (
+                        <Button onClick={() => request.answer({ action: "delete", tagId })}>
+                            Delete
+                        </Button>
+                    )}
                     <Button onClick={() => request.answer(null)}>Cancel</Button>
                     <Button variant="primary" type="submit" form={formId} disabled={!valid}>
                         {creating ? "Create" : "OK"}
@@ -74,6 +97,22 @@ export function TagDialog({ request }: { request: TagRequest }) {
                     submit();
                 }}
             >
+                {tagId === null || options.length < 2 ? null : (
+                    <>
+                        <span className="ui-field__label" aria-hidden="true">
+                            Tag
+                        </span>
+                        <Select
+                            className="tag-form__choice"
+                            label="Tag"
+                            hideLabel
+                            value={tagId}
+                            onChange={choose}
+                            options={options}
+                        />
+                    </>
+                )}
+
                 <label className="ui-field__label" htmlFor={nameId}>
                     Name
                 </label>
@@ -182,8 +221,11 @@ export function TagDialog({ request }: { request: TagRequest }) {
                         onChange={(repeat) => change({ repeat })}
                         min={0}
                         max={MAX_TAG_REPEAT}
+                        describedBy={repeatHintId}
                     />
-                    <span className="tag-form__hint">0 repeats without end</span>
+                    <span className="tag-form__hint" id={repeatHintId}>
+                        0 repeats without end
+                    </span>
                 </div>
 
                 <p className="tag-form__message" role="alert" id={messageId}>

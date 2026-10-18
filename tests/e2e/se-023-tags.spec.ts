@@ -8,9 +8,12 @@ import { menuItem, menuTrigger, openEditor, openMenu, openSession } from "./se-0
 import { audit, dialogButton, field, nameField, setNumber } from "./se-008-support";
 import {
     activeCell,
+    afterFrames,
+    cell,
     documentState,
     frameHeader,
     grid,
+    holdAnimationFrames,
     runCommands,
     scroller,
     selectedFrames,
@@ -98,6 +101,7 @@ function tagState(page: Page) {
             })),
             undoCount: document.history.undoCount,
             undoLabel: document.history.undoLabel,
+            redoLabel: document.history.redoLabel,
         };
     });
 }
@@ -128,6 +132,15 @@ async function pressHandle(page: Page, span: Locator, end: "from" | "to"): Promi
     await page.mouse.down();
     await expect(span).toHaveAttribute("data-resizing", end);
     return y;
+}
+
+/**
+ * Waits until the timeline has drawn the last change: it draws two animation frames and an
+ * idle callback after it (`useShownTimeline`), and the next frame shows it.
+ */
+async function panelDrawn(page: Page): Promise<void> {
+    await afterFrames(page, 3);
+    await page.evaluate(() => new Promise<void>((resolve) => requestIdleCallback(() => resolve())));
 }
 
 /** sRGB channel to linear light, and the WCAG 2.1 contrast of two CSS `rgb()` colours. */
@@ -513,12 +526,19 @@ test("the active tag at the active frame is marked, and a double-click edits the
     await expect(page.getByRole("menu")).toHaveCount(0);
     await expect(menuTrigger(page, "Frame")).toBeFocused();
 
-    // The outer tag's span, with the inner one active: its own properties.
+    // Each span is named by its tag and frames.
+    await expect(tagBar(page).getByRole("listitem", { name: "outer, frames 1–6" })).toBeVisible();
+    await expect(tagBar(page).getByRole("listitem", { name: "inner, frames 3–4" })).toBeVisible();
+
+    // The outer tag's span, with the inner one active: its own properties. Both tags are at
+    // the active frame, so the dialog's Tag select comes first, with the outer one chosen.
     await frameHeader(page, 3).click();
     await expect.poll(current).toEqual(["inner"]);
     await tagSpan(page, "outer").dblclick();
     const properties = propertiesDialog(page);
-    await expect(nameField(properties)).toBeFocused();
+    const choice = properties.getByRole("combobox", { name: "Tag", exact: true });
+    await expect(choice).toBeFocused();
+    await expect(choice).toHaveText("outer, frames 1–6");
     await expect(nameField(properties)).toHaveValue("outer");
     await expect(field(properties, "From")).toHaveValue("1");
     await expect(field(properties, "To")).toHaveValue("6");
@@ -538,7 +558,8 @@ test("a press on the tag bar keeps the focus in the timeline, on the active cell
     const before = await documentState(page);
     await tagSpan(page, "walk").click();
     await expect(activeCell(page)).toBeFocused();
-    // Nothing was selected or made active.
+    // Nothing was selected or made active, once the panel has drawn what the press did.
+    await panelDrawn(page);
     const after = await documentState(page);
     expect(after.activeFrame).toBe(before.activeFrame);
     expect(after.undoCount).toBe(before.undoCount);
@@ -551,5 +572,216 @@ test("a press on the tag bar keeps the focus in the timeline, on the active cell
     await page.mouse.click(await frameX(page, 4), bar.y + bar.height / 2);
     await expect(activeCell(page)).toBeFocused();
     expect((await documentState(page)).activeFrame).toBe(before.activeFrame);
+    expect(errors).toEqual([]);
+});
+
+/**
+ * Frame → Tag Properties… from the keyboard: the menu bar's Frame menu with Enter, its item by
+ * typing, Enter. The focus starts on the Frame menu's trigger.
+ */
+async function tagPropertiesFromKeyboard(page: Page): Promise<Locator> {
+    await expect(menuTrigger(page, "Frame")).toBeFocused();
+    await page.keyboard.press("Enter");
+    const menu = page.getByRole("menu", { name: "Frame" });
+    await expect(menu).toBeVisible();
+    // Radix focuses the first item one timer after the menu opens; typing acts on the focus.
+    await expect(menu.locator(":focus")).toHaveCount(1);
+    await page.keyboard.type("Tag P");
+    await expect(menuItem(page, "frame.tagProperties")).toBeFocused();
+    await page.keyboard.press("Enter");
+    const dialog = propertiesDialog(page);
+    await expect(dialog).toBeVisible();
+    return dialog;
+}
+
+/** Chooses a tag in the Tag select of the dialog from the keyboard: Enter, ↑ or ↓, Enter. */
+async function chooseTag(page: Page, dialog: Locator, from: string, to: string, key: string) {
+    const choice = dialog.getByRole("combobox", { name: "Tag", exact: true });
+    await expect(choice).toBeFocused();
+    await expect(choice).toHaveText(from);
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("option", { name: from, exact: true })).toBeFocused();
+    await page.keyboard.press(key);
+    await expect(page.getByRole("option", { name: to, exact: true })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("listbox")).toBeHidden();
+    await expect(choice).toHaveText(to);
+    await expect(choice).toBeFocused();
+}
+
+test("keyboard only: a tag that another covers is chosen in Tag Properties…, edited with Enter and deleted from the dialog", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openTags(page, 5);
+    // "walk" and "loop" share frames 2–4; "loop", created later, is the active tag all over
+    // them, so "walk" is never the active tag.
+    await addTags(page, [
+        { name: "walk", from: 2, to: 4 },
+        { name: "loop", from: 2, to: 4 },
+    ]);
+    const start = (await tagState(page)).undoCount;
+
+    // No pointer from here on: the active cell, then Home and → to frame 3.
+    await activeCell(page).focus();
+    await page.keyboard.press("Home");
+    await expect(cell(page, "Layer 1", 1)).toBeFocused();
+    for (const frame of [2, 3]) {
+        await page.keyboard.press("ArrowRight");
+        await expect(cell(page, "Layer 1", frame)).toBeFocused();
+    }
+    // F6 to the menu bar (its first trigger), then → to Frame.
+    const inMenuBar = () =>
+        page.evaluate(() => document.activeElement?.closest('[data-region="menu-bar"]') !== null);
+    for (let presses = 0; presses < 8 && !(await inMenuBar()); presses++) {
+        await page.keyboard.press("F6");
+        await afterFrames(page, 1);
+    }
+    await expect(menuTrigger(page, "File")).toBeFocused();
+    for (const name of ["Edit", "Sprite", "Layer", "Frame"]) {
+        await page.keyboard.press("ArrowRight");
+        await expect(menuTrigger(page, name)).toBeFocused();
+    }
+
+    // The dialog opens on the active tag; the covered one is chosen and renamed.
+    let dialog = await tagPropertiesFromKeyboard(page);
+    await chooseTag(page, dialog, "loop, frames 2–4", "walk, frames 2–4", "ArrowUp");
+    await expect(nameField(dialog)).toHaveValue("walk");
+    await page.keyboard.press("Tab");
+    await expect(nameField(dialog)).toBeFocused();
+    // The field's text is selected when it takes the focus: typing replaces it.
+    await page.keyboard.type("stride");
+    await page.keyboard.press("Enter");
+    await expect(dialog).toHaveCount(0);
+    expect(await tagState(page)).toMatchObject({
+        tags: [
+            { name: "stride", from: 2, to: 4 },
+            { name: "loop", from: 2, to: 4 },
+        ],
+        undoCount: start + 1,
+        undoLabel: "Edit Tag",
+    });
+
+    // Delete from the dialog: the covered tag chosen again, then its Delete button, the third
+    // control from the end (Delete, Cancel, OK): Shift+Tab from the first control wraps.
+    dialog = await tagPropertiesFromKeyboard(page);
+    await chooseTag(page, dialog, "loop, frames 2–4", "stride, frames 2–4", "ArrowUp");
+    for (const name of ["OK", "Cancel", "Delete"]) {
+        await page.keyboard.press("Shift+Tab");
+        await expect(dialogButton(dialog, name)).toBeFocused();
+    }
+    await page.keyboard.press("Enter");
+    await expect(dialog).toHaveCount(0);
+    expect(await tagState(page)).toMatchObject({
+        tags: [{ name: "loop", from: 2, to: 4 }],
+        undoCount: start + 2,
+        undoLabel: "Delete Tag",
+    });
+    await expect(menuTrigger(page, "Frame")).toBeFocused();
+    expect(errors).toEqual([]);
+});
+
+test("after a resize the span keeps the new range until the panel draws it", async ({ page }) => {
+    const errors = collectErrors(page);
+    await openTags(page, 6);
+    await addTags(page, [{ name: "walk", from: 2, to: 3 }]);
+    const span = tagSpan(page, "walk");
+    const y = await pressHandle(page, span, "to");
+    await page.mouse.move(await frameX(page, 5), y, { steps: 4 });
+    await expect.poll(() => boxOf(span)).toEqual(await expectedSpan(page, 2, 5, 0));
+
+    // With the animation frames held the panel cannot draw the tag's new range: the span
+    // shows it all the same after the release, in no frame the old one.
+    const release = await holdAnimationFrames(page);
+    await page.mouse.up();
+    await expect.poll(async () => (await tagState(page)).tags[0]).toMatchObject({ from: 2, to: 5 });
+    await expect(span).not.toHaveAttribute("data-resizing");
+    for (let round = 0; round < 3; round++) {
+        expect(await boxOf(span), `round ${round}`).toEqual(await expectedSpan(page, 2, 5, 0));
+        await settleTimers(page);
+    }
+    // Its name gives the frames it shows.
+    await expect(span).toHaveAttribute("aria-label", "walk, frames 2–5");
+    await release();
+    await panelDrawn(page);
+    expect(await boxOf(span)).toEqual(await expectedSpan(page, 2, 5, 0));
+    expect(errors).toEqual([]);
+});
+
+test("closing the Tag dialog opened by a double-click leaves the timeline where it is scrolled", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openTags(page, 80);
+    await addTags(page, [{ name: "far", from: 70, to: 75 }]);
+    // Frame 1 active, the timeline scrolled to its end: the active cell is out of view.
+    await frameHeader(page, 1).click();
+    await expect.poll(async () => (await documentState(page)).activeFrame).toBe(1);
+    await panelDrawn(page);
+    const panel = scroller(page);
+    await panel.evaluate((element) => void (element.scrollLeft = element.scrollWidth));
+    const left = await panel.evaluate((element) => element.scrollLeft);
+    expect(left).toBeGreaterThan(0);
+    const first = await boxOf(cell(page, "Layer 1", 1));
+    const column = await boxOf(timeline(page).getByRole("group", { name: "Transport" }));
+    expect(first.x + first.width).toBeLessThanOrEqual(column.x + column.width);
+    const scrolled = () => panel.evaluate((element) => element.scrollLeft);
+
+    // Escape.
+    const dialog = propertiesDialog(page);
+    await tagSpan(page, "far").dblclick();
+    await expect(nameField(dialog)).toBeFocused();
+    expect(await scrolled()).toBe(left);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(cell(page, "Layer 1", 1)).toBeFocused();
+    expect(await scrolled()).toBe(left);
+
+    // OK.
+    await tagSpan(page, "far").dblclick();
+    await expect(nameField(dialog)).toBeFocused();
+    await dialogButton(dialog, "OK").click();
+    await expect(dialog).toHaveCount(0);
+    await expect(cell(page, "Layer 1", 1)).toBeFocused();
+    expect(await scrolled()).toBe(left);
+    expect(errors).toEqual([]);
+});
+
+test("a drag whose tag goes away while the button is held ends there; the next press starts a drag", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openTags(page, 6);
+    await addTags(page, [{ name: "walk", from: 2, to: 3 }]);
+    const span = tagSpan(page, "walk");
+    const y = await pressHandle(page, span, "to");
+    await page.mouse.move(await frameX(page, 5), y, { steps: 4 });
+    await expect.poll(() => boxOf(span)).toEqual(await expectedSpan(page, 2, 5, 0));
+
+    // Undo the tag's creation with the button held: the span goes, and the release finds no
+    // drag to apply.
+    await expect(activeCell(page)).toBeFocused();
+    await page.keyboard.press("Control+z");
+    await expect(tagBar(page).getByRole("listitem")).toHaveCount(0);
+    const undone = await tagState(page);
+    expect(undone).toMatchObject({ tags: [], redoLabel: "New Tag" });
+    await page.mouse.up();
+    await panelDrawn(page);
+    // No Apply Tag Range: no step, and the redo is still there.
+    expect(await tagState(page)).toEqual(undone);
+
+    // Redo brings the tag back as it was: nothing of the drag that ended comes back with it.
+    await page.keyboard.press("Control+y");
+    await expect(span).toBeVisible();
+    await panelDrawn(page);
+    await expect(span).not.toHaveAttribute("data-resizing");
+    expect(await boxOf(span)).toEqual(await expectedSpan(page, 2, 3, 0));
+    // A press on a handle starts a drag again (with the mouse, the same pointer as the drag
+    // that ended).
+    const again = await pressHandle(page, span, "to");
+    await page.mouse.move(await frameX(page, 4), again, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(async () => (await tagState(page)).tags[0]).toMatchObject({ from: 2, to: 4 });
+    expect((await tagState(page)).undoCount).toBe(undone.undoCount + 2);
     expect(errors).toEqual([]);
 });

@@ -14,7 +14,7 @@ import {
     TAG_COLOURS,
     tagProblems,
 } from "../../src/app/timeline/tagDialogs";
-import type { TagRequest, TagValues } from "../../src/app/timeline/tagDialogs";
+import type { TagAnswer, TagRequest, TagValues } from "../../src/app/timeline/tagDialogs";
 import { initialTagState, tagStore, withTagArguments } from "../../src/app/timeline/tagState";
 import { clickTimeline } from "../../src/app/timeline/timelineClicks";
 import { TIMELINE_COMMANDS as IDS } from "../../src/app/timeline/timelineCommandIds";
@@ -114,13 +114,19 @@ function tagNamed(name: string) {
     return { ...tag, from: index(tag.fromFrameId), to: index(tag.toFrameId) };
 }
 
+/** The answer that applies `values` to the tag the dialog shows first (none for a new tag). */
+function applying(request: TagRequest, values: TagValues): TagAnswer {
+    return { action: "apply", tagId: request.chosen, values };
+}
+
 /**
  * Runs a command that opens the Tag dialog, with a dialog host attached, and answers the
- * request with what `respond` returns. Returns the request the dialog was shown.
+ * request with what `respond` returns: values apply to the tag the dialog shows first. Returns
+ * the request the dialog was shown.
  */
 async function throughDialog(
     id: string,
-    respond: (request: TagRequest) => TagValues | null,
+    respond: (request: TagRequest) => TagValues | TagAnswer | null,
 ): Promise<TagRequest> {
     const detach = commandDialogs.attachHost();
     try {
@@ -129,7 +135,10 @@ async function throughDialog(
         const done = found.run();
         const request = commandDialogs.store.getState().request;
         if (!request || !isTagRequest(request)) throw new Error(`${id} opened no Tag dialog`);
-        request.answer(respond(request));
+        const response = respond(request);
+        request.answer(
+            response === null || "action" in response ? response : applying(request, response),
+        );
         await done;
         return request;
     } finally {
@@ -170,8 +179,8 @@ describe("the tag commands in the registry", () => {
         expect(command(TAGS.deleteTag).title()).toBe("Delete Tag");
         // Apply Tag Range is outside the menus: the tag bar runs it.
         expect(command(TAGS.applyTagRange).menuPath).toBeNull();
-        // No key of SPEC §7.8 is a tag command's.
-        for (const id of Object.values(TAGS)) expect(command(id).shortcuts, id).toEqual([]);
+        // The tag bar's own command has no key.
+        expect(command(TAGS.applyTagRange).shortcuts).toEqual([]);
     });
 
     it("are disabled without a document, and during a stroke", () => {
@@ -346,16 +355,102 @@ describe("Tag Properties…", () => {
             expect(command(TAGS.tagProperties).enabled()).toBe(true);
             done = command(TAGS.tagProperties).run();
         });
-        // The target is read before the dialog opens, and taken out right after.
-        expect(tagStore.getState().target).toBeNull();
         const request = commandDialogs.store.getState().request;
         if (!request || !isTagRequest(request)) throw new Error("no Tag dialog");
+        // The target was read before the dialog opened.
         expect(request.initial.name).toBe("outer");
-        request.answer({ ...request.initial, direction: "reverse", from: 2, to: 8 });
+        expect(request.chosen).toBe(outer);
+        request.answer(applying(request, { ...request.initial, direction: "reverse", to: 8 }));
         await done;
         detach();
-        expect(tagNamed("outer")).toMatchObject({ direction: "reverse", from: 1, to: 7 });
+        expect(tagNamed("outer")).toMatchObject({ direction: "reverse", from: 0, to: 7 });
         expect(tagNamed("inner")).toMatchObject({ direction: "forward", from: 2, to: 3 });
+    });
+
+    it("offers every tag at the active frame, the active one first chosen: a covered tag is edited and deleted from the dialog", async () => {
+        openWith(8);
+        // "first" and "same" have one range, so "same", created later, covers "first"; "short"
+        // covers both at frames 2–3. None but "short" is the active tag at frame 2.
+        const first = addTag("first", 0, 3);
+        const same = addTag("same", 0, 3);
+        const short = addTag("short", 1, 2);
+        const later = addTag("later", 5, 6);
+        activateCel({ frameId: frameAt(1) });
+        const { history } = active();
+        const start = history.undoCount;
+
+        let request = await throughDialog(TAGS.tagProperties, (shown) => ({
+            action: "apply",
+            tagId: first,
+            values: { ...shown.choices[0]!.values, name: "renamed", repeat: 4 },
+        }));
+        expect(request.chosen).toBe(short);
+        expect(request.initial.name).toBe("short");
+        // In creation order, with what names them; the tag outside the frame is not offered.
+        expect(request.choices.map(({ id, label }) => [id, label])).toEqual([
+            [first, "first, frames 1–4"],
+            [same, "same, frames 1–4"],
+            [short, "short, frames 2–3"],
+        ]);
+        expect(request.choices[0]?.values).toEqual({
+            name: "first",
+            color: 0x73bed3ff,
+            from: 1,
+            to: 4,
+            direction: "forward",
+            repeat: 0,
+        });
+        expect(tags().map((tag) => tag.name)).toEqual(["renamed", "same", "short", "later"]);
+        expect(tagNamed("renamed")).toMatchObject({ repeat: 4, from: 0, to: 3 });
+        expect(history.undoCount).toBe(start + 1);
+        expect(history.undoLabel).toBe("Edit Tag");
+
+        // Delete in the dialog deletes the tag chosen there, in one step.
+        request = await throughDialog(TAGS.tagProperties, () => ({
+            action: "delete",
+            tagId: same,
+        }));
+        expect(request.chosen).toBe(short);
+        expect(tags().map((tag) => tag.name)).toEqual(["renamed", "short", "later"]);
+        expect(history.undoCount).toBe(start + 2);
+        expect(history.undoLabel).toBe("Delete Tag");
+        history.undo();
+        expect(tags().map((tag) => tag.name)).toEqual(["renamed", "same", "short", "later"]);
+
+        // From the span of a tag outside the active frame: that tag is offered too, and chosen.
+        let done: void | Promise<void> = undefined;
+        const detach = commandDialogs.attachHost();
+        withTagArguments({ target: later }, () => {
+            done = command(TAGS.tagProperties).run();
+        });
+        const open = commandDialogs.store.getState().request;
+        if (!open || !isTagRequest(open)) throw new Error("no Tag dialog");
+        expect(open.chosen).toBe(later);
+        expect(open.choices.map(({ label }) => label)).toEqual([
+            "renamed, frames 1–4",
+            "same, frames 1–4",
+            "short, frames 2–3",
+            "later, frames 6–7",
+        ]);
+        open.answer(null);
+        await done;
+        detach();
+        expect(history.undoCount).toBe(start + 1);
+    });
+
+    it("changes nothing for an answer about a tag that is gone", async () => {
+        openWith(4);
+        addTag("walk", 0, 3);
+        const { history } = active();
+        const start = history.undoCount;
+        await throughDialog(TAGS.tagProperties, (shown) => ({
+            action: "apply",
+            tagId: "gone",
+            values: shown.initial,
+        }));
+        await throughDialog(TAGS.tagProperties, () => ({ action: "delete", tagId: "gone" }));
+        expect(history.undoCount).toBe(start);
+        expect(tags().map((tag) => tag.name)).toEqual(["walk"]);
     });
 
     it("makes one undo step of what changed, and none when nothing did", async () => {
@@ -415,7 +510,6 @@ describe("Delete Tag", () => {
         // From the outer tag's span, with the inner one active.
         withTagArguments({ target: outer }, () => void run(TAGS.deleteTag));
         expect(tags().map((tag) => tag.name)).toEqual(["inner"]);
-        expect(tagStore.getState().target).toBeNull();
         // A span of a tag that is gone: nothing.
         withTagArguments({ target: outer }, () => {
             expect(run(TAGS.deleteTag)).toBe(false);

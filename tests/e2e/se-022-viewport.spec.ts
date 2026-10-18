@@ -46,6 +46,26 @@ async function openTwoLayers(page: Page): Promise<{
 }
 
 /**
+ * Waits until the timeline has drawn the setup's last change and the page is idle: three
+ * animation frames (the panel draws two frames and an idle callback after a change, SE-022),
+ * then an idle callback. The measured toggle then does not share its frames with work the
+ * setup left behind (SE-023 review J).
+ */
+function setupDrawn(page: Page): Promise<void> {
+    return page.evaluate(
+        () =>
+            new Promise<void>((resolve) => {
+                let left = 3;
+                const next = () => {
+                    if (--left > 0) requestAnimationFrame(next);
+                    else requestIdleCallback(() => resolve());
+                };
+                requestAnimationFrame(next);
+            }),
+    );
+}
+
+/**
  * Clicks the upper layer's visibility toggle at the start of an animation frame, as a pointer
  * event comes, and returns in how many animation frames the viewport first showed `image` in
  * full — never anything but the two images on the way.
@@ -56,6 +76,7 @@ async function toggleUpper(
     images: number[][],
     image: number,
 ): Promise<number> {
+    await setupDrawn(page);
     const rect = documentRect(document, VIEW);
     const toggle = layerHeader(page, "Layer 2").getByRole("button", { name: "Visible" });
     const handle = await toggle.elementHandle();

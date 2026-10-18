@@ -63,7 +63,7 @@ describe("rows of the tag bar", () => {
         ).toEqual({ rows: [2, 0, 1], count: 3 });
     });
 
-    it("puts a tag above the tags nested in it, and nested tags that do not overlap side by side", () => {
+    it("puts the longer of two tags that start together above, and nested tags that do not overlap side by side", () => {
         // A walk cycle over 0–7 with a step in 0–3 and another in 4–7.
         expect(
             tagRows([
@@ -79,6 +79,17 @@ describe("rows of the tag bar", () => {
                 { from: 1, to: 2 },
             ]),
         ).toEqual({ rows: [0, 1], count: 2 });
+    });
+
+    it("may put a tag above one that it is nested in and that starts earlier (DESIGN §5.6)", () => {
+        // A over 0–1, W over 1–7, S over 3–4 inside W: W cannot share A's row, S can.
+        expect(
+            tagRows([
+                { from: 0, to: 1 },
+                { from: 1, to: 7 },
+                { from: 3, to: 4 },
+            ]),
+        ).toEqual({ rows: [0, 1, 0], count: 2 });
     });
 
     it("never gives overlapping tags one row, with as few rows as the deepest frame needs", () => {

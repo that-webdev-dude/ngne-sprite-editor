@@ -45,7 +45,11 @@ export function Dialog({
                     }}
                     onCloseAutoFocus={(event) => {
                         event.preventDefault();
-                        if (opener.current?.isConnected) opener.current.focus();
+                        // The opener may lie outside the part of a panel that is scrolled into
+                        // view (the timeline's active cell): giving it the focus moves nothing.
+                        if (opener.current?.isConnected) {
+                            opener.current.focus({ preventScroll: true });
+                        }
                         opener.current = null;
                     }}
                 >

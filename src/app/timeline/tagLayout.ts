@@ -19,9 +19,11 @@ export interface TagRows {
 
 /**
  * The rows of the tag bar. Spans are taken by their first frame, the longer first at an equal
- * first frame (so a tag sits above the tags nested in it), then in the order given (creation
- * order); each goes to the first row whose spans all end before it starts. Spans that share a
- * frame never share a row, and the rows are as few as the most spans over one frame.
+ * first frame (of two spans that start together, the longer is above), then in the order
+ * given (creation order); each goes to the first row whose spans all end before it starts.
+ * Spans that share a frame never share a row, and the rows are as few as the most spans over
+ * one frame. A span nested in one that starts earlier may still go above it, into a row an
+ * earlier span left free.
  */
 export function tagRows(spans: readonly FrameSpan[]): TagRows {
     const order = spans

@@ -1,7 +1,9 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { BLACK, labelColourOn, WHITE } from "../../core/color/contrast";
+import { sessionsStore } from "../../app/state/sessions";
 import { TAG_COMMANDS } from "../../app/timeline/tagCommandIds";
+import { tagRangeLabel } from "../../app/timeline/tagDialogs";
 import { resizedSpan, SHOWN_TAG_ROWS } from "../../app/timeline/tagLayout";
 import type { FrameSpan, SpanEnd } from "../../app/timeline/tagLayout";
 import { withTagArguments } from "../../app/timeline/tagState";
@@ -28,8 +30,17 @@ interface Drag {
     readonly start: FrameSpan;
     /** The frames the span shows now. */
     readonly span: FrameSpan;
-    /** The tags it began on: once the tags drawn change, the drag is over. */
-    readonly key: string;
+    /**
+     * The tags drawn when it began. The bar is drawn again only when they change (an undo,
+     * the range a release set, another document): from then on the drag is over, also when
+     * the same tags come back (a redo).
+     */
+    readonly tags: TimelineTags;
+    /**
+     * The button is up and Apply Tag Range set `span`: the span keeps showing it until the
+     * panel draws the tags with it, so it does not snap back meanwhile.
+     */
+    readonly released: boolean;
 }
 
 export interface TagBarProps {
@@ -47,6 +58,20 @@ export interface TagBarProps {
 /** Runs a tag command on the tag of a span rather than on the active tag. */
 function runOnTag(tagId: string, commandId: string): void {
     withTagArguments({ target: tagId }, () => void runCommand(commandId));
+}
+
+/** Lets a drag's pointer go: its handle no longer captures it. */
+function releaseCapture(current: Drag | null): void {
+    if (current?.element.hasPointerCapture(current.pointerId)) {
+        current.element.releasePointerCapture(current.pointerId);
+    }
+}
+
+/** Whether the tag of the open document `documentId` runs over these frames now. */
+function hasRange(documentId: string, tagId: string, fromFrameId: string, toFrameId: string) {
+    const document = sessionsStore.getState().documents.find((entry) => entry.id === documentId);
+    const tag = document?.session.doc.tags.find((entry) => entry.id === tagId);
+    return tag?.fromFrameId === fromFrameId && tag.toFrameId === toFrameId;
 }
 
 /** The press is the bar's: it keeps the focus where it is and selects no text. */
@@ -67,17 +92,17 @@ function TagBarView({ documentId, tags, frameIds, onPress }: TagBarProps) {
     // The drag as the pointer events see it; `preview` is what is drawn of it.
     const drag = useRef<Drag | null>(null);
     const [preview, setPreview] = useState<Drag | null>(null);
-    const shown = preview && preview.key === tags.key ? preview : null;
-    const dragging = shown !== null;
+    // Drawn over the tags it began on only: once the panel draws other tags (the range the
+    // release set, an undo, another document), it is gone.
+    const shown = preview?.tags === tags ? preview : null;
+    const dragging = shown !== null && !shown.released;
 
     /** Ends the drag without applying it. */
-    const end = useCallback(() => {
+    const cancel = useCallback(() => {
         const current = drag.current;
         drag.current = null;
         setPreview(null);
-        if (current?.element.hasPointerCapture(current.pointerId)) {
-            current.element.releasePointerCapture(current.pointerId);
-        }
+        releaseCapture(current);
     }, []);
 
     // Escape cancels the drag, before any other key handler sees it.
@@ -87,11 +112,20 @@ function TagBarView({ documentId, tags, frameIds, onPress }: TagBarProps) {
             if (event.key !== "Escape") return;
             event.preventDefault();
             event.stopPropagation();
-            end();
+            cancel();
         };
         window.addEventListener("keydown", onKey, true);
         return () => window.removeEventListener("keydown", onKey, true);
-    }, [dragging, end]);
+    }, [dragging, cancel]);
+
+    // Other tags drawn while the button is held (an undo removed the tag, another document
+    // is active): the drag is over. Its span may be gone, and the release with it.
+    useEffect(() => {
+        const current = drag.current;
+        if (!current || current.tags === tags) return;
+        drag.current = null;
+        releaseCapture(current);
+    }, [tags]);
 
     /** The frame under the pointer: by the frame columns the bar lies over. */
     const spanAt = (current: Drag, clientX: number): FrameSpan => {
@@ -104,15 +138,20 @@ function TagBarView({ documentId, tags, frameIds, onPress }: TagBarProps) {
     const dragOf = (event: ReactPointerEvent): Drag | null => {
         const current = drag.current;
         if (!current || current.pointerId !== event.pointerId) return null;
-        if (current.key !== tags.key) {
-            end();
+        if (current.tags !== tags) {
+            cancel();
             return null;
         }
         return current;
     };
 
     const onHandleDown = (tag: TimelineTag, which: SpanEnd) => (event: ReactPointerEvent) => {
-        if (event.button !== 0 || drag.current) return;
+        if (event.button !== 0) return;
+        // A drag begun over other tags is over, whatever its pointer.
+        const held = drag.current;
+        if (held && held.tags === tags) return;
+        drag.current = null;
+        releaseCapture(held);
         const element = event.currentTarget as HTMLElement;
         element.setPointerCapture(event.pointerId);
         const start = { from: tag.from, to: tag.to };
@@ -123,7 +162,8 @@ function TagBarView({ documentId, tags, frameIds, onPress }: TagBarProps) {
             end: which,
             start,
             span: start,
-            key: tags.key,
+            tags,
+            released: false,
         };
         drag.current = next;
         setPreview(next);
@@ -141,17 +181,25 @@ function TagBarView({ documentId, tags, frameIds, onPress }: TagBarProps) {
         const current = dragOf(event);
         if (!current) return;
         const span = spanAt(current, event.clientX);
-        end();
+        drag.current = null;
+        releaseCapture(current);
         const fromFrameId = frameIds[span.from];
         const toFrameId = frameIds[span.to];
         const changed = span.from !== current.start.from || span.to !== current.start.to;
-        if (changed && fromFrameId !== undefined && toFrameId !== undefined) {
-            const range = { documentId, tagId: current.tagId, fromFrameId, toFrameId };
-            withTagArguments({ range }, () => void runCommand(TAG_COMMANDS.applyTagRange));
+        if (!changed || fromFrameId === undefined || toFrameId === undefined) {
+            setPreview(null);
+            return;
         }
+        const { tagId } = current;
+        const range = { documentId, tagId, fromFrameId, toFrameId };
+        const ran = withTagArguments({ range }, () => runCommand(TAG_COMMANDS.applyTagRange));
+        // The span keeps the new range until the panel draws it; it goes back at once when
+        // the command set nothing (disabled, or the tag or its frames gone).
+        const applied = ran && hasRange(documentId, tagId, fromFrameId, toFrameId);
+        setPreview(applied ? { ...current, span, released: true } : null);
     };
     const onHandleCancel = (event: ReactPointerEvent) => {
-        if (drag.current?.pointerId === event.pointerId) end();
+        if (drag.current?.pointerId === event.pointerId) cancel();
     };
 
     const onBarDown = (event: ReactPointerEvent) => {
@@ -184,11 +232,14 @@ function TagBarView({ documentId, tags, frameIds, onPress }: TagBarProps) {
                             key={tag.id}
                             className="timeline__tag"
                             role="listitem"
+                            aria-label={tagRangeLabel(tag.name, from + 1, to + 1)}
                             aria-current={tag.id === tags.activeId ? "true" : undefined}
                             title={tag.name}
                             data-tag={tag.id}
                             data-row={tag.row}
-                            data-resizing={resizing?.end}
+                            data-resizing={
+                                resizing && !resizing.released ? resizing.end : undefined
+                            }
                             style={{
                                 left: from * CELL_WIDTH + TAG_INSET,
                                 width: (to - from + 1) * CELL_WIDTH - 2 * TAG_INSET,

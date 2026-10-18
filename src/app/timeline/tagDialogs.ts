@@ -12,8 +12,10 @@ import type {
 /**
  * The Tag dialog of the tag commands (DESIGN §7, SE-023): name, colour, range, direction and
  * repeat. New Tag… and Tag Properties… ask for it and wait for the answer; the dialog host
- * shows it (app/dialogs/dialogRequests.ts). The document is changed by the command, never by
- * the dialog (SPEC §5).
+ * shows it (app/dialogs/dialogRequests.ts). Tag Properties… lets it choose among the tags at
+ * the active frame and delete the one chosen, so every tag is reached from the keyboard, also
+ * one that another tag covers. The document is changed by the command, never by the dialog
+ * (SPEC §5).
  */
 
 export type TagDirection = Tag["direction"];
@@ -29,15 +31,38 @@ export interface TagValues {
     repeat: number;
 }
 
+/** A tag Tag Properties… can edit, with its values. */
+export interface TagChoice {
+    readonly id: string;
+    /** What names it: "walk, frames 2–5" (`tagRangeLabel`). */
+    readonly label: string;
+    readonly values: TagValues;
+}
+
+/** What the Tag dialog answers: values to apply (to the tag chosen), or the tag to delete. */
+export type TagAnswer =
+    | {
+          readonly action: "apply";
+          /** The tag the values are for; null for a new tag. */
+          readonly tagId: string | null;
+          readonly values: TagValues;
+      }
+    | { readonly action: "delete"; readonly tagId: string };
+
 export interface TagRequest {
     kind: "tag";
     /** `new`: the answer creates a tag (New tag, Create); `edit`: it changes one (OK). */
     mode: "new" | "edit";
+    /** The values it opens with: the new tag's, or those of the tag `chosen`. */
     initial: TagValues;
+    /** `edit`: the tags it can edit, in creation order; none for a new tag. */
+    choices: readonly TagChoice[];
+    /** `edit`: the tag it opens with, one of `choices`; null for a new tag. */
+    chosen: string | null;
     /** Frames of the document: the range fields run from 1 to this. */
     frameCount: number;
-    /** Apply these values, or null to cancel. Closes the dialog. */
-    answer(values: TagValues | null): void;
+    /** Apply or delete, or null to cancel. Closes the dialog. */
+    answer(answer: TagAnswer | null): void;
 }
 
 export type TagDialogState = DialogState<TagRequest>;
@@ -52,8 +77,10 @@ export interface TagDialogs {
     readonly store: DialogView<TagRequest>;
     /** Attaches a host (`DialogRequests.attachHost`); returns the function that detaches it. */
     attachHost(): () => void;
-    /** Opens the Tag dialog; resolves with the values to apply, or null. */
-    tag(options: Pick<TagRequest, "mode" | "initial" | "frameCount">): Promise<TagValues | null>;
+    /** Opens the Tag dialog; resolves with what to apply or delete, or null. */
+    tag(
+        options: Pick<TagRequest, "mode" | "initial" | "choices" | "chosen" | "frameCount">,
+    ): Promise<TagAnswer | null>;
 }
 
 /** The Tag dialog over `requests`: by default requests of its own, which a test attaches. */
@@ -62,12 +89,20 @@ export function createTagDialogs(requests: DialogRequests = createDialogRequests
         store: dialogView(requests.store, isTagRequest),
         attachHost: () => requests.attachHost(),
         tag: (options) =>
-            requests.open<TagValues>((answer): TagRequest => ({ kind: "tag", ...options, answer })),
+            requests.open<TagAnswer>((answer): TagRequest => ({ kind: "tag", ...options, answer })),
     };
 }
 
 /** The Tag dialog of the app, shown by the app's one dialog host (`commandDialogs`). */
 export const tagDialogs = createTagDialogs(commandDialogs);
+
+/**
+ * How a tag is named to assistive technology and in the dialog's choice of tags: its name and
+ * its frames, numbered from 1 ("walk, frames 2–5"; "jump, frame 3").
+ */
+export function tagRangeLabel(name: string, from: number, to: number): string {
+    return from === to ? `${name}, frame ${from}` : `${name}, frames ${from}–${to}`;
+}
 
 /** The name New Tag… proposes. */
 export const NEW_TAG_NAME = "Tag";

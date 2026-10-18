@@ -11,9 +11,23 @@ import {
 // SE-023: the label of a tag's span is black or white, whichever contrasts more with the span's
 // colour (DESIGN §3.1), and so at least 4.5:1 against it (WCAG 2.1 AA for normal text).
 
+/**
+ * WCAG 2.1 contrast of `colour` (0xRRGGBBAA) with black or white, written out here apart from
+ * the module under test, so a mistake there is not measured with itself.
+ */
+function referenceContrast(colour: number, label: "black" | "white"): number {
+    const channel = (shift: number) => {
+        const value = Math.floor(colour / 2 ** shift) % 256;
+        const c = value / 255;
+        return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    const luminance = 0.2126 * channel(24) + 0.7152 * channel(16) + 0.0722 * channel(8);
+    return label === "black" ? (luminance + 0.05) / 0.05 : 1.05 / (luminance + 0.05);
+}
+
 /** The contrast of the label the tag bar draws on `colour`. */
 function labelContrast(colour: number): number {
-    return contrastRatio(colour, labelColourOn(colour) === "black" ? BLACK : WHITE);
+    return referenceContrast(colour, labelColourOn(colour));
 }
 
 const MID_GREY = 0x808080ff;
@@ -73,10 +87,30 @@ describe("contrast of a tag's label against its span", () => {
         // Just either side of the luminance where both contrasts are equal (about 0.179).
         expect(labelColourOn(0x757575ff)).toBe("white");
         expect(labelColourOn(0x767676ff)).toBe("black");
-        for (const colour of [0x757575ff, 0x767676ff, 0x3366ccff, 0xffcc00ff]) {
-            const black = contrastRatio(colour, BLACK);
-            const white = contrastRatio(colour, WHITE);
-            expect(labelColourOn(colour)).toBe(black >= white ? "black" : "white");
-        }
+        // Primaries: red (0.2126) and green (0.7152) are light enough for black, blue
+        // (0.0722) is not.
+        expect(labelColourOn(0xff0000ff)).toBe("black");
+        expect(labelColourOn(0x00ff00ff)).toBe("black");
+        expect(labelColourOn(0x0000ffff)).toBe("white");
+        // A mid blue (luminance about 0.146) and an amber (about 0.644).
+        expect(labelColourOn(0x3366ccff)).toBe("white");
+        expect(labelColourOn(0xffcc00ff)).toBe("black");
+    });
+
+    it("weighs the channels in the order red, green, blue, and leaves alpha out", () => {
+        // WCAG 2.1: the coefficients of the three primaries, each at full intensity.
+        expect(relativeLuminance(0xff0000ff)).toBeCloseTo(0.2126, 12);
+        expect(relativeLuminance(0x00ff00ff)).toBeCloseTo(0.7152, 12);
+        expect(relativeLuminance(0x0000ffff)).toBeCloseTo(0.0722, 12);
+        expect(relativeLuminance(0x000000ff)).toBe(0);
+        expect(relativeLuminance(0x00000000)).toBe(0);
+        // A channel at half level: 128/255 linearized is 0.2158605 (the sRGB transfer curve).
+        expect(relativeLuminance(0x800000ff)).toBeCloseTo(0.2126 * 0.2158605, 6);
+        expect(relativeLuminance(0x000080ff)).toBeCloseTo(0.0722 * 0.2158605, 6);
+        // Below the curve's knee (10/255 ≤ 0.04045) the transfer is linear: c / 12.92.
+        expect(relativeLuminance(0x0a0a0aff)).toBeCloseTo(10 / 255 / 12.92, 12);
+        // Contrast ratios of known pairs: red on black 5.252, blue on white 8.592.
+        expect(contrastRatio(0xff0000ff, BLACK)).toBeCloseTo(5.252, 3);
+        expect(contrastRatio(0x0000ffff, WHITE)).toBeCloseTo(8.592, 3);
     });
 });

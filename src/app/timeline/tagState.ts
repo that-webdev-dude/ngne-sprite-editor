@@ -29,12 +29,12 @@ export const tagStore: StoreApi<TagState> = createStore<TagState>(initialTagStat
 
 /**
  * Runs `run` with `values` set in the store, and takes them out again afterwards whatever
- * `run` did. A command reads them before its first `await`.
+ * `run` did; returns what `run` returns. A command reads them before its first `await`.
  */
-export function withTagArguments(values: Partial<TagState>, run: () => void): void {
+export function withTagArguments<Result>(values: Partial<TagState>, run: () => Result): Result {
     tagStore.setState(values);
     try {
-        run();
+        return run();
     } finally {
         tagStore.setState(initialTagState());
     }
