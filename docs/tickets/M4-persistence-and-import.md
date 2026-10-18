@@ -97,6 +97,10 @@ Scope
 - On launch, the recovery dialog lists snapshots (name, time, thumbnail) with Recover / Discard.
 - Storage quota errors are reported once by toast and disable autosave for the session.
 - Honours the autosave preference (SE-007 store).
+- From SE-032 (REVIEW F33): a floating selection holds the document's transaction open for as
+  long as it floats, so a reader of the document or the composite cache must not wait for an
+  idle history (SPEC §5.3); call `applyFloating()` first where the ticket's action must
+  include the floating pixels (`src/app/selection/floating.ts`).
 
 Acceptance
 - E2E: draw, wait 3 s, reload without saving → recovery prompt → recovered composite is

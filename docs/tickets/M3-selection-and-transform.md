@@ -101,7 +101,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-005, SE-031                                           |
 | Blocks       | SE-033, SE-046                                           |
 | Blocked until | —                                                       |
@@ -157,6 +157,10 @@ Scope
   dragging outside the box (Shift snaps 15°), nearest-neighbour sampling.
 - Context bar shows X, Y, W, H and angle fields with Apply / Cancel.
 - Handles and bounding box drawn on the overlay.
+- From SE-032 (REVIEW F32, F33): the float lives in `src/core/floating/floating.ts` (content,
+  base and render are private to it) and is driven by `src/app/selection/floatingState.ts`;
+  this ticket extends both for transforms. Undo while floating cancels the float; apply is one
+  entry through `StrokeTransaction.commit(label, extra)`.
 
 Acceptance
 - Golden tests: flips and 90° rotations are exact permutations; four 90° rotations return the

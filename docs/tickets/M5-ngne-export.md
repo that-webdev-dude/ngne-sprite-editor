@@ -133,6 +133,10 @@ Scope
   from the page (`tests/e2e/se-053-support.ts`). SE-053 proves `bundle()` for all frames and
   the default options only: this ticket adds a conformance draw (SE-053's consumer fixture)
   for an export of one tag, whose frame IDs do not start at 0.
+- From SE-032 (REVIEW F33): a floating selection holds the document's transaction open for as
+  long as it floats, so a reader of the document or the composite cache must not wait for an
+  idle history (SPEC §5.3); call `applyFloating()` first where the ticket's action must
+  include the floating pixels (`src/app/selection/floating.ts`).
 
 Acceptance
 - E2E (File System Access stubbed with an in-memory directory): export writes exactly the
@@ -236,6 +240,10 @@ Scope
 - From the SE-015 review: the viewport's upload versions (`viewportLink.nextVersion`,
   `onDrawn`) are one counter for the page, not one per frame key; a reader of them compares
   versions of one key only.
+- From SE-032 (REVIEW F33): a floating selection holds the document's transaction open for as
+  long as it floats, so a reader of the document or the composite cache must not wait for an
+  idle history (SPEC §5.3); call `applyFloating()` first where the ticket's action must
+  include the floating pixels (`src/app/selection/floating.ts`).
 
 Acceptance
 - E2E readback (in `afterFrame`): paused on frame k, the preview canvas equals the composite of
