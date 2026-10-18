@@ -1,4 +1,6 @@
 import type { StoreApi } from "zustand/vanilla";
+import { keyContextStore } from "../keymap/contextState";
+import type { KeyContextState } from "../keymap/contextState";
 import { OVERLAY_SELECTOR } from "../keymap/environment";
 import { carriesFiles, droppedFiles } from "../platform/projectFiles";
 import { isDirty, sessionsStore } from "../state/sessions";
@@ -17,6 +19,11 @@ export interface FileWorkflowInstall {
     target?: FileEventTarget;
     /** The store of open documents; the default is the app's. */
     sessions?: StoreApi<SessionsState>;
+    /**
+     * Whether a selection floats (the keymap's `floating` context, SE-032); the default is
+     * the app's.
+     */
+    contexts?: Pick<StoreApi<KeyContextState>, "getState" | "subscribe">;
     /** What a dropped file is handed to; the default is the app's workflows. */
     workflows?: Pick<FileWorkflows, "busy" | "openFiles">;
     /** Whether a menu, dialog or popover is open; the default reads the page. */
@@ -31,8 +38,9 @@ interface DragLike extends Event {
 /**
  * The page-wide parts of the file workflows (SPEC §10):
  *
- * - While any open document is dirty, a `beforeunload` listener asks the browser to confirm
- *   before the page is left (closing the tab, reloading). Without one, no listener is there.
+ * - While any open document is dirty, or a selection floats (its pixels are not in the
+ *   document's history yet), a `beforeunload` listener asks the browser to confirm before the
+ *   page is left (closing the tab, reloading). Without either, no listener is there.
  * - A drop of files on the window opens the first project file among them (`openFiles`).
  *   Every file drag has its default prevented, so a dropped file never replaces the app; a
  *   drop while a menu or dialog is open, or while a file operation runs, does nothing.
@@ -42,6 +50,7 @@ interface DragLike extends Event {
 export function installFileWorkflows(install: FileWorkflowInstall = {}): () => void {
     const target: FileEventTarget = install.target ?? window;
     const sessions = install.sessions ?? sessionsStore;
+    const contexts = install.contexts ?? keyContextStore;
     const workflows = install.workflows ?? fileWorkflows;
     const overlayOpen =
         install.overlayOpen ?? (() => document.querySelector(OVERLAY_SELECTOR) !== null);
@@ -52,15 +61,16 @@ export function installFileWorkflows(install: FileWorkflowInstall = {}): () => v
         (event as Event & { returnValue: unknown }).returnValue = true;
     };
     let guarded = false;
-    const guard = ({ documents }: SessionsState) => {
-        const dirty = documents.some(isDirty);
-        if (dirty === guarded) return;
-        guarded = dirty;
-        if (dirty) target.addEventListener("beforeunload", onBeforeUnload);
+    const guard = () => {
+        const unsaved = sessions.getState().documents.some(isDirty) || contexts.getState().floating;
+        if (unsaved === guarded) return;
+        guarded = unsaved;
+        if (unsaved) target.addEventListener("beforeunload", onBeforeUnload);
         else target.removeEventListener("beforeunload", onBeforeUnload);
     };
-    guard(sessions.getState());
-    const stopGuard = sessions.subscribe(guard);
+    guard();
+    const stopSessions = sessions.subscribe(guard);
+    const stopContexts = contexts.subscribe(guard);
 
     const accepts = () => !overlayOpen() && !workflows.busy;
     const onDragOver = (event: Event) => {
@@ -80,7 +90,8 @@ export function installFileWorkflows(install: FileWorkflowInstall = {}): () => v
     target.addEventListener("drop", onDrop);
 
     return () => {
-        stopGuard();
+        stopSessions();
+        stopContexts();
         if (guarded) target.removeEventListener("beforeunload", onBeforeUnload);
         guarded = false;
         target.removeEventListener("dragover", onDragOver);

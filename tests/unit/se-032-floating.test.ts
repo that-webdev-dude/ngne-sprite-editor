@@ -17,7 +17,14 @@ import {
     sequentialIds,
 } from "../../src/core/model";
 import type { DocSession, PixelBuffer } from "../../src/core/model";
-import { createMask, rectMask, selectionOf, setMaskPixel } from "../../src/core/selection";
+import {
+    createMask,
+    maskHas,
+    rectMask,
+    selectionOf,
+    selectionsEqual,
+    setMaskPixel,
+} from "../../src/core/selection";
 
 // SE-032: the floating selection of `core/floating` (SPEC §5.2, §7.2). Pixels lifted from a
 // cel or pasted float inside one transaction of the history: cancelled, the cel is
@@ -491,5 +498,376 @@ describe("copy, delete and fill of the selected pixels", () => {
         expect(rgba(bytes(session)!, 1, 1)).toEqual([0, 0, 0, 0]);
         expect(history.undoCount).toBe(2);
         assertInvariants(session);
+    });
+});
+
+// SE-032 review (H): Delete and Cut while pixels float discard them, as Aseprite's
+// `PixelsMovement::discardImage` does: the image keeps what lies under the float and nothing
+// is selected, in one step, or none when the document is as it was before the float.
+describe("discard (Delete and Cut while floating)", () => {
+    it("keeps what lies under the float: the lifted place transparent, the place it floats over as it was; nothing selected; one step that undoes and redoes exactly", () => {
+        const { session, history, target } = setUp();
+        const selection = rectSelection(1, 1, 2, 2);
+        session.selection = selection;
+        const before = bytes(session)!;
+        const float = FloatingSelection.lift(history, { ...target, selection });
+        float.moveBy(3, 2);
+        // The float is over (4..5, 3..4) now.
+        expect(rgba(bytes(session)!, 4, 3)).toEqual(rgba(before, 1, 1));
+        const command = float.discard("Delete");
+        expect(float.open).toBe(false);
+        const lifted = (x: number, y: number) => x >= 1 && x <= 2 && y >= 1 && y <= 2;
+        // The lifted pixels are cleared, and nothing is written anywhere else.
+        const expected = moved(before, lifted, 100, 0);
+        expect(bytes(session)).toEqual(expected);
+        expect(rgba(bytes(session)!, 4, 3)).toEqual(rgba(before, 4, 3));
+        expect(rgba(bytes(session)!, 5, 4)).toEqual(rgba(before, 5, 4));
+        expect(session.selection).toBeNull();
+        expect(command?.label).toBe("Delete");
+        expect(history.undoCount).toBe(1);
+        expect(history.undoLabel).toBe("Delete");
+        expect(history.transaction).toBeNull();
+        assertInvariants(session);
+
+        history.undo();
+        expect(bytes(session)).toEqual(before);
+        expect(session.selection).toBe(selection);
+        history.redo();
+        expect(bytes(session)).toEqual(expected);
+        expect(session.selection).toBeNull();
+        history.undo();
+        expect(bytes(session)).toEqual(before);
+        expect(session.selection).toBe(selection);
+    });
+
+    it("records nothing for a paste with nothing selected before it, and removes the cel the paste made", () => {
+        const { session, history, target } = setUp(null);
+        const float = FloatingSelection.paste(history, {
+            ...target,
+            content: contentOfImage(pattern(3, 2)),
+            x: 1,
+            y: 1,
+        });
+        float.moveBy(1, 1);
+        expect(float.discard("Delete")).toBeNull();
+        expect(history.undoCount).toBe(0);
+        expect(history.transaction).toBeNull();
+        expect(bytes(session)).toBeNull();
+        expect(session.doc.images.size).toBe(0);
+        expect(session.selection).toBeNull();
+        assertInvariants(session);
+    });
+
+    it("a paste over a selection, then Cut: the cel as it was and the selection gone, a step of the selection alone", () => {
+        const { session, history, target } = setUp();
+        const selection = rectSelection(0, 0, 1, 1);
+        session.selection = selection;
+        const before = bytes(session)!;
+        const float = FloatingSelection.paste(history, {
+            ...target,
+            content: contentOfImage(pattern(2, 2)),
+            x: 4,
+            y: 2,
+        });
+        expect(bytes(session)).not.toEqual(before);
+        const command = float.discard("Cut");
+        expect(bytes(session)).toEqual(before);
+        expect(session.selection).toBeNull();
+        expect(command?.label).toBe("Cut");
+        expect(command?.touched).toEqual({ frameIds: [], layerIds: [], structure: false });
+        history.undo();
+        expect(session.selection).toBe(selection);
+        expect(bytes(session)).toEqual(before);
+        history.redo();
+        expect(session.selection).toBeNull();
+        expect(bytes(session)).toEqual(before);
+    });
+
+    it("a whole cel lifted without a selection is cleared, and the selection is left alone", () => {
+        const { session, history, target } = setUp();
+        const before = bytes(session)!;
+        const float = FloatingSelection.lift(history, { ...target, selection: null });
+        float.moveBy(2, 1);
+        expect(float.discard("Delete")?.label).toBe("Delete");
+        expect(bytes(session)!.every((value) => value === 0)).toBe(true);
+        expect(session.selection).toBeNull();
+        history.undo();
+        expect(bytes(session)).toEqual(before);
+    });
+
+    it("puts pixels and selection back when the step cannot be stored (AllocationError)", () => {
+        let failing = false;
+        const allocate: PixelAllocator = (length) => {
+            if (failing) throw new RangeError("out of memory");
+            return new Uint8ClampedArray(length);
+        };
+        const { session, history, target } = setUp(pattern(), { allocate });
+        const selection = rectSelection(2, 1, 3, 3);
+        session.selection = selection;
+        const before = bytes(session);
+        const float = FloatingSelection.lift(history, { ...target, selection });
+        float.moveBy(-1, 1);
+        failing = true;
+        expect(() => float.discard("Delete")).toThrow(AllocationError);
+        expect(bytes(session)).toEqual(before);
+        expect(session.selection).toBe(selection);
+        expect(history.transaction).toBeNull();
+        expect(history.undoCount).toBe(0);
+    });
+});
+
+// SE-032 review (F): a throw after the entry was recorded (a listener of the history) is not
+// a failed commit: the step and its selection stay, and undo takes both back.
+describe("a listener of the history that throws at the apply", () => {
+    it("leaves the recorded step and its selection; undo and redo stay exact", () => {
+        const { session, history, target } = setUp();
+        const selection = rectSelection(0, 0, 2, 0);
+        session.selection = selection;
+        const before = bytes(session)!;
+        const float = FloatingSelection.lift(history, { ...target, selection });
+        float.moveBy(2, 3);
+        const stop = history.subscribe(() => {
+            throw new Error("listener failed");
+        });
+        expect(() => float.apply()).toThrow("listener failed");
+        stop();
+        const inRow = (x: number, y: number) => x <= 2 && y === 0;
+        const expected = moved(before, inRow, 2, 3);
+        expect(history.undoCount).toBe(1);
+        expect(history.undoLabel).toBe("Move");
+        expect(history.transaction).toBeNull();
+        expect(bytes(session)).toEqual(expected);
+        // Not put back: the selection is the entry's, where the pixels went.
+        expect(session.selection?.bounds).toEqual({ x: 2, y: 3, width: 3, height: 1 });
+        history.undo();
+        expect(bytes(session)).toEqual(before);
+        expect(session.selection).toBe(selection);
+        history.redo();
+        expect(bytes(session)).toEqual(expected);
+        expect(session.selection?.bounds).toEqual({ x: 2, y: 3, width: 3, height: 1 });
+    });
+});
+
+// SE-032 review (J): do/undo symmetry of every command (SPEC §11) for the steps of this ticket.
+describe("do and undo of the steps", () => {
+    it("a Paste onto an empty cel: undo removes the cel it made and restores the selection; redo brings both back", () => {
+        const { session, history, target } = setUp(null);
+        const selection = rectSelection(5, 4, 6, 5);
+        session.selection = selection;
+        const float = FloatingSelection.paste(history, {
+            ...target,
+            content: contentOfImage(pattern(3, 2)),
+            x: 2,
+            y: 1,
+        });
+        float.moveBy(1, 0);
+        expect(float.apply()?.label).toBe("Paste");
+        const after = bytes(session)!;
+        const pasted = session.selection;
+        expect(selectedPixels(session)).toEqual(["3,1", "4,1", "5,1", "3,2", "4,2", "5,2"]);
+        expect(session.doc.cels.size).toBe(1);
+        assertInvariants(session);
+
+        history.undo();
+        expect(bytes(session)).toBeNull();
+        expect(session.doc.cels.size).toBe(0);
+        expect(session.doc.images.size).toBe(0);
+        expect(session.selection).toBe(selection);
+        assertInvariants(session);
+        history.redo();
+        expect(bytes(session)).toEqual(after);
+        expect(session.selection).toBe(pasted);
+        assertInvariants(session);
+        history.undo();
+        expect(bytes(session)).toBeNull();
+        expect(session.selection).toBe(selection);
+    });
+
+    it("Fill and Cut (a clear labelled Cut): undo restores the bytes, redo repeats them", () => {
+        const { session, history, target } = setUp();
+        const before = bytes(session)!;
+        const mask = createMask(W, H);
+        for (const [x, y] of [
+            [1, 1],
+            [2, 1],
+            [5, 4],
+        ] as const) {
+            setMaskPixel(mask, x, y);
+        }
+        const selection = selectionOf(mask)!;
+        expect(fillSelected(history, target, selection, 0x0a141eff)?.label).toBe("Fill");
+        const filled = bytes(session)!;
+        expect(rgba(filled, 5, 4)).toEqual([10, 20, 30, 255]);
+        expect(clearSelected(history, target, selection, "Cut")?.label).toBe("Cut");
+        const cut = bytes(session)!;
+        expect(rgba(cut, 2, 1)).toEqual([0, 0, 0, 0]);
+        expect(rgba(cut, 3, 1)).toEqual(rgba(before, 3, 1));
+        history.undo();
+        expect(bytes(session)).toEqual(filled);
+        history.undo();
+        expect(bytes(session)).toEqual(before);
+        history.redo();
+        expect(bytes(session)).toEqual(filled);
+        history.redo();
+        expect(bytes(session)).toEqual(cut);
+    });
+
+    it("a Move of the selection alone (transparent pixels over transparent ones) redoes exactly", () => {
+        const { session, history, target } = setUp(null);
+        const selection = rectSelection(0, 0, 1, 1);
+        session.selection = selection;
+        const float = FloatingSelection.lift(history, { ...target, selection });
+        float.moveBy(4, 2);
+        float.apply();
+        const movedSelection = session.selection;
+        history.undo();
+        expect(session.selection).toBe(selection);
+        history.redo();
+        expect(session.selection).toBe(movedSelection);
+        expect(session.selection?.bounds).toEqual({ x: 4, y: 2, width: 2, height: 2 });
+        expect(bytes(session)).toBeNull();
+        assertInvariants(session);
+    });
+});
+
+/** mulberry32: a small seeded generator, the same numbers on every run. */
+function random(seed: number): () => number {
+    let state = seed >>> 0;
+    return () => {
+        state = (state + 0x6d2b79f5) >>> 0;
+        let t = state;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+/** A `width` × `height` document whose active cel holds `image` (none: empty), its history. */
+function documentOf(width: number, height: number, image: PixelBuffer | null) {
+    const session: DocSession = createDocument(
+        { name: "random", width, height },
+        sequentialIds("r-"),
+    );
+    if (image) {
+        session.doc.images.set("img", image);
+        session.doc.cels.set(celKey(session.activeLayerId, session.activeFrameId), {
+            imageId: "img",
+            opacity: 255,
+        });
+    }
+    const history = new History(session);
+    const target = { layerId: session.activeLayerId, frameId: session.activeFrameId };
+    return { session, history, target };
+}
+
+// SE-032 review (J): random masks moved at random, off the canvas included, against an oracle
+// worked out here: a cancel leaves the cel byte-identical; an apply equals the oracle; undo and
+// redo give back exactly the states before and after.
+describe("property: random selections moved at random", () => {
+    it("cancel is byte-identical, apply equals the oracle, undo and redo are exact (400 cases)", () => {
+        const next = random(0x5e032);
+        const int = (below: number) => Math.floor(next() * below);
+        let applied = 0;
+        let cancelled = 0;
+        let offCanvas = 0;
+        for (let run = 0; run < 400; run++) {
+            const width = 1 + int(9);
+            const height = 1 + int(7);
+            // Opaque, translucent and transparent pixels, some transparent with a colour; an
+            // empty cel now and then.
+            const empty = int(8) === 0;
+            const data = new Uint8ClampedArray(width * height * 4);
+            for (let at = 0; at < data.length; at++) {
+                data[at] = at % 4 === 3 ? [0, 255, 255, 90][int(4)]! : int(256);
+            }
+            const { session, history, target } = documentOf(
+                width,
+                height,
+                empty ? null : { width, height, data },
+            );
+            const mask = createMask(width, height);
+            const density = next();
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) if (next() < density) setMaskPixel(mask, x, y);
+            }
+            const selection = selectionOf(mask);
+            if (!selection) continue;
+            session.selection = selection;
+            const before = bytes(session);
+            const label = `run ${run}`;
+
+            // Moves anywhere, partly or wholly off the canvas too; the last one counts.
+            let dx = 0;
+            let dy = 0;
+            const float = FloatingSelection.lift(history, { ...target, selection });
+            const moves = 1 + int(4);
+            for (let step = 0; step < moves; step++) {
+                dx = int(2 * width + 5) - width - 2;
+                dy = int(2 * height + 5) - height - 2;
+                float.moveTo(selection.bounds.x + dx, selection.bounds.y + dy);
+            }
+            if (float.placed === null) offCanvas++;
+            if (int(3) === 0) {
+                cancelled++;
+                float.cancel();
+                expect(bytes(session), label).toEqual(before);
+                expect(session.selection, label).toBe(selection);
+                expect(history.undoCount, label).toBe(0);
+                expect(history.transaction, label).toBeNull();
+                assertInvariants(session);
+                continue;
+            }
+            applied++;
+            const command = float.apply();
+
+            // The oracle: the selected pixels cleared, then written moved, on the canvas only.
+            const source = before ?? new Array<number>(width * height * 4).fill(0);
+            const selected = (x: number, y: number) => maskHas(mask, x, y);
+            const expected = moved(source, selected, dx, dy, width, height);
+            const expectedMask = createMask(width, height);
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const tx = x + dx;
+                    const ty = y + dy;
+                    if (!selected(x, y) || tx < 0 || ty < 0 || tx >= width || ty >= height) {
+                        continue;
+                    }
+                    setMaskPixel(expectedMask, tx, ty);
+                }
+            }
+            const expectedSelection = selectionOf(expectedMask);
+            const pixelsChanged = expected.some((value, index) => value !== source[index]);
+            const selectionChanged = !selectionsEqual(selection, expectedSelection);
+
+            const after = bytes(session);
+            // An empty cel that nothing was written into stays empty.
+            if (before === null && !pixelsChanged) expect(after, label).toBeNull();
+            else expect(after, label).toEqual(expected);
+            if (selectionChanged) {
+                expect(session.selection?.bounds, label).toEqual(expectedSelection?.bounds);
+                expect(session.selection?.mask.data, label).toEqual(expectedSelection?.mask.data);
+            } else {
+                expect(session.selection, label).toBe(selection);
+            }
+            expect(command !== null, label).toBe(pixelsChanged || selectionChanged);
+            expect(history.undoCount, label).toBe(command ? 1 : 0);
+            expect(history.transaction, label).toBeNull();
+            assertInvariants(session);
+            if (!command) continue;
+
+            const landed = session.selection;
+            history.undo();
+            expect(bytes(session), label).toEqual(before);
+            expect(session.selection, label).toBe(selection);
+            assertInvariants(session);
+            history.redo();
+            expect(bytes(session), label).toEqual(after);
+            expect(session.selection, label).toBe(landed);
+            assertInvariants(session);
+        }
+        // The cases cover each path.
+        expect(applied).toBeGreaterThan(150);
+        expect(cancelled).toBeGreaterThan(60);
+        expect(offCanvas).toBeGreaterThan(10);
     });
 });

@@ -493,6 +493,11 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
                 run(current, () => current.tool.onHover?.(current.context, pointer));
                 return;
             }
+            // A tool that follows where the pointer is takes the last sample of the stroke's
+            // pointer in this event (the Move tool: every sample would move the float anew).
+            const latest = current.tool.latestSample
+                ? inputs.filter((input) => input.pointerId === current.pointerId).at(-1)
+                : undefined;
             for (const input of inputs) {
                 if (stroke !== current) return;
                 if (input.pointerId !== current.pointerId) continue;
@@ -501,6 +506,7 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
                     finish(current, input);
                     return;
                 }
+                if (latest && input !== latest) continue;
                 const pointer = toolPointer(input, mapping, current.button);
                 run(current, () => current.tool.onMove?.(current.context, pointer));
             }

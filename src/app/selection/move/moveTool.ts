@@ -62,6 +62,9 @@ export function createMoveTool(sources: MoveToolSources): ToolSpec {
         label: "Move",
         hint: MOVE_HINT,
         cursor: "move",
+        // Only where the pointer is matters: each sample would rewrite the float's two
+        // rectangles and make a new selection.
+        latestSample: true,
         onDown(context, pointer) {
             const start = { x: pointer.pixel.x, y: pointer.pixel.y };
             const floated = floating.floats(context.document) ? floating.float : null;
@@ -110,8 +113,11 @@ export function createMoveTool(sources: MoveToolSources): ToolSpec {
         onCancel(context) {
             const drag = dragOf(context);
             drags.delete(context);
+            // When the document is left the float is no longer the one floating (`dragOf`):
+            // it is applied as the drag left it, or goes with a closed document
+            // (`floatingState.ts`), so there is nothing to take back here.
             if (!drag) return;
-            // Escape, a pointer cancel, the document left: what the drag did is taken back.
+            // Escape, a pointer cancel, a lost capture: what the drag did is taken back.
             if (drag.lifted) floating.cancel();
             else floating.moveTo(drag.origin.x, drag.origin.y);
         },

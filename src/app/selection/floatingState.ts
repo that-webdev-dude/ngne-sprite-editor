@@ -1,8 +1,11 @@
 import type { StoreApi } from "zustand/vanilla";
 import { FloatingSelection } from "../../core/floating";
 import type { FloatingContent } from "../../core/floating";
+import { AllocationError } from "../../core/history";
+import type { Command } from "../../core/history";
 import type { DocSession } from "../../core/model";
 import { setKeyContext } from "../keymap/contextState";
+import { notices } from "../notices/notices";
 import { activeComposites } from "../state/composites";
 import { activeDocument, sessionsStore } from "../state/sessions";
 import type { OpenDocument, SessionsState } from "../state/sessions";
@@ -21,14 +24,18 @@ import { viewportLink } from "../viewport/viewportLink";
 //     rectangle, handed to the composite cache and echoed on the overlay (SPEC §6.6) as a
 //     stroke's dabs are, for as long as the float lasts, over any number of gestures
 //   apply (Enter, a press outside it, `applyFloating`, the triggers of SPEC §5.2) → one
-//     history step; cancel (Escape, undo) → nothing recorded, the cel as it was
+//     history step; cancel (Escape, undo) → nothing recorded, the cel as it was; discard
+//     (Delete, Cut) → one step: what lies under the float, nothing selected
+//   a failure → the float is taken back (or, after its step was recorded, kept), `onError`
+//     reports it (a toast in the app) and the call returns "failed"
 //
 // The float writes into the cel's own image, so a composite made from the document while it
 // floats (the cache composites the frame again after an eviction; the preview; the
 // eyedropper) shows it as well. The selection follows the float; the session store is told
 // once an animation frame, so the ants and the status bar follow it without a render per
-// pointer sample. When the document stops being the active one the float is applied, and
-// when it is closed the float is dropped.
+// pointer sample. When the document stops being the active one the float is applied. Close,
+// Open, Revert and New Sprite apply it before they ask (SPEC §10); a document closed some
+// other way takes its float with it.
 
 export interface FloatingSources extends LiveCompositeSources {
     sessions: StoreApi<SessionsState>;
@@ -37,6 +44,14 @@ export interface FloatingSources extends LiveCompositeSources {
     /** Receives what failed while a float was applied; the default logs it. */
     onError?(error: unknown): void;
 }
+
+/**
+ * What `apply` or `discard` did: there was no float; it landed (one history step, or none
+ * when nothing changed); it failed, was reported through `onError`, and the pixels are those
+ * before the float (an entry that could not be stored) or those of its recorded step (a
+ * listener of the history threw).
+ */
+export type LandOutcome = "none" | "landed" | "failed";
 
 export interface LiftRequest {
     /** Lift the whole cel and leave the selection alone, instead of the selection's pixels. */
@@ -71,11 +86,14 @@ export interface FloatingState {
     moveTo(x: number, y: number): void;
     /** Moves the float by `dx`, `dy` pixels; nothing without a float. */
     moveBy(dx: number, dy: number): void;
+    /** Applies the float (SPEC §5.2): one history step, or none when nothing changed. */
+    apply(): LandOutcome;
     /**
-     * Applies the float (SPEC §5.2): one history step, or none when nothing changed. Returns
-     * whether there was a float. A failure is reported and the cel is left as before it.
+     * Discards the float's content (Delete and Cut while pixels float, SPEC §7.2): one step
+     * labelled `label` that keeps what lies under the float and selects nothing, or none when
+     * that changes nothing.
      */
-    apply(): boolean;
+    discard(label: string): LandOutcome;
     /** Cancels the float: the cel and the selection as before it. Returns whether there was one. */
     cancel(): boolean;
     /** Stops following the session store; a float is dropped. */
@@ -149,9 +167,16 @@ export function createFloatingState(sources: FloatingSources): FloatingState {
         });
     };
 
-    const apply = (): boolean => {
+    /**
+     * Ends the float with `settle`, its apply or its discard, shown and reported. `rewrites`:
+     * `settle` writes pixels where the content is (a discard writes what lies under it).
+     */
+    const land = (
+        settle: (float: FloatingSelection) => Command | null,
+        rewrites: boolean,
+    ): LandOutcome => {
         const ended = end();
-        if (!ended) return false;
+        if (!ended) return "none";
         const { float, live } = ended;
         try {
             live.flush();
@@ -162,23 +187,37 @@ export function createFloatingState(sources: FloatingSources): FloatingState {
             live.aborted();
             touch(ended.session);
             onError(error);
-            return true;
+            return "failed";
         }
-        let recorded: boolean;
+        const placed = rewrites ? float.placed : null;
+        let command: Command | null;
         try {
-            recorded = float.apply() !== null;
+            command = settle(float);
         } catch (error) {
-            // The entry could not be stored: pixels and selection are as before the float.
-            live.aborted();
+            if (error instanceof AllocationError) {
+                // The entry could not be stored: pixels and selection are as before the float.
+                live.aborted();
+            } else {
+                // The step was recorded, then a listener of the history threw: the frame is
+                // shown as the step left it, in case the listener that tells the viewport
+                // did not run.
+                if (placed) live.dirty(placed);
+                live.committed(false);
+            }
             touch(ended.session);
             onError(error);
-            return true;
+            return "failed";
         }
-        live.committed(recorded);
+        if (placed) live.dirty(placed);
+        // A step of the selection alone touches no frame, so nothing tells the viewport: the
+        // live buffer is shown anew, as for no step (an upload of the float may be on screen).
+        live.committed(command !== null && command.touched.frameIds.length > 0);
         // No step to tell the store, but the selection the float showed is gone.
-        if (!recorded) touch(ended.session);
-        return true;
+        if (!command) touch(ended.session);
+        return "landed";
     };
+
+    const apply = () => land((float) => float.apply(), false);
 
     const cancel = (): boolean => {
         const ended = end();
@@ -241,6 +280,7 @@ export function createFloatingState(sources: FloatingSources): FloatingState {
             if (current) moved(current.float.moveBy(dx, dy));
         },
         apply,
+        discard: (label) => land((float) => float.discard(label), true),
         cancel,
         dispose() {
             stopSessions();
@@ -260,4 +300,11 @@ export const floatingState: FloatingState = createFloatingState({
         return () => cancelAnimationFrame(request);
     },
     context: (active) => setKeyContext("floating", active),
+    // SPEC §5.2: a failure is reported by a toast.
+    onError: (error) =>
+        notices.error(
+            `Could not apply the floating selection. ${
+                error instanceof Error && error.message !== "" ? error.message : String(error)
+            }`,
+        ),
 });

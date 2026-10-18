@@ -12,11 +12,12 @@ import {
     settle,
 } from "./se-011-support";
 import type { TestDocument } from "./se-011-support";
-import { devicePixel, viewportArea } from "./se-012-support";
+import { devicePixel, geometry, viewportArea } from "./se-012-support";
 import type { Point, View } from "./se-012-support";
 import { setGrids } from "./se-013-support";
 import { historyOf, railButton, toolsState } from "./se-014-support";
 import { celBytes } from "./se-015-support";
+import { contextMenus, recordContextMenus } from "./se-016-support";
 import { moveOver } from "./se-017-support";
 import { cell } from "./se-022-support";
 import { selectionState, setSelection } from "./se-030-support";
@@ -422,5 +423,138 @@ test("a float that outlives its drags stays on screen when the cache drops the f
     await page.keyboard.press("Enter");
     expect(await shown(page, { x: 7, y: 5 })).toEqual(expected);
     expect(await celBytes(page, document.id)).toEqual(moved(before, rect, 6, 4));
+    expect(errors).toEqual([]);
+});
+
+/** Copies the selection with Ctrl+C on the viewport and waits for the editor's clipboard. */
+async function copySelection(page: Page): Promise<void> {
+    await viewportArea(page).focus();
+    await expect(viewportArea(page)).toBeFocused();
+    await page.keyboard.press("Control+KeyC");
+    await expect
+        .poll(() =>
+            page.evaluate(async () => {
+                const path = "/src/app/selection/clipboard.commands.ts";
+                const module = (await import(/* @vite-ignore */ path)) as {
+                    editorClipboard: { content: unknown };
+                };
+                return module.editorClipboard.content !== null;
+            }),
+        )
+        .toBe(true);
+}
+
+test("Escape during a later drag takes back that drag only: a paste dragged and released, then pressed on, moved and Escape, floats where the first drag left it", async ({
+    page,
+    context,
+}) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const errors = collectErrors(page);
+    const document = await setUp(page);
+    const rect = { x: 1, y: 1, width: 4, height: 3 };
+    await setSelection(page, document.id, rows(rect));
+    await copySelection(page);
+    await page.keyboard.press("Control+KeyV");
+    await expect.poll(() => floating(page)).toBe(true);
+
+    // Where the paste went: its centre on the viewport's centre, or on the canvas's when the
+    // viewport's lies off this small canvas (SE-032 review).
+    const { device } = await geometry(page);
+    const centre = {
+        x: (device.width / 2 - VIEW.originX) / VIEW.scale,
+        y: (device.height / 2 - VIEW.originY) / VIEW.scale,
+    };
+    const onCanvas = centre.x >= 0 && centre.y >= 0 && centre.x < WIDTH && centre.y < HEIGHT;
+    const c = onCanvas ? centre : { x: WIDTH / 2, y: HEIGHT / 2 };
+    const at = {
+        x: Math.floor(c.x - rect.width / 2 + 0.5),
+        y: Math.floor(c.y - rect.height / 2 + 0.5),
+    };
+    expect((await selectionState(page, document.id))?.bounds).toEqual({
+        ...at,
+        width: 4,
+        height: 3,
+    });
+    expect(at.x >= 0 && at.y >= 0 && at.x + 4 <= WIDTH && at.y + 3 <= HEIGHT).toBe(true);
+    const before = (await celBytes(page, document.id))!;
+
+    // The first drag, released: the pixels float on, 2 right and 1 down.
+    await drag(page, [
+        { x: at.x + 1, y: at.y + 1 },
+        { x: at.x + 3, y: at.y + 2 },
+    ]);
+    expect(await floating(page)).toBe(true);
+    const afterFirst = (await celBytes(page, document.id))!;
+    expect(afterFirst).not.toEqual(before);
+    expect(await historyOf(page, document.id)).toEqual({ undo: 2, open: true });
+
+    // A press on the float, a move, Escape with the button held, the release.
+    await moveOver(page, VIEW, [{ x: at.x + 3, y: at.y + 2 }]);
+    await page.mouse.down();
+    await moveOver(page, VIEW, [
+        { x: at.x + 5, y: at.y + 3 },
+        { x: at.x + 6, y: at.y + 3 },
+    ]);
+    expect(await celBytes(page, document.id)).not.toEqual(afterFirst);
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+    expect(await floating(page)).toBe(true);
+    expect(await celBytes(page, document.id)).toEqual(afterFirst);
+    expect(await historyOf(page, document.id)).toEqual({ undo: 2, open: true });
+    expect((await selectionState(page, document.id))?.bounds).toEqual({
+        x: at.x + 2,
+        y: at.y + 1,
+        width: 4,
+        height: 3,
+    });
+
+    // Enter applies it where the first drag left it, as the paste's one step.
+    await page.keyboard.press("Enter");
+    expect(await floating(page)).toBe(false);
+    expect(await historyOf(page, document.id)).toEqual({ undo: 3, open: false });
+    expect(await undoLabel(page, document.id)).toBe("Paste");
+    expect(await celBytes(page, document.id)).toEqual(afterFirst);
+    expect(errors).toEqual([]);
+});
+
+test("either button moves: a right-button drag lifts and moves the selection, and no context menu opens", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    const document = await setUp(page);
+    const rect = { x: 3, y: 4, width: 4, height: 3 };
+    await setSelection(page, document.id, rows(rect));
+    await pressToolKey(page, "KeyV", "move");
+    const before = (await celBytes(page, document.id))!;
+    await recordContextMenus(page);
+
+    // Chrome sends `contextmenu` at the release on Windows, at the press elsewhere.
+    await moveOver(page, VIEW, [{ x: 4, y: 5 }]);
+    await page.mouse.down({ button: "right" });
+    await moveOver(page, VIEW, [
+        { x: 6, y: 4 },
+        { x: 7, y: 3 },
+    ]);
+    await page.mouse.up({ button: "right" });
+    expect(await floating(page)).toBe(true);
+    expect(await celBytes(page, document.id)).toEqual(moved(before, rect, 3, -2));
+
+    // A second right-button drag from a pixel of the float moves it on.
+    await moveOver(page, VIEW, [{ x: 7, y: 3 }]);
+    await page.mouse.down({ button: "right" });
+    await moveOver(page, VIEW, [{ x: 8, y: 4 }]);
+    await page.mouse.up({ button: "right" });
+    expect(await celBytes(page, document.id)).toEqual(moved(before, rect, 4, -1));
+
+    const menus = await contextMenus(page);
+    expect(menus.length).toBeGreaterThan(0);
+    expect(menus.every((menu) => menu.prevented)).toBe(true);
+    await expect(page.locator('[role="menu"]')).toHaveCount(0);
+
+    await expect(viewportArea(page)).toBeFocused();
+    await page.keyboard.press("Enter");
+    expect(await floating(page)).toBe(false);
+    expect(await undoLabel(page, document.id)).toBe("Move");
+    expect(await celBytes(page, document.id)).toEqual(moved(before, rect, 4, -1));
     expect(errors).toEqual([]);
 });

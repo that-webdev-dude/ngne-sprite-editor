@@ -124,7 +124,13 @@ export const commands: CommandSpec[] = [
         context: "floating",
         enabled: floats,
         run() {
-            // Escape cancels the stroke in progress too, as it does without a float.
+            // During a drag of the Move tool, Escape takes back that drag only (SPEC §7.2): its
+            // cancel cancels the float when the drag lifted it, and moves it back otherwise.
+            if (toolPipeline.strokeTool?.id === MOVE_TOOL_ID) {
+                toolPipeline.cancel();
+                return;
+            }
+            // Escape cancels another tool's stroke in progress too, as it does without a float.
             toolPipeline.cancel();
             floatingState.cancel();
         },

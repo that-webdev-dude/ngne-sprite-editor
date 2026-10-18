@@ -6,17 +6,20 @@ import { fileWorkflows } from "./workflows";
 // The file commands of SPEC §10 (SE-041). They take the File menu items planned for their ids
 // (commands/planned.commands.ts). SPEC §7.8: Ctrl+O, Ctrl+S, Ctrl+Shift+S and Alt+W are
 // marked †, so they also act while a text field has focus. Each waits while another file
-// operation runs, and none acts on a document during a stroke; Save and Save As do act while a
-// selection floats, which they apply first (SPEC §5.2).
+// operation runs, and none acts on a document during a stroke; each does act while a selection
+// floats, which it applies first (SPEC §5.2), Open once the file has been read.
 
 /** The active document's history, when one is open. */
 function activeHistory() {
     return activeDocument(sessionsStore.getState())?.history ?? null;
 }
 
-/** No file operation runs and the active document, if any, is not in a stroke. */
+/**
+ * No file operation runs and the active document, if any, is not in a stroke: its history is
+ * idle or holds a floating selection, which the operation applies first.
+ */
 function idle(): boolean {
-    return !fileWorkflows.busy && !activeHistory()?.transaction;
+    return fileWorkflows.canAct();
 }
 
 /** A document is open, and `idle` holds. */

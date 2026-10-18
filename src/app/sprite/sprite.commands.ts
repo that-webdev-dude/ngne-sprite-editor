@@ -10,6 +10,8 @@ import {
 import type { CommandSpec } from "../commands/types";
 import { fileWorkflows } from "../file/workflows";
 import { preferences } from "../preferences/preferences";
+import { applyFloating } from "../selection/floating";
+import { settleableDocument } from "../selection/settled";
 import { activeDocument, isDirty, sessionsStore } from "../state/sessions";
 import type { OpenDocument } from "../state/sessions";
 import { spriteDialogs } from "./dialogs";
@@ -29,6 +31,8 @@ export const NEW_SPRITE_DEFAULTS: Readonly<NewSpriteValues> = {
  * preference store.
  */
 async function newSprite(): Promise<void> {
+    // A floating selection is applied first, so the question below covers it (SE-032).
+    applyFloating();
     const open = activeDocument(sessionsStore.getState());
     const values = await spriteDialogs.newSprite({
         initial: { ...NEW_SPRITE_DEFAULTS },
@@ -88,6 +92,7 @@ function applySpriteProperties(id: string, values: SpritePropertiesValues): void
 
 /** Sprite Properties (SPEC §7.7): name, pivot and grid of the active document in one dialog. */
 async function spriteProperties(): Promise<void> {
+    applyFloating();
     const document = editableDocument();
     if (!document) return;
     const { doc } = document.session;
@@ -117,7 +122,8 @@ export const commands: CommandSpec[] = [
     {
         id: "sprite.properties",
         title: "Properties…",
-        enabled: () => editableDocument() !== null,
+        // While a selection floats too: it is applied first (SE-032 review).
+        enabled: () => settleableDocument() !== null,
         run: spriteProperties,
     },
 ];

@@ -191,7 +191,8 @@ export interface ToolHold {
 
 /**
  * A tool, as its module declares it. Every handler is optional. For one pointer down the
- * pipeline calls `onDown`, `onMove` for every sample (coalesced events included), and then
+ * pipeline calls `onDown`, `onMove` for every sample (coalesced events included; the last of
+ * each event's for a tool with `latestSample`), and then
  * exactly one of `onUp` or `onCancel`; strokes never overlap. A gesture
  * (`ToolContext.openGesture`) repeats that for each of its presses, with `onHover` between
  * them, and ends with `onClose` or `onCancel`.
@@ -235,6 +236,12 @@ export interface ToolSpec {
     hold?: ToolHold;
     /** CSS cursor over the viewport while the tool is active; the default is "default". */
     cursor?: string | ((state: ToolCursorState) => string);
+    /**
+     * The tool follows where the pointer is, not the path it took (the Move tool, SE-032
+     * review): of the coalesced samples of one pointer event `onMove` receives only the last.
+     * A sample whose buttons no longer hold the stroke's still ends the stroke where it is.
+     */
+    latestSample?: boolean;
     onDown?(context: ToolContext, pointer: ToolPointer): void;
     onMove?(context: ToolContext, pointer: ToolPointer): void;
     /**

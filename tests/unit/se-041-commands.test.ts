@@ -90,7 +90,7 @@ describe("the file commands in the registry", () => {
         expect(enabled()).toEqual(["file.open", "file.save", "file.saveAs", "file.close"]);
     });
 
-    it("Save and Save As stay enabled while a selection floats, which they apply first (SPEC §5.2)", () => {
+    it("Save, Save As, Open and Close stay enabled while a selection floats, which they apply first (SPEC §5.2; SE-032 review)", () => {
         const enabled = () => FILE_COMMANDS.filter((id) => command(id).enabled());
         const document = sessionsStore
             .getState()
@@ -103,7 +103,7 @@ describe("the file commands in the registry", () => {
         expect(enabled()).toEqual([]);
         setKeyContext("floating", true);
         expect(keyContextStore.getState().floating).toBe(true);
-        expect(enabled()).toEqual(["file.save", "file.saveAs"]);
+        expect(enabled()).toEqual(["file.open", "file.save", "file.saveAs", "file.close"]);
         setKeyContext("floating", false);
         expect(enabled()).toEqual([]);
         transaction.abort();

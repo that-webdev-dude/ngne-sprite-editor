@@ -300,10 +300,20 @@ document sees them where they are; `core/floating` holds the model and `app/sele
 "Tool change" means a change of the selected tool: a tool held for a while (Space → hand,
 Alt → eyedropper) leaves the float as it is. A float belongs to the Move tool: Paste and the
 arrows' lift select it. When its document stops being the active one the float is applied; when
-its document is closed it is dropped. A transaction's `commit` may carry another change of the
-session that its owner made and that is already applied, such as the selection the float moved:
-it is recorded in the same entry, done after the pixels and undone before them, and alone when
-no pixel changed.
+its document is closed it is applied first, and the question before unsaved changes are lost
+covers it (Close, Open, Revert and New Sprite apply it before they ask, §10). A transaction's
+`commit` may carry another change of the session that its owner made and that is already
+applied, such as the selection the float moved: it is recorded in the same entry, done after
+the pixels and undone before them, and alone when no pixel changed.
+
+From the SE-032 review: a command that applies the float first is enabled while pixels float,
+and only a stroke's transaction disables it: the sprite-wide commands and Sprite Properties,
+Select All, Deselect and Invert Selection, the palette's commands, the file workflows and New
+Sprite (§10), the timeline's switches and apply commands. A float that cannot be applied (its
+entry cannot be allocated) is taken back, the cel and the selection as before it, and reported
+by a toast; `applyFloating()` then throws, so the command that called it stops (Save says it
+could not save). A listener of the history that throws after the entry was recorded leaves the
+entry and its selection, and is reported the same way.
 
 ### 5.3 Compositing
 
@@ -328,9 +338,13 @@ preview, thumbnails, the eyedropper and every export read its output. It:
   animation frame and at the commit, so the frame is not composited again in full. This is the
   one buffer the cache hands out that is rewritten. Readers therefore: learn that a composite
   changed from the cache's notifications, never from the buffer's identity; copy a buffer they
-  keep across an `await`, or wait while a transaction is open; and do not call `get` for the
-  stroked frame synchronously inside a notification (the viewport defers to a microtask), or
-  the frame is composited in full before the stroke's buffer is adopted again.
+  keep across an `await`; and do not call `get` for the stroked frame synchronously inside a
+  notification (the viewport defers to a microtask), or the frame is composited in full before
+  the stroke's buffer is adopted again.
+- A reader of the composite cache or of the document never waits for the history to be idle:
+  a floating selection holds its transaction open for as long as the pixels float (§5.2), which
+  may be indefinitely, and its pixels are in the cel's image meanwhile (SE-032 review). A reader
+  that needs a still state copies it, or applies the float first where it changes the document.
 - A stroke that changes nothing (§7.1) hands its buffer back to the cache in the same way and
   tells the viewport. It is composited in full only when the cache refuses the buffer, as when
   the commit removes a cel the stroke created.
@@ -952,8 +966,9 @@ Selection model (SE-030):
 - Selection changes are commands labelled with their menu titles ("Select All", "Deselect",
   "Invert Selection"; a tool gives its own label). They touch no composite (`touched` is
   empty). A change that would leave the same pixels selected makes no command and records
-  nothing, as a stroke that changes nothing (§7.1). While a transaction is open they are
-  disabled, as undo and redo are.
+  nothing, as a stroke that changes nothing (§7.1). During a stroke they are disabled, as undo
+  and redo are; while pixels float they apply them first (SE-032 review), as Aseprite's
+  Deselect drops moving pixels in place, and then act on the selection that leaves.
 - A selection change is a history step like any other: it moves the history position, so it
   makes the document dirty (§5.2), and the close confirmation and autosave treat it as a
   change.
@@ -998,7 +1013,9 @@ Move, floating selection and clipboard (SE-032):
   release, one undo step per drag; an empty cel has nothing to move. Either button moves. It is
   refused on a locked, hidden or reference layer with the messages of §7.1 (SE-046 gives it
   reference layers), and works at every zoom step: it moves by whole texels. A pointer cancel
-  or Escape during a drag takes that drag back, and cancels the float when the drag lifted it.
+  or Escape during a drag takes that drag back, and cancels the float when the drag lifted it:
+  Escape during a later drag leaves the pixels floating where that drag found them. A drag
+  follows the last pointer sample of each event, not every coalesced one (SE-032 review).
 - Keys (§7.8): in the `floating` context Enter applies, Escape cancels and the arrows nudge by 1
   px, Shift+arrows by 8. In the `canvas` context the arrows with a selection lift its pixels,
   select the Move tool and nudge them. Selecting another tool applies the float.
@@ -1011,17 +1028,30 @@ Move, floating selection and clipboard (SE-032):
   image is pasted whole, every pixel in its mask. When the system clipboard cannot be read, the
   editor's clipboard is pasted and the status bar says so ("No access to the system clipboard:
   pasted from the editor's clipboard"); a copy that could not reach it says "No access to the
-  system clipboard: copied in the editor only". Paste makes a float on the active cel whose
-  top-left pixel is at ⌊c − size / 2 + ½⌋ on each axis, c being the document position at the
-  centre of the viewport, and selects the Move tool; an image larger than the canvas floats
-  whole and is clipped when it is applied. Paste is refused on the layers paint is refused on,
-  and does nothing without a document (SE-044 imports a pasted image then).
+  system clipboard: copied in the editor only". The editor's clipboard is pasted too, with no
+  message, when the system clipboard holds no image (text, or nothing) and when the last copy
+  could not be written to it, so its image is older than the editor's (SE-032 review). Paste
+  makes a float on the active cel whose top-left pixel is at ⌊c − size / 2 + ½⌋ on each axis,
+  c being the document position at the centre of the viewport, or the canvas's centre when
+  that position lies outside the canvas, so the float is in sight; it selects the Move tool. An
+  image larger than the canvas floats whole and is clipped when it is applied. Paste is refused
+  on the layers paint is refused on, and does nothing without a document (SE-044 imports a
+  pasted image then).
 - Cut (copy, then clear), Delete (the selected pixels become transparent) and Fill (the
-  selected pixels take the foreground colour, replaced, not blended) apply a float first and
-  then act on the selection, each one undo step that records nothing when it changes nothing;
-  Delete on an empty cel creates none. Copy and Cut need a selection or a float, Delete and Fill
-  a selection; Fill has no key. They write on the layers paint may go to; Copy reads any pixel
-  layer.
+  selected pixels take the foreground colour, replaced, not blended) act on the selection, each
+  one undo step that records nothing when it changes nothing; Delete on an empty cel creates
+  none. While pixels float, Fill applies them first; Delete and Cut act on the float instead, as
+  Aseprite does (checked in its source: `MovingPixelsState::onBeforeCommandExecution`,
+  `PixelsMovement::discardImage`): Delete discards the floating pixels, Cut copies them (the
+  floating content, whole) and discards them. The image keeps what lies under the float — where
+  a lift took the pixels from, transparent; where they float, as it was before them — and
+  nothing is selected, in one step labelled Delete or Cut that records nothing when the
+  document is as it was before the float (a paste with nothing selected, then Delete). A whole
+  cel lifted (no selection) leaves the selection alone. Aseprite keeps the float's place
+  selected after Delete when its preference "keep selection after clear" is on; this editor
+  has no such preference. Copy and Cut need a selection or a float, Delete and Fill a
+  selection or a float; Fill has no key. They write on the layers paint may go to; Copy reads
+  any pixel layer.
 
 ### 7.3 Layers
 
@@ -1178,7 +1208,9 @@ Focus rules that make `canvas` the normal state:
   nothing during a stroke.
 - While pixels float (SE-032) the `floating` context outranks `timeline`, so the arrows nudge
   the float with the focus in the timeline too; Ctrl+Z cancels the float (§5.2) and Ctrl+Y does
-  nothing until it is applied or cancelled.
+  nothing until it is applied or cancelled. Escape during a drag of the Move tool takes back
+  that drag only (§7.2). Ctrl+A, Ctrl+D, Ctrl+I, Ctrl+O, Alt+W and Ctrl+Alt+N apply the float
+  first (§5.2, §7.2, §10).
 - Differences from Aseprite forced by the browser: invert selection is Ctrl+I (Ctrl+Shift+I
   opens DevTools); new sprite and close use the alternates above; D is the contour tool, so
   reset colours has no default key.
@@ -1476,7 +1508,12 @@ Export is accepted only when all three hold (SE-053):
   - Save applies a floating selection first, so Save and Save As are enabled while a selection
     floats (§5.2); then it records as saved the history position and export settings the
     written bytes hold: a change made while the file is being written keeps the document
-    dirty. Saving an unchanged document writes the same bytes again.
+    dirty. Saving an unchanged document writes the same bytes again. When the float cannot be
+    applied, Save stops with "Could not save …" (SE-032 review).
+  - Close and Revert apply a floating selection first too, Open (and a drop) once it has read
+    the file, so a file that cannot be opened changes nothing, and New Sprite before its
+    dialog; all are enabled while a selection floats, and the question before unsaved changes
+    are lost covers the float, which is a change of the document once applied (SE-032 review).
   - Open refuses a file larger than any project can be (the 2 GiB of content of FORMAT §1.8
     plus 1 KiB of zip framing for each of its 65 534 entries) before it reads it. Then it reads
     and checks the file before anything else: a file that cannot be opened is reported by an
@@ -1502,8 +1539,9 @@ Export is accepted only when all three hold (SE-053):
     ("Could not open “x”. <reason>", "Could not save …") are error toasts, one per failed
     operation.
   - The unsaved marker (an asterisk after the document's name, DESIGN §2) is shown while the
-    active document is dirty. While any open document is dirty, the page asks the browser to
-    confirm before it is left (`beforeunload`); with none dirty no listener is registered.
+    active document is dirty. While any open document is dirty, or a selection floats (its
+    pixels are not in the history yet, SE-032 review), the page asks the browser to confirm
+    before it is left (`beforeunload`); with neither, no listener is registered.
 - Autosave: each dirty document is snapshotted to IndexedDB 2 s after its last change
   (`doc.json` plus raw image buffers keyed by image ID; only changed images are rewritten). On
   launch, unsaved snapshots are offered for recovery. Closing a tab with unsaved changes

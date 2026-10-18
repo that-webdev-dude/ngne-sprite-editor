@@ -1,3 +1,4 @@
+import { AllocationError } from "../history";
 import type { Command, History, Transaction } from "../history";
 import { celAt } from "../model";
 import type { BitMask, DocSession, IdGenerator, PixelBuffer, Rect, Selection } from "../model";
@@ -15,7 +16,8 @@ import { createMask, fullMask, maskHas, selectionOf, selectionsEqual } from "../
 //     over it at the float's position, the pixels of its mask replacing what is there,
 //     transparent ones included; what lies off the canvas is not written
 //   apply: the transaction is committed, with the selection moved along, as one entry;
-//     cancel: it is aborted, pixels and selection as they were before the float
+//     cancel: it is aborted, pixels and selection as they were before the float;
+//     discard (Delete, Cut): the content is dropped, the base committed, nothing selected
 //
 // The image the transaction holds is the cel's own, so every reader of the document (the
 // compositor, the live composite of SE-014, the eyedropper) sees the float where it is. The
@@ -367,19 +369,27 @@ export class FloatingSelection {
     apply(): Command | null {
         this.#assertOpen("apply");
         this.#open = false;
-        const after = this.#session.selection;
-        const extra =
-            this.selects && !selectionsEqual(this.#before, after)
-                ? selectionCommand(this.#before, after, this.label)
-                : undefined;
-        // Back where it started: the selection before, itself (selections are values).
-        if (!extra) this.#session.selection = this.#before;
-        try {
-            return this.transaction.commit(this.label, extra);
-        } catch (error) {
-            this.#session.selection = this.#before;
-            throw error;
+        return this.#commit(this.label, this.#session.selection);
+    }
+
+    /**
+     * Discards the float's content (Delete and Cut while pixels float, SPEC §7.2), as
+     * Aseprite's `PixelsMovement::discardImage` does: the image keeps what lies under the
+     * float — the place a lift took the pixels from transparent, the place they float over as
+     * it was before them — and nothing is selected (a whole cel lifted leaves the selection
+     * alone). Committed as one history entry labelled `label`, or none when nothing changed
+     * (a paste with nothing selected before it). Returns that command; throws as `apply`.
+     */
+    discard(label: string): Command | null {
+        this.#assertOpen("discard");
+        this.#open = false;
+        const placed = this.#placed;
+        if (placed) {
+            this.#restoreBase(placed);
+            this.transaction.markDirty(placed);
         }
+        this.#placed = null;
+        return this.#commit(label, this.selects ? null : this.#session.selection);
     }
 
     /** Cancels the float: the cel's pixels and the selection are exactly as before it. */
@@ -388,6 +398,39 @@ export class FloatingSelection {
         this.#open = false;
         this.transaction.abort();
         this.#session.selection = this.#before;
+    }
+
+    /**
+     * Commits the transaction as one entry labelled `label`, with `after` as the selection: a
+     * selection the float changed is part of the entry. On `AllocationError` the commit has
+     * put the pixels back, and the selection before the float is put back too. A throw after
+     * the entry was recorded (a listener of the history) leaves the entry's selection, which
+     * its undo takes back with its pixels.
+     */
+    #commit(label: string, after: Selection | null): Command | null {
+        const extra =
+            this.selects && !selectionsEqual(this.#before, after)
+                ? selectionCommand(this.#before, after, label)
+                : undefined;
+        // Unchanged, it is the selection before, itself (selections are values).
+        this.#session.selection = extra ? after : this.#before;
+        try {
+            return this.transaction.commit(label, extra);
+        } catch (error) {
+            if (error instanceof AllocationError) this.#session.selection = this.#before;
+            throw error;
+        }
+    }
+
+    /** Writes the base back over `rect` (on the canvas): what lies under the float there. */
+    #restoreBase(rect: Rect): void {
+        const { image } = this.transaction;
+        const { width } = image;
+        const base = this.#base.data;
+        for (let y = rect.y; y < rect.y + rect.height; y++) {
+            const start = (y * width + rect.x) * 4;
+            image.data.set(base.subarray(start, start + rect.width * 4), start);
+        }
     }
 
     #assertOpen(call: string): void {
@@ -403,24 +446,25 @@ export class FloatingSelection {
     #render(): Rect | null {
         const { image } = this.transaction;
         const { width, height } = image;
-        const base = this.#base.data;
         const old = this.#placed;
-        if (old) {
-            for (let y = old.y; y < old.y + old.height; y++) {
-                const start = (y * width + old.x) * 4;
-                image.data.set(base.subarray(start, start + old.width * 4), start);
-            }
-        }
+        if (old) this.#restoreBase(old);
         const { pixels, mask } = this.content;
         const next = clipTo(this.bounds, width, height);
         if (next) {
+            const from = pixels.data;
+            const to = image.data;
             for (let y = next.y; y < next.y + next.height; y++) {
                 const row = y - this.#y;
                 for (let x = next.x; x < next.x + next.width; x++) {
                     const bit = row * mask.width + (x - this.#x);
                     if ((mask.data[bit >> 3] & (1 << (bit & 7))) === 0) continue;
-                    const from = bit * 4;
-                    image.data.set(pixels.data.subarray(from, from + 4), (y * width + x) * 4);
+                    // Byte by byte: no view is made per pixel of every move.
+                    const source = bit * 4;
+                    const target = (y * width + x) * 4;
+                    to[target] = from[source];
+                    to[target + 1] = from[source + 1];
+                    to[target + 2] = from[source + 2];
+                    to[target + 3] = from[source + 3];
                 }
             }
         }

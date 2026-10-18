@@ -30,6 +30,11 @@ import { isProjectFileName, projectFileName } from "./fileName";
 // the others do nothing. Results and failures are reported as notices (toasts): one for each
 // operation that fails or is given up after it started, none when the user cancels. A failure
 // leaves every open document as it was.
+//
+// A floating selection holds a transaction open (SPEC §5.2), as a stroke does, but unlike a
+// stroke it does not keep an operation from running: Save, Save As, Close and Revert apply it
+// first, and Open (and a drop) once the file has been read, so the question before unsaved
+// changes are lost covers it (SE-032 review).
 
 /**
  * Zip framing and compression overhead allowed per entry on top of the content of a project
@@ -68,7 +73,10 @@ export interface FileWorkflowOptions {
     dialogs?: FileDialogs;
     /** Where results and failures go; the default is the app's toasts. */
     notices?: Pick<Notices, "info" | "error">;
-    /** Applies the floating selection before a save (SPEC §5.2); the default is the app's. */
+    /**
+     * Applies the floating selection before a save, a close, an open or a revert (SPEC §5.2);
+     * throws when it cannot. The default is the app's.
+     */
     applyFloating?(): void;
     /** Whether the active document holds a floating selection; the default is the app's. */
     isFloating?(): boolean;
@@ -86,6 +94,12 @@ export interface FileWorkflows {
      * history is idle or holds a floating selection, which the save applies first (SPEC §5.2).
      */
     canSave(): boolean;
+    /**
+     * Whether Open, Close and Revert can act on the active document now: no operation runs,
+     * and its history, if one is open, is idle or holds a floating selection, which they apply
+     * first. Not during a stroke.
+     */
+    canAct(): boolean;
     /** Asks for a project file and opens it in place of the active document. */
     open(): Promise<boolean>;
     /** Opens the first project file among `files` (a drop) in place of the active document. */
@@ -223,6 +237,12 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
         if (!project) return false;
         const active = activeDocument(sessions.getState());
         if (active) {
+            // A floating selection is applied before the question, which then covers it.
+            try {
+                applyFloating();
+            } catch (error) {
+                return failed(reason(error));
+            }
             if (active.history.transaction) return failed(interruption(active));
             if (!(await mayDiscard(active, "open", chosen.name))) return false;
             if (!stillActive(active)) return failed(interruption(active));
@@ -334,11 +354,16 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
             const document = activeDocument(sessions.getState());
             return !busy && document !== null && (!document.history.transaction || isFloating());
         },
+        canAct() {
+            const document = activeDocument(sessions.getState());
+            return !busy && (!document?.history.transaction || isFloating());
+        },
 
         open: () =>
             exclusive(async () => {
                 const active = activeDocument(sessions.getState());
-                if (active?.history.transaction) {
+                // A floating selection is applied once the file has been read (`openChosen`).
+                if (active?.history.transaction && !isFloating()) {
                     notices.error(`Could not open a file. ${interruption(active)}`);
                     return false;
                 }
@@ -370,6 +395,14 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
 
         close: () =>
             exclusive(async () => {
+                const opened = activeDocument(sessions.getState());
+                if (!opened) return false;
+                try {
+                    applyFloating();
+                } catch (error) {
+                    notices.error(`Could not close “${opened.session.doc.name}”. ${reason(error)}`);
+                    return false;
+                }
                 const document = editable();
                 if (!document) return false;
                 if (!(await mayDiscard(document, "close", null))) return false;
@@ -384,13 +417,20 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
 
         revert: () =>
             exclusive(async () => {
-                const document = editable();
-                const file = document ? files.get(document.id) : undefined;
-                if (!document || !file) return false;
+                const opened = activeDocument(sessions.getState());
+                const file = opened ? files.get(opened.id) : undefined;
+                if (!opened || !file) return false;
                 const failed = (why: string) => {
                     notices.error(`Could not revert to “${file.name}”. ${why}`);
                     return false;
                 };
+                try {
+                    applyFloating();
+                } catch (error) {
+                    return failed(reason(error));
+                }
+                const document = editable();
+                if (!document) return false;
                 if (!(await mayDiscard(document, "revert", file.name))) return false;
                 const { handle, bytes } = file;
                 // Read permission can lapse: asked again, within the gesture of the command or

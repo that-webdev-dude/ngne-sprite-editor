@@ -10,7 +10,13 @@ import type { OpenDocument } from "../../src/app/state/sessions";
 import { celAt, celKey, createDocument, sequentialIds } from "../../src/core/model";
 import type { DocSession, PixelBuffer } from "../../src/core/model";
 import { decodePng, encodePng } from "../../src/core/png";
-import { createMask, fullMask, selectionOf, setMaskPixel } from "../../src/core/selection";
+import {
+    createMask,
+    fullMask,
+    rectMask,
+    selectionOf,
+    setMaskPixel,
+} from "../../src/core/selection";
 import { manualFrames } from "./se-014-support";
 
 // SE-032: Cut, Copy, Paste, Delete and Fill (`clipboard.ts`) over a system clipboard of the
@@ -343,23 +349,107 @@ describe("without access to the system clipboard", () => {
 });
 
 describe("the edits and their refusals", () => {
-    it("Copy while floating copies the floating pixels and leaves them floating; Cut applies them first", async () => {
-        const { system } = chromeLikeClipboard();
+    it("Copy while floating copies the floating pixels and leaves them floating; Cut copies them and discards them, keeping what lies under them, in one step", async () => {
+        const { system, state } = chromeLikeClipboard();
         const test = setUp(system);
         const document = test.open(pattern(), "k-");
-        document.session.selection = shape(3, 3);
+        const selection = shape(3, 3);
+        document.session.selection = selection;
+        const before = image(document)!.data.slice();
         test.floating.lift(document);
         test.floating.moveBy(2, 0);
         await test.clipboard.copy();
         expect(test.floating.floats()).toBe(true);
-        expect(test.clipboard.content).toEqual(test.floating.float!.content);
+        const floated = test.floating.float!.content;
+        expect(test.clipboard.content).toEqual(floated);
+        expect(test.clipboard.content).not.toBe(floated);
         const steps = document.history.undoCount;
+        const writes = state.writes;
         await test.clipboard.cut();
         expect(test.floating.floats()).toBe(false);
-        expect(document.history.undoCount).toBe(steps + 2);
+        expect(document.history.undoCount).toBe(steps + 1);
         expect(document.history.undoLabel).toBe("Cut");
-        // The cut pixels are those that were moved, now transparent.
-        expect(rgba(image(document)!, 5, 3)).toEqual([0, 0, 0, 0]);
+        // What was cut is the floating content, on both clipboards.
+        expect(test.clipboard.content).toEqual(floated);
+        expect(state.writes).toBe(writes + 1);
+        // The lifted pixels are transparent; where they floated the cel is as it was.
+        const after = image(document)!;
+        for (const [x, y] of [
+            [3, 3],
+            [2, 3],
+            [4, 3],
+            [3, 2],
+            [3, 4],
+            [6, 3],
+        ] as const) {
+            expect(rgba(after, x, y), `${x},${y}`).toEqual([0, 0, 0, 0]);
+        }
+        for (const [x, y] of [
+            [5, 3],
+            [5, 2],
+            [5, 4],
+            [8, 3],
+        ] as const) {
+            expect(rgba(after, x, y), `${x},${y}`).toEqual(rgba(pattern(), x, y));
+        }
+        expect(document.session.selection).toBeNull();
+        const cut = after.data.slice();
+        document.history.undo();
+        expect(image(document)!.data).toEqual(before);
+        expect(document.session.selection).toBe(selection);
+        document.history.redo();
+        expect(image(document)!.data).toEqual(cut);
+        expect(document.session.selection).toBeNull();
+    });
+
+    it("Delete while floating discards the floating pixels in one step; a paste with nothing selected, then Delete, records nothing", async () => {
+        const { system } = chromeLikeClipboard();
+        const test = setUp(system);
+        const document = test.open(pattern(), "n-");
+        const selection = shape(4, 4);
+        document.session.selection = selection;
+        const before = image(document)!.data.slice();
+        test.floating.lift(document);
+        test.floating.moveBy(-1, -2);
+        const steps = document.history.undoCount;
+        test.clipboard.deleteSelected();
+        expect(test.floating.floats()).toBe(false);
+        expect(document.history.undoCount).toBe(steps + 1);
+        expect(document.history.undoLabel).toBe("Delete");
+        expect(rgba(image(document)!, 4, 4)).toEqual([0, 0, 0, 0]);
+        expect(rgba(image(document)!, 3, 2)).toEqual(rgba(pattern(), 3, 2));
+        expect(document.session.selection).toBeNull();
+        document.history.undo();
+        expect(image(document)!.data).toEqual(before);
+        expect(document.session.selection).toBe(selection);
+
+        // Copied, deselected, pasted and deleted: the document as before the paste.
+        await test.clipboard.copy();
+        document.session.selection = null;
+        const clean = document.history.undoCount;
+        await test.clipboard.paste();
+        expect(test.floating.floats()).toBe(true);
+        test.clipboard.deleteSelected();
+        expect(test.floating.floats()).toBe(false);
+        expect(document.history.undoCount).toBe(clean);
+        expect(image(document)!.data).toEqual(before);
+        expect(document.session.selection).toBeNull();
+    });
+
+    it("Fill while floating applies the float first, then fills the selection it left", () => {
+        const { system } = chromeLikeClipboard();
+        const test = setUp(system);
+        const document = test.open(pattern(), "o-");
+        document.session.selection = shape(3, 3);
+        test.floating.lift(document);
+        test.floating.moveBy(1, 1);
+        const steps = document.history.undoCount;
+        test.clipboard.fill();
+        expect(document.history.undoCount).toBe(steps + 2);
+        expect(document.history.undoLabel).toBe("Fill");
+        expect(rgba(image(document)!, 4, 4)).toEqual([0xff, 0x80, 0x00, 0xff]);
+        document.history.undo();
+        expect(document.history.undoLabel).toBe("Move");
     });
 
     it("refuses to paste, cut, delete or fill on a locked layer, and to copy from a reference layer", async () => {
@@ -406,5 +496,142 @@ describe("the edits and their refusals", () => {
         expect(rgba(image(document)!, 6, 3)).toEqual([0xff, 0x80, 0x00, 0xff]);
         expect(rgba(image(document)!, 4, 4)).toEqual([0, 0, 0, 0]);
         expect(document.history.undoLabel).toBe("Fill");
+    });
+});
+
+// SE-032 review (I, L): which clipboard Paste takes, how the editor recognises its own copy,
+// and where a paste lands when the viewport is centred off the canvas.
+describe("which clipboard Paste takes", () => {
+    it("a copy that did not reach the system clipboard is pasted from the editor's, not the older image there", async () => {
+        const shared = chromeLikeClipboard();
+        const older: PixelBuffer = {
+            width: 2,
+            height: 1,
+            data: new Uint8ClampedArray([1, 2, 3, 255, 4, 5, 6, 255]),
+        };
+        await shared.system.writePng(encodePng(older));
+        const test = setUp(shared.system);
+        const document = test.open(pattern(), "p-");
+        document.session.selection = shape(4, 3);
+        // Writing fails, reading still works.
+        shared.access.write = false;
+        await test.clipboard.copy();
+        expect(test.feedback.at(-1)).toBe(CLIPBOARD_FEEDBACK.copiedInEditor);
+        await test.clipboard.paste();
+        expect(shared.state.reads).toBe(1);
+        const float = test.floating.float!;
+        expect(float.content).toEqual(test.clipboard.content);
+        expect(float.content).not.toBe(test.clipboard.content);
+        // No message: the copy already said where it went.
+        expect(test.feedback.at(-1)).toBe(CLIPBOARD_FEEDBACK.copiedInEditor);
+        test.floating.cancel();
+
+        // Written again: the system clipboard's image is the editor's own copy.
+        shared.access.write = true;
+        await test.clipboard.copy();
+        await shared.system.writePng(encodePng(older));
+        await test.clipboard.paste();
+        expect(Array.from(test.floating.float!.content.pixels.data)).toEqual(
+            Array.from(older.data),
+        );
+    });
+
+    it("a system clipboard holding text (no image) gives the editor's image, with its shape and no message", async () => {
+        const test = setUp({
+            writePng: async () => true,
+            readPng: async () => ({ kind: "none" }),
+        });
+        const document = test.open(pattern(), "q-");
+        document.session.selection = shape(3, 4);
+        await test.clipboard.copy();
+        await test.clipboard.paste();
+        const float = test.floating.float!;
+        expect(float.content).toEqual(test.clipboard.content);
+        expect(float.content).not.toBe(test.clipboard.content);
+        expect(test.feedback).toEqual([]);
+    });
+
+    it("an image of the copy's size is the editor's own only when every alpha and every opaque colour match: otherwise it is pasted whole", async () => {
+        const shared = chromeLikeClipboard();
+        const test = setUp(shared.system);
+        const document = test.open(pattern(), "r-");
+        // A rectangle with opaque, translucent and transparent pixels.
+        const mask = createMask(W, H);
+        for (let y = 1; y <= 3; y++) for (let x = 2; x <= 5; x++) setMaskPixel(mask, x, y);
+        document.session.selection = selectionOf(mask);
+        await test.clipboard.copy();
+        const own = test.clipboard.content!;
+        const opaqueAt = own.pixels.data.findIndex((value, at) => at % 4 === 3 && value === 255);
+        const translucentAt = own.pixels.data.findIndex(
+            (value, at) => at % 4 === 3 && value > 0 && value < 255,
+        );
+        expect(opaqueAt).toBeGreaterThan(0);
+        expect(translucentAt).toBeGreaterThan(0);
+
+        /** Pastes `image` from the system clipboard; returns the float's content, cancelled. */
+        const pasteOf = async (image: PixelBuffer) => {
+            shared.state.bytes = encodePng(image);
+            await test.clipboard.paste();
+            const content = test.floating.float!.content;
+            test.floating.cancel();
+            return content;
+        };
+        // As written: the editor's own copy, with its shape.
+        const same = await pasteOf({ ...own.pixels, data: own.pixels.data.slice() });
+        expect(same).toEqual(own);
+        // One opaque colour differs: another image, pasted whole.
+        const colour = own.pixels.data.slice();
+        colour[opaqueAt - 3] = (colour[opaqueAt - 3]! + 1) & 255;
+        const recoloured = await pasteOf({ ...own.pixels, data: colour });
+        expect(recoloured.mask).toEqual(fullMask(own.pixels.width, own.pixels.height));
+        expect(Array.from(recoloured.pixels.data.slice(opaqueAt - 3, opaqueAt + 1))).toEqual(
+            Array.from(colour.slice(opaqueAt - 3, opaqueAt + 1)),
+        );
+        // One alpha differs: another image, pasted whole.
+        const alpha = own.pixels.data.slice();
+        alpha[translucentAt] = alpha[translucentAt]! + 1;
+        const realpha = await pasteOf({ ...own.pixels, data: alpha });
+        expect(realpha.mask).toEqual(fullMask(own.pixels.width, own.pixels.height));
+        expect(realpha.pixels.data[translucentAt]).toBe(alpha[translucentAt]);
+        // A translucent pixel's colour may differ (the browser re-encodes): still its own.
+        const tinted = own.pixels.data.slice();
+        tinted[translucentAt - 1] = (tinted[translucentAt - 1]! + 7) & 255;
+        expect(await pasteOf({ ...own.pixels, data: tinted })).toEqual(own);
+    });
+});
+
+describe("where a paste lands", () => {
+    it("on the canvas's centre when the viewport's centre lies outside the canvas, so the float is in sight", async () => {
+        for (const centre of [
+            { x: -40, y: 3 },
+            { x: 5, y: H },
+            { x: W + 0.5, y: -0.5 },
+        ]) {
+            const { system } = chromeLikeClipboard({ read: false, write: false });
+            const test = setUp(system, centre);
+            const document = test.open(pattern(), "s-");
+            document.session.selection = selectionOf(
+                rectMask(W, H, { x: 0, y: 0, width: 3, height: 3 }),
+            );
+            await test.clipboard.copy();
+            await test.clipboard.paste();
+            // ⌊5 − 1.5 + ½⌋, ⌊4 − 1.5 + ½⌋.
+            expect(test.floating.float?.bounds, JSON.stringify(centre)).toEqual({
+                x: 4,
+                y: 3,
+                width: 3,
+                height: 3,
+            });
+        }
+        // A centre on the canvas, near its edge, is kept.
+        const { system } = chromeLikeClipboard({ read: false, write: false });
+        const test = setUp(system, { x: 0.25, y: H - 0.5 });
+        const document = test.open(pattern(), "t-");
+        document.session.selection = selectionOf(
+            rectMask(W, H, { x: 0, y: 0, width: 3, height: 3 }),
+        );
+        await test.clipboard.copy();
+        await test.clipboard.paste();
+        expect(test.floating.float?.bounds).toEqual({ x: -1, y: 6, width: 3, height: 3 });
     });
 });

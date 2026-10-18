@@ -22,16 +22,20 @@ import { floatRefusal } from "./move/floatTarget";
 // - Paste reads the system clipboard when the browser allows it. An image there that is the
 //   editor's own copy (the same size, the same alpha everywhere and the same colour wherever
 //   it is opaque: the browser may re-encode the PNG) is pasted from the editor's clipboard,
-//   with its shape; another image is pasted whole. When the system clipboard cannot be read
-//   the editor's clipboard is pasted, and the status bar says why.
+//   with its shape; another image is pasted whole. The editor's clipboard is pasted when the
+//   system clipboard holds no image (text, or nothing), when it cannot be read (the status
+//   bar says why), and when the last copy did not reach it, whose image is then older.
 // - Paste makes a floating selection on the active cel, its centre on the pixel at the centre
-//   of the viewport, at whole pixels; an image larger than the canvas floats whole and is
-//   clipped when it is applied. It selects the Move tool, which holds the float.
-// - Cut, Delete and Fill apply a floating selection first and then act on the selection,
-//   each one undo step; Copy copies the floating pixels as they are and leaves them floating.
-//   Fill writes the foreground colour. Cut and Copy need a selection or a float; Delete and
-//   Fill a selection. They write on the layers paint may go to (SPEC §7.1); Copy reads any
-//   pixel layer.
+//   of the viewport (the canvas's centre when that lies outside the canvas, so the float is
+//   in sight), at whole pixels; an image larger than the canvas floats whole and is clipped
+//   when it is applied. It selects the Move tool, which holds the float.
+// - Delete and Fill act on the selection, Cut copies it and clears it, each one undo step.
+//   While pixels float, Fill applies them first; Delete discards them, and Cut copies them
+//   and discards them, as Aseprite does (`FloatingSelection.discard`): what lies under the
+//   float stays and nothing is selected. Copy copies the floating pixels as they are and
+//   leaves them floating. Fill writes the foreground colour. Cut and Copy need a selection or
+//   a float; Delete and Fill a selection. They write on the layers paint may go to (SPEC
+//   §7.1); Copy reads any pixel layer.
 
 /** The status-bar feedback of the clipboard (DESIGN §5.7). */
 export const CLIPBOARD_FEEDBACK = {
@@ -104,6 +108,8 @@ function reason(error: unknown): string {
 export function createEditorClipboard(sources: ClipboardSources): EditorClipboard {
     const { sessions, floating } = sources;
     let content: FloatingContent | null = null;
+    /** Whether `content` reached the system clipboard when it was copied. */
+    let written = false;
 
     const active = () => activeDocument(sessions.getState());
     /** The active document while its history is idle. */
@@ -111,9 +117,12 @@ export function createEditorClipboard(sources: ClipboardSources): EditorClipboar
         const document = active();
         return document && !document.history.transaction ? document : null;
     };
-    /** The active document after its float was applied, while its history is idle. */
+    /**
+     * The active document after its float was applied, while its history is idle; null when
+     * the float could not be applied (reported, and taken back): the edit does not go on.
+     */
     const settled = (): OpenDocument | null => {
-        if (floating.floats()) floating.apply();
+        if (floating.floats() && floating.apply() === "failed") return null;
         return idle();
     };
     const targetOf = ({ session }: OpenDocument) => ({
@@ -129,10 +138,17 @@ export function createEditorClipboard(sources: ClipboardSources): EditorClipboar
         return (idle()?.session.selection ?? null) !== null;
     };
 
-    /** Puts `copied` on the system clipboard; says so when it cannot. */
-    const toSystem = async (copied: FloatingContent) => {
-        const written = await sources.system.writePng(encodePng(copied.pixels));
-        if (!written) sources.feedback(CLIPBOARD_FEEDBACK.copiedInEditor);
+    /**
+     * Makes `copied` the editor's clipboard and puts it on the system clipboard; says so when
+     * it cannot.
+     */
+    const keep = async (copied: FloatingContent) => {
+        content = copied;
+        written = false;
+        const done = await sources.system.writePng(encodePng(copied.pixels));
+        // A later copy may have taken its place meanwhile.
+        if (content === copied) written = done;
+        if (!done) sources.feedback(CLIPBOARD_FEEDBACK.copiedInEditor);
     };
 
     /** The content to paste and what the status bar should say; null content: nothing. */
@@ -149,14 +165,21 @@ export function createEditorClipboard(sources: ClipboardSources): EditorClipboar
                 sources.notices.error(`Could not paste the image. ${reason(error)}`);
                 return null;
             }
+            // The last copy did not reach the system clipboard: the image there is older.
+            if (content && !written) return { pasted: cloneContent(content), note: null };
+            // The editor's own copy is pasted with its shape, as a copy of its own; another
+            // image as decoded, which nothing else holds.
             const own = content && isOwnCopy(content.pixels, image) ? content : null;
-            return { pasted: own ?? contentOfImage(image), note: null };
+            return { pasted: own ? cloneContent(own) : contentOfImage(image), note: null };
         }
         if (read.kind === "none") {
-            return { pasted: content, note: content ? null : CLIPBOARD_FEEDBACK.nothingToPaste };
+            return {
+                pasted: content && cloneContent(content),
+                note: content ? null : CLIPBOARD_FEEDBACK.nothingToPaste,
+            };
         }
         return {
-            pasted: content,
+            pasted: content && cloneContent(content),
             note: content
                 ? CLIPBOARD_FEEDBACK.pastedFromEditor
                 : CLIPBOARD_FEEDBACK.nothingWithoutAccess,
@@ -190,12 +213,19 @@ export function createEditorClipboard(sources: ClipboardSources): EditorClipboar
                 }
                 copied = copySelected(session, targetOf(document), session.selection);
             }
-            content = copied;
-            await toSystem(copied);
+            await keep(copied);
         },
 
         async cut() {
-            const document = settled();
+            // While pixels float they are copied as they are, then discarded.
+            const float = floating.floats() ? floating.float : null;
+            if (float) {
+                const copied = cloneContent(float.content);
+                if (floating.discard("Cut") !== "landed") return;
+                await keep(copied);
+                return;
+            }
+            const document = idle();
             const selection = document?.session.selection ?? null;
             if (!document || !selection) return;
             const refused = floatRefusal(document);
@@ -206,8 +236,7 @@ export function createEditorClipboard(sources: ClipboardSources): EditorClipboar
             const target = targetOf(document);
             const copied = copySelected(document.session, target, selection);
             clearSelected(document.history, target, selection, "Cut");
-            content = copied;
-            await toSystem(copied);
+            await keep(copied);
         },
 
         async paste() {
@@ -235,17 +264,27 @@ export function createEditorClipboard(sources: ClipboardSources): EditorClipboar
                 return;
             }
             sources.selectMove();
-            const centre = sources.centre(document);
+            const { doc } = document.session;
+            const viewed = sources.centre(document);
+            // A viewport centred off the canvas would hide the float: the canvas's centre then.
+            const onCanvas =
+                viewed.x >= 0 && viewed.y >= 0 && viewed.x < doc.width && viewed.y < doc.height;
+            const centre = onCanvas ? viewed : { x: doc.width / 2, y: doc.height / 2 };
             const { width, height } = pasted.pixels;
             // The image's centre on the pixel nearest the viewport's centre (`+ 0`: never -0).
             const x = Math.floor(centre.x - width / 2 + 0.5) + 0;
             const y = Math.floor(centre.y - height / 2 + 0.5) + 0;
-            floating.paste(document, cloneContent(pasted), x, y);
+            floating.paste(document, pasted, x, y);
             if (note) sources.feedback(note);
         },
 
         deleteSelected() {
-            const document = settled();
+            // While pixels float they are discarded: what lies under them stays.
+            if (floating.floats()) {
+                floating.discard("Delete");
+                return;
+            }
+            const document = idle();
             const selection = document?.session.selection ?? null;
             if (!document || !selection) return;
             const refused = floatRefusal(document);

@@ -10,6 +10,7 @@ import {
 } from "../../core/sprite";
 import type { CommandSpec } from "../commands/types";
 import { applyFloating } from "../selection/floating";
+import { settleableDocument } from "../selection/settled";
 import { activeDocument, sessionsStore } from "../state/sessions";
 import type { OpenDocument } from "../state/sessions";
 import { spriteDialogs } from "./dialogs";
@@ -71,7 +72,8 @@ async function spriteSize(): Promise<void> {
     if (document) execute(document, (session) => spriteSizeCommand(session, values));
 }
 
-const hasDocument = () => editableDocument() !== null;
+/** Enabled while a selection floats too: each applies it first (SE-032 review). */
+const hasDocument = () => settleableDocument() !== null;
 
 export const commands: CommandSpec[] = [
     {
@@ -89,7 +91,7 @@ export const commands: CommandSpec[] = [
     {
         id: "sprite.crop",
         title: "Crop to Selection",
-        enabled: () => (editableDocument()?.session.selection ?? null) !== null,
+        enabled: () => (settleableDocument()?.session.selection ?? null) !== null,
         run: () => runOnActive((session) => cropToSelectionCommand(session)),
     },
     {

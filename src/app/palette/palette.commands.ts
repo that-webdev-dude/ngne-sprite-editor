@@ -14,6 +14,8 @@ import {
 import type { CompositeSource, PresetPalette } from "../../core/palettes";
 import { appCommands } from "../commands/appCommands";
 import type { CommandSpec } from "../commands/types";
+import { applyFloating } from "../selection/floating";
+import { canSettle, settleableDocument } from "../selection/settled";
 import { activeComposites } from "../state/composites";
 import { createEditorStore, editorStore } from "../state/editor";
 import { activeDocument, sessionsStore } from "../state/sessions";
@@ -37,8 +39,9 @@ import { currentSwatch, paletteStore, setCurrentSwatch } from "./paletteState";
 // the swatch edit Edit Colour… opened. The panel's overflow menu is the context menu
 // `PALETTE_MENU` and its preset menu `PRESET_MENU`, both generated from the commands that list
 // them, so a later ticket adds its items (import, export, sort, replace colour: SE-066) from
-// its own module. While a transaction is open (a stroke) the history takes no command, so the
-// commands are disabled then, as undo and redo are.
+// its own module. While a transaction is open for a stroke the history takes no command, so the
+// commands are disabled then, as undo and redo are. While pixels float (SE-032) they are enabled
+// and apply them first, as the other commands that change the document do (SPEC §5.2).
 //
 // The registry loads this module (appCommands.ts); everything else takes the ids from
 // `paletteCommandIds.ts`, so this module never loads before the registry.
@@ -58,17 +61,21 @@ function execute(document: OpenDocument, command: Command | null): boolean {
     return true;
 }
 
-/** The current swatch of the active document's palette, when a command may change it. */
-function currentOfIdle(): { document: OpenDocument; index: number } | null {
-    const document = idleDocument();
+/** The current swatch of the palette of `document`, when there is one. */
+function currentOf(
+    document: OpenDocument | null,
+): { document: OpenDocument; index: number } | null {
     if (!document) return null;
     const index = currentSwatch(document.session.doc.palette.colors.length);
     return index < 0 ? null : { document, index };
 }
 
+/** The current swatch of the active document's palette, when a command may change it. */
+const currentOfIdle = () => currentOf(idleDocument());
+
 /** Add Current Colour: the foreground, at the end, unless the palette has it or is full. */
 function canAdd(): boolean {
-    const colors = idleDocument()?.session.doc.palette.colors;
+    const colors = settleableDocument()?.session.doc.palette.colors;
     if (!colors) return false;
     return (
         colors.length < MAX_PALETTE_COLORS && !colors.includes(editorStore.getState().foreground)
@@ -95,8 +102,9 @@ function removeColour(): void {
 }
 
 /** Moves the current swatch to the target a drag or a Ctrl+arrow key set; it stays current. */
-function moveTarget(): { document: OpenDocument; from: number; to: number } | null {
-    const current = currentOfIdle();
+function moveTarget(
+    current = currentOfIdle(),
+): { document: OpenDocument; from: number; to: number } | null {
     const { target } = paletteStore.getState();
     if (!current || target === null) return null;
     const count = current.document.session.doc.palette.colors.length;
@@ -129,13 +137,16 @@ function editColour(): void {
     paletteStore.setState({ edit: { documentId: document.id, index, colour, draft } });
 }
 
-/** The document of the open swatch edit, when its history can take the edit now. */
-function editedDocument(): OpenDocument | null {
+/** The document of the open swatch edit, while it is open. */
+function editDocument(): OpenDocument | null {
     const { edit } = paletteStore.getState();
     if (!edit) return null;
-    const document = sessionsStore
-        .getState()
-        .documents.find((entry) => entry.id === edit.documentId);
+    return sessionsStore.getState().documents.find((entry) => entry.id === edit.documentId) ?? null;
+}
+
+/** The document of the open swatch edit, when its history can take the edit now. */
+function editedDocument(): OpenDocument | null {
+    const document = editDocument();
     return document && !document.history.transaction ? document : null;
 }
 
@@ -183,56 +194,79 @@ function loadPreset(preset: PresetPalette): void {
     if (document) execute(document, loadPresetCommand(document.session, preset));
 }
 
-const hasIdleDocument = () => idleDocument() !== null;
-const hasCurrent = () => currentOfIdle() !== null;
+// What `enabled` reads: a document whose history is idle or holds a floating selection, which
+// each `run` applies first.
+const hasDocument = () => settleableDocument() !== null;
+const hasCurrent = () => currentOf(settleableDocument()) !== null;
 
 export const commands: CommandSpec[] = [
     {
         id: ADD_COLOUR,
         title: "Add Current Colour",
         enabled: canAdd,
-        run: addColour,
+        run: () => {
+            applyFloating();
+            addColour();
+        },
     },
     {
         id: REMOVE_COLOUR,
         title: "Remove Colour",
         enabled: hasCurrent,
-        run: removeColour,
+        run: () => {
+            applyFloating();
+            removeColour();
+        },
         contextMenus: [{ menu: PALETTE_MENU, order: 100 }],
     },
     {
         id: EDIT_COLOUR,
         title: "Edit Colour…",
         enabled: () => hasCurrent() && paletteStore.getState().edit === null,
-        run: editColour,
+        run: () => {
+            applyFloating();
+            editColour();
+        },
         contextMenus: [{ menu: PALETTE_MENU, order: 110 }],
     },
     {
         id: APPLY_EDIT,
         title: "Apply Colour Edit",
-        enabled: () => editedDocument() !== null,
-        run: finishSwatchEdit,
+        enabled: () => canSettle(editDocument()),
+        run: () => {
+            applyFloating();
+            finishSwatchEdit();
+        },
     },
     {
         id: MOVE_COLOUR,
         title: "Move Colour",
-        enabled: () => moveTarget() !== null,
-        run: moveColour,
+        enabled: () => moveTarget(currentOf(settleableDocument())) !== null,
+        run: () => {
+            applyFloating();
+            moveColour();
+        },
     },
     // DESIGN §5.4 orders the overflow menu remove, edit, import, export, from sprite, sort,
     // replace colour: the 200s are left to import and export, the 400s to sort and replace.
     {
         id: PALETTE_FROM_SPRITE,
         title: "Palette from Sprite",
-        enabled: hasIdleDocument,
-        run: paletteFromSprite,
+        enabled: hasDocument,
+        run: () => {
+            applyFloating();
+            paletteFromSprite();
+        },
         contextMenus: [{ menu: PALETTE_MENU, order: 300 }],
     },
     ...PRESET_PALETTES.map((preset, index): CommandSpec => ({
         id: presetCommandId(preset),
         title: `Load ${preset.name} Palette`,
-        enabled: hasIdleDocument,
-        run: () => loadPreset(preset),
+        enabled: hasDocument,
+        run: () => {
+            applyFloating();
+            loadPreset(preset);
+        },
         contextMenus: [{ menu: PRESET_MENU, order: 100 + 10 * index }],
     })),
 ];

@@ -5,29 +5,50 @@ import { findChordConflicts } from "../../src/app/commands/registry";
 import { plannedCommands } from "../../src/app/commands/planned.commands";
 import type { Command } from "../../src/app/commands/types";
 import { createFileDialogs } from "../../src/app/file/dialogs";
+import { installFileWorkflows } from "../../src/app/file/install";
 import { createFileWorkflows } from "../../src/app/file/workflows";
 import { keyContextStore, setKeyContext } from "../../src/app/keymap/contextState";
 import { resolveKey } from "../../src/app/keymap/resolve";
+import { notices } from "../../src/app/notices/notices";
+import {
+    ADD_COLOUR,
+    MOVE_COLOUR,
+    PALETTE_FROM_SPRITE,
+    REMOVE_COLOUR,
+} from "../../src/app/palette/paletteCommandIds";
+import { setCurrentSwatch, setMoveTarget } from "../../src/app/palette/paletteState";
 import type { KeyEnvironment } from "../../src/app/keymap/resolve";
 import { editorClipboard } from "../../src/app/selection/clipboard.commands";
 import { CLIPBOARD_FEEDBACK } from "../../src/app/selection/clipboard";
-import { applyFloating, isFloating } from "../../src/app/selection/floating";
-import { FLOATING_COMMANDS, LONG_NUDGE } from "../../src/app/selection/floating.commands";
+import { applyFloating, FloatingApplyError, isFloating } from "../../src/app/selection/floating";
+import { FLOATING_COMMANDS } from "../../src/app/selection/floating.commands";
 import { floatingState } from "../../src/app/selection/floatingState";
 import { MOVE_TOOL_ID } from "../../src/app/selection/move/moveTool";
+import { spriteDialogs } from "../../src/app/sprite/dialogs";
 import { DEFAULT_TOOL, editorStore } from "../../src/app/state/editor";
 import { activeDocument, isDirty, sessionsStore } from "../../src/app/state/sessions";
 import type { OpenDocument } from "../../src/app/state/sessions";
 import { statusStore } from "../../src/app/state/status";
 import { TIMELINE_COMMANDS } from "../../src/app/timeline/timelineCommandIds";
+import {
+    editProperties,
+    initialTimelineState,
+    setRenameText,
+    timelineStore,
+    withArguments,
+} from "../../src/app/timeline/timelineState";
+import { connectToolMapping, toolPipeline } from "../../src/app/tools/appPipeline";
 import { toolState } from "../../src/app/tools/activeTool";
 import { toolRegistry } from "../../src/app/tools/toolRegistry";
 import { addFrameCommand } from "../../src/core/frames";
+import type { PixelAllocator } from "../../src/core/history";
 import { celAt, celKey, createDocument } from "../../src/core/model";
 import type { DocSession, PixelBuffer } from "../../src/core/model";
+import { serialize } from "../../src/core/project";
 import { rectMask, selectCommand } from "../../src/core/selection";
 import { readSpecKeyTable } from "../e2e/se-007-spec-keys";
-import { fakePlatform, MemoryDisk } from "./se-041-support";
+import { at, plainMapping } from "./se-014-support";
+import { chosen, fakePlatform, MemoryDisk } from "./se-041-support";
 
 // SE-032: the commands of the floating selection and the clipboard in the app's registry —
 // their menu items and the keys of SPEC §7.8 in their contexts — and how the app keeps the
@@ -56,6 +77,8 @@ afterEach(() => {
     editorStore.getState().setTool(DEFAULT_TOOL);
     setKeyContext("floating", false);
     statusStore.getState().setFeedback(null);
+    timelineStore.setState(initialTimelineState());
+    setMoveTarget(null);
     vi.unstubAllGlobals();
 });
 
@@ -211,16 +234,6 @@ describe("the commands in the registry", () => {
             .list()
             .filter((entry) => entry.contexts.includes("floating"))
             .flatMap((entry) => entry.shortcuts.map((chord) => `${chord} ${entry.id}`));
-        expect(floatingIds.sort()).toEqual(
-            [
-                `Enter ${FLOATING_COMMANDS.apply}`,
-                `Escape ${FLOATING_COMMANDS.cancel}`,
-                ...["Left", "Right", "Up", "Down"].flatMap((name) => [
-                    `Arrow${name} ${FLOATING_COMMANDS.nudge(name, 1)}`,
-                    `Shift+Arrow${name} ${FLOATING_COMMANDS.nudge(name, LONG_NUDGE)}`,
-                ]),
-            ].sort(),
-        );
         expect(
             floatingIds.map((entry) => entry.split(" ")[0]).sort(),
             "the table's floating rows",
@@ -482,5 +495,480 @@ describe("the clipboard commands of the app", () => {
             expect(command(id).enabled(), id).toBe(false);
         }
         expect(command("edit.paste").enabled()).toBe(true);
+    });
+});
+
+// SE-032 review (A): Escape during a drag of the Move tool takes back that drag only.
+describe("Escape during a drag of the Move tool", () => {
+    it("during a later drag it takes back that drag and the pixels float on; during the drag that lifted them it cancels the float", () => {
+        const document = open();
+        sessionsStore.getState().setView(document.id, { scale: 8, originX: 0, originY: 0 });
+        const disconnect = connectToolMapping(() => plainMapping(sessionsStore));
+        try {
+            const view = { document: active };
+            select({ x: 1, y: 1, width: 2, height: 2 });
+            toolState.select(MOVE_TOOL_ID);
+            const steps = active().history.undoCount;
+            const before = celBytes();
+            toolPipeline.down(at(view, { x: 1, y: 1 }, { button: 0, buttons: 1 }));
+            toolPipeline.move([at(view, { x: 3, y: 2 })]);
+            toolPipeline.up(at(view, { x: 3, y: 2 }, { button: 0, buttons: 0 }));
+            expect(isFloating()).toBe(true);
+            const afterFirst = celBytes();
+            expect(afterFirst).toEqual(moved(before, { x: 1, y: 1, width: 2, height: 2 }, 2, 1));
+
+            // A press on the float, a move, Escape: the drag is taken back, the float stays.
+            toolPipeline.down(at(view, { x: 3, y: 2 }, { button: 0, buttons: 1 }));
+            toolPipeline.move([at(view, { x: 5, y: 4 })]);
+            expect(celBytes()).not.toEqual(afterFirst);
+            expect(press("Escape")).toBe(`floating:${FLOATING_COMMANDS.cancel}`);
+            expect(toolPipeline.stroking).toBe(false);
+            expect(isFloating()).toBe(true);
+            expect(celBytes()).toEqual(afterFirst);
+            // The release finds no drag.
+            toolPipeline.up(at(view, { x: 5, y: 4 }, { button: 0, buttons: 0 }));
+            expect(isFloating()).toBe(true);
+            expect(celBytes()).toEqual(afterFirst);
+            expect(active().history.transaction).not.toBeNull();
+
+            // Escape with no drag cancels the float.
+            expect(press("Escape")).toBe(`floating:${FLOATING_COMMANDS.cancel}`);
+            expect(isFloating()).toBe(false);
+            expect(celBytes()).toEqual(before);
+
+            // Escape during the drag that lifted the pixels cancels the float.
+            toolPipeline.down(at(view, { x: 2, y: 2 }, { button: 0, buttons: 1 }));
+            toolPipeline.move([at(view, { x: 4, y: 4 })]);
+            expect(isFloating()).toBe(true);
+            press("Escape");
+            expect(toolPipeline.stroking).toBe(false);
+            expect(isFloating()).toBe(false);
+            expect(celBytes()).toEqual(before);
+            expect(active().history.undoCount).toBe(steps);
+            expect(active().history.transaction).toBeNull();
+        } finally {
+            disconnect();
+        }
+    });
+});
+
+// SE-032 review (B, C, E): the commands that apply the float first are enabled while it
+// floats, and only a stroke disables them.
+describe("commands that apply the float first, with a real float", () => {
+    /** Lifts the selection by the canvas arrow: a float of one pixel's move. */
+    function float(): void {
+        select({ x: 1, y: 1, width: 3, height: 2 });
+        press("ArrowRight");
+        expect(isFloating()).toBe(true);
+    }
+
+    /** The labels of the steps undo would take back, newest first, `count` of them. */
+    function labels(count: number): (string | null)[] {
+        const { history } = active();
+        const found: (string | null)[] = [];
+        for (let index = 0; index < count; index++) {
+            found.push(history.undoLabel);
+            history.undo();
+        }
+        for (let index = 0; index < count; index++) history.redo();
+        return found;
+    }
+
+    const SPRITE_COMMANDS = [
+        "sprite.canvasSize",
+        "sprite.spriteSize",
+        "sprite.crop",
+        "sprite.trim",
+        "sprite.rotate90",
+        "sprite.rotate180",
+        "sprite.flipHorizontal",
+        "sprite.flipVertical",
+        "sprite.properties",
+    ];
+
+    it("the sprite-wide commands and Sprite Properties: enabled while floating, a Move step then theirs; disabled during a stroke", async () => {
+        open();
+        float();
+        for (const id of SPRITE_COMMANDS) expect(command(id).enabled(), id).toBe(true);
+        const steps = active().history.undoCount;
+        void command("sprite.rotate180").run();
+        expect(isFloating()).toBe(false);
+        expect(active().history.undoCount).toBe(steps + 2);
+        expect(labels(2)).toEqual(["Rotate Canvas 180°", "Move"]);
+
+        // Sprite Properties applies the float before its dialog (no host: cancelled at once).
+        float();
+        const before = active().history.undoCount;
+        await command("sprite.properties").run();
+        expect(isFloating()).toBe(false);
+        expect(active().history.undoCount).toBe(before + 1);
+        expect(active().history.undoLabel).toBe("Move");
+
+        const { session, history } = active();
+        const stroke = history.begin({
+            layerId: session.activeLayerId,
+            frameId: session.activeFrameId,
+        });
+        for (const id of SPRITE_COMMANDS) expect(command(id).enabled(), id).toBe(false);
+        stroke.abort();
+    });
+
+    it("Select All, Deselect and Invert: Ctrl+D after a paste drops the pixels in place and deselects; each applies the float first", async () => {
+        open();
+        const rect = { x: 0, y: 0, width: 2, height: 2 };
+        select(rect);
+        const before = celBytes();
+        await command("edit.copy").run();
+        await command("edit.paste").run();
+        expect(isFloating()).toBe(true);
+        floatingState.moveTo(5, 3);
+        expect(press("Ctrl+D")).toBe("global:select.none");
+        expect(isFloating()).toBe(false);
+        expect(active().session.selection).toBeNull();
+        expect(labels(2)).toEqual(["Deselect", "Paste"]);
+        const after = celBytes();
+        for (let y = 0; y < 2; y++) {
+            for (let x = 0; x < 2; x++) {
+                const from = (y * W + x) * 4;
+                const to = ((3 + y) * W + 5 + x) * 4;
+                expect(after.slice(to, to + 4)).toEqual(before.slice(from, from + 4));
+            }
+        }
+
+        float();
+        expect(press("Ctrl+A")).toBe("global:select.all");
+        expect(isFloating()).toBe(false);
+        expect(labels(2)).toEqual(["Select All", "Move"]);
+        float();
+        expect(press("Ctrl+I")).toBe("global:select.invert");
+        expect(isFloating()).toBe(false);
+        expect(labels(2)).toEqual(["Invert Selection", "Move"]);
+
+        const { session, history } = active();
+        const stroke = history.begin({
+            layerId: session.activeLayerId,
+            frameId: session.activeFrameId,
+        });
+        for (const id of ["select.all", "select.none", "select.invert"]) {
+            expect(command(id).enabled(), id).toBe(false);
+        }
+        stroke.abort();
+    });
+
+    it("the palette's commands, swatch reorder included: enabled while floating, a Move step then theirs; disabled during a stroke", () => {
+        open();
+        editorStore.getState().setForeground(0x123456ff);
+        float();
+        expect(command(ADD_COLOUR).enabled()).toBe(true);
+        void command(ADD_COLOUR).run();
+        expect(isFloating()).toBe(false);
+        expect(active().session.doc.palette.colors).toContain(0x123456ff);
+        expect(labels(2)).toEqual(["Add Current Colour", "Move"]);
+
+        editorStore.getState().setForeground(0x654321ff);
+        void command(ADD_COLOUR).run();
+        const colours = () => active().session.doc.palette.colors;
+        const first = colours().indexOf(0x123456ff);
+        const last = colours().length - 1;
+        expect(colours()[last]).toBe(0x654321ff);
+        float();
+        // The last swatch dragged before the first one added.
+        setCurrentSwatch(last);
+        setMoveTarget(first);
+        expect(command(MOVE_COLOUR).enabled()).toBe(true);
+        expect(command(REMOVE_COLOUR).enabled()).toBe(true);
+        expect(command(PALETTE_FROM_SPRITE).enabled()).toBe(true);
+        void command(MOVE_COLOUR).run();
+        expect(isFloating()).toBe(false);
+        expect(colours().slice(first, first + 2)).toEqual([0x654321ff, 0x123456ff]);
+        expect(labels(2)).toEqual(["Move Colour", "Move"]);
+
+        const { session, history } = active();
+        const stroke = history.begin({
+            layerId: session.activeLayerId,
+            frameId: session.activeFrameId,
+        });
+        // The current swatch is the moved one: a target after it is valid but for the stroke.
+        setMoveTarget(first + 1);
+        for (const id of [ADD_COLOUR, REMOVE_COLOUR, MOVE_COLOUR, PALETTE_FROM_SPRITE]) {
+            expect(command(id).enabled(), id).toBe(false);
+        }
+        stroke.abort();
+        setMoveTarget(null);
+    });
+
+    it("the timeline's apply commands (SE-022): rename, layer properties and frame duration apply a real float, a Move step then theirs", () => {
+        open(2);
+        const layer = () => active().session.doc.layers[0]!;
+        float();
+        void command(TIMELINE_COMMANDS.renameLayer).run();
+        setRenameText("Ink");
+        expect(command(TIMELINE_COMMANDS.applyLayerName).enabled()).toBe(true);
+        void command(TIMELINE_COMMANDS.applyLayerName).run();
+        expect(isFloating()).toBe(false);
+        expect(layer().name).toBe("Ink");
+        expect(labels(2)[1]).toBe("Move");
+
+        float();
+        void command(TIMELINE_COMMANDS.layerProperties).run();
+        editProperties({ opacity: 100 });
+        const steps = active().history.undoCount;
+        void command(TIMELINE_COMMANDS.applyLayerProperties).run();
+        expect(isFloating()).toBe(false);
+        expect(layer().opacity).toBe(100);
+        expect(active().history.undoCount).toBe(steps + 2);
+        expect(labels(2)[1]).toBe("Move");
+
+        float();
+        const before = active().history.undoCount;
+        withArguments({ duration: 250 }, () => void command(TIMELINE_COMMANDS.setDuration).run());
+        expect(isFloating()).toBe(false);
+        expect(active().session.doc.frames[0]!.durationMs).toBe(250);
+        expect(active().history.undoCount).toBe(before + 2);
+        expect(labels(2)[1]).toBe("Move");
+    });
+});
+
+// SE-032 review (D): the file workflows and New Sprite apply the float first, so the question
+// before unsaved changes are lost covers it; the unload guard is armed while it floats.
+describe("the file workflows while floating", () => {
+    function workflowsOf() {
+        const platform = fakePlatform();
+        const dialogs = createFileDialogs();
+        const detach = dialogs.attachHost();
+        const questions: string[] = [];
+        dialogs.store.subscribe(({ request }) => {
+            if (request) questions.push(`${request.action} ${request.document}`);
+        });
+        const notes: string[] = [];
+        const workflows = createFileWorkflows({
+            sessions: sessionsStore,
+            platform,
+            dialogs,
+            notices: {
+                info: (message) => void notes.push(`info: ${message}`),
+                error: (message) => void notes.push(`error: ${message}`),
+            },
+        });
+        /** Answers the question once it is asked: true discards, null keeps the document. */
+        const answer = async (discard: true | null) => {
+            const asked = await vi.waitFor(() => {
+                const request = dialogs.store.getState().request;
+                if (!request) throw new Error("no question yet");
+                return request;
+            });
+            asked.answer(discard);
+        };
+        return { platform, dialogs, detach, questions, notes, workflows, answer };
+    }
+
+    /** A clean document (saved where it is) with a floating selection. */
+    function cleanWithFloat(): OpenDocument {
+        const document = open();
+        select({ x: 1, y: 1, width: 2, height: 2 });
+        sessionsStore.getState().markSaved(document.id);
+        press("ArrowRight");
+        expect(isFloating()).toBe(true);
+        expect(isDirty(active())).toBe(false);
+        return active();
+    }
+
+    it("Open, Close and Revert are enabled while floating; disabled during a stroke", () => {
+        const document = cleanWithFloat();
+        expect(command("file.open").enabled()).toBe(true);
+        expect(command("file.close").enabled()).toBe(true);
+        expect(command("file.revert").enabled()).toBe(false);
+        floatingState.cancel();
+        const stroke = document.history.begin({
+            layerId: document.session.activeLayerId,
+            frameId: document.session.activeFrameId,
+        });
+        for (const id of ["file.open", "file.close", "file.save", "file.saveAs"]) {
+            expect(command(id).enabled(), id).toBe(false);
+        }
+        stroke.abort();
+    });
+
+    it("Close applies the float first and asks: Cancel keeps the document with the float applied, Discard closes it", async () => {
+        const { detach, questions, notes, workflows, answer } = workflowsOf();
+        const document = cleanWithFloat();
+        let closing = workflows.close();
+        await answer(null);
+        expect(await closing).toBe(false);
+        expect(questions).toEqual(["close float"]);
+        expect(isFloating()).toBe(false);
+        expect(active().history.undoLabel).toBe("Move");
+        closing = workflows.close();
+        await answer(true);
+        expect(await closing).toBe(true);
+        expect(sessionsStore.getState().documents.some((entry) => entry.id === document.id)).toBe(
+            false,
+        );
+        expect(notes).toEqual([]);
+        detach();
+    });
+
+    it("a dropped project opens once read: the float is applied and the question covers it; an unreadable one changes nothing", async () => {
+        const { detach, questions, notes, workflows, answer } = workflowsOf();
+        cleanWithFloat();
+        expect(
+            await workflows.openFiles([chosen("bad.ngsprite", new Uint8Array([1, 2, 3]), null)]),
+        ).toBe(false);
+        expect(notes).toHaveLength(1);
+        expect(notes[0]).toMatch(/^error: Could not open “bad\.ngsprite”\./);
+        expect(notes[0]).not.toMatch(/stroke/);
+        expect(isFloating()).toBe(true);
+        expect(questions).toEqual([]);
+
+        const bytes = serialize(
+            createDocument({ name: "dropped", width: 3, height: 3 }).doc,
+            new Map(),
+        );
+        const opening = workflows.openFiles([chosen("dropped.ngsprite", bytes, null)]);
+        await answer(true);
+        expect(await opening).toBe(true);
+        expect(questions).toEqual(["open float"]);
+        expect(isFloating()).toBe(false);
+        expect(active().session.doc.name).toBe("dropped");
+        expect(notes.slice(1)).toEqual(["info: Opened dropped.ngsprite"]);
+        detach();
+    });
+
+    it("Revert applies the float first and asks; Discard reads the file again", async () => {
+        const { platform, detach, questions, notes, workflows, answer } = workflowsOf();
+        open();
+        select({ x: 1, y: 1, width: 2, height: 2 });
+        const saved = celBytes();
+        const disk = new MemoryDisk();
+        platform.toSave.push(disk.handle("float.ngsprite"));
+        expect(await workflows.save()).toBe(true);
+        press("ArrowRight");
+        expect(isFloating()).toBe(true);
+        expect(workflows.canAct()).toBe(true);
+        const reverting = workflows.revert();
+        await answer(true);
+        expect(await reverting).toBe(true);
+        expect(questions).toEqual(["revert float"]);
+        expect(isFloating()).toBe(false);
+        expect(celBytes()).toEqual(saved);
+        expect(notes).toEqual(["info: Saved float.ngsprite", "info: Reverted to float.ngsprite"]);
+        detach();
+    });
+
+    it("New Sprite applies the float before its dialog, which then names the document to discard", async () => {
+        const detach = spriteDialogs.attachHost();
+        try {
+            cleanWithFloat();
+            const done = command("file.new").run();
+            const request = spriteDialogs.store.getState().request;
+            expect(request?.kind).toBe("new-sprite");
+            expect(request?.kind === "new-sprite" ? request.discards : undefined).toBe("float");
+            expect(isFloating()).toBe(false);
+            expect(active().history.undoLabel).toBe("Move");
+            if (request?.kind === "new-sprite") request.answer(null);
+            await done;
+        } finally {
+            detach();
+        }
+    });
+
+    it("the unload guard is armed while a selection floats on a clean document", () => {
+        let listeners = 0;
+        const target = {
+            addEventListener: (type: string) => void (type === "beforeunload" && listeners++),
+            removeEventListener: (type: string) => void (type === "beforeunload" && listeners--),
+        };
+        const stop = installFileWorkflows({
+            target,
+            workflows: { busy: false, openFiles: async () => false },
+            overlayOpen: () => false,
+        });
+        try {
+            open();
+            select({ x: 1, y: 1, width: 2, height: 2 });
+            sessionsStore.getState().markSaved(active().id);
+            expect(listeners).toBe(0);
+            press("ArrowRight");
+            expect(isDirty(active())).toBe(false);
+            expect(listeners).toBe(1);
+            floatingState.cancel();
+            expect(listeners).toBe(0);
+            press("ArrowRight");
+            expect(listeners).toBe(1);
+            press("Enter");
+            // Applied: the document is dirty now, and stays guarded.
+            expect(isDirty(active())).toBe(true);
+            expect(listeners).toBe(1);
+        } finally {
+            stop();
+        }
+        expect(listeners).toBe(0);
+    });
+});
+
+// SE-032 review (F): a float that cannot be applied is reported by a toast and taken back;
+// `applyFloating` throws, so Save says it could not save.
+describe("a float that cannot be applied", () => {
+    it("is reported by a toast and taken back; applyFloating throws; Save reports that it could not save and writes nothing", async () => {
+        const toasts: string[] = [];
+        const detachSink = notices.attachSink(
+            (kind, message) => void toasts.push(`${kind}: ${message}`),
+        );
+        let failing = false;
+        const allocate: PixelAllocator = (length) => {
+            if (failing) throw new RangeError("out of memory");
+            return new Uint8ClampedArray(length);
+        };
+        const session = createDocument({ name: "float", width: W, height: H });
+        session.doc.images.set("image-0", pattern(1));
+        session.doc.cels.set(celKey(session.activeLayerId, session.activeFrameId), {
+            imageId: "image-0",
+            opacity: 255,
+        });
+        sessionsStore.getState().open(session, { history: { allocate } });
+        try {
+            select({ x: 0, y: 0, width: 2, height: 2 });
+            const selection = active().session.selection;
+            const before = celBytes();
+            press("ArrowDown");
+            failing = true;
+            expect(() => applyFloating()).toThrow(FloatingApplyError);
+            expect(isFloating()).toBe(false);
+            expect(celBytes()).toEqual(before);
+            expect(active().session.selection).toBe(selection);
+            expect(active().history.transaction).toBeNull();
+            expect(toasts).toHaveLength(1);
+            expect(toasts[0]).toMatch(/^error: Could not apply the floating selection\. /);
+
+            failing = false;
+            press("ArrowDown");
+            failing = true;
+            const platform = fakePlatform();
+            const disk = new MemoryDisk();
+            const handle = disk.handle("float.ngsprite");
+            platform.toSave.push(handle);
+            const errors: string[] = [];
+            const infos: string[] = [];
+            const workflows = createFileWorkflows({
+                sessions: sessionsStore,
+                platform,
+                dialogs: createFileDialogs(),
+                notices: {
+                    info: (message) => void infos.push(message),
+                    error: (message) => void errors.push(message),
+                },
+            });
+            expect(await workflows.save()).toBe(false);
+            expect(errors).toEqual([
+                "Could not save “float.ngsprite”. The floating selection could not be applied.",
+            ]);
+            expect(infos).toEqual([]);
+            expect(handle.writes).toHaveLength(0);
+            expect(platform.toSave).toHaveLength(1);
+            expect(toasts).toHaveLength(2);
+            expect(celBytes()).toEqual(before);
+        } finally {
+            detachSink();
+        }
     });
 });
