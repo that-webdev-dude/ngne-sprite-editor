@@ -539,6 +539,14 @@ fixes and stay In progress until the next leg's checks (F25), the owner having p
 | F24 | SE-041 review | Failed writes were untested and some ended in silence (D, H); after a refused permission the save picker needs the user's gesture, which may have lapsed, and a kept file that was deleted failed every Save (E); a trailing dot doubled the extension and some device names escaped (F); a huge file was read whole before any check (G); Revert never asked for read permission again (I); tests that could not fail (B, C, J) or pinned what SE-044 changes (K) | A failed write, picker or permission request leaves the document dirty with its previous file and one error toast; every operation given up after it started says why; past a lapsed gesture, or for a file that is gone, Save names Save As; names trimmed before and after the extension, device names tested on their stem; a file larger than any project (2 GiB of content plus zip framing) is refused before it is read; Revert asks for read permission first; New Sprite also waits while a file operation runs; drop tests use a text file. The download fallback counts the document as saved once the download is handed over, which a cancelled browser dialog cannot undo (SPEC §10) | `src/app/file/*`, `src/app/platform/projectFiles.ts`, `src/app/sprite/sprite.commands.ts`; SPEC §10; `tests/*/se-041-*` |
 | F25 | Owner, 23:05 | The owner paused the leg to let the machine cool, to resume the next day. Both fix agents had just committed. SE-065's fixes are merged and `npm run check` passed on them (406a3e7, 3657 unit tests); SE-041's fixes were merged after it (da8bcd6) with no check run. 5-hour limit 56% used, weekly 30% | SE-041 and SE-065 stay In progress: each has had its review and fixes; the next leg runs `npm run check` and the full `CI=1` suite on da8bcd6, then marks both Done | Ticket index |
 
+### Leg 2 (2026-10-18)
+
+| #   | Source | Finding | Decision | Applied in |
+| --- | ------ | ------- | -------- | ---------- |
+| F26 | Start of the leg | Local `main` (3fb0151) was 14 commits ahead of `origin/main` (68485e1): the push after leg 1 had not happened. CI was green on `origin/main` (run 39013146830). SE-041 and SE-065 were In progress, waiting for their checks (F25). 5-hour limit 2% used, weekly 30% | The leg continues from local `main`. SE-041 and SE-065 are checked first, with no agent running | — |
+| F27 | Full E2E with `CI=1` | On 3fb0151 (SE-041 and SE-065 with their review fixes) 457 of 457 passed (39.5 min); `npm run check` passed (3671 unit tests) | SE-041 and SE-065 are Done | Ticket index |
+| F28 | Orchestrator | SE-032 (after SE-031) and SE-023 (after SE-022) head the two longest open chains and share no module | Started together, two agents (5-hour limit 2% used, weekly 30%) | Ticket index |
+
 ## Descoped tickets
 
 None.

@@ -169,7 +169,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-017                                                   |
 | Blocks       | —                                                        |
 | Blocked until | —                                                       |
