@@ -316,6 +316,28 @@ Behaviour (SE-022):
 - Tab (viewport focused) and View → Hide Timeline hide the panel; the viewport takes its rows.
   The panel is shown again at every start.
 
+Tag bar (SE-023):
+
+- Each tag is a span over its frames, 1 px in from the edges of their columns, 16 px tall in an
+  18 px row, with a 4 px radius and its name in 11 px type, cut short with an ellipsis (the
+  whole name is its tooltip). The span is the tag's colour, opaque: an alpha the colour has is
+  kept but not drawn. The name is black or white, whichever has the higher contrast with the
+  span (WCAG 2.1 relative luminance; black on a tie), which is at least 4.58:1 on any colour.
+- Overlapping tags take different rows. Tags are placed by their first frame, the longer first
+  at an equal first frame (a tag sits above the tags nested in it), then in creation order, each
+  in the first row where it overlaps no tag. With one row the bar keeps the transport's 28 px;
+  each further row adds 18 px, up to three rows (64 px); then the tag bar scrolls vertically and
+  the frame header stays right below it. The transport stays on the first row.
+- The active tag at the active frame (SPEC §7.4) is marked by weight 500 and a 1 px ring inside
+  its span, in the colour of its name.
+- Each end of a span is a drag handle 6 px wide inside the span (resize cursor); while the
+  button is held the span shows the range the release will set. A double-click on a span opens
+  Tag Properties… for its tag. A press on the bar gives the focus to the active cell without
+  scrolling the panel, and selects nothing.
+- The spans are 16 px tall, under the 24 px pointer target of §8: what they do is also in the
+  Frame menu for the active tag (Tag Properties…, Delete Tag), and the range in the dialog's
+  From and To fields. Context menus on tags are SE-026's.
+
 ### 5.7 Status bar
 
 Left to right: cursor `x, y` · document size · zoom with a "Fit" button after it · frame
@@ -361,7 +383,7 @@ transient tool feedback in `--warn`.
 | Export          | Large dialog | Bundle options (SPEC §9.4), file toggles, frames (all / one tag), pivot (edits the same value as Sprite properties), atlas thumbnail with rectangles, resulting file list with sizes, final frame/animation IDs, destination folder, "Export on save" |
 | Overwrite confirm | Dialog | Lists existing files in the chosen folder once per folder                       |
 | Canvas / Sprite size | Dialog | Numeric fields, anchor grid, resample method                                |
-| Tag             | Dialog   | Name, colour, range, direction, repeat                                          |
+| Tag             | Dialog   | Name, colour, range, direction, repeat. Colour: a hex field (3, 4, 6 or 8 digits, as the colour panel's), a sample of the span and eight preset colours; range: From and To, frame numbers; direction: Forward, Reverse, Ping-pong; repeat 0–255, 0 repeating without end. Titled "New tag" (Create) or "Tag properties" (OK). An empty name, a colour that is not one and a From after To are named in a message line under the form (the name and colour fields marked invalid), and the dialog cannot be confirmed until they are fixed (SE-023) |
 | Layer properties | Popover | Name, opacity, blend mode; for reference layers: X, Y, scale, placement         |
 | Cel properties  | Popover  | Cel opacity; linked state with Unlink                                           |
 | Onion skin      | Popover  | Frames before/after, opacity, falloff, tint, placement, within tag              |

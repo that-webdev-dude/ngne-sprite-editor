@@ -992,6 +992,19 @@ layer would remain.
   `a b`). `repeat = n > 0` writes the sequence n times; `repeat = 0` loops forever.
 - Tags may overlap. The **active tag** at a frame is the tag with the shortest range containing
   that frame; ties go to the tag created last.
+- In the timeline (SE-023), Frame → New Tag… opens the Tag dialog over the frames selected in
+  the timeline, from the first to the last (frames between them included), or over the active
+  frame when none is selected. It proposes the name "Tag", the first of the dialog's eight
+  preset colours that no tag of the document has (the presets again, in order, once all are
+  taken), forward and repeat 0; Create adds the tag in one undo step. Tag Properties… and Delete
+  Tag follow it in the Frame menu. They act on the tag whose span ran them (a double-click on a
+  span opens Tag Properties… for its tag), otherwise on the active tag at the active frame, and
+  are disabled while there is none. The dialog's answer is one undo step, or none when it
+  changes nothing; a name is stored without surrounding white space. Dragging either end of a
+  span sets the tag's range in one undo step at the release (Apply Tag Range, a command outside
+  the menus); the end stops at the first and the last frame and at the other end, and Escape
+  during the drag cancels it. Each of these applies a floating selection first and does nothing
+  during a stroke.
 
 ### 7.5 Playback and onion skin
 

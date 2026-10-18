@@ -1,0 +1,161 @@
+/*
+ * Tag bar (DESIGN §2, §5.6; SE-023), at the right of the transport in the timeline's bar. Each
+ * row is 18 px; a span is 16 px tall, 1 px inside its row and its frame columns, with its label
+ * in black or white (set by the component). One row fills the 28 px bar; the bar grows by 18 px
+ * per further row up to three rows (`data-tag-rows` on the panel), then the tag bar scrolls
+ * and the frame header stays right below it.
+ */
+.timeline[data-tag-rows="2"] .timeline__bar {
+    height: calc(var(--row-height) + 18px);
+}
+
+.timeline[data-tag-rows="2"] .timeline__row--header {
+    top: calc(var(--row-height) + 18px);
+}
+
+.timeline[data-tag-rows="3"] .timeline__bar {
+    height: calc(var(--row-height) + 36px);
+}
+
+.timeline[data-tag-rows="3"] .timeline__row--header {
+    top: calc(var(--row-height) + 36px);
+}
+
+/* In a taller bar the transport stays on the first row. */
+.timeline[data-tag-rows] .timeline__transport {
+    align-items: flex-start;
+    padding-top: calc((var(--row-height) - var(--control-height)) / 2);
+}
+
+/* A scroller only when the rows do not fit: the usual bar adds no scroll container. */
+.timeline__tags[data-scrolls] {
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+.timeline__tag-rows {
+    position: relative;
+}
+
+.timeline__tag {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    height: 16px;
+    padding: 0 var(--space-8);
+    overflow: hidden;
+    border-radius: var(--radius-control);
+    font-size: var(--font-size-label);
+    line-height: var(--line-height);
+    white-space: nowrap;
+}
+
+.timeline__tag-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* The active tag at the active frame: weight 500 and a ring inside, in the label's colour. */
+.timeline__tag[aria-current="true"] {
+    box-shadow: inset 0 0 0 var(--border-width) currentColor;
+    font-weight: var(--font-weight-strong);
+}
+
+/* The drag handles: 6 px inside each end of the span. */
+.timeline__tag-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: ew-resize;
+    touch-action: none;
+}
+
+.timeline__tag-handle[data-end="from"] {
+    left: 0;
+}
+
+.timeline__tag-handle[data-end="to"] {
+    right: 0;
+}
+
+/* The Tag dialog (DESIGN §7): a column of labels and a column of controls. */
+.tag-form {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--space-12);
+    align-items: center;
+}
+
+.tag-form__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8) var(--space-12);
+    min-width: 0;
+}
+
+/* Text fields with the metrics of the number field (DESIGN §4). */
+.tag-form__text {
+    width: 100%;
+    min-width: 0;
+    height: var(--control-height);
+    padding: 0 var(--space-8);
+    border: var(--border-width) solid var(--border-input);
+    border-radius: var(--radius-control);
+    background: var(--bg-raised);
+    color: var(--text);
+    user-select: text;
+}
+
+.tag-form__text[aria-invalid="true"] {
+    border-color: var(--danger);
+}
+
+.tag-form__hex {
+    width: 96px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The span as the tag bar will draw it: the colour, and the label's black or white. */
+.tag-form__sample {
+    flex: none;
+    max-width: 96px;
+    height: 16px;
+    padding: 0 var(--space-8);
+    overflow: hidden;
+    border-radius: var(--radius-control);
+    font-size: var(--font-size-label);
+    line-height: var(--line-height);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tag-form__presets {
+    display: flex;
+    gap: var(--space-4);
+}
+
+.tag-form__preset {
+    width: var(--control-height);
+    height: var(--control-height);
+    border-radius: var(--radius-control);
+}
+
+.tag-form__preset[data-state="checked"] {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+}
+
+.tag-form__hint {
+    color: var(--text-muted);
+}
+
+/* The line is always there, so the dialog does not change height when a message appears. */
+.tag-form__message {
+    grid-column: 1 / -1;
+    min-height: var(--line-height);
+    color: var(--danger);
+}

@@ -3,16 +3,17 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { activeDocument, sessionsStore, useSessions } from "../../app/state/sessions";
 import { effectiveSelection } from "../../app/timeline/selection";
+import { SHOWN_TAG_ROWS } from "../../app/timeline/tagLayout";
 import { clickTimeline } from "../../app/timeline/timelineClicks";
 import { TIMELINE_COMMANDS } from "../../app/timeline/timelineCommandIds";
 import { useTimelineState } from "../../app/timeline/timelineState";
 import { runCommand } from "../commands/runCommand";
 import { finishProperties, LayerProperties } from "./LayerProperties";
 import { LayerRow } from "./LayerRow";
+import { TagBar } from "./TagBar";
 import {
     activeCell,
     CELL_ATTRIBUTE,
-    CELL_WIDTH,
     cellOf,
     focusCell,
     keepInView,
@@ -25,9 +26,9 @@ import { useLiveCel, useShownTimeline } from "./useShownTimeline";
 import "./timeline.css";
 
 /**
- * The timeline panel (DESIGN §5.6, SE-022): the transport and the tag bar on top, the frame
- * header, and one row per pixel layer, top of the stack first — the layer's visibility, lock,
- * name and opacity, then its cels. The grid is one ARIA grid whose active cell is its only tab
+ * The timeline panel (DESIGN §5.6, SE-022): the transport and the tag bar (SE-023) on top, the
+ * frame header, and one row per pixel layer, top of the stack first — the layer's visibility,
+ * lock, name and opacity, then its cels. The grid is one ARIA grid whose active cell is its only tab
  * stop besides the controls of the active row's header; ← → ↑ ↓ Home End move the active cell
  * through the registry's `timeline` bindings, and the focus follows it. Nothing is shown while
  * no document is open.
@@ -92,6 +93,15 @@ export function TimelinePanel() {
         focusCell(cellOf(grid.current, activeLayerId, activeFrameId));
     }, []);
 
+    // A press on the tag bar keeps the focus in the timeline, on the active cell, without
+    // scrolling it into view: the span pressed stays under the pointer.
+    const focusActiveInPlace = useCallback(() => {
+        const document = activeDocument(sessionsStore.getState());
+        if (!document) return;
+        const { activeLayerId, activeFrameId } = document.session;
+        cellOf(grid.current, activeLayerId, activeFrameId)?.focus({ preventScroll: true });
+    }, []);
+
     // An edit whose document stops being the active one ends: applied when its document can
     // take it (a closed document's edits are dropped by `timelineLifetime`).
     useEffect(() => {
@@ -135,15 +145,24 @@ export function TimelinePanel() {
         focusActive();
     };
 
+    // The bar grows by a row per overlap level of the tags, up to three (DESIGN §2).
+    const tagRows = Math.min(model.tags.rows, SHOWN_TAG_ROWS);
+
     return (
-        <div ref={root} className="timeline" data-timeline="">
+        <div
+            ref={root}
+            className="timeline"
+            data-timeline=""
+            data-tag-rows={tagRows > 1 ? tagRows : undefined}
+        >
             <div className="timeline__bar">
                 <Transport />
                 {/* The tag bar (SE-023) spans the frame columns. */}
-                <div
-                    className="timeline__tags"
-                    data-timeline-tags=""
-                    style={{ width: frameIds.length * CELL_WIDTH }}
+                <TagBar
+                    documentId={model.documentId}
+                    tags={model.tags}
+                    frameIds={frameIds}
+                    onPress={focusActiveInPlace}
                 />
             </div>
             <RadixPopover.Root

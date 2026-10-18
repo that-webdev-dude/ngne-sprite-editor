@@ -1,12 +1,14 @@
 import type { StoreApi } from "zustand/vanilla";
-import { celAt } from "../../core/model";
-import type { DocSession } from "../../core/model";
+import { activeTagAt, celAt } from "../../core/model";
+import type { DocSession, SpriteDoc } from "../../core/model";
 import { activeDocument } from "../state/sessions";
 import type { SessionsState } from "../state/sessions";
+import { tagRows } from "./tagLayout";
 
 // What the timeline panel shows of a document (DESIGN §5.6, SE-022), read from the document
 // model alone: the cel states come from `SpriteDoc.cels`, never from images or composites, so
-// a document with many large hidden layers costs the panel nothing more than its cel map.
+// a document with many large hidden layers costs the panel nothing more than its cel map. The
+// tag bar's spans and rows (SE-023) are part of it, so they are drawn with the rest.
 
 /** DESIGN §5.6: empty (hollow dot), filled (solid dot), linked (shares its image). */
 export type CelState = "empty" | "filled" | "linked";
@@ -34,6 +36,32 @@ export interface TimelineLayer {
     readonly key: string;
 }
 
+/** A tag as the tag bar shows it (DESIGN §5.6, SE-023). */
+export interface TimelineTag {
+    readonly id: string;
+    readonly name: string;
+    /** 0xRRGGBBAA. */
+    readonly color: number;
+    /** Index of the tag's first frame. */
+    readonly from: number;
+    /** Index of the tag's last frame. */
+    readonly to: number;
+    /** Row of the tag bar, 0 at the top: overlapping tags take different rows (`tagRows`). */
+    readonly row: number;
+}
+
+/** The tag bar of a timeline (SE-023). */
+export interface TimelineTags {
+    /** In creation order. */
+    readonly list: readonly TimelineTag[];
+    /** Rows the tags take: the most tags over one frame; 0 without tags. */
+    readonly rows: number;
+    /** The active tag at the active frame (SPEC §7.4, `activeTagAt`), or null. */
+    readonly activeId: string | null;
+    /** Changes whenever anything above changes: what the tag bar is rendered again for. */
+    readonly key: string;
+}
+
 export interface TimelineModel {
     readonly documentId: string;
     readonly frames: readonly TimelineFrame[];
@@ -41,6 +69,24 @@ export interface TimelineModel {
     readonly layers: readonly TimelineLayer[];
     readonly activeLayerId: string;
     readonly activeFrameId: string;
+    readonly tags: TimelineTags;
+}
+
+/** The tags of a document as the tag bar shows them, with the active tag at `activeFrameId`. */
+export function timelineTags(doc: SpriteDoc, activeFrameId: string): TimelineTags {
+    const index = new Map(doc.frames.map((frame, at) => [frame.id, at]));
+    const spans: Omit<TimelineTag, "row">[] = [];
+    for (const { id, name, color, fromFrameId, toFrameId } of doc.tags) {
+        const from = index.get(fromFrameId);
+        const to = index.get(toFrameId);
+        // A document keeps its tags' endpoints among its frames (SPEC §5.1).
+        if (from !== undefined && to !== undefined) spans.push({ id, name, color, from, to });
+    }
+    const { rows, count } = tagRows(spans);
+    const list = spans.map((span, at) => ({ ...span, row: rows[at] ?? 0 }));
+    const activeId = activeTagAt(doc, index.get(activeFrameId) ?? -1)?.id ?? null;
+    const key = JSON.stringify([activeId, list.map((tag) => Object.values(tag))]);
+    return { list, rows: count, activeId, key };
 }
 
 /** The timeline of a session's document. */
@@ -74,6 +120,7 @@ export function timelineModel(documentId: string, session: DocSession): Timeline
         layers,
         activeLayerId: session.activeLayerId,
         activeFrameId: session.activeFrameId,
+        tags: timelineTags(doc, session.activeFrameId),
     };
 }
 
@@ -90,7 +137,8 @@ function sameModel(a: TimelineModel, b: TimelineModel): boolean {
                 frame.durationMs === b.frames[index]?.durationMs,
         ) &&
         a.layers.length === b.layers.length &&
-        a.layers.every((layer, index) => layer.key === b.layers[index]?.key)
+        a.layers.every((layer, index) => layer.key === b.layers[index]?.key) &&
+        a.tags.key === b.tags.key
     );
 }
 
