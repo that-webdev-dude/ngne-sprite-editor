@@ -294,6 +294,17 @@ open transaction. It is applied automatically before: frame or layer switch, too
 non-move tool, save, export, playback start, any sprite-wide command. Undo while floating
 cancels the float. Selection masks survive frame and layer switches and are not saved.
 
+Recorded by SE-032 (the rules are in §7.2, "Move, floating selection and clipboard"): the
+float's pixels are written into the transaction's image, the cel's own, so every reader of the
+document sees them where they are; `core/floating` holds the model and `app/selection` shows it.
+"Tool change" means a change of the selected tool: a tool held for a while (Space → hand,
+Alt → eyedropper) leaves the float as it is. A float belongs to the Move tool: Paste and the
+arrows' lift select it. When its document stops being the active one the float is applied; when
+its document is closed it is dropped. A transaction's `commit` may carry another change of the
+session that its owner made and that is already applied, such as the selection the float moved:
+it is recorded in the same entry, done after the pixels and undone before them, and alone when
+no pixel changed.
+
 ### 5.3 Compositing
 
 The CPU compositor in `core/` is the single source of truth for pixels: the viewport, the
@@ -965,6 +976,53 @@ Selection model (SE-030):
   only the part within the selection's bounds is composited and echoed: outside them nothing
   changed, and the opaque echo would hide onion skins and references there.
 
+Move, floating selection and clipboard (SE-032):
+
+- A float is content (pixels and a mask of one size) at a position in whole document pixels,
+  over the active cel, in one transaction (§5.2). Lifted, the content is the selection's
+  bounding rectangle of the cel with the unselected pixels transparent and the selection as its
+  mask, and the lifted pixels are transparent underneath. Wherever the float is, the pixels of
+  its mask replace the cel's pixels under them, transparent ones included (Aseprite's opaque
+  move); what lies off the canvas is not written but is kept, so content moved off and back is
+  whole again. The selection follows the float: its mask where it is, cut to the canvas, none
+  when nothing of it is on the canvas.
+- Applied, the float stays where it is, clipped to the canvas, as one undo step labelled Move
+  (Paste for a pasted float) that also moves the selection; a float applied where it began
+  records nothing. Cancelled (Escape, undo), the cel is byte-identical to before it and the
+  selection is the one before it. The float is shown through the live-stroke path of §5.3 and
+  the echo of §6.6 for as long as it lasts, across any number of drags.
+- Move tool (V): with a selection a press anywhere on the canvas lifts the selected pixels and
+  the drag moves them by whole pixels; they float on after the release. While pixels float, a
+  press on a pixel of the float's mask drags it again, and a press anywhere else applies it and
+  does nothing more. With no selection the drag moves the whole cel and is applied at the
+  release, one undo step per drag; an empty cel has nothing to move. Either button moves. It is
+  refused on a locked, hidden or reference layer with the messages of §7.1 (SE-046 gives it
+  reference layers), and works at every zoom step: it moves by whole texels. A pointer cancel
+  or Escape during a drag takes that drag back, and cancels the float when the drag lifted it.
+- Keys (§7.8): in the `floating` context Enter applies, Escape cancels and the arrows nudge by 1
+  px, Shift+arrows by 8. In the `canvas` context the arrows with a selection lift its pixels,
+  select the Move tool and nudge them. Selecting another tool applies the float.
+- Clipboard. Copy puts the selected pixels of the active cel (as lifted, with their shape) or,
+  while pixels float, the floating content, in the editor's own clipboard, and as an
+  `image/png` file (SE-005's encoder) on the system clipboard when the browser allows it. Paste
+  reads the system clipboard when the browser allows it: an image that is the editor's own copy
+  (the same size, the same alpha at every pixel and the same colour at every opaque one, since
+  the browser may encode it again) is pasted from the editor's clipboard with its shape; another
+  image is pasted whole, every pixel in its mask. When the system clipboard cannot be read, the
+  editor's clipboard is pasted and the status bar says so ("No access to the system clipboard:
+  pasted from the editor's clipboard"); a copy that could not reach it says "No access to the
+  system clipboard: copied in the editor only". Paste makes a float on the active cel whose
+  top-left pixel is at ⌊c − size / 2 + ½⌋ on each axis, c being the document position at the
+  centre of the viewport, and selects the Move tool; an image larger than the canvas floats
+  whole and is clipped when it is applied. Paste is refused on the layers paint is refused on,
+  and does nothing without a document (SE-044 imports a pasted image then).
+- Cut (copy, then clear), Delete (the selected pixels become transparent) and Fill (the
+  selected pixels take the foreground colour, replaced, not blended) apply a float first and
+  then act on the selection, each one undo step that records nothing when it changes nothing;
+  Delete on an empty cel creates none. Copy and Cut need a selection or a float, Delete and Fill
+  a selection; Fill has no key. They write on the layers paint may go to; Copy reads any pixel
+  layer.
+
 ### 7.3 Layers
 
 Add, delete, duplicate, rename, reorder (drag), visibility, lock, opacity, merge down, flatten.
@@ -1116,6 +1174,9 @@ Focus rules that make `canvas` the normal state:
   only without a selection, so the menu items stay enabled while a selection exists. Every
   switch of the active frame or layer applies a floating selection first (§5.2) and does
   nothing during a stroke.
+- While pixels float (SE-032) the `floating` context outranks `timeline`, so the arrows nudge
+  the float with the focus in the timeline too; Ctrl+Z cancels the float (§5.2) and Ctrl+Y does
+  nothing until it is applied or cancelled.
 - Differences from Aseprite forced by the browser: invert selection is Ctrl+I (Ctrl+Shift+I
   opens DevTools); new sprite and close use the alternates above; D is the contour tool, so
   reset colours has no default key.

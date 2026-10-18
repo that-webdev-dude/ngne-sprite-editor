@@ -1,5 +1,6 @@
 import type { History } from "../../core/history";
 import type { CommandSpec } from "../commands/types";
+import { floatingState } from "../selection/floatingState";
 import { activeDocument, sessionsStore } from "./sessions";
 
 function activeHistory(): History | null {
@@ -21,16 +22,26 @@ function titled(verb: string, label: string | null | undefined): string {
     return label ? `${verb} ${label}` : verb;
 }
 
+/** Undo while a selection floats cancels the float (SPEC §5.2), the step it would become. */
+function undo(): void {
+    if (floatingState.floats()) floatingState.cancel();
+    else idleHistory()?.undo();
+}
+
 // SPEC §7.8: Ctrl+Z; Ctrl+Y, Ctrl+Shift+Z. Not bound in `text`: a field undoes its own typing.
 export const commands: CommandSpec[] = [
     {
         id: "edit.undo",
-        title: () => titled("Undo", activeHistory()?.undoLabel),
+        title: () =>
+            titled(
+                "Undo",
+                floatingState.floats() ? floatingState.float?.label : activeHistory()?.undoLabel,
+            ),
         shortcut: "Ctrl+Z",
         menuPath: ["Edit"],
         menuOrder: 100,
-        enabled: () => idleHistory()?.canUndo ?? false,
-        run: () => void idleHistory()?.undo(),
+        enabled: () => floatingState.floats() || (idleHistory()?.canUndo ?? false),
+        run: undo,
     },
     {
         id: "edit.redo",

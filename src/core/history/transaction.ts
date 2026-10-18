@@ -2,7 +2,7 @@ import { assertCanAdd, celAt, celKey, frameIndex } from "../model";
 import type { BitMask, DocSession, DocumentLimits, IdGenerator, PixelBuffer, Rect } from "../model";
 import { blitPixels } from "../pixels";
 import { allocateBuffer, copyRect, type PixelAllocator } from "./allocate";
-import type { Command } from "./command";
+import { compositeCommand, type Command } from "./command";
 import { TransactionError } from "./errors";
 import { patchCommand, touchedByImage } from "./pixelPatch";
 
@@ -48,8 +48,14 @@ export interface Transaction {
      * reported pixel has its value at `begin` again — it acts as `abort` and returns null
      * (SPEC §7.1: a stroke that changes nothing records nothing). When the entry cannot be
      * allocated it also restores the state at `begin`, and throws `AllocationError`.
+     *
+     * `extra` is a change of the session that the owner of the transaction made besides the
+     * pixels and that is already applied, such as the selection a floating selection moved
+     * (SE-032). It becomes part of the same entry, done after the pixels and undone before
+     * them; when no pixel changed it is the entry alone. It is not undone when the commit
+     * fails: that is the owner's part.
      */
-    commit(label: string): Command | null;
+    commit(label: string, extra?: Command): Command | null;
     /** Closes the stroke with no history entry: pixels as at `begin`, a created cel removed. */
     abort(): void;
 }
@@ -177,16 +183,18 @@ class StrokeTransaction implements Transaction {
         if (changed) this.#dirty = union(this.#dirty, changed);
     }
 
-    commit(label: string): Command | null {
+    commit(label: string, extra?: Command): Command | null {
         this.#assertOpen("commit");
-        let command: Command | null = null;
+        let pixels: Command | null = null;
         try {
             const area = this.#dirty && this.#changedIn(this.#dirty);
-            if (area) command = this.#command(label, area);
+            if (area) pixels = this.#command(label, area);
         } finally {
-            if (!command) this.#restore();
+            if (!pixels) this.#restore();
             this.#close();
         }
+        const command =
+            pixels && extra ? compositeCommand(label, [pixels, extra]) : (pixels ?? extra ?? null);
         if (command) this.#host.record(command);
         return command;
     }
