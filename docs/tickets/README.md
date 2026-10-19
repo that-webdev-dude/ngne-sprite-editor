@@ -64,14 +64,14 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-021 | Frame, cel and tag commands                       | L    | 004, 010                           | —             | Done   |
 | SE-022 | Timeline panel                                    | L    | 007, 011, 020, 021                 | G1            | Done   |
 | SE-023 | Tags UI                                           | M    | 021, 022                           | —             | Done   |
-| SE-024 | Editor playback                                   | M    | 011, 022, 023                      | —             | Ready  |
+| SE-024 | Editor playback                                   | M    | 011, 022, 023                      | —             | In progress |
 | SE-025 | Onion skin                                        | M    | 024                                | —             | Ready  |
 | SE-026 | Timeline editing interactions                     | M    | 022, 023                           | —             | Ready  |
 | **M3** | **[Selection and transform](M3-selection-and-transform.md)** | |                                |               |        |
 | SE-030 | Selection model and marching ants                 | M    | 004, 013, 014                      | —             | Done   |
 | SE-031 | Selection tools                                   | M    | 014, 017, 030                      | —             | Done   |
 | SE-032 | Move, floating selection and clipboard            | L    | 005, 031                           | —             | Done   |
-| SE-033 | Selection transforms                              | M    | 032                                | —             | Ready  |
+| SE-033 | Selection transforms                              | M    | 032                                | —             | In progress |
 | SE-034 | Sprite operations                                 | L    | 006, 007, 020, 021, 030, 040       | —             | Done   |
 | **M4** | **[Persistence and import](M4-persistence-and-import.md)** | |                                  |               |        |
 | SE-040 | Project file format (`.ngsprite`)                 | M    | 003, 005, 010                      | —             | Done   |
