@@ -8,25 +8,29 @@ import {
     canAddReferenceLayer,
     fitPlacement,
     ReferenceLayerError,
-    resetReferenceFitCommand,
+    fitToCanvas,
+    RESET_REFERENCE_FIT_LABEL,
     setReferenceCommand,
 } from "../../core/references";
-import type { ReferenceChange, ReferenceRect } from "../../core/references";
+import type { ReferenceChange, ReferencePlacement, ReferenceRect } from "../../core/references";
 import { notices } from "../notices/notices";
 import { FloatingApplyError } from "../selection/floating";
+import { PAINT_REFUSED } from "../tools/paintTarget";
 import { activeDocument, sessionsStore } from "../state/sessions";
 import type { OpenDocument } from "../state/sessions";
 import { settledDocumentOf } from "../timeline/timelineDocument";
 import { referenceImages } from "./referenceImages";
+import { withReferenceSources } from "./referenceSources";
 
 // Reference layers as the app adds and changes them (SPEC §7.6, SE-045). Every change is one
 // undo step of the document's history; the source bytes go into the document's store
 // (`OpenDocument.referenceSources`, SE-007), from where Save writes them (SE-040, SE-041) and the
 // viewport draws them (`app/viewport/viewportController`).
 //
-// What later tickets call: `addReferenceLayerFromPng` (SE-044: the drop chooser's "Add as
-// reference", "keep source as reference" with the cropped region as `rect`) and
-// `changeReference` (SE-046: a drag or a corner handle, one step per gesture).
+// What later tickets call: `addReferenceLayerFromPng` and `referenceLayerCommandFromPng`
+// (SE-044: the drop chooser's "Add as reference", "keep source as reference" with the cropped
+// region as `rect`, chained with the import in one step) and `changeReference` (SE-046: a drag
+// or a corner handle, one step per gesture; a locked layer refuses).
 
 /** The toast of a fifth reference layer. */
 export const REFERENCE_LIMIT_MESSAGE = `A sprite can have at most ${
@@ -78,23 +82,39 @@ function reason(error: unknown): string {
     return "Something went wrong.";
 }
 
+/** A reference layer's step made from a PNG file, not yet executed (`referenceLayerCommandFromPng`). */
+export interface ReferenceLayerStep {
+    /** The document the step is for; execute it in that document's history. */
+    document: OpenDocument;
+    /**
+     * The step: it adds the layer and puts the source bytes into the document's store, and its
+     * undo takes both away (SE-045 review C). Made for the document as it is now: execute it
+     * before the document changes again, alone or in a `compositeCommand` (SE-044 chains it
+     * with its import, one undo step for both).
+     */
+    command: Command;
+    /** The ID the new layer gets. */
+    layerId: string;
+}
+
 /**
- * Adds a reference layer made from the bytes of a PNG file to a document (SPEC §7.6): decoded
- * with the import's PNG path, placed behind the pixel layers at opacity 50%, fitted and centred
- * on the canvas (or in `options.rect`), in one undo step. Resolves with the new layer's ID, or
- * null when nothing was added; the reason has then been shown in an error toast:
+ * The step that adds a reference layer made from the bytes of a PNG file to a document (SPEC
+ * §7.6), without executing it: decoded with the import's PNG path, placed behind the pixel
+ * layers at opacity 50%, fitted and centred on the canvas (or in `options.rect`). Resolves null
+ * when no step can be made; the reason has then been shown in an error toast:
  *
  * - The document has four reference layers already ("A sprite can have at most four
  *   reference layers.", checked before and after decoding).
  * - The bytes are not a PNG file, or larger than a project holds (64 MiB, FORMAT.md §1.8).
- * - The document was closed while the file was decoded, or a stroke is in progress.
+ * - The document was closed, opened again or reverted while the file was decoded, or a
+ *   stroke is in progress ("The sprite is busy or was closed.").
  *
- * The document is unchanged in every one of these cases. `bytes` are copied.
+ * A floating selection of the document is applied first (SPEC §5.2). `bytes` are copied.
  */
-export async function addReferenceLayerFromPng(
+export async function referenceLayerCommandFromPng(
     bytes: Uint8Array,
     options: AddReferenceOptions = {},
-): Promise<string | null> {
+): Promise<ReferenceLayerStep | null> {
     const fail = (why: string): null => {
         notices.error(`Could not add the reference layer. ${why}`);
         return null;
@@ -106,7 +126,7 @@ export async function addReferenceLayerFromPng(
         return null;
     }
     if (bytes.length > MAX_REFERENCE_SOURCE_BYTES) {
-        return fail(`The file is larger than ${MAX_REFERENCE_SOURCE_BYTES / 1024 / 1024} MB.`);
+        return fail(`The file is larger than ${MAX_REFERENCE_SOURCE_BYTES / 1024 / 1024} MiB.`);
     }
     const source = bytes.slice();
     let image: PixelBuffer;
@@ -115,17 +135,20 @@ export async function addReferenceLayerFromPng(
     } catch (error) {
         return fail(reason(error));
     }
-    const document = documentOf(before.id) === null ? null : settled(before.id);
-    if (!document) return fail("The sprite is busy or was closed.");
-    const { session, history } = document;
+    // The same session: a document opened again or reverted keeps its id, not its session.
+    const busy = "The sprite is busy or was closed.";
+    if (documentOf(before.id)?.session !== before.session) return fail(busy);
+    const document = settled(before.id);
+    if (!document || document.session !== before.session) return fail(busy);
+    const { session } = document;
     if (!canAddReferenceLayer(session.doc)) {
         notices.error(REFERENCE_LIMIT_MESSAGE);
         return null;
     }
     const sourceId = randomId();
-    let command: Command;
+    let added: Command;
     try {
-        command = addReferenceLayerCommand(session, {
+        added = addReferenceLayerCommand(session, {
             sourceId,
             sourceWidth: image.width,
             sourceHeight: image.height,
@@ -138,15 +161,28 @@ export async function addReferenceLayerFromPng(
         return fail(reason(error));
     }
     referenceImages.put(source, image);
-    // The bytes first: whoever hears of the step finds them.
-    sessionsStore.getState().setReferenceSource(document.id, sourceId, source);
-    try {
-        history.execute(command);
-    } catch (error) {
-        sessionsStore.getState().deleteReferenceSource(document.id, sourceId);
-        throw error;
-    }
-    return command.touched.layerIds[0] ?? null;
+    const command = withReferenceSources(added, {
+        sessions: sessionsStore,
+        documentId: document.id,
+        owned: new Map([[sourceId, source]]),
+    });
+    return { document, command, layerId: added.touched.layerIds[0]! };
+}
+
+/**
+ * Adds a reference layer made from the bytes of a PNG file to a document in one undo step
+ * (`referenceLayerCommandFromPng`, executed at once). Resolves with the new layer's ID, or
+ * null when nothing was added; the reason has then been shown in an error toast, and the
+ * document is unchanged.
+ */
+export async function addReferenceLayerFromPng(
+    bytes: Uint8Array,
+    options: AddReferenceOptions = {},
+): Promise<string | null> {
+    const step = await referenceLayerCommandFromPng(bytes, options);
+    if (!step) return null;
+    step.document.history.execute(step.command);
+    return step.layerId;
 }
 
 /** The reference layer `layerId` of a document, if it is one. */
@@ -168,38 +204,82 @@ export function referenceSourceSize(
     return image ? { width: image.width, height: image.height } : null;
 }
 
+/** Why a reference layer's geometry cannot change: the paint tools' reason for a locked layer. */
+export const REFERENCE_LOCKED = PAINT_REFUSED.locked;
+
+/**
+ * What a change of a reference layer's position, scale or placement came to: `changed` when a
+ * step was recorded; `refused` with the reason when the layer is locked (SPEC §7.6: a lock
+ * keeps the geometry, as it keeps pixels from the paint tools).
+ */
+export interface ReferenceChangeResult {
+    changed: boolean;
+    refused?: string;
+}
+
+const UNCHANGED: ReferenceChangeResult = { changed: false };
+
 /**
  * Sets position, scale and placement of a reference layer of the active document, those
- * `change` names, in one undo step (SE-046 calls it once per drag). Returns whether a step was
- * recorded: none when nothing changes, the layer is not a reference layer of the active
- * document, or that document is busy with a stroke. Throws `ReferenceLayerError` for a value
- * out of range.
+ * `change` names, in one undo step (SE-046 calls it once per drag). No step is recorded when
+ * nothing changes, the layer is not a reference layer of the active document, or that document
+ * is busy with a stroke; a locked layer is refused with `REFERENCE_LOCKED`. Throws
+ * `ReferenceLayerError` for a value out of range.
  */
-export function changeReference(layerId: string, change: ReferenceChange, label?: string): boolean {
+export function changeReference(
+    layerId: string,
+    change: ReferenceChange,
+    label?: string,
+): ReferenceChangeResult {
     const active = activeDocument(sessionsStore.getState());
-    if (!active || !referenceLayerOf(active, layerId)) return false;
+    const layer = active && referenceLayerOf(active, layerId);
+    if (!active || !layer) return UNCHANGED;
+    if (layer.locked) return { changed: false, refused: REFERENCE_LOCKED };
     const document = settled(active.id);
-    if (!document || !referenceLayerOf(document, layerId)) return false;
+    if (!document || !referenceLayerOf(document, layerId)) return UNCHANGED;
     const command = setReferenceCommand(document.session, layerId, change, label);
-    if (!command) return false;
+    if (!command) return UNCHANGED;
     document.history.execute(command);
-    return true;
+    return { changed: true };
+}
+
+/**
+ * The placement that fits a reference layer's source to the canvas of its document, centred:
+ * the source is decoded first when it is not yet (a hidden layer's, say). Null when the
+ * document or the layer is gone meanwhile, or the source cannot be decoded.
+ */
+export async function referenceFit(
+    documentId: string,
+    layerId: string,
+): Promise<ReferencePlacement | null> {
+    const document = documentOf(documentId);
+    const layer = document && referenceLayerOf(document, layerId);
+    const bytes = layer && document.referenceSources.get(layer.sourceId);
+    if (!document || !bytes) return null;
+    let image: PixelBuffer;
+    try {
+        image = await referenceImages.decode(bytes);
+    } catch {
+        return null;
+    }
+    const now = documentOf(documentId);
+    if (now?.session !== document.session) return null;
+    return fitToCanvas(now.session.doc, image.width, image.height);
 }
 
 /**
  * Fits a reference layer of the active document to the canvas again, centred, in one undo
- * step. Returns whether a step was recorded: none when it is fitted already, its source is
- * not decoded yet, or the document is busy.
+ * step; its source is decoded first when it is not yet. Refused for a locked layer, like
+ * `changeReference`; no step when it is fitted already or the document is busy or changed.
  */
-export function resetReferenceFit(layerId: string): boolean {
+export async function resetReferenceFit(layerId: string): Promise<ReferenceChangeResult> {
     const active = activeDocument(sessionsStore.getState());
     const layer = active && referenceLayerOf(active, layerId);
-    const size = active && layer ? referenceSourceSize(active, layer) : null;
-    if (!active || !size) return false;
-    const document = settled(active.id);
-    if (!document || !referenceLayerOf(document, layerId)) return false;
-    const command = resetReferenceFitCommand(document.session, layerId, size.width, size.height);
-    if (!command) return false;
-    document.history.execute(command);
-    return true;
+    if (!active || !layer) return UNCHANGED;
+    if (layer.locked) return { changed: false, refused: REFERENCE_LOCKED };
+    const fitted = await referenceFit(active.id, layerId);
+    if (!fitted || activeDocument(sessionsStore.getState())?.session !== active.session) {
+        return UNCHANGED;
+    }
+    return changeReference(layerId, fitted, RESET_REFERENCE_FIT_LABEL);
 }

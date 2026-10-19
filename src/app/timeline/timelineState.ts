@@ -27,8 +27,8 @@ export interface DurationEdit {
 
 /**
  * The fields of a reference layer in the layer properties popover (DESIGN §7, SE-045): its
- * position and scale (`ReferenceLayer`), its placement, and the fitted placement Reset to Fit
- * puts in the fields (null while the source is not decoded).
+ * position and scale (`ReferenceLayer`) and its placement; read-only while the layer is locked
+ * (SPEC §7.6).
  */
 export interface ReferenceDraft {
     readonly x: number;
@@ -36,7 +36,8 @@ export interface ReferenceDraft {
     /** Document pixels per source pixel. */
     readonly scale: number;
     readonly placement: "behind" | "front";
-    readonly fit: { readonly x: number; readonly y: number; readonly scale: number } | null;
+    /** The layer was locked when the popover opened: the fields above cannot be changed. */
+    readonly locked: boolean;
 }
 
 /**
@@ -117,10 +118,18 @@ export function editProperties(change: Partial<Pick<PropertiesDraft, "name" | "o
     if (properties) timelineStore.setState({ properties: { ...properties, ...change } });
 }
 
-/** Changes the reference fields of the open popover (SE-045); none for a pixel layer. */
-export function editReferenceProperties(change: Partial<Omit<ReferenceDraft, "fit">>): void {
+/**
+ * Changes the reference fields of the open popover (SE-045); none for a pixel layer or a
+ * locked reference, nor when `layerId` is given and the popover is another layer's.
+ */
+export function editReferenceProperties(
+    change: Partial<Omit<ReferenceDraft, "locked">>,
+    layerId?: string,
+): void {
     const { properties } = timelineStore.getState();
-    if (!properties?.reference) return;
+    if (!properties?.reference || properties.reference.locked) return;
+    // A change that arrives late (Reset to Fit decodes first) is for its own layer only.
+    if (layerId !== undefined && properties.layerId !== layerId) return;
     timelineStore.setState({
         properties: { ...properties, reference: { ...properties.reference, ...change } },
     });

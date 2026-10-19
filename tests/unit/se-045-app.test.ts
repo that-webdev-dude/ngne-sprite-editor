@@ -77,6 +77,10 @@ describe("connectViewport: reference layers", () => {
         expect(viewport.references[0]).toMatchObject({ placement: "front", x: 1 });
         document.history.execute(setLayerOpacityCommand(session, "ref-1", 30)!);
         expect(viewport.references[0]?.opacity).toBe(30);
+        // At opacity 0 it is given no more than a hidden one (SE-045 review K).
+        document.history.execute(setLayerOpacityCommand(session, "ref-1", 0)!);
+        expect(viewport.references).toEqual([]);
+        document.history.undo();
         document.history.execute(setLayerVisibleCommand(session, "ref-1", false)!);
         expect(viewport.references).toEqual([]);
         document.history.undo();

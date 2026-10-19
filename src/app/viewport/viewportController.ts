@@ -164,7 +164,10 @@ export function connectViewport(
         const references: ViewportReference[] = [];
         if (document && document.session === shown) {
             for (const layer of document.session.doc.layers) {
-                if (layer.kind !== "reference" || !layer.visible) continue;
+                // Opacity 0 shows nothing: like a hidden layer, it takes no slot or texels.
+                if (layer.kind !== "reference" || !layer.visible || layer.opacity === 0) {
+                    continue;
+                }
                 const bytes = document.referenceSources.get(layer.sourceId);
                 const image = bytes ? images.get(bytes) : null;
                 if (!image) continue;

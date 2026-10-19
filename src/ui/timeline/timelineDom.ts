@@ -45,14 +45,25 @@ export function cellOf(grid: HTMLElement | null, layerId: string, frameId: strin
 /**
  * Scrolls `scroller` the least that shows `cell` beside the sticky layer column and below the
  * sticky rows on top, as they are laid out now (a tag bar makes the top taller). Only the
- * scroller moves: `scrollIntoView` would scroll the shell too.
+ * scroller moves: `scrollIntoView` would scroll the shell too. Of a reference layer's cell,
+ * which spans every frame column (SE-045), the column of the active frame is what is shown
+ * (`data-frame-index`).
  */
 export function keepInView(scroller: HTMLElement, cell: HTMLElement): void {
     const box = scroller.getBoundingClientRect();
-    const target = cell.getBoundingClientRect();
-    const column = cell.closest('[role="row"]')?.querySelector('[role="rowheader"]');
+    const whole = cell.getBoundingClientRect();
+    const column = Number(cell.dataset.frameIndex);
+    const target = Number.isInteger(column)
+        ? {
+              left: whole.left + column * CELL_WIDTH,
+              right: whole.left + (column + 1) * CELL_WIDTH,
+              top: whole.top,
+              bottom: whole.bottom,
+          }
+        : whole;
+    const header = cell.closest('[role="row"]')?.querySelector('[role="rowheader"]');
     const inner = { left: box.left + scroller.clientLeft, top: box.top + scroller.clientTop };
-    const left = column ? column.getBoundingClientRect().right : inner.left;
+    const left = header ? header.getBoundingClientRect().right : inner.left;
     let top = inner.top;
     for (const sticky of scroller.querySelectorAll(STICKY_TOP)) {
         top = Math.max(top, sticky.getBoundingClientRect().bottom);

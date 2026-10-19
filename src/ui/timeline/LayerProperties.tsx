@@ -9,6 +9,7 @@ import {
 } from "../../core/project/format";
 import { editProperties, editReferenceProperties } from "../../app/timeline/timelineState";
 import type { PropertiesDraft, ReferenceDraft } from "../../app/timeline/timelineState";
+import { referenceFit } from "../../app/references/references";
 import { runCommand } from "../commands/runCommand";
 import { Button } from "../primitives/Button";
 import { NumberField } from "../primitives/NumberField";
@@ -33,15 +34,17 @@ const PERCENT = 100;
  * document pixels, its scale in percent, its placement, and Reset to Fit, which puts the
  * fitted values in the fields. Like the name and opacity, they apply when the popover closes.
  */
-function ReferenceFields({ draft }: { draft: ReferenceDraft }) {
+function ReferenceFields({ draft, owner }: { draft: ReferenceDraft; owner: PropertiesDraft }) {
     const offset = { min: -MAX_REFERENCE_OFFSET, max: MAX_REFERENCE_OFFSET, step: 1, precision: 2 };
-    const { fit } = draft;
+    // A locked reference keeps its geometry (SPEC §7.6): the fields are read-only.
+    const disabled = draft.locked;
     return (
         <div className="timeline-properties__reference">
             <NumberField
                 label="X"
                 unit="px"
                 {...offset}
+                disabled={disabled}
                 value={draft.x}
                 onChange={(x) => editReferenceProperties({ x })}
             />
@@ -49,6 +52,7 @@ function ReferenceFields({ draft }: { draft: ReferenceDraft }) {
                 label="Y"
                 unit="px"
                 {...offset}
+                disabled={disabled}
                 value={draft.y}
                 onChange={(y) => editReferenceProperties({ y })}
             />
@@ -59,12 +63,14 @@ function ReferenceFields({ draft }: { draft: ReferenceDraft }) {
                 max={MAX_REFERENCE_SCALE * PERCENT}
                 step={1}
                 precision={4}
+                disabled={disabled}
                 value={draft.scale * PERCENT}
                 onChange={(percent) => editReferenceProperties({ scale: percent / PERCENT })}
             />
             <SegmentedControl
                 className="timeline-properties__placement"
                 label="Placement"
+                disabled={disabled}
                 value={draft.placement}
                 onChange={(placement) => editReferenceProperties({ placement })}
                 options={[
@@ -74,9 +80,12 @@ function ReferenceFields({ draft }: { draft: ReferenceDraft }) {
             />
             <Button
                 className="timeline-properties__fit"
-                disabled={!fit}
-                onClick={() => {
-                    if (fit) editReferenceProperties({ x: fit.x, y: fit.y, scale: fit.scale });
+                disabled={disabled}
+                // Computed at the click, the source decoded first when it is not yet: a hidden
+                // reference's is not (SE-045 review J).
+                onClick={async () => {
+                    const fit = await referenceFit(owner.documentId, owner.layerId);
+                    if (fit) editReferenceProperties(fit, owner.layerId);
                 }}
             >
                 Reset to Fit
@@ -159,7 +168,9 @@ export function LayerProperties({ draft, fallback }: { draft: PropertiesDraft; f
                         value={draft.opacity}
                         onChange={(opacity) => editProperties({ opacity })}
                     />
-                    {draft.reference ? <ReferenceFields draft={draft.reference} /> : null}
+                    {draft.reference ? (
+                        <ReferenceFields draft={draft.reference} owner={draft} />
+                    ) : null}
                 </form>
             </RadixPopover.Content>
         </RadixPopover.Portal>

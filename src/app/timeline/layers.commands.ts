@@ -13,11 +13,12 @@ import {
     setLayerVisibleCommand,
 } from "../../core/layers";
 import type { Layer } from "../../core/model";
-import { fitToCanvas, setReferenceCommand } from "../../core/references";
+import { setReferenceCommand } from "../../core/references";
 import { appCommands } from "../commands/appCommands";
 import type { CommandSpec } from "../commands/types";
+import { sessionsStore } from "../state/sessions";
 import type { OpenDocument } from "../state/sessions";
-import { referenceSourceSize } from "../references/references";
+import { sourcesFreedBy, withReferenceSources } from "../references/referenceSources";
 import { effectiveSelection, rowOrder, targetLayerIds } from "./selection";
 import { TIMELINE_COMMANDS as IDS } from "./timelineCommandIds";
 import {
@@ -79,7 +80,10 @@ function selectionOf(document: OpenDocument) {
     return effectiveSelection(timelineStore.getState().selection, document.id, document.session);
 }
 
-/** The layers Delete Layer removes, when at least one pixel layer stays. */
+/**
+ * The layers Delete Layer removes, of either kind (SE-045 review A), when at least one pixel
+ * layer stays.
+ */
 function deletableLayers(document: OpenDocument): string[] | null {
     const { session } = document;
     const ids = targetLayerIds(session, selectionOf(document));
@@ -96,12 +100,21 @@ function deleteLayers(): void {
         const ids = deletableLayers(document);
         if (!ids) return null;
         const { session } = document;
-        if (ids.length === 1) return deleteLayerCommand(session, ids[0]);
-        return chainedCommand(
-            "Delete Layers",
-            session,
-            ids.map((id) => (current) => deleteLayerCommand(current, id)),
-        );
+        const command: Command | null =
+            ids.length === 1
+                ? deleteLayerCommand(session, ids[0])
+                : chainedCommand(
+                      "Delete Layers",
+                      session,
+                      ids.map((id) => (current) => deleteLayerCommand(current, id)),
+                  );
+        // The step holds the sources of the reference layers it deletes (SPEC §7.6).
+        if (!command) return null;
+        return withReferenceSources(command, {
+            sessions: sessionsStore,
+            documentId: document.id,
+            owned: sourcesFreedBy(session.doc, ids, document.referenceSources),
+        });
     });
 }
 
@@ -126,10 +139,8 @@ function openProperties(): void {
     const { document, layer } = subject;
     let reference: PropertiesDraft["reference"] = null;
     if (layer.kind === "reference") {
-        const size = referenceSourceSize(document, layer);
-        const { x, y, scale, placement } = layer;
-        const fit = size ? fitToCanvas(document.session.doc, size.width, size.height) : null;
-        reference = { x, y, scale, placement, fit };
+        const { x, y, scale, placement, locked } = layer;
+        reference = { x, y, scale, placement, locked };
     }
     setTimelineVisible(true);
     timelineStore.setState({
@@ -168,7 +179,8 @@ function applyProperties(): void {
     const opacity = setLayerOpacityCommand(session, layer.id, properties.opacity);
     if (opacity) edits.push(opacity);
     const { reference } = properties;
-    if (reference && layer.kind === "reference") {
+    // A locked reference keeps its geometry (SPEC §7.6).
+    if (reference && layer.kind === "reference" && !layer.locked) {
         const { x, y, scale, placement } = reference;
         const placed = setReferenceCommand(session, layer.id, { x, y, scale, placement });
         if (placed) edits.push(placed);

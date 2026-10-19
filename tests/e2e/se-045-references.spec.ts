@@ -25,7 +25,48 @@ import {
     patchTexel,
     referenceLayers,
     setOpacity,
+    setVisible,
 } from "./se-045-support";
+
+/** NGNE's estimate of the texture memory of the renderer on screen. */
+function textureBytes(page: Page): Promise<number> {
+    return page.evaluate(() => window.__ngneTest!.viewport!.inspect()!.estimatedTextureBytes);
+}
+
+/**
+ * The mean absolute difference of the document rectangle's pixels from `expected`, per channel,
+ * read back now.
+ */
+function meanError(
+    page: Page,
+    rect: { x: number; y: number; width: number; height: number },
+    expected: (dx: number, dy: number) => readonly number[],
+): Promise<number[]> {
+    return page.evaluate(
+        ({ rect, wanted }) => {
+            const image = window.__ngneTest!.viewport!.readCanvas()!;
+            const sums = [0, 0, 0];
+            for (let dy = 0; dy < rect.height; dy++) {
+                for (let dx = 0; dx < rect.width; dx++) {
+                    const from = ((rect.y + dy) * image.width + rect.x + dx) * 4;
+                    const want = wanted[dy * rect.width + dx]!;
+                    for (let channel = 0; channel < 3; channel++) {
+                        sums[channel]! += Math.abs(
+                            (image.data[from + channel] ?? 0) - want[channel]!,
+                        );
+                    }
+                }
+            }
+            return sums.map((sum) => sum / (rect.width * rect.height));
+        },
+        {
+            rect,
+            wanted: Array.from({ length: rect.width * rect.height }, (_, index) => [
+                ...expected(index % rect.width, Math.floor(index / rect.width)),
+            ]),
+        },
+    );
+}
 
 // SE-045: reference layers on the canvas (SPEC §7.6, §6.4). A reference image is decoded, fitted
 // and centred, drawn by NGNE behind the pixel layers at 50% opacity (quad layer 2) or in front
@@ -176,10 +217,13 @@ test("a 2048 × 2048 gradient fitted to a 64 × 64 canvas at scale 4 is within 4
     test.setTimeout(120_000);
     const errors = collectErrors(page);
     const { document, view } = await open(page, 64, 64, 4);
+    const before = await textureBytes(page);
     const id = await addReference(page, { kind: "gradient", width: 2048, height: 2048 });
     await setOpacity(page, id!, 255);
     await settle(page);
     const rect = documentRect(document, view);
+    // The slot holds the image resampled to its 256 × 256 device pixels, not the source.
+    expect((await textureBytes(page)) - before).toBe(256 * 256 * 4);
     const error = await page.evaluate((rect) => {
         const image = window.__ngneTest!.viewport!.readCanvas()!;
         const side = 2048;
@@ -218,14 +262,80 @@ test("a 2048 × 2048 gradient fitted to a 64 × 64 canvas at scale 4 is within 4
     expect(errors).toEqual([]);
 });
 
+test("2048 × 2048 one-pixel black and white columns fitted to 64 × 64 at scale 4 read back as mid grey within 4/255", async ({
+    page,
+}) => {
+    // Nearest sampling would show one column per device pixel, black or white (an error near
+    // 127); the CPU resample averages the eight columns under it: 127.5.
+    test.setTimeout(120_000);
+    const errors = collectErrors(page);
+    const { document, view } = await open(page, 64, 64, 4);
+    const id = await addReference(page, {
+        kind: "columns",
+        width: 2048,
+        height: 2048,
+        rgba: [0, 0, 0, 255],
+        other: [255, 255, 255, 255],
+    });
+    await setOpacity(page, id!, 255);
+    await settle(page);
+    const error = await meanError(page, documentRect(document, view), () => [127.5, 127.5, 127.5]);
+    for (const channel of error) expect(channel).toBeLessThanOrEqual(4);
+    expect(errors).toEqual([]);
+});
+
+test("columns of a colour and of transparent pixels resample to the colour at half alpha, not darkened", async ({
+    page,
+}) => {
+    // The resample is premultiplied (SPEC §7.6): averaging straight colour would pull the
+    // colour halfway to the transparent pixels' black.
+    test.setTimeout(120_000);
+    const errors = collectErrors(page);
+    const { document, view } = await open(page, 64, 64, 4);
+    const id = await addReference(page, {
+        kind: "columns",
+        width: 1024,
+        height: 1024,
+        rgba: [240, 200, 40, 255],
+        other: [0, 0, 0, 0],
+    });
+    await setOpacity(page, id!, 255);
+    await settle(page);
+    const error = await meanError(page, documentRect(document, view), (dx, dy) =>
+        over([240, 200, 40], 0.5, checkerAt(DARK_CHECKER, Math.floor(dx / 4), Math.floor(dy / 4))),
+    );
+    for (const channel of error) expect(channel).toBeLessThanOrEqual(4);
+    expect(errors).toEqual([]);
+});
+
+test("switching to a document without references lets every display source go", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await open(page, 16, 16, 4);
+    await addReference(page, { kind: "flat", width: 64, height: 64, rgba: RED });
+    await addReference(page, { kind: "flat", width: 32, height: 32, rgba: BLUE });
+    await settle(page);
+    const sources = () => page.evaluate(() => window.__ngneTest!.viewport!.referenceSources);
+    expect(await sources()).toBe(2);
+    // Another document, with no reference: none is kept.
+    await openDocument(
+        page,
+        { name: "plain", width: 8, height: 8 },
+        { scale: 4, originX: 8, originY: 8 },
+    );
+    await settle(page);
+    expect(await sources()).toBe(0);
+    expect(errors).toEqual([]);
+});
+
 test("after deleting every reference layer, texture bytes are within 1 MB of the baseline", async ({
     page,
 }) => {
     const errors = collectErrors(page);
-    // 128 × 128 at scale 4: each reference is 512 × 512 on screen, 1 MiB in its slot.
-    await open(page, 128, 128, 4);
-    const bytes = () =>
-        page.evaluate(() => window.__ngneTest!.viewport!.inspect()!.estimatedTextureBytes);
+    // 128 × 128 at scale 8: each reference is 1024 × 1024 on screen, 4 MiB in its slot.
+    await open(page, 128, 128, 8);
+    const bytes = () => textureBytes(page);
     const baseline = await bytes();
     const ids: string[] = [];
     for (let index = 0; index < 4; index++) {
@@ -240,7 +350,15 @@ test("after deleting every reference layer, texture bytes are within 1 MB of the
     await settle(page);
     const MB = 1024 * 1024;
     // The four slots hold their images: the comparison below is not vacuous.
-    expect((await bytes()) - baseline).toBeGreaterThanOrEqual(4 * MB);
+    expect((await bytes()) - baseline).toBeGreaterThanOrEqual(16 * MB);
+    // A hidden reference's slot goes back to the 1×1 image.
+    await setVisible(page, ids[0]!, false);
+    await settle(page);
+    const slots = await page.evaluate(() => window.__ngneTest!.viewport!.references);
+    expect(slots.filter((slot) => slot === null)).toHaveLength(1);
+    expect(slots.some((slot) => slot?.layerId === ids[0])).toBe(false);
+    expect((await bytes()) - baseline).toBeLessThanOrEqual(12 * MB + MB);
+    await setVisible(page, ids[0]!, true);
     for (const id of ids) await deleteLayer(page, id);
     await settle(page);
     expect(Math.abs((await bytes()) - baseline)).toBeLessThanOrEqual(MB);

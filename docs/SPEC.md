@@ -496,9 +496,12 @@ Texture slots (IDs are fixed for the life of a renderer)
 
 Reference slots (SE-045; §7.6):
 - The app decodes a source once (`app/references/referenceImages`) and gives the viewport the
-  visible reference layers of the shown document whose source is decoded
-  (`NgneViewport.setReferences`). The viewport keeps a slot per layer while the layer is given,
-  and puts the 1×1 image in a slot when its layer goes (deleted, hidden, another document).
+  visible reference layers of the shown document whose opacity is above 0 and whose source is
+  decoded (`NgneViewport.setReferences`); a layer at opacity 0 is treated as hidden, so it
+  takes no slot and no share of the 16 MP. The viewport keeps a slot per layer while the layer
+  is given, and puts the 1×1 image in a slot when its layer goes (deleted, hidden, another
+  document). The display sources of images it no longer shows are closed once no upload is
+  being made from them, also when the next document has no reference at all.
 - Each decoded source becomes its display source once (≤ 4096 px per side, a high-quality
   downscale); an upload is the display source resampled to the reference's device rectangle,
   `[round(originX + x × zoom), round(originY + y × zoom)]` to the rounded far edges, so a
@@ -614,7 +617,8 @@ composite:
   are merged into one. A cancel or an abort clears it at once; after the stroke, any change of
   its frame, another active document or a closed one clears it at once.
 - It hides whatever NGNE draws over the composite's place: references and onion skins (quad
-  layers 2, 3, 5, 6). SE-025 and SE-045 decide how it gives way to them.
+  layers 2, 3, 5, 6). SE-025 decides how it gives way to onion skins; how it gives way to
+  references is recorded in §7.6 (SE-045).
 - Development builds switch it with `window.__ngneTest.strokeEcho.enabled`; the benchmark
   measures both ways on one build (`PERF_ECHO=off`). With the echo, a sample's frame is the
   earlier of NGNE's submit and the end of the overlay draw that showed it.
@@ -1305,16 +1309,23 @@ Recorded by SE-045 (`core/references`, `app/references`; the display path is in 
 - A new reference layer is visible, unlocked, at opacity 128, behind, fitted inside the canvas
   ("contain") and centred, named after its file without `.png` ("Reference" through the app
   function). It goes directly above the topmost reference layer in the stack, or to the bottom
-  when there is none, and the active layer stays active. The source bytes go into the
-  document's store before the step, and stay there after a delete or an undo, so a redo finds
-  them; Save writes only the sources a layer names (§10).
+  when there is none, and the active layer stays active.
+- The document's store holds only the sources some layer names (SE-045 review). The step that
+  adds a reference layer and the one that deletes reference layers hold the bytes they add or
+  take away: done or redone they put back what the layers name, and an undo of an add or a
+  delete takes out what no layer names any more. Their `bytes` (§5.2) include the sources', so
+  the history's budget counts them, and a dropped entry lets them go. A source taken out of the
+  store loses its decoded image; a redo decodes it again before the reference is drawn. Save
+  writes the store's sources (§10).
 - Layer → New Reference Layer from File… opens a file input for one PNG. A fifth reference
   layer is refused before the picker opens, and again once the file is decoded, by the error
   toast "A sprite can have at most four reference layers."; the document is unchanged. A file
-  that is not a PNG, larger than 64 MiB (FORMAT §1.8), or a document that was closed or began
-  a stroke meanwhile, is reported as "Could not add the reference layer. <reason>".
-  `addReferenceLayerFromPng(bytes, { documentId, name, rect })` is the same path for SE-044
-  (`rect`: fitted and centred in the cropped region instead of the canvas), and
+  that is not a PNG, larger than 64 MiB (FORMAT §1.8), or a document that was closed, opened
+  again, reverted or began a stroke meanwhile, is reported as "Could not add the reference
+  layer. <reason>". `addReferenceLayerFromPng(bytes, { documentId, name, rect })` is the same
+  path for SE-044 (`rect`: fitted and centred in the cropped region instead of the canvas);
+  `referenceLayerCommandFromPng` makes the same step without executing it, store write
+  included, so SE-044 can chain it with its import in one undo step.
   `changeReference(layerId, change)` sets position, scale and placement in one step (SE-046).
 - Every change is one undo step: add; position, scale and placement (one step for any of them
   together, `setReferenceCommand`); Reset Reference to Fit (the canvas fit again, placement
@@ -1326,6 +1337,13 @@ Recorded by SE-045 (`core/references`, `app/references`; the display path is in 
   Reset Reference to Fit and the placement toggle ("Move Reference in Front of Layers" /
   "Move Reference Behind Layers"). They act on the reference layer of the row that ran them,
   otherwise on the active layer when it is a reference layer.
+- A locked reference layer keeps its geometry, as a lock keeps the paint tools off a pixel
+  layer: position, scale, placement and Reset to Fit are refused (the menu commands are
+  disabled, the popover's X, Y, Scale, Placement and Reset to Fit are read-only, and
+  `changeReference` refuses with the paint tools' reason "Layer is locked"; SE-046's drag
+  follows it). Opacity, visibility, lock, name and delete still work, as for pixel layers.
+- Reset to Fit in the popover computes the fit when it is pressed, decoding the source first
+  when it is not yet (a hidden layer's).
 - Stroke echo (§6.6; the SE-015 review): the echo gives way to references. Over a visible
   reference placed in front it draws nothing, and over one placed behind it draws only the
   composite's opaque pixels, which hide the reference in NGNE as well; the pixels it leaves out

@@ -286,7 +286,8 @@ too large to preview, the canvas area shows that message instead.
 
 Behaviour (SE-022):
 
-- While no document is open the panel is empty. Rows are the pixel layers, top of the stack
+- While no document is open the panel is empty. Rows are the pixel layers (then the Reference
+  group, SE-045), top of the stack
   first; the transport, the tag bar and the frame numbers stay in place while the grid scrolls
   under them, and the layer column stays at the left. The grid has thin scroll bars; the wheel
   (Shift+wheel across) and the keys scroll it too, and the active cell is kept in full view
@@ -342,11 +343,16 @@ Reference group (SE-045; SPEC §7.6):
 - A press on the header or the cell makes the reference layer the active layer (and selects
   it); while it is, that cell is the grid's tab stop and its header's controls are in the tab
   order, as for the active pixel row. ↓ from the bottom pixel layer goes on into the group, ↑
-  from its top row back. Delete Layer deletes it; Duplicate Layer is disabled.
+  from its top row back; while the cell is the active cell, the column of the active frame is
+  kept in view, also as ← → change it. Duplicate Layer is disabled.
+- Delete Layer takes every selected layer of either kind — reference rows selected with Ctrl,
+  pixel and reference rows together — or the active layer when none is selected, in one undo
+  step, as long as one pixel layer stays (SE-045 review).
 - The layer properties popover of a reference layer adds, after name and opacity: X and Y (px,
   two decimals), Scale (%, four decimals), Placement (Behind / In front) and Reset to Fit,
-  which puts the fitted values in the fields. They apply with name and opacity when the
-  popover closes, in one undo step.
+  which puts the fitted values in the fields (computed when pressed). They apply with name and
+  opacity when the popover closes, in one undo step. While the layer is locked they are
+  read-only (SPEC §7.6).
 
 Playback (SE-024; SPEC §7.5):
 

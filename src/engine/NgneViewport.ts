@@ -79,6 +79,8 @@ export interface ViewportProbe {
      * texture is of and the texture's size, or null for none or the placeholder.
      */
     readonly references: readonly ({ layerId: string; width: number; height: number } | null)[];
+    /** Display sources of references the viewport keeps (SE-045): one per decoded image shown. */
+    readonly referenceSources: number;
     /**
      * Draws the scene again and reads the canvas back in the same task (SPEC §6.7), at
      * backing resolution. The draw is not counted in `submittedFrames`. Null while there is
@@ -183,6 +185,8 @@ export class NgneViewport implements ViewportPort {
         if (document === this.#scene.document) return;
         // The frame key goes with the document: `setCurrent` names the new one's.
         replaceSceneDocument(this.#scene, document);
+        // The references went with the document (`replaceSceneDocument`); so do their sources.
+        this.#referenceSources.retain(new Set());
         for (const instance of this.#instances()) instance.slots.documentChanged();
         this.#markDirty();
     }
@@ -214,6 +218,9 @@ export class NgneViewport implements ViewportPort {
     }
 
     setReferences(references: readonly ViewportReference[]): void {
+        // Before the comparison: a document without references after one with them leaves the
+        // list as `setDocument` emptied it, and its display sources go all the same.
+        this.#referenceSources.retain(new Set(references.map((reference) => reference.image)));
         const now = this.#scene.references ?? [];
         const same =
             references.length === now.length &&
@@ -232,7 +239,6 @@ export class NgneViewport implements ViewportPort {
             });
         if (same) return;
         this.#scene.references = references.map((reference) => ({ ...reference }));
-        this.#referenceSources.retain(new Set(references.map((reference) => reference.image)));
         for (const instance of this.#instances()) instance.slots.references.sync();
         this.#markDirty();
     }
@@ -594,6 +600,7 @@ export class NgneViewport implements ViewportPort {
                 ),
                 slots: read(() => this.#live?.slots.shownKeys() ?? []),
                 references: read(() => this.#live?.slots.references.shown() ?? []),
+                referenceSources: read(() => this.#referenceSources.size),
                 playGrid: read(() => {
                     const grid = this.#live?.slots.playGrid();
                     if (!grid) return null;

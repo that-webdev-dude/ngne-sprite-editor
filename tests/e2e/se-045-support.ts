@@ -13,7 +13,18 @@ import type { Rgb } from "./se-011-support";
 /** An image the page makes: flat colour, or the two-axis gradient of the quality test. */
 export type ImageSpec =
     | { kind: "flat"; width: number; height: number; rgba: readonly number[] }
-    | { kind: "gradient"; width: number; height: number };
+    | { kind: "gradient"; width: number; height: number }
+    /**
+     * Columns one pixel wide: `rgba` in the even ones, `other` in the odd ones (opaque black
+     * and white, or a colour and transparent black).
+     */
+    | {
+          kind: "columns";
+          width: number;
+          height: number;
+          rgba: readonly number[];
+          other: readonly number[];
+      };
 
 /**
  * Adds a reference layer to the active document from a PNG the page encodes, through
@@ -39,6 +50,8 @@ export function addReference(
                     const at = (y * width + x) * 4;
                     if (image.kind === "flat") {
                         data.set(image.rgba, at);
+                    } else if (image.kind === "columns") {
+                        data.set(x % 2 === 0 ? image.rgba : image.other, at);
                     } else {
                         // A smooth gradient along both axes (SE-045 acceptance).
                         data[at] = Math.round((x * 255) / (width - 1));
@@ -85,7 +98,10 @@ export function setVisible(page: Page, layerId: string, visible: boolean): Promi
     );
 }
 
-/** Changes a reference layer through `changeReference` (one step); resolves whether it did. */
+/**
+ * Changes a reference layer through `changeReference` (one step); resolves whether a step was
+ * recorded.
+ */
 export function changeReference(
     page: Page,
     layerId: string,
@@ -97,20 +113,26 @@ export function changeReference(
             const references = (await import(
                 /* @vite-ignore */ referencesPath
             )) as typeof AppReferences;
-            return references.changeReference(layerId, change);
+            return references.changeReference(layerId, change).changed;
         },
         { layerId, change },
     );
 }
 
-/** Deletes a layer of the active document through its history (one step). */
+/**
+ * Deletes a layer of the active document as Delete Layer does with it active and nothing
+ * selected (one step, its source taken out of the store).
+ */
 export function deleteLayer(page: Page, layerId: string): Promise<void> {
-    return page.evaluate(async (layerId) => {
-        const layersPath = "/src/core/layers/index.ts";
-        const layers = (await import(/* @vite-ignore */ layersPath)) as typeof CoreLayers;
-        const state = window.__ngneTest!.sessions.getState();
+    return page.evaluate((layerId) => {
+        const hooks = window.__ngneTest!;
+        const state = hooks.sessions.getState();
         const document = state.documents.find((entry) => entry.id === state.activeId)!;
-        document.history.execute(layers.deleteLayerCommand(document.session, layerId));
+        document.session.activeLayerId = layerId;
+        state.touch(document.id);
+        const command = hooks.commands.get("layer.delete")!;
+        if (!command.enabled()) throw new Error("se-045: Delete Layer is disabled");
+        void command.run();
     }, layerId);
 }
 

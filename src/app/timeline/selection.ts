@@ -212,13 +212,14 @@ export function selectedFrameIds(
     return doc.frames.filter((frame) => chosen.has(frame.id)).map((frame) => frame.id);
 }
 
-/** The pixel layers of a layer selection, bottom to top; none for another kind. */
+/**
+ * The layers of a layer selection, pixel and reference layers alike (SE-045 review A), bottom
+ * to top; none for another kind.
+ */
 export function selectedLayerIds(doc: SpriteDoc, selection: TimelineSelection | null): string[] {
     if (!selection || selection.kind !== "layers") return [];
     const chosen = new Set(selection.layerIds);
-    return doc.layers
-        .filter((layer) => layer.kind === "pixel" && chosen.has(layer.id))
-        .map((layer) => layer.id);
+    return doc.layers.filter((layer) => chosen.has(layer.id)).map((layer) => layer.id);
 }
 
 /** Whether the cell of `layerId` at `frameId` is in the selection, by any kind. */

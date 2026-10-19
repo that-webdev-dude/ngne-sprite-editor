@@ -247,6 +247,8 @@ export interface ReferenceRowProps {
     layer: TimelineReference;
     /** Number of frame columns the row spans. */
     frameCount: number;
+    /** The column of `frameId`: the part of the cell kept in view (`keepInView`). */
+    frameIndex: number;
     /** The active layer's row as the panel draws it: tinted. */
     tinted: boolean;
     /**
@@ -272,6 +274,7 @@ export interface ReferenceRowProps {
 function ReferenceRowView({
     layer,
     frameCount,
+    frameIndex,
     tinted,
     focusRow,
     frameId,
@@ -320,11 +323,13 @@ function ReferenceRowView({
                 role="gridcell"
                 aria-selected={selected}
                 aria-label={`Reference layer, ${placement.toLowerCase()}`}
+                aria-colspan={frameCount}
                 style={{ width: Math.max(1, frameCount) * CELL_WIDTH }}
                 tabIndex={tabIndex}
                 {...{ [CELL_ATTRIBUTE]: "" }}
                 data-region-focus={focusRow ? "" : undefined}
                 data-frame={frameId}
+                data-frame-index={frameIndex}
                 data-active-cel={focusRow || undefined}
                 // As a cel's cell: the press makes it active and the click focuses it.
                 onPointerDown={(event) => {
@@ -344,6 +349,7 @@ export const ReferenceRow = memo(
     (before, after) =>
         before.layer.key === after.layer.key &&
         before.frameCount === after.frameCount &&
+        before.frameIndex === after.frameIndex &&
         before.tinted === after.tinted &&
         before.focusRow === after.focusRow &&
         before.frameId === after.frameId &&

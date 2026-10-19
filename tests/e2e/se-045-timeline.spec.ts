@@ -1,10 +1,21 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { encode } from "fast-png";
+// The page imports this module from the dev server; here it is needed for its type.
+import type * as CoreFrames from "../../src/core/frames";
 import { collectErrors } from "./se-006-support";
 import { menuItem, openMenu } from "./se-007-support";
 import { openDocument, openViewportEditor, settle } from "./se-011-support";
-import { activeCell, grid, propertiesPopover, runCommands, timeline } from "./se-022-support";
+import {
+    activeCell,
+    frameHeader,
+    grid,
+    layerHeader,
+    propertiesPopover,
+    runCommands,
+    scroller,
+    timeline,
+} from "./se-022-support";
 import { errorToast } from "./se-041-support";
 import { addReference, changeReference, historyState, referenceLayers } from "./se-045-support";
 
@@ -246,5 +257,128 @@ test("a fifth reference layer is refused with a toast and the document is unchan
     expect(await historyState(page)).toEqual(before);
     expect(await referenceLayers(page)).toEqual(references);
     await expect(timeline(page)).toBeVisible();
+    expect(errors).toEqual([]);
+});
+
+test("Delete Layer removes every selected layer, reference rows selected with Ctrl and pixel rows with them, in one undo step", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await open(page);
+    await addReference(page, { kind: "flat", width: 4, height: 4, rgba: RED }, { name: "One" });
+    await addReference(page, { kind: "flat", width: 4, height: 4, rgba: RED }, { name: "Two" });
+    await addReference(page, { kind: "flat", width: 4, height: 4, rgba: RED }, { name: "Three" });
+    const storedSources = () =>
+        page.evaluate(() => {
+            const state = window.__ngneTest!.sessions.getState();
+            return state.documents.find((entry) => entry.id === state.activeId)!.referenceSources
+                .size;
+        });
+    expect(await storedSources()).toBe(3);
+    let steps = (await historyState(page)).undo;
+
+    // Two reference rows, the second with Ctrl.
+    await referenceRow(page, "One").locator(".timeline__name").click();
+    await referenceRow(page, "Two")
+        .locator(".timeline__name")
+        .click({ modifiers: ["Control"] });
+    await runCommands(page, ["layer.delete"]);
+    expect((await referenceLayers(page)).map((layer) => layer.name)).toEqual(["Three"]);
+    expect((await historyState(page)).undo).toBe(++steps);
+    expect(await storedSources()).toBe(1);
+
+    // A pixel row and a reference row together; a second pixel layer stays.
+    await runCommands(page, ["layer.new"]);
+    steps++;
+    const layers = (await historyState(page)).layers;
+    await layerHeader(page, "Layer 1").locator(".timeline__name").click();
+    await referenceRow(page, "Three")
+        .locator(".timeline__name")
+        .click({ modifiers: ["Control"] });
+    await runCommands(page, ["layer.delete"]);
+    expect(await referenceLayers(page)).toEqual([]);
+    expect(await historyState(page)).toEqual({ undo: steps + 1, layers: layers - 2 });
+    expect(await storedSources()).toBe(0);
+    // One undo brings both back, the source too.
+    await runCommands(page, ["edit.undo"]);
+    expect((await referenceLayers(page)).map((layer) => layer.name)).toEqual(["Three"]);
+    expect((await historyState(page)).layers).toBe(layers);
+    expect(await storedSources()).toBe(1);
+    expect(errors).toEqual([]);
+});
+
+test("the active frame's column of a reference row stays in view: after ↓ into the group and → along it", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await open(page);
+    // 60 frames, the 50th active.
+    await page.evaluate(async () => {
+        const framesPath = "/src/core/frames/index.ts";
+        const frames = (await import(/* @vite-ignore */ framesPath)) as typeof CoreFrames;
+        const state = window.__ngneTest!.sessions.getState();
+        const document = state.documents.find((entry) => entry.id === state.activeId)!;
+        for (let count = 1; count < 60; count++) {
+            const { session } = document;
+            document.history.execute(frames.addFrameCommand(session.doc, session.activeFrameId));
+        }
+        document.session.activeFrameId = document.session.doc.frames[49]!.id;
+        state.touch(document.id);
+    });
+    await addReference(page, { kind: "flat", width: 4, height: 4, rgba: RED });
+    await expect(frameHeader(page, 60)).toBeAttached();
+    await expect(activeCell(page)).toHaveAttribute("data-frame", /./);
+    await activeCell(page).click();
+    await expect(activeCell(page)).toBeFocused();
+
+    /** Whether the header of `frame` lies inside the scroller, right of the layer column. */
+    const headerShown = (frame: number) =>
+        frameHeader(page, frame).evaluate((header) => {
+            const box = header.getBoundingClientRect();
+            const panel = header.closest("[data-timeline]")!.getBoundingClientRect();
+            const column = header
+                .closest('[role="row"]')!
+                .querySelector(".timeline__corner")!
+                .getBoundingClientRect();
+            return box.left >= column.right - 0.5 && box.right <= panel.right + 0.5;
+        });
+    expect(await headerShown(50)).toBe(true);
+
+    await page.keyboard.press("ArrowDown");
+    await expect(activeCell(page)).toHaveAccessibleName("Reference layer, behind");
+    await expect(activeCell(page)).toBeFocused();
+    await expect.poll(() => headerShown(50)).toBe(true);
+    for (let frame = 51; frame <= 60; frame++) {
+        await page.keyboard.press("ArrowRight");
+        await expect(activeCell(page)).toHaveAttribute("data-frame-index", String(frame - 1));
+        await expect.poll(() => headerShown(frame)).toBe(true);
+    }
+    await expect(scroller(page)).toBeVisible();
+    expect(errors).toEqual([]);
+});
+
+test("a locked reference's popover shows X, Y, scale, placement and Reset to Fit read-only", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await open(page);
+    await addReference(page, { kind: "flat", width: 8, height: 8, rgba: RED }, { name: "Sketch" });
+    const row = referenceRow(page, "Sketch");
+    await row.getByRole("button", { name: "Locked" }).click();
+    await expect.poll(async () => (await referenceLayers(page))[0]?.locked).toBe(true);
+    await row.getByRole("button", { name: "Opacity 128" }).click();
+    const popover = propertiesPopover(page);
+    await expect(popover).toBeVisible();
+    await focusInside(popover);
+    for (const name of ["X", "Y", "Scale"]) {
+        await expect(popover.getByRole("spinbutton", { name, exact: true })).toBeDisabled();
+    }
+    await expect(popover.getByRole("radio", { name: "In front" })).toBeDisabled();
+    await expect(popover.getByRole("button", { name: "Reset to Fit" })).toBeDisabled();
+    // Name and opacity still apply.
+    await popover.getByRole("textbox", { name: "Name" }).fill("Kept");
+    await page.keyboard.press("Enter");
+    await expect(popover).toBeHidden();
+    expect(await referenceLayers(page)).toMatchObject([{ name: "Kept", x: 0, y: 0, scale: 2 }]);
     expect(errors).toEqual([]);
 });

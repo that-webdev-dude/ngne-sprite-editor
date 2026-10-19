@@ -54,12 +54,16 @@ export function TimelinePanel() {
     // A new active cell (in the session, or now drawn) is scrolled into view, and takes the
     // focus while the focus is on a cell. Checked at every render: the active cel of a new frame
     // or layer is drawn only once the panel draws the frame or the layer.
-    const shownCell = useRef<HTMLElement | null>(null);
+    // The cell and the frame it stands for: a reference layer's one cell stands for the active
+    // frame, and is kept in view again at each frame (SE-045).
+    const shownCell = useRef<{ cell: HTMLElement; frame: string | undefined } | null>(null);
     useLayoutEffect(() => {
         const cell = activeCell(grid.current);
         const scroller = root.current;
-        if (!cell || !scroller || cell === shownCell.current) return;
-        shownCell.current = cell;
+        if (!cell || !scroller) return;
+        const frame = cell.dataset.frame;
+        if (shownCell.current?.cell === cell && shownCell.current.frame === frame) return;
+        shownCell.current = { cell, frame };
         const focused = window.document.activeElement;
         if (focused instanceof HTMLElement && focused.hasAttribute(CELL_ATTRIBUTE)) {
             if (focused !== cell) cell.focus({ preventScroll: true });
@@ -231,6 +235,9 @@ export function TimelinePanel() {
                                     key={layer.id}
                                     layer={layer}
                                     frameCount={frameIds.length}
+                                    frameIndex={
+                                        layer.id === liveLayerId ? liveFrameIndex : activeFrameIndex
+                                    }
                                     tinted={layer.id === model.activeLayerId}
                                     focusRow={layer.id === liveLayerId}
                                     frameId={

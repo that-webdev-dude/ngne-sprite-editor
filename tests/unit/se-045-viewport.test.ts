@@ -117,6 +117,12 @@ describe("sizes", () => {
         const total = sizes.reduce((sum, size) => sum + size.width * size.height, 0);
         expect(total).toBeLessThanOrEqual(REFERENCE_TEXEL_BUDGET);
         expect(sizes).toEqual(big.map(() => ({ width: 2048, height: 2048 })));
+        // A reference at opacity 0 is not given to the viewport (se-045-app): the three others
+        // share the budget, each with a larger part than a quarter.
+        const three = textureSizes(view, big.slice(0, 3));
+        const side = Math.floor(4096 * Math.sqrt(1 / 3));
+        expect(three).toEqual(big.slice(0, 3).map(() => ({ width: side, height: side })));
+        expect(side).toBeGreaterThan(2048);
         // Within the budget nothing is scaled.
         expect(textureSizes(view, big.slice(0, 1))).toEqual([{ width: 4096, height: 4096 }]);
     });
@@ -206,6 +212,37 @@ describe("ReferenceSlots", () => {
         await land();
         expect(uploads()).toEqual(["ed:ref:0<64x64@64x64", "ed:ref:0<64x64@32x32"]);
         expect(slots.shown()[0]).toEqual({ layerId: "r1", width: 32, height: 32 });
+    });
+
+    it("a zoom while a resample is being uploaded ends on the latest size, never the stale one", async () => {
+        const { scene, slots, renderer, uploads, land } = setup();
+        scene.references = [reference("r1", image(256, 256), { scale: 0.125 })];
+        slots.sync();
+        await land();
+        // 4×: 128 px on screen. Zoom to 2× and let the resample start, but not finish.
+        scene.view = { ...scene.view, scale: 2 };
+        slots.sync();
+        vi.advanceTimersByTime(RESAMPLE_QUIET_MS);
+        await settle();
+        expect(uploads()).toEqual(["ed:ref:0<256x256@128x128", "ed:ref:0<256x256@64x64"]);
+        // Meanwhile 3× (96 px) and then 8× (256 px), each held.
+        scene.view = { ...scene.view, scale: 3 };
+        slots.sync();
+        vi.advanceTimersByTime(RESAMPLE_QUIET_MS);
+        scene.view = { ...scene.view, scale: 8 };
+        slots.sync();
+        vi.advanceTimersByTime(RESAMPLE_QUIET_MS);
+        await settle();
+        renderer.inFlight("ed:ref:0").resolve();
+        await land();
+        // The 3× request was replaced before it started; the slot ends at the 8× size.
+        expect(uploads()).toEqual([
+            "ed:ref:0<256x256@128x128",
+            "ed:ref:0<256x256@64x64",
+            "ed:ref:0<256x256@256x256",
+        ]);
+        expect(slots.shown()[0]).toEqual({ layerId: "r1", width: 256, height: 256 });
+        expect(slots.waiting).toBe(false);
     });
 
     it("gives a removed reference's slot the 1×1 placeholder, once, and never draws another layer's texture", async () => {
