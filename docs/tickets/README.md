@@ -81,7 +81,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-044 | Import PNG dialog                                 | L    | 006, 021, 041, 043, 045            | —             | Ready  |
 | SE-045 | Reference layers                                  | L    | 011, 022, 040                      | —             | In progress |
 | SE-046 | Reference layer move and scale on the canvas      | M    | 032, 045                           | —             | Ready  |
-| SE-047 | Document tabs and recent files                    | M    | 041                                | —             | Ready  |
+| SE-047 | Document tabs and recent files                    | M    | 041                                | —             | In progress |
 | **M5** | **[NGNE export](M5-ngne-export.md)**              |      |                                    |               |        |
 | SE-050 | Atlas packer                                      | M    | 005, 010                           | A2            | Done   |
 | SE-051 | NGNE bundle writers                               | L    | 003, 021, 050                      | —             | Done   |
