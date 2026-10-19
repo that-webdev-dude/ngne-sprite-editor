@@ -101,6 +101,11 @@ Scope
   long as it floats, so a reader of the document or the composite cache must not wait for an
   idle history (SPEC §5.3); call `applyFloating()` first where the ticket's action must
   include the floating pixels (`src/app/selection/floating.ts`).
+- From the SE-047 review (REVIEW F62): a document closes through two paths, the active tab's
+  Close and `closeBackground` for another tab; remove the snapshot on both (or where
+  `sessions.close` runs). Save As to another file gives the document a new id
+  (`sessions.changeId`), so snapshots keyed by document id must follow it. Since SE-045 the
+  store holds only the reference sources a layer names; the steps own the others.
 
 Acceptance
 - E2E: draw, wait 3 s, reload without saving → recovery prompt → recovered composite is
@@ -186,6 +191,10 @@ Scope
 - From the SE-064 review: the stored preference `import.dither` says `"ordered"` where
   `core/import` says `"bayer"`; the dialog maps between them. The preference store has no fit
   field: the default fit is "contain" (SPEC §8).
+- From the SE-045 review (REVIEW F58): "Keep source as reference" builds its layer with
+  `referenceLayerCommandFromPng` (`src/app/references/references.ts`), which returns the step
+  without running it, its source bytes owned by the step; chain it with the import so one undo
+  removes both.
 
 Acceptance
 - E2E: import a 256×64 sheet as 4 frames of 32×32 with 8 colours → document has 4 frames, each
@@ -210,7 +219,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-011, SE-022, SE-040                                   |
 | Blocks       | SE-044, SE-046                                           |
 | Blocked until | —                                                       |
@@ -273,6 +282,9 @@ Scope
   fractional boxes and can be reused; `scaleBox` rounds to whole pixels and scales width and
   height apart, so the uniform scale about a fixed corner needs its own function. The Move
   tool's press routing is in `src/app/selection/move/moveTool.ts` (`onDown`).
+- From the SE-045 review (REVIEW F58): a locked reference keeps its position, scale and
+  placement (SPEC §7.6); `changeReference` and `resetReferenceFit` in
+  `src/app/references/references.ts` apply one step and refuse with the lock reason.
 
 Acceptance
 - E2E: drag by (10, 4) document pixels changes `x`, `y` by exactly that; undo restores.
@@ -286,7 +298,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-041                                                   |
 | Blocks       | —                                                        |
 | Blocked until | —                                                       |
