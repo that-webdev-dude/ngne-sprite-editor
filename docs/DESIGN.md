@@ -249,7 +249,10 @@ SE-060 the rest:
   Remove Colour and Edit Colour…, then Palette from Sprite; it is the registry's context menu
   `palette`, in groups of hundreds (100 remove and edit, 300 from sprite), leaving the 200s to
   import and export and the 400s to sort and replace colour. The Menu key or Shift+F10 on a
-  swatch opens it, and the swatch has the focus again after it closes.
+  swatch opens it, and the swatch has the focus again after it closes. SE-066 fills the 200s
+  with Import Palette… and Export Palette as .gpl…, .hex… and .pal…, and the 400s with Sort by
+  Hue, Sort by Lightness, Original Order and Replace Colour… (also in the Edit menu); SPEC §7.1
+  has their rules.
 - **Edit.** Edit Colour…, or a double click on a swatch, opens the picker of §5.3 in a popover
   left of the grid, level with the swatch. It edits the swatch's colour only, with either
   button; the swatch shows the colour as it changes, and the palette takes it in one undo step
@@ -422,7 +425,7 @@ transient tool feedback in `--warn`.
 | Layer properties | Popover | Name, opacity, blend mode; for reference layers: X, Y, scale, placement         |
 | Cel properties  | Popover  | Cel opacity; linked state with Unlink                                           |
 | Onion skin      | Popover  | Frames before/after, opacity, falloff, tint, placement, within tag              |
-| Replace colour  | Dialog   | From, to, tolerance, scope (selection, cel, frame, sprite)                      |
+| Replace colour  | Dialog   | From, to, tolerance, scope (selection, cel, frame, sprite). SE-066: From and To are hex fields (3, 4, 6 or 8 digits, as the colour panel's) beside a sample of the colour over the checkerboard, opening with the foreground and the background; Tolerance a number field 0–255; Scope a segmented control Selection / Cel / Frame / Sprite, Selection offered only with a selection and chosen then, otherwise the scope answered last (Cel at first); the tolerance answered last is kept too. A colour that is not one is named in a message line and Replace is disabled until it is fixed. Cancel / Replace (primary) |
 | Recovery        | Dialog on launch | Recoverable documents with name, time, thumbnail; Recover / Discard     |
 | Preferences     | Dialog   | Theme, checkerboard, grid, onion skin defaults, import defaults, autosave. A change applies at once; actions are Restore defaults and Close |
 | Shortcut sheet  | Dialog   | Generated from the command registry, grouped by menu; commands outside the menus under "Other" |

@@ -781,6 +781,44 @@ Palette (SE-060; the panel is DESIGN §5.4):
   any other frame without putting it there, so reading the whole sprite does not push out the
   composites the viewport and the preview use.
 
+Palette files, sort and replace colour (SE-066; the panel's items are DESIGN §5.4, the dialog
+DESIGN §7):
+
+- Files: `core/palettes` reads and writes GIMP `.gpl`, `.hex` (one colour per line, RRGGBB) and
+  JASC `.pal`, and reads a PNG; the file's ending names the format. A palette with a colour
+  that is not opaque is written with alpha (`.gpl` with Aseprite's `Channels: RGBA` header and
+  four values, `.hex` with RRGGBBAA, `.pal` with a fourth value) and read back so; an opaque
+  palette is written in the plain form. A PNG gives its distinct colours of alpha above 0 in
+  the order its pixels first show them, row by row; more than 256 are refused, not reduced. A
+  file that does not follow its format, holds no colour or more than 256, or is larger than
+  64 MB is malformed.
+- Import Palette… replaces the palette in one undo step ("Import Palette"), named by the
+  `.gpl`'s `Name:` or else the file name without its ending. A malformed file is one error
+  toast naming the file (and the line), and changes nothing. Export Palette as .gpl…, .hex… or
+  .pal… saves `<name>.<ending>` as the exports beside the bundle do (§9.6); it is disabled for
+  an empty palette. Both are file operations: one at a time, a float applied first, not during
+  a stroke.
+- Sort by Hue (greys first, dark to light; then hue, saturation, value, alpha) and Sort by
+  Lightness (OKLab L, dark to light; then alpha) are palette commands: one undo step, none when
+  the order would not change; colours with equal keys keep their order. Original Order puts
+  back, in one undo step, the order the palette had before its first sort. That order is
+  editor state, kept per open document and not saved: a sort keeps the order it finds unless
+  the order kept holds the palette's colours (each as often), so sorts and moves keep it; a
+  colour added, removed or edited, or another palette loaded, makes Original Order unavailable
+  until the next sort.
+- Replace Colour… writes To over every pixel that matches From: each of R, G, B and A differs
+  by at most the tolerance (0–255). A pixel or colour of alpha 0 is compared as 0,0,0,0, and a
+  To of alpha 0 is written as 0,0,0,0. Scope: Selection (the selected pixels of the active
+  layer's cel at the active frame), Cel (that cel), Frame (every cel of the active frame) or
+  Sprite (every cel). Only visible, unlocked pixel layers change, as for paint: for Selection
+  and Cel any other active layer refuses with the paint tools' reason (an error toast); Frame
+  and Sprite skip the others. An empty cel is skipped and no cel is made. A linked image changes
+  once and every cel showing it shows the change; an image a hidden or locked layer also shows
+  is left as it is. The change is one undo step ("Replace Colour") of a patch per changed image
+  (the bounding rectangle of its changed pixels), whose `touched` names every frame and layer
+  showing a changed image. It applies a float first and is disabled during a stroke; when no
+  pixel would change it records nothing and says so in a toast.
+
 Shape tools and paint bucket (SE-017):
 
 - Line, rectangle and ellipse are rubber bands drawn into the stroke's transaction

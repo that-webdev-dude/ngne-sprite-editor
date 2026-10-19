@@ -1,0 +1,58 @@
+/* The Replace colour dialog (DESIGN §7; SE-066): names in the first column, controls in the
+   second, as the other standard dialogs. */
+.replace-form {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--space-12);
+    align-items: center;
+}
+
+.replace-form__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+    min-width: 0;
+}
+
+/* The colour over the checkerboard, so a colour that is not opaque shows as such. */
+.replace-form__sample {
+    position: relative;
+    flex: none;
+    width: var(--control-height);
+    height: var(--control-height);
+    overflow: hidden;
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius-control);
+    background: repeating-conic-gradient(var(--check-a) 0 25%, var(--check-b) 0 50%) 0 0 / 8px 8px;
+}
+
+.replace-form__fill {
+    position: absolute;
+    inset: 0;
+}
+
+/* A text field with the metrics of the number field (DESIGN §4). */
+.replace-form__hex {
+    width: 112px;
+    min-width: 0;
+    height: var(--control-height);
+    padding: 0 var(--space-8);
+    border: var(--border-width) solid var(--border-input);
+    border-radius: var(--radius-control);
+    background: var(--bg-raised);
+    color: var(--text);
+    user-select: text;
+    font-variant-numeric: tabular-nums;
+}
+
+.replace-form__hex[aria-invalid="true"] {
+    border-color: var(--danger);
+}
+
+/* The line is always there, so the dialog does not change height when a message appears. */
+.replace-form__message {
+    grid-column: 1 / -1;
+    min-height: var(--line-height);
+    margin: 0;
+    color: var(--danger);
+}
