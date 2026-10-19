@@ -210,7 +210,7 @@ describe("the Move tool", () => {
         expect(bytes(session)).toEqual(before);
     });
 
-    it("is refused on a locked, hidden or reference layer, with the status bar saying so", () => {
+    it("is refused on a locked or hidden layer, with the status bar saying so; on a reference layer it drags that layer (SE-046)", () => {
         const { h, floating, session } = setUp();
         const layer = session.doc.layers[0]!;
         layer.locked = true;
@@ -228,8 +228,8 @@ describe("the Move tool", () => {
         ]);
         expect(h.status.getState().feedback).toBe(PAINT_REFUSED.hidden);
         expect(h.document().history.undoCount).toBe(0);
-        // A reference layer (SE-046 gives the Move tool reference layers), with a selection
-        // and without one.
+        // A reference layer, with a selection and without one: SE-046 gives the Move tool
+        // reference layers, so the drag moves the layer and lifts no pixels.
         layer.visible = true;
         session.doc.layers.push({
             kind: "reference",
@@ -247,21 +247,26 @@ describe("the Move tool", () => {
         const pixelLayer = session.activeLayerId;
         session.activeLayerId = "ref";
         const before = bytes({ ...session, activeLayerId: pixelLayer });
-        for (const selection of [
+        for (const [index, selection] of [
             null,
             selectionOf(rectMask(W, H, { x: 1, y: 1, width: 2, height: 2 })),
-        ]) {
+        ].entries()) {
             session.selection = selection;
             h.status.getState().setFeedback(null);
             stroke(h, [
                 { x: 1, y: 1 },
                 { x: 3, y: 2 },
             ]);
-            expect(h.status.getState().feedback).toBe(PAINT_REFUSED.reference);
+            expect(h.status.getState().feedback).toBeNull();
+            expect(session.doc.layers.at(-1)).toMatchObject({
+                x: 2 * (index + 1),
+                y: index + 1,
+            });
+            expect(h.document().history.undoLabel).toBe("Move Reference");
             expect(floating.floats()).toBe(false);
             expect(h.document().history.transaction).toBeNull();
         }
-        expect(h.document().history.undoCount).toBe(0);
+        expect(h.document().history.undoCount).toBe(2);
         expect(bytes({ ...session, activeLayerId: pixelLayer })).toEqual(before);
         session.activeLayerId = pixelLayer;
         session.doc.layers.pop();

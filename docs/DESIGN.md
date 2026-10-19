@@ -461,6 +461,10 @@ transient tool feedback in `--warn`.
 - Transform box: while a selection floats, its box (turned as the float is) and eight handles,
   drawn as DESIGN §5.2 describes; draw layer order 700, over the pending selection (600) and
   under the brush cursor (900) (SE-033).
+- Reference box: while the Move tool is active and the active layer is a visible, unlocked
+  reference layer whose source is decoded, its box (never turned) drawn as the transform box
+  is, with the four corner handles only, where a drag shows the layer meanwhile; draw layer
+  order 650, over the pending selection (600) and under the transform box (700) (SE-046).
 - Brush cursor: 1 px outline of the brush footprint snapped to pixels, two-tone so it shows on
   any content (black just outside the footprint, white outside that; an inverted outline cannot
   be drawn on the overlay, which does not hold NGNE's pixels); a paint tool that draws a brush

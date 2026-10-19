@@ -10,6 +10,11 @@ import type { PlaybackState } from "../playback/playbackState";
 import { preferences as appPreferences } from "../preferences/preferences";
 import { referenceImages as appReferenceImages } from "../references/referenceImages";
 import type { ReferenceImages } from "../references/referenceImages";
+import {
+    referencePreview as appReferencePreview,
+    shownGeometry,
+} from "../references/referencePreview";
+import type { ReferencePreviewStore } from "../references/referencePreview";
 import type { PreferenceStore } from "../preferences/preferences";
 import { activeComposites } from "../state/composites";
 import type { ActiveComposites } from "../state/composites";
@@ -67,6 +72,11 @@ export interface ViewportSources {
      * absent.
      */
     referenceImages?: ReferenceImages;
+    /**
+     * A reference layer's position and scale during a drag of the Move tool (SE-046): the
+     * layer it names is drawn there instead of where the document has it; none when absent.
+     */
+    referencePreview?: ReferencePreviewStore;
 }
 
 /** The sources of the app's viewport: its stores, its composite cache and `viewportLink`. */
@@ -78,6 +88,7 @@ export function appViewportSources(): ViewportSources {
         version: () => viewportLink.version,
         playback: playbackStore,
         referenceImages: appReferenceImages,
+        referencePreview: appReferencePreview,
     };
 }
 
@@ -179,6 +190,7 @@ export function connectViewport(
         const document = activeDocument(sessions.getState());
         const references: ViewportReference[] = [];
         if (document && document.session === shown) {
+            const preview = sources.referencePreview?.getState() ?? null;
             for (const layer of document.session.doc.layers) {
                 // Opacity 0 shows nothing: like a hidden layer, it takes no slot or texels.
                 if (layer.kind !== "reference" || !layer.visible || layer.opacity === 0) {
@@ -187,7 +199,8 @@ export function connectViewport(
                 const bytes = document.referenceSources.get(layer.sourceId);
                 const image = bytes ? images.get(bytes) : null;
                 if (!image) continue;
-                const { id, x, y, scale, opacity, placement } = layer;
+                const { id, opacity, placement } = layer;
+                const { x, y, scale } = shownGeometry(preview, document.session, layer);
                 references.push({ id, image, x, y, scale, opacity, placement });
             }
         }
@@ -239,6 +252,7 @@ export function connectViewport(
     const stopSessions = sessions.subscribe(follow);
     const stopPlayback = sources.playback?.subscribe(followPlayback) ?? (() => {});
     const stopImages = images?.subscribe(pushReferences) ?? (() => {});
+    const stopPreview = sources.referencePreview?.subscribe(pushReferences) ?? (() => {});
     const stopPreferences = preferences.subscribe((key) => {
         if (key === "checkerboard") pushChecker();
     });
@@ -259,6 +273,7 @@ export function connectViewport(
             stopSessions();
             stopPlayback();
             stopImages();
+            stopPreview();
             stopPreferences();
             stopComposites();
             shown = null;

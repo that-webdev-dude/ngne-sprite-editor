@@ -5,7 +5,8 @@ import type { OverlayLayer } from "../../overlay/types";
 import type { ViewMapping } from "../../view/coordinates";
 import { floatingState } from "../floatingState";
 import type { FloatShown } from "../floatingState";
-import { boxOutline, HANDLE_SIZE, handlePoints } from "./handles";
+import { boxOutline, HANDLE_IDS, HANDLE_SIZE, handlePoints } from "./handles";
+import type { HandleId } from "./handles";
 
 // The transform box of a floating selection (SE-033; DESIGN §5.2, §6): its outline, turned
 // as the float is, and its eight handles, drawn on the overlay while a selection floats. Over
@@ -22,14 +23,17 @@ const LIGHT = "rgb(255 255 255)";
 
 /**
  * Draws the box of `transform` and its handles on `context`, mapped by `mapping` (device
- * pixels; `ratio` device pixels per CSS pixel sizes the handles).
+ * pixels; `ratio` device pixels per CSS pixel sizes the handles). `handles` names the handles
+ * drawn; the default is all eight (a reference layer's box has its corners only, SE-046).
  */
 export function drawTransformBox(
     context: CanvasRenderingContext2D,
     mapping: ViewMapping,
     transform: FreeTransform,
     ratio: number,
+    handles: readonly HandleId[] = HANDLE_IDS,
 ): void {
+    const points = handlePoints(transform).filter(({ id }) => handles.includes(id));
     const corners = boxOutline(transform).map((point) => mapping.docToDevice(point.x, point.y));
     context.lineJoin = "miter";
     context.beginPath();
@@ -51,14 +55,14 @@ export function drawTransformBox(
     const size = Math.max(5, Math.round(HANDLE_SIZE * ratio));
     const half = Math.floor(size / 2);
     context.beginPath();
-    for (const { point } of handlePoints(transform)) {
+    for (const { point } of points) {
         const device = mapping.docToDevice(point.x, point.y);
         context.rect(Math.round(device.x) - half, Math.round(device.y) - half, size, size);
     }
     context.fillStyle = DARK;
     context.fill();
     context.beginPath();
-    for (const { point } of handlePoints(transform)) {
+    for (const { point } of points) {
         const device = mapping.docToDevice(point.x, point.y);
         context.rect(
             Math.round(device.x) - half + 1,

@@ -1191,8 +1191,9 @@ Move, floating selection and clipboard (SE-032):
   ring just outside the box transforms it (SE-033, below), and a press anywhere else applies it
   and does nothing more. With no selection the drag moves the whole cel and is applied at the
   release, one undo step per drag; an empty cel has nothing to move. Either button moves. It is
-  refused on a locked, hidden or reference layer with the messages of §7.1 (SE-046 gives it
-  reference layers), and works at every zoom step: it moves by whole texels. A pointer cancel
+  refused on a locked or hidden layer with the messages of §7.1; with a reference layer active
+  it moves or scales that layer instead (§7.6, SE-046). It works at every zoom step: it moves
+  by whole texels. A pointer cancel
   or Escape during a drag takes that drag back, and cancels the float when the drag lifted it:
   Escape during a later drag leaves the pixels floating where that drag found them. A drag
   follows the last pointer sample of each event, not every coalesced one (SE-032 review).
@@ -1453,6 +1454,24 @@ Recorded by SE-045 (`core/references`, `app/references`; the display path is in 
   composite's opaque pixels, which hide the reference in NGNE as well; the pixels it leaves out
   (transparent and translucent ones, the eraser's) show through NGNE once their upload is
   drawn. A texel counts as covered when the reference's rectangle touches it.
+
+Recorded by SE-046 (`app/references/referenceMove`, `referenceTransform`, `referencePreview`):
+
+- With the Move tool and a visible, unlocked reference layer active (and no float), a press
+  on a corner of the layer's box (within the transform box's handle reach, DESIGN §5.2)
+  scales it; a press anywhere else drags it by whole document pixels, its fraction kept. The
+  middles of the sides are no handles: the scale is uniform. A locked layer is refused with
+  "Layer is locked", a hidden one with "Layer is hidden"; nothing moves.
+- A corner drag keeps the opposite corner where it is. Its factor is that of the axis farther
+  from 1, as a corner with Shift scales a floating selection (SE-033). The scale stops at a
+  longer side of one document pixel and at `MAX_REFERENCE_SCALE`, the position at
+  ±`MAX_REFERENCE_OFFSET` (FORMAT §1.8): clamped during the drag, never refused.
+- While the drag lasts the document is unchanged: the viewport and the overlay show the layer
+  where the drag has it (`referencePreview`). The release records it as one step, "Move
+  Reference" or "Scale Reference", with the position and scale shown (an undo during the drag
+  acts on the document as it is, and the release records from there); a drag that ends where
+  it began records nothing. Escape or a pointer cancel shows the layer as before and records
+  nothing. A layer locked during the drag is refused at the release with the lock's reason.
 
 ### 7.7 Sprite operations
 

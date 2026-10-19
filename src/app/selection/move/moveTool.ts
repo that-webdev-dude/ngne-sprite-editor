@@ -1,6 +1,8 @@
 import { MAX_TRANSFORM_SIDE } from "../../../core/floating";
 import type { FloatingSelection, FreeTransform } from "../../../core/floating";
 import { celAt } from "../../../core/model";
+import { createReferenceMove } from "../../references/referenceMove";
+import type { ReferenceMoveSources } from "../../references/referenceMove";
 import type { Point } from "../../view/coordinates";
 import type { ToolContext, ToolPointer, ToolSpec } from "../../tools/types";
 import type { FloatingState } from "../floatingState";
@@ -21,6 +23,10 @@ import { floatRefusal } from "./floatTarget";
 // box, within reach of it, turns it about its centre (Shift snaps to 15°); a press farther out
 // applies it as before. Each drag sets the float's transform from where it began, so Escape
 // takes back exactly that drag.
+//
+// Reference layers (SE-046): with no float, a press with a reference layer active drags that
+// layer, or scales it by a corner of its box (`references/referenceMove.ts`), one undo step
+// per drag; a locked or hidden one does not move, and the status bar says why.
 
 /** The id of the Move tool, which holds a floating selection (SPEC §5.2). */
 export const MOVE_TOOL_ID = "move";
@@ -70,6 +76,8 @@ export interface MoveToolSources {
     >;
     /** Device pixels per CSS pixel, for the size of the handles; the default is 1. */
     ratio?(): number;
+    /** What a drag of a reference layer works with (SE-046); see `ReferenceMoveSources`. */
+    references?: ReferenceMoveSources;
 }
 
 /** The Move tool on `sources`. */
@@ -77,6 +85,7 @@ export function createMoveTool(sources: MoveToolSources): ToolSpec {
     const { floating } = sources;
     const ratio = sources.ratio ?? (() => 1);
     const drags = new WeakMap<ToolContext, Drag>();
+    const references = createReferenceMove(sources.references);
 
     /** The drag of `context`, while its float is still the one floating. */
     const dragOf = (context: ToolContext): Drag | null => {
@@ -157,6 +166,8 @@ export function createMoveTool(sources: MoveToolSources): ToolSpec {
                 });
                 return;
             }
+            // The active layer is a reference layer: its drag, or why it cannot move.
+            if (references.press(context, pointer, ratio())) return;
             const refused = floatRefusal(context.document);
             if (refused) {
                 context.feedback(refused);
@@ -178,8 +189,12 @@ export function createMoveTool(sources: MoveToolSources): ToolSpec {
                 applyAtRelease: whole,
             });
         },
-        onMove: follow,
+        onMove(context, pointer) {
+            follow(context, pointer);
+            references.follow(context, pointer);
+        },
         onUp(context, pointer) {
+            references.release(context, pointer);
             follow(context, pointer);
             const drag = dragOf(context);
             drags.delete(context);
@@ -193,6 +208,7 @@ export function createMoveTool(sources: MoveToolSources): ToolSpec {
             return true;
         },
         onCancel(context) {
+            references.cancel(context);
             const drag = dragOf(context);
             drags.delete(context);
             // When the document is left the float is no longer the one floating (`dragOf`):
