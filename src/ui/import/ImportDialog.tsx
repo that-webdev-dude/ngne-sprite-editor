@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import { useStore } from "zustand";
 import type { ImportRequest } from "../../app/import/importDialog";
 import {
-    canKeepReference,
     gridOf,
     placeProblem,
+    referenceProblem,
     settingsOf,
     slices,
 } from "../../app/import/importForm";
@@ -121,29 +121,47 @@ export function summaryOf(frames: number, width: number, height: number, colours
     return `${plural(frames, "frame", "frames")} · ${width} × ${height} · ${plural(colours, "colour", "colours")}`;
 }
 
+/** Resolves after the next frame is painted: "Importing…" shows before the work begins. */
+function painted(): Promise<void> {
+    return new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+}
+
 /**
  * Import PNG (DESIGN §7; SPEC §8; SE-044): the source with its crop rectangle and grid on the
  * left, the frames at the target size on the right, the steps of SPEC §8 below as one compact
  * form, then the result line and any message. Every change asks the live preview again; the
  * smart steps 6 and 7 show what the preview decided for them. Import is disabled while there is
- * nothing to import, the preview failed, or the frames cannot go where the form says.
+ * nothing to import, the preview computes or failed, or the frames cannot go where the form
+ * says. Import waits for the preview's answer to the form as it is, and places the frames while
+ * the dialog stays open ("Importing…"); it closes once they are placed, and otherwise shows
+ * why not and stays (SE-044 review B).
  */
+
 export function ImportDialog({ request }: { request: ImportRequest }) {
     const { sources, errors, reading, generation } = useStore(request.sources);
     const preview = useStore(request.preview.store);
     const [form, setForm] = useState<ImportForm>(request.initial);
     const changed = useRef(new Set<keyof ImportForm>());
+    /** What Import is doing: waiting for the preview's answer, or placing the frames. */
+    const [phase, setPhase] = useState<"checking" | "importing" | null>(null);
+    /** Why the last Import placed nothing; cleared by the next change. */
+    const [failure, setFailure] = useState<string | null>(null);
     const [shownSource, setShownSource] = useState(0);
+    const referenceNoteId = useId();
     const [zoom, setZoom] = useState<ResultZoom>(() =>
         defaultZoom(request.initial.width, request.initial.height),
     );
 
     const set = <Key extends keyof ImportForm>(key: Key, value: ImportForm[Key]) => {
         changed.current.add(key);
+        setFailure(null);
         setForm((current) => ({ ...current, [key]: value }));
     };
     const setMany = (patch: Partial<ImportForm>) => {
         for (const key of Object.keys(patch) as (keyof ImportForm)[]) changed.current.add(key);
+        setFailure(null);
         setForm((current) => ({ ...current, ...patch }));
     };
 
@@ -188,11 +206,54 @@ export function ImportDialog({ request }: { request: ImportRequest }) {
         form.alpha === "smart" ? (decided?.alpha.threshold ?? form.threshold) : form.threshold;
 
     const first = sources[Math.min(shownSource, sourceCount - 1)] ?? null;
-    const referenceAvailable = canKeepReference(form, sourceCount);
+    const notKept = referenceProblem(form, sourceCount, target);
+    const referenceAvailable = notKept === null;
     const problem = placeProblem(form, target);
     const error = sourceCount === 0 ? null : preview.error;
+    /** The preview shows the answer to the newest request, and nothing is being computed. */
+    const current = !preview.computing && result !== null && result.id === preview.requested;
     const canImport =
-        !reading && sourceCount > 0 && error === null && problem === null && result !== null;
+        !reading &&
+        sourceCount > 0 &&
+        current &&
+        error === null &&
+        problem === null &&
+        phase === null;
+
+    const confirm = async () => {
+        if (phase !== null) return;
+        setPhase("checking");
+        setFailure(null);
+        // The answer for the form as it is now: asked again if the preview has not been yet
+        // (an equal request asks nothing), and waited for.
+        request.preview.request(computed.settings, computed.smart);
+        const settled = await request.preview.settled();
+        const state = request.preview.store.getState();
+        if (
+            !settled ||
+            state.error !== null ||
+            settled.id !== state.requested ||
+            placeProblem(form, target) !== null
+        ) {
+            // The error shows in the result pane, the problem in the message line.
+            setPhase(null);
+            return;
+        }
+        setPhase("importing");
+        await painted();
+        const answer = {
+            form: { ...form, keepReference: form.keepReference && referenceAvailable },
+            changed: [...changed.current],
+            frames: settled.frames.length,
+        };
+        const why = await request.place(answer, settled);
+        if (why !== null) {
+            setPhase(null);
+            setFailure(why);
+            return;
+        }
+        request.answer(answer);
+    };
     const several = sourceCount > 1;
     const sliced = slices(form, sourceCount);
 
@@ -208,6 +269,7 @@ export function ImportDialog({ request }: { request: ImportRequest }) {
             : preview.computing || reading
               ? "Computing…"
               : "";
+    const status = phase === "importing" ? "Importing…" : summary;
 
     const colorOptions: SelectOption<string>[] = [
         { value: "keep", label: "Keep" },
@@ -240,7 +302,8 @@ export function ImportDialog({ request }: { request: ImportRequest }) {
             open
             size="large"
             onOpenChange={(open) => {
-                if (!open) request.answer(null);
+                // Not while the frames are being placed: they would be placed after all.
+                if (!open && phase !== "importing") request.answer(null);
             }}
             title="Import PNG"
             className="import-dialog"
@@ -252,7 +315,7 @@ export function ImportDialog({ request }: { request: ImportRequest }) {
                             aria-live="polite"
                             data-import-summary=""
                         >
-                            {summary}
+                            {status}
                         </p>
                         {problem ? (
                             <p
@@ -263,21 +326,20 @@ export function ImportDialog({ request }: { request: ImportRequest }) {
                                 {problem}
                             </p>
                         ) : null}
+                        {failure ? (
+                            <p
+                                className="import-dialog__message"
+                                role="alert"
+                                data-import-failure=""
+                            >
+                                Could not import. {failure}
+                            </p>
+                        ) : null}
                     </div>
-                    <Button onClick={() => request.answer(null)}>Cancel</Button>
-                    <Button
-                        variant="primary"
-                        disabled={!canImport}
-                        onClick={() =>
-                            request.answer({
-                                form: {
-                                    ...form,
-                                    keepReference: form.keepReference && referenceAvailable,
-                                },
-                                changed: [...changed.current],
-                            })
-                        }
-                    >
+                    <Button disabled={phase === "importing"} onClick={() => request.answer(null)}>
+                        Cancel
+                    </Button>
+                    <Button variant="primary" disabled={!canImport} onClick={() => void confirm()}>
                         Import
                     </Button>
                 </>
@@ -612,8 +674,18 @@ export function ImportDialog({ request }: { request: ImportRequest }) {
                             showLabel
                             pressed={form.keepReference && referenceAvailable}
                             disabled={!referenceAvailable}
+                            aria-describedby={notKept ? referenceNoteId : undefined}
                             onPressedChange={(on) => set("keepReference", on)}
                         />
+                        {notKept ? (
+                            <span
+                                className="import-dialog__note"
+                                id={referenceNoteId}
+                                data-import-reference-note=""
+                            >
+                                {notKept}
+                            </span>
+                        ) : null}
                     </Row>
                     <Row>
                         <span className="ui-field">

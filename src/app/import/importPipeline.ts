@@ -42,16 +42,28 @@ export interface PipelineHost {
     post(response: PipelineResponse): void;
     /** Resolves after the host has had the chance to deliver newer requests (a macrotask). */
     pause(): Promise<void>;
+    /**
+     * Pause only once this many milliseconds of work have passed since the last pause (by
+     * `now`), not after every step: a pause costs a macrotask, and an import of 1024 cells has
+     * some 2000 steps. The default is 0, a pause after every step.
+     */
+    pauseEveryMs?: number;
+    /** The clock of `pauseEveryMs`; the default is `performance.now`. */
+    now?(): number;
 }
+
+/** `smartDefaults`, or a function that answers as it does (a cache of it). */
+export type SmartDefaults = typeof smartDefaults;
 
 /** Steps 6 and 7 decided: the smart ones by `smartDefaults` for the cells. */
 export function decideSmart(
     cells: readonly PixelBuffer[],
     settings: ImportSettings,
     smart: SmartChoices,
+    defaultsOf: SmartDefaults = smartDefaults,
 ): ImportSettings {
     if (!smart.alpha && !smart.colors) return settings;
-    const defaults = smartDefaults(cells, settings.size);
+    const defaults = defaultsOf(cells, settings.size);
     const decided: ImportSettings = { ...settings };
     if (smart.alpha) {
         const { colorKey } = settings.alpha;
@@ -77,10 +89,34 @@ function messageOf(error: unknown): string {
 
 /**
  * The computation's state and its message handler. `handle` returns at once; the computation
- * runs on in steps, `host.pause()` between them.
+ * runs on in steps, `host.pause()` between them. `options.smartDefaults` replaces the
+ * function the smart steps are decided by (tests count its calls).
  */
-export function createPipeline(host: PipelineHost) {
+export function createPipeline(
+    host: PipelineHost,
+    options: { smartDefaults?: SmartDefaults } = {},
+) {
     const cache: ImportCache = createImportCache();
+    const computeDefaults = options.smartDefaults ?? smartDefaults;
+    /**
+     * The smart defaults of the cells kept in `cache` at one target size: a change that keeps
+     * both does not scan the cells again (SE-044 review I). The cells are the same array as
+     * long as the cache keeps them.
+     */
+    let defaults: {
+        cells: readonly PixelBuffer[];
+        width: number;
+        height: number;
+        value: ImportSettings;
+    } | null = null;
+    const cachedDefaults: SmartDefaults = (cells, size) => {
+        const { width, height } = size;
+        if (defaults?.cells !== cells || defaults.width !== width || defaults.height !== height) {
+            defaults = null;
+            defaults = { cells, width, height, value: computeDefaults(cells, size) };
+        }
+        return defaults.value;
+    };
     let sources: ImportSource[] = [];
     /** The newest request not yet started. */
     let pending: Extract<PipelineRequest, { kind: "run" }> | null = null;
@@ -90,12 +126,15 @@ export function createPipeline(host: PipelineHost) {
         let settings: ImportSettings;
         try {
             const cells = cachedCells(cache, sources, request.settings);
-            settings = decideSmart(cells, request.settings, request.smart);
+            settings = decideSmart(cells, request.settings, request.smart, cachedDefaults);
         } catch (error) {
             host.post({ kind: "failed", id: request.id, message: messageOf(error) });
             return;
         }
         const steps = importSteps(cache, sources, settings);
+        const every = host.pauseEveryMs ?? 0;
+        const now = host.now ?? (() => performance.now());
+        let paused = now();
         try {
             for (;;) {
                 const step = steps.next();
@@ -104,7 +143,9 @@ export function createPipeline(host: PipelineHost) {
                     host.post({ kind: "done", id: request.id, settings, frames, palette });
                     return;
                 }
+                if (every > 0 && now() - paused < every) continue;
                 await host.pause();
+                paused = now();
                 if (pending) {
                     steps.return(undefined as never);
                     host.post({ kind: "cancelled", id: request.id });

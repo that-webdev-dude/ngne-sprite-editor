@@ -2,7 +2,7 @@ import { oklabToSrgb8, writeOklab } from "../color";
 import type { PixelBuffer } from "../pixels";
 import { MAX_PALETTE_COLORS, assertInteger } from "./errors";
 import { KeyIndex } from "./keyIndex";
-import { nearestColor } from "./nearestColor";
+import { nearestSearch } from "./nearestColor";
 
 // Step 7 of SPEC §8, "reduce": one palette for all cells by median cut, refined by a fixed
 // number of k-means iterations, with colour distance measured in OKLab.
@@ -209,10 +209,15 @@ function medianCut(points: Points, count: number): Float64Array {
 function refine(points: Points, centres: Float64Array): void {
     const { lab, weight } = points;
     const sums = new Float64Array((centres.length / 3) * 4);
+    // Each point's centre in the iteration before: the centres move little, so it is a good
+    // first guess for the search (which it never changes the answer of).
+    const assigned = new Int32Array(points.count).fill(-1);
     for (let iteration = 0; iteration < KMEANS_ITERATIONS; iteration++) {
         sums.fill(0);
+        const nearest = nearestSearch(centres);
         for (let p = 0; p < points.count; p++) {
-            const c = nearestColor(centres, lab[p * 3], lab[p * 3 + 1], lab[p * 3 + 2]);
+            const c = nearest(lab[p * 3], lab[p * 3 + 1], lab[p * 3 + 2], assigned[p]);
+            assigned[p] = c;
             sums[c * 4] += lab[p * 3] * weight[p];
             sums[c * 4 + 1] += lab[p * 3 + 1] * weight[p];
             sums[c * 4 + 2] += lab[p * 3 + 2] * weight[p];
@@ -252,8 +257,9 @@ function colorsOf(points: Points, centres: Float64Array): number[] {
     }
     if (missing > 0) {
         const { lab, weight, rgb } = points;
+        const nearest = nearestSearch(centres);
         const error = Float64Array.from({ length: points.count }, (_, p) => {
-            const c = nearestColor(centres, lab[p * 3], lab[p * 3 + 1], lab[p * 3 + 2]);
+            const c = nearest(lab[p * 3], lab[p * 3 + 1], lab[p * 3 + 2]);
             const dL = centres[c * 3] - lab[p * 3];
             const da = centres[c * 3 + 1] - lab[p * 3 + 1];
             const db = centres[c * 3 + 2] - lab[p * 3 + 2];

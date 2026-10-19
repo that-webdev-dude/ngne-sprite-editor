@@ -182,9 +182,12 @@ async function importWithReference(
     page: Page,
     source: ReturnType<typeof pngFile>,
     crop: { x: number; y: number; width: number; height: number } | null,
+    /** Into an open 32 × 32 sprite as new frames, instead of a new sprite (review F). */
+    into = false,
 ) {
     const dialog = await importFromMenu(page, [source]);
     await settledSummary(dialog);
+    if (into) await choose(dialog, "Place", "New frames");
     if (crop) {
         await choose(dialog, "Region", "Crop");
         await setField(dialog, "W", crop.width);
@@ -273,6 +276,36 @@ test("keep source as reference: a cropped region of another aspect ratio overlay
     );
     const { shown, expected } = await importWithReference(page, source, crop);
     // Contain: 32 × 16 in the middle of the canvas.
+    expect(expected).toEqual({ left: 12, top: 10 + 32, right: 12 + 128, bottom: 10 + 96 });
+    expectWithin(shown, expected);
+    expect(errors).toEqual([]);
+});
+
+test("keep source as reference into an open sprite: the reference of a cropped region overlays the fitted image (review F)", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openViewportEditor(page);
+    const id = await openSession(page, { name: "hero", width: 32, height: 32 });
+    const crop = { x: 8, y: 8, width: 64, height: 32 };
+    const source = pngFile(
+        "wide.png",
+        image(80, 48, (x, y) =>
+            x >= crop.x && y >= crop.y && x < crop.x + crop.width && y < crop.y + crop.height
+                ? RED
+                : GREEN,
+        ),
+    );
+    const { document, reference, shown, expected } = await importWithReference(
+        page,
+        source,
+        crop,
+        true,
+    );
+    // The sprite that was open, with one step for the frame and the reference.
+    expect(document.id).toBe(id);
+    expect(document.undo).toBe(1);
+    expect(reference).toMatchObject({ placement: "behind" });
     expect(expected).toEqual({ left: 12, top: 10 + 32, right: 12 + 128, bottom: 10 + 96 });
     expectWithin(shown, expected);
     expect(errors).toEqual([]);
@@ -525,8 +558,9 @@ test("a non-PNG or corrupt file shows an inline error and leaves the dialog usab
     await expect(dialog).toBeVisible();
     const lines = dialog.locator("[data-import-file-errors] li");
     await expect(lines).toHaveCount(2);
-    await expect(lines.nth(0)).toContainText("“notes.txt” could not be read as a PNG image.");
-    await expect(lines.nth(1)).toContainText("“broken.png” could not be read as a PNG image.");
+    // The files are read in natural order of their names (review D).
+    await expect(lines.nth(0)).toContainText("“broken.png” could not be read as a PNG image.");
+    await expect(lines.nth(1)).toContainText("“notes.txt” could not be read as a PNG image.");
     await expect(importButton(dialog)).toBeDisabled();
 
     // Still usable: other files replace them.
@@ -542,6 +576,43 @@ test("a non-PNG or corrupt file shows an inline error and leaves the dialog usab
     await expect(dialog).toHaveCount(0);
     expect((await activeDocument(page))!.name).toBe("good");
     // Reported in the dialog, not as page errors.
+    expect(errors).toEqual([]);
+});
+
+test("Import clicked at once after a change to a grid that does not fit keeps the dialog open with the error (review B)", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openEditor(page);
+    const dialog = await importFromMenu(page, [pngFile("small.png", flat(16, 16, RED))]);
+    await choose(dialog, "Cells", "Grid");
+    await setField(dialog, "Cell W", 8);
+    await setField(dialog, "Cell H", 8);
+    await expect(await settledSummary(dialog)).toMatch(/^4 frames/);
+    await expect(importButton(dialog)).toBeEnabled();
+
+    // In one task, as fast as a user cannot be: the field changes, then Import is clicked.
+    const field = await dialog
+        .getByRole("spinbutton", { name: "Cell W", exact: true })
+        .elementHandle();
+    const button = await importButton(dialog).elementHandle();
+    await page.evaluate(
+        ([input, importer]) => {
+            const element = input as HTMLInputElement;
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!;
+            element.focus();
+            setter.set!.call(element, "32");
+            element.dispatchEvent(new Event("input", { bubbles: true }));
+            element.blur();
+            (importer as HTMLButtonElement).click();
+        },
+        [field, button] as const,
+    );
+    await expect(dialog.locator("[data-import-error]")).toContainText("No grid cell fits");
+    await expect(dialog).toBeVisible();
+    await expect(importButton(dialog)).toBeDisabled();
+    expect(await activeDocument(page)).toBeNull();
+    await expect(errorToast(page)).toHaveCount(0);
     expect(errors).toEqual([]);
 });
 

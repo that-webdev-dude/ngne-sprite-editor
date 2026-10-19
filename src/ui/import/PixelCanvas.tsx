@@ -24,7 +24,13 @@ export function PixelCanvas({
         const { width, height, data: bytes } = pixels;
         element.width = width;
         element.height = height;
-        context.putImageData(new ImageData(new Uint8ClampedArray(bytes), width, height), 0, 0);
+        // A view of the pixels, not a copy: `putImageData` copies them into the canvas.
+        const view = new Uint8ClampedArray(
+            bytes.buffer as ArrayBuffer,
+            bytes.byteOffset,
+            bytes.length,
+        );
+        context.putImageData(new ImageData(view, width, height), 0, 0);
     }, [pixels]);
     return (
         <canvas

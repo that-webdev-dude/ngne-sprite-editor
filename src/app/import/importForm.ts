@@ -9,6 +9,7 @@ import type {
     ResampleFit,
     ResampleMethod,
 } from "../../core/import";
+import { MAX_REFERENCE_LAYERS } from "../../core/model";
 import type { Palette } from "../../core/model";
 import { paletteFromPreset, presetPalette } from "../../core/palettes";
 import type { PixelRect } from "../../core/pixels";
@@ -82,6 +83,8 @@ export interface ImportTarget {
     width: number;
     height: number;
     palette: Palette;
+    /** How many reference layers it has (SPEC §7.6: at most four). */
+    references: number;
 }
 
 export function ditherOf(choice: DitherChoice): DitherMethod {
@@ -245,10 +248,32 @@ export function canKeepReference(form: ImportForm, sourceCount: number): boolean
 }
 
 /**
+ * Why "Keep source as reference" is not available for the form, for the line beside it; null
+ * when it is. Only for one source image as a single sprite (SPEC §8); into a sprite, only
+ * while it has fewer than four reference layers (SPEC §7.6, SE-044 review C).
+ */
+export function referenceProblem(
+    form: ImportForm,
+    sourceCount: number,
+    target: ImportTarget | null,
+): string | null {
+    if (!canKeepReference(form, sourceCount)) {
+        return "Only for one image imported as a single sprite.";
+    }
+    if (form.place !== "new" && target && target.references >= MAX_REFERENCE_LAYERS) {
+        return `The sprite has ${MAX_REFERENCE_LAYERS} reference layers, the most it can have.`;
+    }
+    return null;
+}
+
+/**
  * Why the frames cannot go where the form says, for the dialog's message line; null when they
  * can. Into a document the target size must be the document's (SPEC §8).
  */
-export function placeProblem(form: ImportForm, target: ImportTarget | null): string | null {
+export function placeProblem(
+    form: ImportForm,
+    target: Pick<ImportTarget, "width" | "height"> | null,
+): string | null {
     if (form.place === "new") return null;
     if (!target) return "No sprite is open to import into.";
     if (form.width !== target.width || form.height !== target.height) {

@@ -6,12 +6,17 @@ import {
     ditherOf,
     initialForm,
     placeProblem,
+    referenceProblem,
     referenceRectOf,
     rememberedOf,
     settingsOf,
 } from "../../src/app/import/importForm";
 import type { ImportForm, ImportTarget } from "../../src/app/import/importForm";
-import { decodeSources, isImageDrop } from "../../src/app/import/importWorkflow";
+import {
+    decodeSources,
+    isImageDrop,
+    referenceSourceFor,
+} from "../../src/app/import/importWorkflow";
 import { baseNameOf } from "../../src/app/import/pickImages";
 import { defaultPreferences } from "../../src/app/preferences/preferences";
 import type { ImportPreference } from "../../src/app/preferences/preferences";
@@ -39,6 +44,7 @@ const target: ImportTarget = {
     width: 16,
     height: 16,
     palette: { name: "Mine", colors: [0x000000ff, 0xffffffff] },
+    references: 0,
 };
 
 describe("the dialog's form", () => {
@@ -165,6 +171,26 @@ describe("the dialog's form", () => {
         expect(canKeepReference(form, 3)).toBe(false);
     });
 
+    it("disables Keep source as reference into a sprite with four reference layers, with the reason (review C)", () => {
+        const full: ImportTarget = { ...target, references: 4 };
+        const form = initialForm(preference, full, {});
+        expect(referenceProblem({ ...form, place: "frames" }, 1, target)).toBeNull();
+        expect(
+            referenceProblem({ ...form, place: "frames" }, 1, { ...target, references: 3 }),
+        ).toBeNull();
+        expect(referenceProblem({ ...form, place: "frames" }, 1, full)).toBe(
+            "The sprite has 4 reference layers, the most it can have.",
+        );
+        expect(referenceProblem({ ...form, place: "layer" }, 1, full)).not.toBeNull();
+        // A new sprite has none yet.
+        expect(referenceProblem({ ...form, place: "new" }, 1, full)).toBeNull();
+        // Not a single sprite of one image: that reason first.
+        expect(referenceProblem({ ...form, cells: "grid" }, 1, null)).toBe(
+            "Only for one image imported as a single sprite.",
+        );
+        expect(referenceProblem(form, 2, null)).not.toBeNull();
+    });
+
     it("blocks a place into a sprite of another size with a message", () => {
         const form = initialForm(preference, target, {});
         expect(placeProblem({ ...form, place: "frames" }, target)).toBeNull();
@@ -239,6 +265,68 @@ describe("files for the import", () => {
         expect(sources[0]!.pixels.data[0]).toBe(9);
         expect(errors).toHaveLength(1);
         expect(errors[0]).toMatch(/^“notes\.txt” could not be read as a PNG image\./);
+    });
+
+    it("refuses more files than an import takes before reading any (review D)", async () => {
+        let reads = 0;
+        const files = Array.from({ length: 4 }, (_, index) => ({
+            name: `f${index}.png`,
+            read: async () => {
+                reads++;
+                return new Uint8Array();
+            },
+        }));
+        const { sources, errors } = await decodeSources(files, { files: 3, pixelBytes: 1 << 20 });
+        expect(sources).toEqual([]);
+        expect(errors).toEqual(["4 files were chosen; an import reads at most 3 files."]);
+        expect(reads).toBe(0);
+    });
+
+    it("stops decoding before the images would pass the pixel budget and names the files left out (review D)", async () => {
+        const png = (side: number) =>
+            encodePng({ width: side, height: side, data: new Uint8ClampedArray(side * side * 4) });
+        const decoded: string[] = [];
+        const file = (name: string, side: number) => ({
+            name,
+            read: async () => {
+                decoded.push(name);
+                return png(side);
+            },
+        });
+        // 4 × 4 × 4 = 64 bytes each; 150 bytes hold two.
+        const { sources, errors } = await decodeSources(
+            [file("c3.png", 4), file("c1.png", 4), file("c2.png", 4), file("c10.png", 4)],
+            { files: 1024, pixelBytes: 150 },
+        );
+        expect(sources.map((source) => source.name)).toEqual(["c1.png", "c2.png"]);
+        expect(errors).toEqual([
+            "“c3.png” was left out: the images would hold more than 150 bytes of pixels.",
+            "“c10.png” was left out: the images would hold more than 150 bytes of pixels.",
+        ]);
+        // The third was read for its header only; the fourth not at all.
+        expect(decoded).toEqual(["c1.png", "c2.png", "c3.png"]);
+        // The defaults: 1024 files, 1 GiB.
+        const one = await decodeSources([file("a.png", 2)]);
+        expect(one.sources).toHaveLength(1);
+    });
+
+    it("refuses a reference larger than a project holds, before the dialog closes (review C)", async () => {
+        const pixels = { width: 8, height: 8, data: new Uint8ClampedArray(256).fill(77) };
+        const bytes = encodePng(pixels);
+        const source = { name: "s.png", bytes, pixels };
+        const whole = referenceSourceFor(source, null, bytes.length);
+        expect(whole).toEqual({ bytes, pixels });
+        expect(referenceSourceFor(source, null, bytes.length - 1)).toEqual({
+            problem: `The source is too large to keep as a reference: a reference holds at most ${
+                bytes.length - 1
+            } bytes.`,
+        });
+        // A crop is measured as the PNG it becomes.
+        const crop = { x: 2, y: 2, width: 4, height: 4 };
+        const cropped = referenceSourceFor(source, crop);
+        expect("bytes" in cropped && cropped.pixels.width).toBe(4);
+        expect(referenceSourceFor(source, crop, 10)).toHaveProperty("problem");
+        expect(referenceSourceFor(source, null)).toEqual({ bytes, pixels });
     });
 
     it("names a document or layer by the file without its extension", () => {

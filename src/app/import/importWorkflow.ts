@@ -1,12 +1,22 @@
 import { createStore } from "zustand/vanilla";
-import { compareNatural, importIntoDocumentCommand, importedDocument } from "../../core/import";
+import {
+    MAX_IMPORT_FRAMES,
+    compareNatural,
+    importIntoDocumentCommand,
+    importedDocument,
+} from "../../core/import";
 import type { ImportResult } from "../../core/import";
-import { DocumentLimitError, randomId, truncateName } from "../../core/model";
+import {
+    DocumentLimitError,
+    MAX_DOCUMENT_PIXEL_BYTES,
+    randomId,
+    truncateName,
+} from "../../core/model";
 import type { PixelBuffer } from "../../core/model";
 import { cropPixels } from "../../core/pixels";
 import { PngError, decodePng, encodePng } from "../../core/png";
 import { MAX_REFERENCE_SOURCE_BYTES } from "../../core/project/format";
-import { addReferenceLayerCommand, fitPlacement } from "../../core/references";
+import { addReferenceLayerCommand, fitPlacement, referenceLayers } from "../../core/references";
 import { normalizeSpriteName } from "../../core/sprite";
 import { fileWorkflows } from "../file/workflows";
 import { notices } from "../notices/notices";
@@ -21,22 +31,22 @@ import { settledDocumentOf } from "../timeline/timelineDocument";
 import { importDialogs } from "./importDialog";
 import type { DecodedSource, ImportAnswer, ImportSourcesState } from "./importDialog";
 import {
-    canKeepReference,
     initialForm,
     placeProblem,
+    referenceProblem,
     referenceRectOf,
     rememberedOf,
-    settingsOf,
 } from "./importForm";
-import type { ImportForm, RememberedField } from "./importForm";
+import type { ImportForm, ImportTarget, RememberedField } from "./importForm";
 import { createImportPreview } from "./importPreview";
-import type { ImportPreview } from "./importPreview";
+import type { ImportPreview, PreviewResult } from "./importPreview";
 import { baseNameOf, isPngName, pickPngFiles } from "./pickImages";
 
 // Import PNG (SPEC §8; SE-044): File → Import PNG, a drop of PNG files, the empty state, and a
 // paste while no document is open all come here. The dialog shows the sources and the live
-// preview; its answer places the frames: a new document, or one undo step in the active one
-// (new frames, or a new layer), with "Keep source as reference" chained into that step. A
+// preview; its Import places the frames while the dialog stays open, which closes once they
+// are placed and shows why when they cannot be: a new document, or one undo step in the active
+// one (new frames, or a new layer), with "Keep source as reference" chained into that step. A
 // file operation of its own (`fileWorkflows.run`), so nothing else runs meanwhile. Settings are
 // remembered for the session: the fields the user changed in the last import made.
 
@@ -52,50 +62,128 @@ function reason(error: unknown): string {
     return error instanceof Error && error.message !== "" ? error.message : String(error);
 }
 
-/** Reads and decodes the files; a file that cannot be read gives a line naming it. */
+/** How many files one import reads, and how many bytes of pixels their images may hold. */
+export interface SourceLimits {
+    /** Most files; more are refused before any is read. The default is 1024 (SPEC §8). */
+    files: number;
+    /**
+     * Most bytes of decoded pixels for all files together; the files that would pass it are
+     * left out. The default is the 1 GiB of SPEC §5.1.
+     */
+    pixelBytes: number;
+}
+
+export const SOURCE_LIMITS: Readonly<SourceLimits> = Object.freeze({
+    files: MAX_IMPORT_FRAMES,
+    pixelBytes: MAX_DOCUMENT_PIXEL_BYTES,
+});
+
+const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
+
+/** Width and height from a PNG file's header, read before the image is decoded; null if none. */
+function pngSize(bytes: Uint8Array): { width: number; height: number } | null {
+    if (bytes.length < 24 || PNG_SIGNATURE.some((value, index) => bytes[index] !== value)) {
+        return null;
+    }
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    return { width: view.getUint32(16), height: view.getUint32(20) };
+}
+
+/**
+ * Reads and decodes the files in natural order of their names; a file that cannot be read
+ * gives a line naming it. More files than `limits.files` are refused before any is read. Once
+ * the decoded images would hold more than `limits.pixelBytes`, decoding stops: that file and
+ * those after it are left out, each named in a line (sizes are read from the PNG header,
+ * before the pixels are made).
+ */
 export async function decodeSources(
     files: readonly PickedImage[],
+    limits: Readonly<SourceLimits> = SOURCE_LIMITS,
 ): Promise<{ sources: DecodedSource[]; errors: string[] }> {
+    if (files.length > limits.files) {
+        return {
+            sources: [],
+            errors: [
+                `${files.length} files were chosen; an import reads at most ${limits.files} files.`,
+            ],
+        };
+    }
+    const ordered = [...files].sort((a, b) => compareNatural(a.name, b.name));
     const sources: DecodedSource[] = [];
     const errors: string[] = [];
-    for (const file of files) {
-        try {
-            const bytes = await file.read();
-            const pixels = await decodePng(bytes);
-            sources.push({ name: file.name, bytes, pixels });
-        } catch (error) {
-            const why = error instanceof PngError ? error.message : reason(error);
-            errors.push(`“${file.name}” could not be read as a PNG image. ${why}`);
+    let total = 0;
+    let full = false;
+    const gib = limits.pixelBytes / 1024 ** 3;
+    const budget = Number.isInteger(gib) ? `${gib} GiB` : `${limits.pixelBytes} bytes`;
+    for (const file of ordered) {
+        if (!full) {
+            try {
+                const bytes = await file.read();
+                const size = pngSize(bytes);
+                if (size && total + size.width * size.height * 4 > limits.pixelBytes) {
+                    full = true;
+                } else {
+                    const pixels = await decodePng(bytes);
+                    total += pixels.data.byteLength;
+                    sources.push({ name: file.name, bytes, pixels });
+                    continue;
+                }
+            } catch (error) {
+                const why = error instanceof PngError ? error.message : reason(error);
+                errors.push(`“${file.name}” could not be read as a PNG image. ${why}`);
+                continue;
+            }
         }
+        errors.push(
+            `“${file.name}” was left out: the images would hold more than ${budget} of pixels.`,
+        );
     }
-    sources.sort((a, b) => compareNatural(a.name, b.name));
     return { sources, errors };
 }
 
 /**
  * The bytes and the pixels of the reference that "Keep source as reference" adds: the file
- * itself for the whole image, a PNG of the cropped region otherwise.
+ * itself for the whole image, a PNG of the cropped region otherwise. A reference larger than a
+ * project holds (`limit`, 64 MiB, FORMAT.md §1.8) gives the reason instead.
  */
-function referenceSourceOf(
+export function referenceSourceFor(
     source: DecodedSource,
     crop: ImportForm["crop"],
-): { bytes: Uint8Array; pixels: PixelBuffer } {
-    if (!crop) return { bytes: source.bytes, pixels: source.pixels };
-    const pixels = cropPixels(source.pixels, crop);
-    return { bytes: encodePng(pixels), pixels };
+    limit = MAX_REFERENCE_SOURCE_BYTES,
+): { bytes: Uint8Array; pixels: PixelBuffer } | { problem: string } {
+    let reference: { bytes: Uint8Array; pixels: PixelBuffer };
+    if (crop) {
+        const pixels = cropPixels(source.pixels, crop);
+        reference = { bytes: encodePng(pixels), pixels };
+    } else {
+        reference = { bytes: source.bytes, pixels: source.pixels };
+    }
+    if (reference.bytes.length > limit) {
+        const mib = limit / 1024 / 1024;
+        const size = Number.isInteger(mib) ? `${mib} MiB` : `${limit} bytes`;
+        return {
+            problem: `The source is too large to keep as a reference: a reference holds at most ${size}.`,
+        };
+    }
+    return reference;
 }
 
+/** What placing needs: the answer, its result, the sources and where they go. */
 interface Placement {
-    answer: ImportAnswer;
+    form: ImportForm;
     result: ImportResult;
     sources: readonly DecodedSource[];
+    /** The reference to keep, already checked; null for none. */
+    reference: { bytes: Uint8Array; pixels: PixelBuffer } | null;
     targetId: string | null;
     name: string;
 }
 
-/** The frames in a new document, the active one; its reference layer made in it at once. */
-function placeInNewDocument({ answer, result, sources, name }: Placement): boolean {
-    const { form } = answer;
+/**
+ * The frames in a new document, the active one; its reference layer made in it at once.
+ * Returns null, or why it could not.
+ */
+function placeInNewDocument({ form, result, sources, reference, name }: Placement): string | null {
     const { width, height } = preferences.get("grid");
     const session = importedDocument({
         name,
@@ -106,16 +194,7 @@ function placeInNewDocument({ answer, result, sources, name }: Placement): boole
     });
     const referenceSources: [string, Uint8Array][] = [];
     const [source] = sources;
-    if (form.keepReference && source && canKeepReference(form, sources.length)) {
-        const reference = referenceSourceOf(source, form.crop);
-        if (reference.bytes.length > MAX_REFERENCE_SOURCE_BYTES) {
-            notices.error(
-                `Could not add the reference layer. The file is larger than ${
-                    MAX_REFERENCE_SOURCE_BYTES / 1024 / 1024
-                } MiB.`,
-            );
-            return false;
-        }
+    if (reference && source) {
         const { pixels } = reference;
         const sourceId = randomId();
         addReferenceLayerCommand(session, {
@@ -136,58 +215,48 @@ function placeInNewDocument({ answer, result, sources, name }: Placement): boole
     // (SPEC §5.2), as New Sprite does.
     applyFloating();
     sessionsStore.getState().open(session, { referenceSources });
-    return true;
+    return null;
 }
 
-/** The frames into the open document `targetId`, one undo step with its reference layer. */
-async function placeInDocument({ answer, result, sources, targetId }: Placement): Promise<boolean> {
-    const { form } = answer;
+/**
+ * The frames into the open document `targetId`, one undo step with its reference layer.
+ * Returns null, or why it could not.
+ */
+async function placeInDocument({
+    form,
+    result,
+    sources,
+    reference,
+    targetId,
+}: Placement): Promise<string | null> {
     const busy = "The sprite is busy or was closed.";
-    if (!targetId) return false;
+    if (!targetId) return busy;
     let first = null;
     const [source] = sources;
-    if (form.keepReference && source && canKeepReference(form, sources.length)) {
-        const reference = referenceSourceOf(source, form.crop);
-        // Applies a floating selection of the document first (SPEC §5.2), and reports why it
-        // could not make the layer.
+    if (reference && source) {
+        // Applies a floating selection of the document first (SPEC §5.2); a failure there is
+        // reported by its toast as well.
         const step = await referenceLayerCommandFromPng(reference.bytes, {
             documentId: targetId,
             name: baseNameOf(source.name, "Reference"),
             rect: referenceRectOf(reference.pixels, form, form.fit),
         });
-        if (!step) return false;
+        if (!step) return "The reference layer could not be added.";
         first = step;
     }
-    let document;
-    try {
-        document = settledDocumentOf(targetId);
-    } catch (error) {
-        if (error instanceof FloatingApplyError) return false;
-        throw error;
-    }
-    if (!document || (first && document.session !== first.document.session)) {
-        notices.error(`Could not import. ${busy}`);
-        return false;
-    }
+    const document = settledDocumentOf(targetId);
+    if (!document || (first && document.session !== first.document.session)) return busy;
     const problem = placeProblem(form, document.session.doc);
-    if (problem) {
-        notices.error(`Could not import. ${problem}`);
-        return false;
-    }
-    try {
-        document.history.execute(
-            importIntoDocumentCommand(document.session, result.frames, {
-                destination: form.place === "layer" ? "layer" : "frames",
-                palette: result.palette,
-                paletteMode: form.paletteMode,
-                ...(first && { first: first.command }),
-            }),
-        );
-    } catch (error) {
-        notices.error(`Could not import. ${reason(error)}`);
-        return false;
-    }
-    return true;
+    if (problem) return problem;
+    document.history.execute(
+        importIntoDocumentCommand(document.session, result.frames, {
+            destination: form.place === "layer" ? "layer" : "frames",
+            palette: result.palette,
+            paletteMode: form.paletteMode,
+            ...(first && { first: first.command }),
+        }),
+    );
+    return null;
 }
 
 export interface ImportOptions {
@@ -197,8 +266,11 @@ export interface ImportOptions {
     name?: string;
 }
 
-/** The dialog for `files`, and the import it answers; a file operation of its own. */
-async function runImport(files: readonly PickedImage[], options: ImportOptions): Promise<boolean> {
+/** The dialog for `files`, and the import it places; a file operation of its own. */
+async function runImportDialog(
+    files: readonly PickedImage[],
+    options: ImportOptions,
+): Promise<boolean> {
     const sources = createStore<ImportSourcesState>(() => ({
         sources: [],
         errors: [],
@@ -226,17 +298,54 @@ async function runImport(files: readonly PickedImage[], options: ImportOptions):
             generation: state.generation + 1,
         }));
     };
+    const active = activeDocument(sessionsStore.getState());
+    const target: (ImportTarget & { name: string }) | null = active
+        ? {
+              name: active.session.doc.name,
+              width: active.session.doc.width,
+              height: active.session.doc.height,
+              palette: active.session.doc.palette,
+              references: referenceLayers(active.session.doc).length,
+          }
+        : null;
+    /** Places what the dialog settled; null once placed, otherwise why not. */
+    const place = async (answer: ImportAnswer, result: PreviewResult): Promise<string | null> => {
+        const { form } = answer;
+        const { sources: decoded } = sources.getState();
+        const [first] = decoded;
+        if (!first) return "There is no image to import.";
+        let reference: Placement["reference"] = null;
+        if (form.keepReference && referenceProblem(form, decoded.length, target) === null) {
+            const made = referenceSourceFor(first, form.crop);
+            if ("problem" in made) return made.problem;
+            reference = made;
+        }
+        // The answer has settled: the worker and what it holds go before the frames are
+        // placed (a later change of a setting starts another).
+        preview.suspend();
+        const placement: Placement = {
+            form,
+            result,
+            sources: decoded,
+            reference,
+            targetId: active?.id ?? null,
+            name: normalizeSpriteName(
+                truncateName(options.name ?? baseNameOf(first.name, "Sprite")),
+            ),
+        };
+        try {
+            return form.place === "new"
+                ? placeInNewDocument(placement)
+                : await placeInDocument(placement);
+        } catch (error) {
+            if (error instanceof FloatingApplyError) {
+                return "The floating selection could not be applied.";
+            }
+            return error instanceof DocumentLimitError ? error.message : reason(error);
+        }
+    };
     try {
         void read(files);
-        const active = activeDocument(sessionsStore.getState());
-        const target = active
-            ? {
-                  name: active.session.doc.name,
-                  width: active.session.doc.width,
-                  height: active.session.doc.height,
-                  palette: active.session.doc.palette,
-              }
-            : null;
         const answer = await importDialogs.importPng({
             target,
             initial: initialForm(preferences.get("import"), target, remembered, options),
@@ -247,51 +356,13 @@ async function runImport(files: readonly PickedImage[], options: ImportOptions):
                     if (picked) void read(picked);
                 });
             },
+            place,
         });
         if (!answer) return false;
-        const { sources: decoded } = sources.getState();
-        // Asked once more for the form answered and the sources there are now: an answer the
-        // dialog showed may be for an earlier state. The cache makes it quick.
-        const { settings, smart } = settingsOf(
-            answer.form,
-            decoded.length,
-            target?.palette ?? null,
-        );
-        if (decoded.length > 0) preview.request(settings, smart);
-        const result = decoded.length > 0 ? await preview.settled() : null;
-        if (!result || decoded.length === 0) {
-            notices.error(
-                `Could not import. ${preview.store.getState().error ?? "There is no image to import."}`,
-            );
-            return false;
-        }
-        const placement: Placement = {
-            answer,
-            result,
-            sources: decoded,
-            targetId: active?.id ?? null,
-            name: normalizeSpriteName(
-                truncateName(options.name ?? baseNameOf(decoded[0]!.name, "Sprite")),
-            ),
-        };
-        let placed: boolean;
-        try {
-            placed =
-                answer.form.place === "new"
-                    ? placeInNewDocument(placement)
-                    : await placeInDocument(placement);
-        } catch (error) {
-            if (error instanceof FloatingApplyError) return false;
-            const why = error instanceof DocumentLimitError ? error.message : reason(error);
-            notices.error(`Could not import. ${why}`);
-            return false;
-        }
-        if (placed) {
-            remembered = rememberedOf(answer.form, new Set(answer.changed), remembered);
-            const count = result.frames.length;
-            notices.info(`Imported ${count} ${count === 1 ? "frame" : "frames"}`);
-        }
-        return placed;
+        remembered = rememberedOf(answer.form, new Set(answer.changed), remembered);
+        const count = answer.frames;
+        notices.info(`Imported ${count} ${count === 1 ? "frame" : "frames"}`);
+        return true;
     } finally {
         preview.dispose();
     }
@@ -306,7 +377,7 @@ export function importImages(
     files: readonly PickedImage[],
     options: ImportOptions = {},
 ): Promise<boolean> {
-    return fileWorkflows.run(() => runImport(files, options));
+    return fileWorkflows.run(() => runImportDialog(files, options));
 }
 
 /** File → Import PNG: asks for PNG files, then `importImages`. */

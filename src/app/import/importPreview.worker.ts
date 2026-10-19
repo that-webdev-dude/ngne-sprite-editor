@@ -33,6 +33,8 @@ const pipeline = createPipeline({
         scope.postMessage(response, transfer);
     },
     pause,
+    // A newer request waits at most about this long for the computation to notice it.
+    pauseEveryMs: 8,
 });
 
 scope.onmessage = (event) => pipeline.handle(event.data);

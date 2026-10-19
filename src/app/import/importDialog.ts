@@ -3,7 +3,7 @@ import type { PixelBuffer } from "../../core/pixels";
 import { commandDialogs, createDialogRequests, dialogView } from "../dialogs/dialogRequests";
 import type { DialogRequestBase, DialogRequests, DialogView } from "../dialogs/dialogRequests";
 import type { ImportForm, ImportTarget } from "./importForm";
-import type { ImportPreview } from "./importPreview";
+import type { ImportPreview, PreviewResult } from "./importPreview";
 
 /**
  * The surfaces of Import PNG (DESIGN §7; SE-044): the large dialog, and the chooser that a drop
@@ -35,6 +35,8 @@ export interface ImportAnswer {
     form: ImportForm;
     /** The fields the user changed, for the session to remember. */
     changed: readonly (keyof ImportForm)[];
+    /** How many frames were placed. */
+    frames: number;
 }
 
 export interface ImportRequest {
@@ -48,6 +50,12 @@ export interface ImportRequest {
     preview: ImportPreview;
     /** Asks for other files; they replace the sources when the user chooses any. */
     chooseFiles(): void;
+    /**
+     * Places the import of `result`, the settled answer for the form: resolves null once the
+     * frames are placed (the dialog then answers and closes), otherwise with why they could not
+     * be, which the dialog shows while it stays open (SE-044 review B).
+     */
+    place(answer: ImportAnswer, result: PreviewResult): Promise<string | null>;
     /** The form to import with, or null to cancel. */
     answer(values: ImportAnswer | null): void;
 }

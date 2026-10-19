@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createPipeline, decideSmart } from "../../src/app/import/importPipeline";
 import type { PipelineResponse } from "../../src/app/import/importPipeline";
+import type { PreviewRunner } from "../../src/app/import/importPreview";
 import { createImportPreview, createLocalRunner } from "../../src/app/import/importPreview";
 import type { SmartChoices } from "../../src/app/import/importForm";
-import { runImport } from "../../src/core/import";
+import { runImport, smartDefaults } from "../../src/core/import";
 import type { ImportSettings, ImportSource } from "../../src/core/import";
 import { noise } from "./se-043-support";
 
@@ -85,6 +86,29 @@ describe("the preview pipeline", () => {
         ]);
     });
 
+    it("with pauseEveryMs, pauses only once that much time has passed since the last pause", async () => {
+        let clock = 0;
+        let pauses = 0;
+        const responses: PipelineResponse[] = [];
+        const pipeline = createPipeline({
+            post: (response) => responses.push(response),
+            pause: () => {
+                pauses++;
+                return new Promise((resolve) => setTimeout(resolve, 0));
+            },
+            pauseEveryMs: 10,
+            // Every step takes 4 ms: a pause after every third step.
+            now: () => (clock += 4),
+        });
+        pipeline.handle({ kind: "sources", sources });
+        pipeline.handle({ kind: "run", id: 1, settings, smart: explicit });
+        await vi.waitFor(() => expect(responses).toHaveLength(1), { timeout: 5000 });
+        expect(responses.map((response) => response.kind)).toEqual(["done"]);
+        // Ten steps (cells, four frames, palette, four mappings); without the budget, ten pauses.
+        expect(pauses).toBeGreaterThan(0);
+        expect(pauses).toBeLessThan(5);
+    });
+
     it("answers a request whose settings fail with the import's message", async () => {
         const recorder = steppedHost();
         const pipeline = createPipeline(recorder.host);
@@ -121,9 +145,42 @@ describe("the preview pipeline", () => {
     });
 });
 
+describe("the smart defaults of the pipeline", () => {
+    it("are computed once for the same cells and target size (review I)", async () => {
+        const recorder = steppedHost();
+        let calls = 0;
+        const pipeline = createPipeline(recorder.host, {
+            smartDefaults: (cells, size) => {
+                calls++;
+                return smartDefaults(cells, size);
+            },
+        });
+        const smart: SmartChoices = { ...explicit, alpha: true, colors: true };
+        pipeline.handle({ kind: "sources", sources });
+        let id = 0;
+        const run = async (next: ImportSettings) => {
+            pipeline.handle({ kind: "run", id: ++id, settings: next, smart });
+            await recorder.finish();
+        };
+        await run(settings);
+        expect(calls).toBe(1);
+        await run({ ...settings, dither: "bayer" });
+        await run({ ...settings, resample: "nearest" });
+        expect(calls).toBe(1);
+        await run({ ...settings, size: { width: 9, height: 8, fit: "contain" } });
+        expect(calls).toBe(2);
+        await run({
+            ...settings,
+            cells: { mode: "grid", grid: { cell: { columns: 2, rows: 1 } } },
+        });
+        expect(calls).toBe(3);
+        expect(recorder.responses.every((response) => response.kind === "done")).toBe(true);
+    });
+});
+
 describe("createImportPreview", () => {
     it("shows only the newest request's answer and settles with it", async () => {
-        const preview = createImportPreview(createLocalRunner());
+        const preview = createImportPreview(createLocalRunner);
         preview.setSources(sources);
         preview.request(settings, explicit);
         const newest: ImportSettings = { ...settings, colors: { mode: "reduce", count: 3 } };
@@ -140,7 +197,7 @@ describe("createImportPreview", () => {
 
     it("keeps its own copy of the sources", async () => {
         const pixels = noise(8, 8, 9);
-        const preview = createImportPreview(createLocalRunner());
+        const preview = createImportPreview(createLocalRunner);
         const own: ImportSource[] = [{ name: "a.png", pixels }];
         preview.setSources(own);
         const before = [...pixels.data];
@@ -155,8 +212,61 @@ describe("createImportPreview", () => {
         preview.dispose();
     });
 
+    it("asks nothing again for settings equal to the newest request's", async () => {
+        const runs: number[] = [];
+        const preview = createImportPreview(() => {
+            const runner = createLocalRunner();
+            const send = runner.send.bind(runner);
+            runner.send = (request) => {
+                if (request.kind === "run") runs.push(request.id);
+                send(request);
+            };
+            return runner;
+        });
+        preview.setSources(sources);
+        const first = preview.request(settings, explicit);
+        expect(preview.request({ ...settings }, { ...explicit })).toBe(first);
+        await preview.settled();
+        expect(preview.request(settings, explicit)).toBe(first);
+        expect(runs).toEqual([first]);
+        expect(preview.store.getState().requested).toBe(first);
+        preview.dispose();
+    });
+
+    it("suspend ends the runner; a later request starts another and sends the sources again", async () => {
+        const started: PreviewRunner[] = [];
+        const ended: PreviewRunner[] = [];
+        const preview = createImportPreview(() => {
+            const runner = createLocalRunner();
+            const dispose = runner.dispose.bind(runner);
+            runner.dispose = () => {
+                ended.push(runner);
+                dispose();
+            };
+            started.push(runner);
+            return runner;
+        });
+        preview.setSources(sources);
+        preview.request(settings, explicit);
+        const before = await preview.settled();
+        preview.suspend();
+        expect(ended).toEqual(started);
+        expect(started).toHaveLength(1);
+        // The answer stays shown; the same settings are computed again by a new runner.
+        expect(preview.store.getState().result).toBe(before);
+        const id = preview.request(settings, explicit);
+        expect(started).toHaveLength(2);
+        const after = await preview.settled();
+        expect(after?.id).toBe(id);
+        expect(after?.frames.map((frame) => [...frame.data])).toEqual(
+            before?.frames.map((frame) => [...frame.data]),
+        );
+        preview.dispose();
+        expect(ended).toHaveLength(2);
+    });
+
     it("reports a failure and settles with null", async () => {
-        const preview = createImportPreview(createLocalRunner());
+        const preview = createImportPreview(createLocalRunner);
         preview.setSources([]);
         preview.request(settings, explicit);
         expect(await preview.settled()).toBeNull();

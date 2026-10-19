@@ -1605,10 +1605,17 @@ Rules:
     fields the user changed in the last import made, except the crop and "keep source as
     reference"; a remembered size applies only while no document is open.
   - The preview runs `importSteps` (`runImport` in stages that keep their results) in a
-    worker; a newer change cancels the computation at its next step, and Import uses the
-    newest answer.
-  - Files that cannot be decoded are named in the dialog and left out; "Choose files…"
-    replaces the sources.
+    worker; a newer change cancels the computation at its next step. Import is enabled once
+    the preview has answered the form as it is. It places the frames while the dialog stays
+    open ("Importing…"), and the dialog closes once they are placed; otherwise it names the
+    reason and stays open. The worker ends before the frames are placed.
+  - Files are read in natural order of their names. Files that cannot be decoded are named in
+    the dialog and left out; "Choose files…" replaces the sources. More than 1024 files are
+    refused before any is read. Once the decoded images would hold more than 1 GiB (§5.1),
+    the files from there on are named and left out.
+  - "Keep source as reference" is disabled, with the reason beside it, unless the import is
+    one image as a single sprite, and into a sprite that has four reference layers. A kept
+    reference larger than 64 MiB (FORMAT.md §1.8) is refused in the dialog.
 - Placing (SE-044):
   - New document: named after the first file ("Pasted image" for a paste), frames of 100 ms,
     the palette choice applied to the default palette, a "kept" reference already in it.
