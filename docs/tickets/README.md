@@ -79,7 +79,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-042 | Autosave and crash recovery                       | M    | 041                                | —             | Ready  |
 | SE-043 | Import pipeline core and preset palettes          | L    | 003, 005                           | A3            | Done   |
 | SE-044 | Import PNG dialog                                 | L    | 006, 021, 041, 043, 045            | —             | Ready  |
-| SE-045 | Reference layers                                  | L    | 011, 022, 040                      | —             | Ready  |
+| SE-045 | Reference layers                                  | L    | 011, 022, 040                      | —             | In progress |
 | SE-046 | Reference layer move and scale on the canvas      | M    | 032, 045                           | —             | Ready  |
 | SE-047 | Document tabs and recent files                    | M    | 041                                | —             | Ready  |
 | **M5** | **[NGNE export](M5-ngne-export.md)**              |      |                                    |               |        |
@@ -95,7 +95,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-063 | GIF export                                        | M    | 043, 052                           | —             | Ready  |
 | SE-064 | Preferences dialog, command palette and shortcut sheet | M | 007                              | —             | Done   |
 | SE-065 | Tools II: curve, contour, polygon, spray          | M    | 017                                | —             | Done   |
-| SE-066 | Palette files, replace colour and sort            | M    | 030, 060                           | —             | Ready  |
+| SE-066 | Palette files, replace colour and sort            | M    | 030, 060                           | —             | In progress |
 | **M7** | **[Hardening and release](M7-hardening-and-release.md)** | |                                    |               |        |
 | SE-070 | End-to-end regression suite and performance record | L   | 023, 025, 033, 044, 052, 053, 054  | —             | Ready  |
 | SE-071 | Accessibility and interface audit                 | M    | 064, 070                           | —             | Ready  |
