@@ -60,7 +60,7 @@ async function expectOthersWork(page: Page, failed: Region | "dock-panel") {
         ).toBeVisible();
     }
     if (failed !== "viewport") {
-        await expect(region(page, "viewport")).toHaveText("New spriteOpen");
+        await expect(region(page, "viewport")).toHaveText("New spriteOpenImport PNG");
     }
 }
 
