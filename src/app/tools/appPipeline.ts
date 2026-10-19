@@ -1,4 +1,5 @@
 import { setKeyContext } from "../keymap/contextState";
+import { stopPlaybackForEdit } from "../playback/playbackState";
 import { activeComposites } from "../state/composites";
 import { editorStore } from "../state/editor";
 import { sessionsStore } from "../state/sessions";
@@ -9,6 +10,9 @@ import { toolState } from "./activeTool";
 import { createToolPipeline } from "./pipeline";
 import type { ToolPipeline } from "./pipeline";
 import { strokeEcho } from "./strokeEcho";
+
+/** Tools that change only the view: a stroke of theirs does not stop editor playback. */
+const VIEW_TOOLS: ReadonlySet<string> = new Set(["hand", "zoom"]);
 
 /** Where the pointer pipeline of the app reads the mapping of the image on screen. */
 let mappingSource: (() => ViewMapping | null) | null = null;
@@ -37,6 +41,11 @@ export const toolPipeline: ToolPipeline = createToolPipeline({
     },
     // While a gesture is open, Enter closes it (SPEC §7.8, `gesture.commands.ts`).
     gesture: (open) => setKeyContext("gesture", open),
+    // Editing input stops editor playback first, on the frame on screen; the hand and the
+    // zoom only move the view, and playback goes on under them (SPEC §7.5, SE-024).
+    beforeStroke(tool) {
+        if (!VIEW_TOOLS.has(tool.id)) stopPlaybackForEdit();
+    },
 });
 
 /**

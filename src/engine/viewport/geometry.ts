@@ -34,6 +34,14 @@ export interface Quad {
     y: number;
     width: number;
     height: number;
+    /**
+     * The part of the texture drawn, 0 to 1 over it (NGNE's `u`, `v`, `uw`, `vh`); the whole
+     * texture when absent. Editor playback draws a cell of the `ed:play` grid (SE-024).
+     */
+    u?: number;
+    v?: number;
+    uw?: number;
+    vh?: number;
 }
 
 /**

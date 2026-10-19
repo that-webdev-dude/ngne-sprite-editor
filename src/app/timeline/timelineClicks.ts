@@ -1,3 +1,4 @@
+import { stopPlaybackForEdit } from "../playback/playbackState";
 import { clickSelection, effectiveSelection, gridOrder } from "./selection";
 import type { ClickModifiers, ClickTarget } from "./selection";
 import { activateCel, availableDocument } from "./timelineDocument";
@@ -11,6 +12,8 @@ import { setSelection, timelineStore } from "./timelineState";
  * document, or a stroke in progress).
  */
 export function clickTimeline(target: ClickTarget, modifiers: ClickModifiers): boolean {
+    // A click in the grid stops editor playback first, on the frame on screen (SE-024).
+    stopPlaybackForEdit();
     const document = availableDocument();
     if (!document) return false;
     const { id, session } = document;

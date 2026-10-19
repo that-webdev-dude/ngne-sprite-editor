@@ -479,6 +479,20 @@ Texture slots (IDs are fixed for the life of a renderer)
   plain grid local to the viewport, no padding; not the exporter's packer) when it fits
   8192×8192 and 64 MB, and draws UV sub-rectangles; otherwise it steps through the frame
   cache and shows the newest ready frame (frames may be skipped, never queued).
+- Recorded by SE-024: the grid holds each frame of the playing range once, row by row, about
+  as wide as tall. It is built from the composite cache when playback starts, its pixels and
+  their version read in one task; until its upload resolves, and for a frame whose pixels
+  change while it plays (until the grid is built again), playback steps through the frame
+  cache, which uploads nothing for a frame the grid holds. An `ed:play` upload that fails
+  leaves that renderer on the frame cache. After playback the grid stays until a frame slot
+  holds the current frame, then gets the 1×1 image; a cell whose frame changed stays on screen
+  with its previous pixels until then, as a frame slot does during its upload. Through the frame cache playback draws the
+  newest frame that is ready (the one made current last), never one played before the frame on
+  screen. A frame is drawn only from a slot that is still reserved for it: a slot being
+  re-keyed shows its old key until the new upload resolves, and the frame drawn from it would
+  then give way to the checkerboard alone (the case left open by the SE-011 review). A frame
+  drawn from `ed:play` is reported as drawn with its key and the grid's version (`onDrawn`), so
+  the stroke echo (§6.6) clears as it does for a frame slot.
 
 Quad order (NGNE `layer` value): 0 workspace colour · 1 checkerboard · 2 references placed
 behind · 3 onion skins behind · 4 current frame · 5 onion skins in front · 6 references placed
@@ -509,7 +523,7 @@ Upload queue (one per renderer instance)
 - Versions (SE-015, for the stroke echo of §6.6): a `ViewportDocument` may give `version(key)`,
   read in the same task as the key's pixels; the version travels with the upload into the slot
   and is reported, with the frame key, for every frame NGNE submits (`NgneViewport` option
-  `onDrawn`; `drawnFrame()`, which knows the frame slot's quad only). The app's link
+  `onDrawn`; `drawnFrame()`, the frame slot's quad or the `ed:play` cell, SE-024). The app's link
   (`app/viewport/viewportLink`) hands out versions (`nextVersion`, one counter for the page),
   relays `onDrawn`, and holds the checkerboard the viewport was last given
   (`ViewportSources.checker`), so the echo draws the same one.
@@ -551,6 +565,10 @@ Reference hardware: §3. Document 256×256, 8 layers.
 | Editor playback from `ed:play`, 64 frames, 100 ms each                 | no skipped frames |
 | Idle editor: frames submitted per second                               | 0               |
 | Cold load to interactive (production build, local)                     | ≤ 2 s           |
+
+The playback budget (SE-024, `tests/perf/se-024-playback.perf.ts`) is measured on the reference
+document (8 layers) at 1× speed over two passes once the grid is drawn from: an entry is skipped
+when no frame submitted while it is the active frame shows it.
 
 If the stroke budget is unreachable (SE-002 question 1, or SE-015's measurement), SE-015
 implements the fallback: the in-progress stroke is echoed immediately on the Canvas2D overlay
@@ -1146,6 +1164,29 @@ layer would remain.
   active tag at the playhead, or all frames forward when there is none. A tag with
   `repeat = n > 0` plays n times and stops on its last entry; otherwise playback loops. Speed
   0.25×–4×. Onion skin is hidden while playing.
+
+Recorded by SE-024 (playback; the display path is in §6.4):
+
+- Playback steps the active frame of the active document (session state, no history entry),
+  so the timeline and the status bar follow it. Its clock is the page's (`performance.now`),
+  counted only while the page is visible: a hidden tab pauses it and it goes on where it was,
+  with no catch-up. An entry shows from its start, included, to its end, excluded; a speed
+  change counts from the moment it is made. Playback starts at the active frame's first entry
+  of the sequence; a sequence that does not loop and would start on its last entry starts on
+  its first. A tag with `repeat = n` stops playback on its last entry.
+- Play / Pause takes the Frame menu's item, the transport's play button and Enter (`canvas`,
+  `timeline`). It is enabled with two frames or more, not during a stroke or an open gesture;
+  while pixels float it applies them first (§5.2). Pause stops on the frame the viewport drew
+  last, which becomes the active frame.
+- Speed: Frame → Playback Speed, 0.25×, 0.5×, 1×, 1.5×, 2×, 3× and 4× (Aseprite's play button
+  menu, with 4×). The speed is kept for the page, for every document, and not saved.
+- Editing stops playback first. A press that begins a stroke of any tool but the hand and the
+  zoom stops it before the stroke reads its frame: the frame on screen becomes the active one,
+  and the stroke paints there. `applyFloating`, which every command that changes the document
+  calls first (§5.2), stops it the same way. Any step of the playing document's history, a
+  transaction opened in it (a paste), another active frame (frame navigation, a timeline
+  click), another active document and a closed one stop it too. The hand, the zoom, the wheel,
+  the view commands and a tool change leave it playing.
 - Onion skin: 0–3 frames before and after, base opacity with per-step falloff, optional tint
   (red before, blue after; 50% blend toward the tint colour, done on the CPU), placement behind
   or in front, optionally limited to the active tag's range.

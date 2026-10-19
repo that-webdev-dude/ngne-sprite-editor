@@ -6,6 +6,8 @@ import { FrameSlots } from "./frameSlots";
 import type { SlotImage } from "./frameSlots";
 import { imageQuad, QUAD_LAYER } from "./geometry";
 import type { Quad } from "./geometry";
+import { blitCell, cellUv, createGridImage, playGridLayout } from "./playGrid";
+import type { PlayGridLayout } from "./playGrid";
 import type { ViewportChecker, ViewportDocument, ViewportView } from "./types";
 
 // The texture slots of one renderer of the viewport (SPEC §6.4) and what goes into them: the
@@ -17,6 +19,8 @@ import type { ViewportChecker, ViewportDocument, ViewportView } from "./types";
 export const CHECKER_SLOT = "ed:checker";
 /** Number of frame cache slots, `ed:f:0` to `ed:f:7`. */
 export const FRAME_SLOT_COUNT = 8;
+/** The grid of the playing range during editor playback (SPEC §6.4, SE-024). */
+export const PLAY_SLOT = "ed:play";
 
 /** The texture ID of a frame cache slot. */
 export function frameSlotId(index: number): string {
@@ -39,6 +43,11 @@ export interface Scene {
     checker: ViewportChecker;
     /** Workspace colour, 0xRRGGBB. */
     background: number;
+    /**
+     * Editor playback (SE-024): the frame keys of the playing range, each once; null or absent
+     * while nothing plays.
+     */
+    playing?: readonly string[] | null;
 }
 
 /**
@@ -62,6 +71,24 @@ interface SlotTag {
     height: number;
     /** The document's `version` of a frame's pixels, when it gives one (SE-015). */
     version?: number;
+    /** For `ed:play`: the grid's cells, and the frame key of each (null: left empty). */
+    grid?: PlayGridTag;
+}
+
+/** The cells of an `ed:play` image. */
+interface PlayGridTag {
+    layout: PlayGridLayout;
+    keys: readonly (string | null)[];
+}
+
+/** The grid `ed:play` shows. */
+interface PlayShown {
+    layout: PlayGridLayout;
+    /** The cell of each frame key. */
+    cells: ReadonlyMap<string, number>;
+    /** The keys whose cells still show their frame's pixels: none of them changed since. */
+    valid: Set<string>;
+    version?: number;
 }
 
 /** What an upload is made of: a key and its pixels, read in one task. */
@@ -69,6 +96,7 @@ interface SlotImageSource {
     key: string;
     pixels: PixelBuffer;
     version?: number;
+    grid?: PlayGridTag;
 }
 
 /** What the slots need of the renderer instance they belong to. */
@@ -108,6 +136,23 @@ export class ViewportSlots {
     /** The frame image of the quads made last; null when they had none. */
     #drawn: SlotImage | null = null;
     #stuck = false;
+    /**
+     * Spec of the `ed:play` grid last asked for: null while the slot holds none and none is
+     * asked for. A grid that could not be built is not asked for again until playback stops.
+     */
+    #playSpec: string | null = null;
+    /** The grid `ed:play` shows, once its upload resolved. */
+    #playShown: PlayShown | null = null;
+    /** Keys whose pixels changed since the grid being built read them. */
+    readonly #playStale = new Set<string>();
+    /** `ed:play` failed on this renderer: playback steps through the frame cache. */
+    #playFailed = false;
+    /**
+     * While playing without the grid: when each key was last made the current one, so the
+     * newest ready frame is drawn (SE-024), never one older than the frame on screen.
+     */
+    readonly #requested = new Map<string, number>();
+    #requests = 0;
 
     constructor(scene: Scene, host: SlotsHost) {
         this.#scene = scene;
@@ -143,7 +188,17 @@ export class ViewportSlots {
     /** Asks for whatever the scene needs and these slots do not have or expect yet. */
     sync(): void {
         this.#syncChecker();
+        this.#syncPlay();
         this.#syncCurrent();
+    }
+
+    /**
+     * The grid `ed:play` shows: its layout and the frame keys whose cells are current. Null
+     * while it shows none. For tests.
+     */
+    playGrid(): { layout: PlayGridLayout; keys: string[] } | null {
+        const shown = this.#playShown;
+        return shown ? { layout: shown.layout, keys: [...shown.valid] } : null;
     }
 
     /** Reserves slots for the keys of another renderer's cache, least recently used first. */
@@ -157,6 +212,7 @@ export class ViewportSlots {
     /** The scene's document was replaced: nothing of the earlier one is kept or drawn. */
     documentChanged(): void {
         this.#displayed = null;
+        this.#playShown = null;
         this.#blank(this.frames.release(() => true));
         this.sync();
     }
@@ -171,6 +227,7 @@ export class ViewportSlots {
         const { current } = this.#scene;
         // "all" includes the document's size, which the checker image follows.
         if (keys === "all") this.#syncChecker();
+        this.#invalidatePlay(hit);
         this.#blank(this.frames.release((key) => key !== current && hit(key)));
         if (current === null || !hit(current)) return;
         const slot = this.frames.reservedFor(current);
@@ -199,6 +256,16 @@ export class ViewportSlots {
         if (checker && checker.key !== null && checker.epoch === scene.epoch) {
             quads.push(imageQuad(CHECKER_SLOT, QUAD_LAYER.checker, scene.view, checker));
         }
+        const cell = this.#playCell();
+        if (cell) {
+            const { layout, index, image } = cell;
+            quads.push({
+                ...imageQuad(PLAY_SLOT, QUAD_LAYER.frame, scene.view, image),
+                ...cellUv(layout, index),
+            });
+            this.#drawn = image;
+            return quads;
+        }
         const slot = this.#displaySlot();
         const image = this.frames.shown(slot);
         if (image) {
@@ -214,9 +281,12 @@ export class ViewportSlots {
     }
 
     /**
-     * The slot to draw the frame from: the current key when a slot shows it, otherwise the
+     * The slot to draw the frame from: the current key when a slot holds it, otherwise the
      * key drawn last, so a frame switch shows the old frame or the new one, never a slot
-     * whose texture is still another frame's.
+     * whose texture is still another frame's. A slot that still shows the current key while
+     * it is being re-keyed for another is not used: the key drawn last is kept from being
+     * re-keyed (`#load`), that slot is not, and drawing from it would leave the checkerboard
+     * alone once its new upload resolves (SE-024, from the SE-011 review).
      */
     #displaySlot(): number {
         const { current } = this.#scene;
@@ -224,10 +294,32 @@ export class ViewportSlots {
             this.#displayed = null;
             return -1;
         }
-        const wanted = this.frames.showing(current);
+        const wanted = this.frames.holding(current);
         if (wanted >= 0) {
             this.#displayed = current;
             return wanted;
+        }
+        if (this.#scene.playing) {
+            // Playback through the frame cache: the newest frame that is ready, never one
+            // played before the frame on screen, which stays while none is (SE-024).
+            const shownOrder =
+                this.#displayed === null ? 0 : (this.#requested.get(this.#displayed) ?? 0);
+            let best = -1;
+            let newest = shownOrder;
+            for (let slot = 0; slot < this.frames.count; slot++) {
+                const key = this.frames.shown(slot)?.key;
+                const held = key !== undefined && this.frames.reserved(slot) === key;
+                const order = held ? (this.#requested.get(key) ?? 0) : 0;
+                if (order > newest) {
+                    newest = order;
+                    best = slot;
+                }
+            }
+            const image = this.frames.shown(best);
+            if (image) {
+                this.#displayed = image.key;
+                return best;
+            }
         }
         const previous = this.#displayed === null ? -1 : this.frames.showing(this.#displayed);
         if (previous < 0) this.#displayed = null;
@@ -252,8 +344,13 @@ export class ViewportSlots {
     }
 
     #syncCurrent(): void {
-        const { current, document: doc } = this.#scene;
+        const { current, document: doc, playing } = this.#scene;
         if (current === null || !doc) return;
+        if (playing) {
+            this.#requested.set(current, ++this.#requests);
+            // Drawn from the grid: no upload per step.
+            if (this.#playShown?.valid.has(current)) return;
+        }
         if (this.frames.reservedFor(current) >= 0) this.frames.use(current);
         else this.#load(current);
     }
@@ -304,10 +401,16 @@ export class ViewportSlots {
         const { width, height } = made.pixels;
         const tag: SlotTag = { epoch, key: made.key, width, height };
         if (made.version !== undefined) tag.version = made.version;
+        if (made.grid) tag.grid = made.grid;
         return { bitmap: await this.#host.bitmap(made.pixels), tag };
     }
 
     #published(slot: string, tag: SlotTag): void {
+        if (slot === PLAY_SLOT) {
+            this.#playPublished(tag);
+            this.#host.onChange();
+            return;
+        }
         const index = frameSlotIndex(slot);
         if (index >= 0) {
             const current = tag.key !== null && tag.epoch === this.#scene.epoch;
@@ -320,11 +423,22 @@ export class ViewportSlots {
                 current: this.#scene.current,
                 newerQueued: this.queue.pending(slot),
             });
+            // A grid kept after playback stopped goes once a slot shows the frame instead.
+            if (!this.#scene.playing) this.#syncPlay();
         }
         this.#host.onChange();
     }
 
     #failed(slot: string, error: unknown): void {
+        if (slot === PLAY_SLOT) {
+            // Playback steps through the frame cache instead: for good on this renderer when
+            // `texture()` rejected; for this playback when the grid could not be built.
+            if (this.queue.failed(slot)) this.#playFailed = true;
+            this.#playShown = null;
+            this.#host.onError(error);
+            this.#host.onChange();
+            return;
+        }
         if (this.queue.failed(slot)) this.#uploadFailed(slot);
         else this.#buildFailed(slot);
         this.#host.onError(error);
@@ -362,6 +476,114 @@ export class ViewportSlots {
         const index = frameSlotIndex(slot);
         if (index >= 0) this.frames.unreserve(index);
         else this.#checker = undefined;
+    }
+
+    // --- Editor playback (SE-024) --------------------------------------------------------
+
+    /**
+     * Asks for the grid of the playing range when it fits `ed:play` (SPEC §6.4), or lets go of
+     * the grid when nothing plays or it does not fit. After playback the grid stays while the
+     * current frame is drawn from it and no frame slot shows that frame yet, so the frame on
+     * screen does not go back to an older one while its own upload is on its way.
+     */
+    #syncPlay(): void {
+        const { playing, document: doc, epoch, current } = this.#scene;
+        if (!playing) this.#requested.clear();
+        const layout =
+            playing && doc && !this.#playFailed
+                ? playGridLayout(playing.length, doc.width, doc.height)
+                : null;
+        if (!playing || !doc || !layout) {
+            if (this.#playSpec === null) return;
+            const kept =
+                !playing &&
+                current !== null &&
+                this.#playShown?.cells.has(current) === true &&
+                this.frames.holding(current) < 0;
+            if (kept) return;
+            this.#playSpec = null;
+            this.#playShown = null;
+            this.queue.request(PLAY_SLOT, () => this.#build(PLAY_SLOT, () => null));
+            return;
+        }
+        const spec = `${epoch}/${doc.width}x${doc.height}/${playing.join("\n")}`;
+        if (spec === this.#playSpec) return;
+        this.#playSpec = spec;
+        this.queue.request(PLAY_SLOT, () => this.#build(PLAY_SLOT, () => this.#gridImage()));
+    }
+
+    /** The grid of the playing range, read in one task with its version; null for none. */
+    #gridImage(): SlotImageSource | null {
+        const { document: doc, playing } = this.#scene;
+        if (!doc || !playing || playing.length === 0) return null;
+        const layout = playGridLayout(playing.length, doc.width, doc.height);
+        if (!layout) return null;
+        this.#playStale.clear();
+        const pixels = createGridImage(layout);
+        const keys = playing.map((key, index) => {
+            const image = doc.pixels(key);
+            return image && blitCell(pixels, layout, index, image) ? key : null;
+        });
+        const version = doc.version?.(playing[0]!);
+        const made: SlotImageSource = { key: PLAY_SLOT, pixels, grid: { layout, keys } };
+        if (version !== undefined) made.version = version;
+        return made;
+    }
+
+    #playPublished(tag: SlotTag): void {
+        const { grid } = tag;
+        if (!grid || tag.epoch !== this.#scene.epoch || this.#playSpec === null) {
+            this.#playShown = null;
+            return;
+        }
+        const cells = new Map<string, number>();
+        const valid = new Set<string>();
+        for (const [index, key] of grid.keys.entries()) {
+            if (key === null || cells.has(key)) continue;
+            cells.set(key, index);
+            if (!this.#playStale.has(key)) valid.add(key);
+        }
+        this.#playShown = { layout: grid.layout, cells, valid };
+        if (tag.version !== undefined) this.#playShown.version = tag.version;
+    }
+
+    /**
+     * Pixels behind some keys changed: their cells are out of date. While playing, the grid is
+     * built again; until it is, those frames come from the frame cache, and a cell on screen
+     * stays there until a frame slot holds its frame (`#playCell`).
+     */
+    #invalidatePlay(hit: (key: string) => boolean): void {
+        const shown = this.#playShown;
+        if (shown) for (const key of [...shown.valid]) if (hit(key)) shown.valid.delete(key);
+        const playing = this.#scene.playing;
+        if (!playing || this.#playSpec === null) return;
+        const changed = playing.filter(hit);
+        if (changed.length === 0) return;
+        for (const key of changed) this.#playStale.add(key);
+        this.#playSpec = null;
+        this.#syncPlay();
+    }
+
+    /** The cell of the current frame, when it is drawn from the grid. */
+    #playCell(): { layout: PlayGridLayout; index: number; image: SlotImage } | null {
+        const { current, playing } = this.#scene;
+        const shown = this.#playShown;
+        const index = current === null ? undefined : shown?.cells.get(current);
+        if (current === null || !shown || index === undefined) return null;
+        // A frame slot that holds the frame takes over after playback, and while playing
+        // when the frame's pixels changed since the grid was built. Until one does, the cell
+        // stays on screen with its previous pixels, as a frame slot does during its upload
+        // (with the grid's version, so the stroke echo stays over it).
+        const fresh = playing && shown.valid.has(current);
+        if (!fresh && this.frames.holding(current) >= 0) return null;
+        const { layout } = shown;
+        const image: SlotImage = {
+            key: current,
+            width: layout.cellWidth,
+            height: layout.cellHeight,
+        };
+        if (shown.version !== undefined) image.version = shown.version;
+        return { layout, index, image };
     }
 
     #reportStuck(): void {

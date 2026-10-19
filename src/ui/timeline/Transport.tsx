@@ -1,8 +1,18 @@
-import { ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Play, Plus } from "lucide-react";
+import {
+    ChevronFirst,
+    ChevronLast,
+    ChevronLeft,
+    ChevronRight,
+    Pause,
+    Play,
+    Plus,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { memo, useMemo, useSyncExternalStore } from "react";
+import { useStore } from "zustand";
 import { appCommands } from "../../app/commands/appCommands";
 import { formatChord } from "../../app/commands/chord";
+import { playbackStore } from "../../app/playback/playbackState";
 import { activeDocument, sessionsStore } from "../../app/state/sessions";
 import { beginDurationEdit, shownDuration } from "../../app/timeline/frameDuration";
 import type { ShownDuration } from "../../app/timeline/frameDuration";
@@ -16,8 +26,8 @@ import { TIMELINE_FIELD_ATTRIBUTE } from "./timelineDom";
 
 /**
  * The transport buttons of DESIGN §5.6, left to right, each the registry's command: shown
- * disabled while the command is disabled or not implemented yet (play / pause is SE-024's).
- * The onion-skin toggle follows the last of them (SE-025).
+ * disabled while the command is disabled or not implemented yet. The onion-skin toggle follows
+ * the last of them (SE-025).
  */
 const TRANSPORT: readonly (readonly [id: string, icon: LucideIcon])[] = [
     [TIMELINE_COMMANDS.firstFrame, ChevronFirst],
@@ -76,13 +86,18 @@ function CommandButton({ view, icon }: { view: CommandView | null; icon: LucideI
     );
 }
 
-/** The transport, at the left of the tag bar. */
+/** The transport, at the left of the tag bar. Play shows a pause icon while playing (SE-024). */
 export const Transport = memo(function Transport() {
     const views = useCommandViews(TRANSPORT_IDS);
+    const playing = useStore(playbackStore, (state) => state.playing);
     return (
         <div className="timeline__transport" role="group" aria-label="Transport">
             {TRANSPORT.map(([id, icon], index) => (
-                <CommandButton key={id} view={views[index] ?? null} icon={icon} />
+                <CommandButton
+                    key={id}
+                    view={views[index] ?? null}
+                    icon={id === PLAY_PAUSE_COMMAND && playing ? Pause : icon}
+                />
             ))}
         </div>
     );

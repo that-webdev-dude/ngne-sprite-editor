@@ -78,4 +78,11 @@ export interface ViewportPort {
     setChecker(checker: ViewportChecker): void;
     /** The workspace colour around the document, 0xRRGGBB. */
     setBackground(colour: number): void;
+    /**
+     * Editor playback (SE-024): the frame keys of the playing range, each once, or null when
+     * nothing plays. While they fit the `ed:play` grid (SPEC §6.4) the current key is drawn from
+     * it; otherwise from the frame cache, showing the newest ready frame. Optional, so a port
+     * without playback (a test's) need not have it.
+     */
+    setPlayback?(keys: readonly string[] | null): void;
 }

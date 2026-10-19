@@ -67,6 +67,16 @@ export class FrameSlots {
         return this.#slots.findIndex((slot) => slot.shown?.key === key);
     }
 
+    /**
+     * The slot whose texture shows `key` and is still reserved for it, or -1. A slot that is
+     * being re-keyed shows its old key only until the new upload resolves; a frame drawn from
+     * it would then give way to nothing (SE-024, from the SE-011 review), so the frame to draw
+     * is taken from a slot that holds it.
+     */
+    holding(key: string): number {
+        return this.#slots.findIndex((slot) => slot.reserved === key && slot.shown?.key === key);
+    }
+
     /** What the texture of `slot` shows, or null. */
     shown(slot: number): SlotImage | null {
         return this.#slots[slot]?.shown ?? null;

@@ -96,6 +96,11 @@ export interface PipelineSources extends LiveCompositeSources {
      * context with it (SPEC §7.8).
      */
     gesture?(open: boolean): void;
+    /**
+     * A press is about to begin a stroke of `tool`, before its document and target are read:
+     * the app stops editor playback there, so the stroke acts on the frame on screen (SE-024).
+     */
+    beforeStroke?(tool: Tool): void;
 }
 
 export interface ToolPipeline {
@@ -390,6 +395,7 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
             // A new press over the canvas takes the place of the last refusal's message.
             clearFeedback();
             const tool = sources.tools.active();
+            if (tool) sources.beforeStroke?.(tool);
             const document = activeDocument(sessions.getState());
             const mapping = sources.mapping();
             if (!tool || !document || !mapping) return false;

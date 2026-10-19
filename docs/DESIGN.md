@@ -327,6 +327,18 @@ Behaviour (SE-022):
 - Tab (viewport focused) and View → Hide Timeline hide the panel; the viewport takes its rows.
   The panel is shown again at every start.
 
+Playback (SE-024; SPEC §7.5):
+
+- The play button is Play / Pause: a play icon named "Play" ("Play at 2×" at another speed
+  than 1×) while stopped, a pause icon named "Pause" while playing. Enter on the canvas or on a
+  focused cell does the same; a focused button takes Enter itself.
+- While playing, the active cell follows the playing frame, scrolled into view; a cell that
+  has the focus passes it on, so Enter pauses again. A click in the grid or a frame key stops
+  playback, as any edit does.
+- The speed is chosen in Frame → Playback Speed (0.25× to 4×), below Play / Pause, as in
+  Aseprite's play button menu; the speed in use is the disabled item. The transport has no room
+  for a speed control in 200 px.
+
 Tag bar (SE-023):
 
 - Each tag is a span over its frames, 1 px in from the edges of their columns, 16 px tall in an

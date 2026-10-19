@@ -67,6 +67,11 @@ export interface ViewportProbe {
     /** The frame key each cache slot of the renderer on screen shows. */
     readonly slots: readonly (string | null)[];
     /**
+     * The `ed:play` grid of the renderer on screen (SE-024): its size, its number of cells and
+     * the frame keys whose cells are current; null while it shows none.
+     */
+    readonly playGrid: { width: number; height: number; cells: number; keys: string[] } | null;
+    /**
      * Draws the scene again and reads the canvas back in the same task (SPEC §6.7), at
      * backing resolution. The draw is not counted in `submittedFrames`. Null while there is
      * no renderer, or it is not ready.
@@ -206,6 +211,14 @@ export class NgneViewport implements ViewportPort {
     setBackground(colour: number): void {
         if (colour === this.#scene.background) return;
         this.#scene.background = colour;
+        this.#markDirty();
+    }
+
+    setPlayback(keys: readonly string[] | null): void {
+        const now = this.#scene.playing ?? null;
+        if (keys === now || (keys && now && keys.join("\n") === now.join("\n"))) return;
+        this.#scene.playing = keys ? [...keys] : null;
+        for (const instance of this.#instances()) instance.slots.sync();
         this.#markDirty();
     }
 
@@ -541,6 +554,12 @@ export class NgneViewport implements ViewportPort {
                         !this.#live.slots.queue.busy(),
                 ),
                 slots: read(() => this.#live?.slots.shownKeys() ?? []),
+                playGrid: read(() => {
+                    const grid = this.#live?.slots.playGrid();
+                    if (!grid) return null;
+                    const { width, height, count } = grid.layout;
+                    return { width, height, cells: count, keys: grid.keys };
+                }),
             },
         );
     }

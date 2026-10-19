@@ -3,6 +3,8 @@ import { frameIndex } from "../../core/model";
 import type { DocSession } from "../../core/model";
 import { frameKey, parseFrameKey } from "../../engine/viewport/types";
 import type { ViewportChecker, ViewportPort } from "../../engine/viewport/types";
+import { playbackStore } from "../playback/playbackState";
+import type { PlaybackState } from "../playback/playbackState";
 import { preferences as appPreferences } from "../preferences/preferences";
 import type { PreferenceStore } from "../preferences/preferences";
 import { activeComposites } from "../state/composites";
@@ -50,6 +52,11 @@ export interface ViewportSources {
      * over the same one, through `ViewportLink.checker`); none when absent.
      */
     checker?(checker: ViewportChecker): void;
+    /**
+     * Editor playback (SE-024): while it plays the shown session, the viewport is told the
+     * playing range (`ViewportPort.setPlayback`); none when absent.
+     */
+    playback?: StoreApi<PlaybackState>;
 }
 
 /** The sources of the app's viewport: its stores, its composite cache and `viewportLink`. */
@@ -59,6 +66,7 @@ export function appViewportSources(): ViewportSources {
         preferences: appPreferences,
         composites: activeComposites,
         version: () => viewportLink.version,
+        playback: playbackStore,
     };
 }
 
@@ -125,10 +133,23 @@ export function connectViewport(
         });
     };
 
+    /** The frames the viewport was told are playing (one array per playback); null for none. */
+    let playing: readonly string[] | null = null;
+    const followPlayback = () => {
+        const state = sources.playback?.getState();
+        const frames = state?.playing && shown && state.session === shown ? state.frameIds : null;
+        if (frames === playing) return;
+        playing = frames;
+        viewport.setPlayback?.(frames ? frames.map((id) => frameKey(id)) : null);
+    };
+
     const follow = () => {
         const document = activeDocument(sessions.getState());
         // The session object, not the id: the same file opened again is another session.
-        if ((document?.session ?? null) !== shown) show(document);
+        if ((document?.session ?? null) !== shown) {
+            show(document);
+            followPlayback();
+        }
         if (!document) return;
         const active = document.session.activeFrameId;
         if (active !== frameId) {
@@ -145,6 +166,7 @@ export function connectViewport(
     pushChecker();
     follow();
     const stopSessions = sessions.subscribe(follow);
+    const stopPlayback = sources.playback?.subscribe(followPlayback) ?? (() => {});
     const stopPreferences = preferences.subscribe((key) => {
         if (key === "checkerboard") pushChecker();
     });
@@ -162,6 +184,7 @@ export function connectViewport(
         },
         dispose() {
             stopSessions();
+            stopPlayback();
             stopPreferences();
             stopComposites();
             shown = null;
