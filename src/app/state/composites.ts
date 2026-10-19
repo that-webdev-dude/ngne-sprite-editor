@@ -11,8 +11,10 @@ import type { SessionsState } from "./sessions";
 //
 //   history step (touched) → composites dropped here → listeners told (the viewport uploads)
 //
-// Only the active document keeps composites: when another document becomes active, the
-// cache of the one left is let go and a new, empty one is made (REVIEW.md D7).
+// Each open document has a cache of its own (SPEC §5.3), but only the active document keeps
+// composites: when another document becomes active, the cache of the one left is cleared, so
+// the budget is not multiplied by the number of tabs (REVIEW.md D7, SE-047). It is filled
+// again from the document when the document is active once more.
 
 /**
  * Called after the composites a change made out of date were dropped: `touched` is what the
@@ -30,6 +32,11 @@ export interface ActiveComposites {
     readonly session: DocSession | null;
     /** `cache` when `session` is the active session, otherwise null. */
     cacheOf(session: DocSession): CompositeCache | null;
+    /**
+     * Pixel memory held by the composite cache of an open document's session, in bytes: 0 for
+     * every document but the active one (SE-047).
+     */
+    bytesOf(session: DocSession): number;
     /**
      * Reports pixels written into the active document outside a command (by an open
      * transaction, or put back by its abort), with the frames that show them: their
@@ -63,6 +70,8 @@ interface Attached {
 export function createActiveComposites(sessions: StoreApi<SessionsState>): ActiveComposites {
     const listeners = new Set<CompositeListener>();
     let attached: Attached | null = null;
+    /** The cache of each open document's session; only the active one holds composites. */
+    const caches = new Map<DocSession, CompositeCache>();
 
     const notify = (touched: Touched, session: DocSession) => {
         for (const listener of [...listeners]) listener(touched, session);
@@ -70,17 +79,26 @@ export function createActiveComposites(sessions: StoreApi<SessionsState>): Activ
 
     /** Brings `attached` in line with the active document of the store. */
     const follow = (): Attached | null => {
-        const document = activeDocument(sessions.getState());
+        const state = sessions.getState();
+        // A closed document's cache goes with it.
+        for (const session of [...caches.keys()]) {
+            if (!state.documents.some((entry) => entry.session === session)) caches.delete(session);
+        }
+        const document = activeDocument(state);
         if ((document?.session ?? null) === (attached?.session ?? null)) return attached;
-        // The document left keeps no composites.
+        // The document left keeps no composites (SE-047).
         attached?.stop();
+        attached?.cache.clear();
         attached = null;
         if (!document) return null;
         const { session, history } = document;
+        // The cache it had is empty, and its document may have changed meanwhile: a new one.
+        const cache = new CompositeCache(session.doc);
+        caches.set(session, cache);
         const entry: Attached = {
             session,
             history,
-            cache: new CompositeCache(session.doc),
+            cache,
             position: history.position,
             stop: history.subscribe(({ touched }) => {
                 entry.cache.invalidate(touched);
@@ -117,6 +135,10 @@ export function createActiveComposites(sessions: StoreApi<SessionsState>): Activ
             const entry = current();
             return entry?.session === session ? entry.cache : null;
         },
+        bytesOf(session) {
+            follow();
+            return caches.get(session)?.bytes ?? 0;
+        },
         invalidate(touched) {
             const entry = follow();
             if (!entry) return;
@@ -133,6 +155,7 @@ export function createActiveComposites(sessions: StoreApi<SessionsState>): Activ
             stopSessions();
             attached?.stop();
             attached = null;
+            caches.clear();
             listeners.clear();
         },
     };

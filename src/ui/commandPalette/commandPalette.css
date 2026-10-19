@@ -18,11 +18,6 @@
         color var(--motion-fast) var(--motion-ease);
 }
 
-/* The document name takes the free space on both of its sides and stays centred. */
-.document-name + .command-palette-trigger {
-    margin-left: 0;
-}
-
 .command-palette-trigger:hover:not(:disabled) {
     background: var(--bg-raised);
     color: var(--text);

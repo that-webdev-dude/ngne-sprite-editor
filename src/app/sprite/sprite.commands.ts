@@ -12,7 +12,7 @@ import { fileWorkflows } from "../file/workflows";
 import { preferences } from "../preferences/preferences";
 import { applyFloating } from "../selection/floating";
 import { settleableDocument } from "../selection/settled";
-import { activeDocument, isDirty, sessionsStore } from "../state/sessions";
+import { activeDocument, sessionsStore } from "../state/sessions";
 import type { OpenDocument } from "../state/sessions";
 import { spriteDialogs } from "./dialogs";
 import type { NewSpriteValues, SpritePropertiesValues } from "./dialogs";
@@ -25,18 +25,17 @@ export const NEW_SPRITE_DEFAULTS: Readonly<NewSpriteValues> = {
 };
 
 /**
- * New Sprite (SE-008): asks for name and size, then opens the new document. Until documents
- * have tabs (SE-047) it takes the place of the open one; when that has unsaved changes the
- * dialog asks before it answers. The grid of a new document is the default grid of the
- * preference store.
+ * New Sprite (SE-008): asks for name and size, then opens the new document in a tab of its
+ * own, the active one (SE-047). The open documents stay as they are, so the dialog has nothing
+ * to discard. The grid of a new document is the default grid of the preference store.
  */
 async function newSprite(): Promise<void> {
-    // A floating selection is applied first, so the question below covers it (SE-032).
+    // The active document stops being the active one: its floating selection is applied
+    // first (SE-032).
     applyFloating();
-    const open = activeDocument(sessionsStore.getState());
     const values = await spriteDialogs.newSprite({
         initial: { ...NEW_SPRITE_DEFAULTS },
-        discards: open && isDirty(open) ? open.session.doc.name : null,
+        discards: null,
     });
     if (!values) return;
     const { width, height } = preferences.get("grid");
@@ -46,7 +45,7 @@ async function newSprite(): Promise<void> {
         height: values.height,
         grid: { width, height },
     });
-    sessionsStore.getState().replaceActive(session);
+    sessionsStore.getState().open(session);
 }
 
 /** The active document while a command may change it: not while a transaction is open. */
@@ -115,7 +114,7 @@ export const commands: CommandSpec[] = [
         title: "New Sprite…",
         shortcut: "Ctrl+Alt+N",
         context: ["global", "text"],
-        // It replaces the active document: not while a file operation (SE-041) runs.
+        // It changes the active document: not while a file operation (SE-041) runs.
         enabled: () => !fileWorkflows.busy,
         run: newSprite,
     },

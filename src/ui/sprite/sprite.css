@@ -1,6 +1,6 @@
 /*
- * SE-008: empty state of the workspace (DESIGN §6), document name in the menu bar (DESIGN §2),
- * and the New sprite and Sprite properties dialogs (DESIGN §7).
+ * SE-008: empty state of the workspace (DESIGN §6) and the New sprite and Sprite properties
+ * dialogs (DESIGN §7). The document tabs of the menu bar are in ui/tabs (SE-047).
  */
 .empty-state {
     display: flex;
@@ -9,32 +9,32 @@
     gap: var(--space-8);
 }
 
-/*
- * Centred in the space the menus leave, like the document tabs of the mockup: the name, cut
- * off when it is long, and the unsaved marker after it (SE-041), which is never cut off.
- */
-.document-name {
+/* SE-047: the recent files, under the actions, newest first. */
+.empty-state__recent {
     display: flex;
-    align-items: baseline;
+    flex-direction: column;
+    align-items: center;
     gap: var(--space-4);
-    min-width: 0;
-    margin: 0 auto;
-    padding: 0 var(--space-12);
+    margin: var(--space-8) 0 0;
+    padding: 0;
+    list-style: none;
 }
 
-.document-name__text {
+.empty-state__recent-title {
+    margin: var(--space-8) 0 0;
+    color: var(--text-muted);
+    font-size: var(--font-size-label);
+    font-weight: var(--font-weight);
+}
+
+.empty-state__recent .ui-button {
+    max-width: 320px;
+}
+
+.empty-state__recent-name {
     min-width: 0;
     overflow: hidden;
-    color: var(--text);
-    font-weight: var(--font-weight-strong);
     text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.document-name__unsaved {
-    flex: none;
-    color: var(--text);
-    font-weight: var(--font-weight-strong);
 }
 
 /* Dialog body: a column of labels and a column of controls. */

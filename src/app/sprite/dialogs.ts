@@ -38,7 +38,8 @@ export interface NewSpriteRequest {
     initial: NewSpriteValues;
     /**
      * Name of the open document whose unsaved changes the new sprite replaces, or null. The
-     * dialog asks once before it answers with values (DESIGN §7).
+     * dialog asks once before it answers with values (DESIGN §7). New Sprite passes null
+     * since documents have tabs (SE-047): a new sprite replaces nothing.
      */
     discards: string | null;
     /** Create with these values, or null to cancel. Closes the dialog. */

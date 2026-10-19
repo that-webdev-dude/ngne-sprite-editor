@@ -216,11 +216,13 @@ describe("New Sprite", () => {
         expect(active().session.doc.width).toBe(64);
     });
 
-    it("replaces the open document: one document stays open, the new one", async () => {
+    it("adds the new document as a tab of its own, the active one; the open document stays (SE-047)", async () => {
         const first = open("first");
         await createSprite({ name: "second", width: 16, height: 24 });
         const { documents } = sessionsStore.getState();
-        expect(documents).toHaveLength(1);
+        expect(documents).toHaveLength(2);
+        expect(documents[0]!.session).toBe(first.session);
+        expect(active()).toBe(documents[1]);
         expect(active().id).not.toBe(first.id);
         expect(active().session.doc).toMatchObject({ name: "second", width: 16, height: 24 });
     });
@@ -237,7 +239,7 @@ describe("New Sprite", () => {
         await done;
     });
 
-    it("names the open document to discard when it has unsaved changes", async () => {
+    it("has nothing to discard while the open document has unsaved changes: it stays open with them (SE-047)", async () => {
         const first = open("first");
         await editProperties((values) => {
             values.pivot = { x: 0, y: 0 };
@@ -245,7 +247,7 @@ describe("New Sprite", () => {
         expect(isDirty(active())).toBe(true);
 
         let done = command("file.new").run();
-        expect(newSpriteRequest().discards).toBe("first");
+        expect(newSpriteRequest().discards).toBeNull();
         // Cancelled: the document and its changes are still there.
         newSpriteRequest().answer(null);
         await done;
@@ -253,23 +255,25 @@ describe("New Sprite", () => {
         expect(active().session.doc.pivot).toEqual({ x: 0, y: 0 });
         expect(active().history.canUndo).toBe(true);
 
-        // Saved: nothing to discard any more.
+        // Unsaved export settings neither.
         sessionsStore.getState().markSaved(first.id);
-        done = command("file.new").run();
-        expect(newSpriteRequest().discards).toBeNull();
-        newSpriteRequest().answer(null);
-        await done;
-
-        // Export settings count as unsaved changes too.
         sessionsStore.getState().updateExportSettings(first.id, (settings) => {
             settings.padding = 2;
         });
+        expect(isDirty(active())).toBe(true);
         done = command("file.new").run();
-        expect(newSpriteRequest().discards).toBe("first");
+        expect(newSpriteRequest().discards).toBeNull();
         newSpriteRequest().answer({ name: "second", width: 8, height: 8 });
         await done;
         expect(active().session.doc.name).toBe("second");
-        expect(sessionsStore.getState().documents).toHaveLength(1);
+        // The first document is open beside it, with its changes, still unsaved.
+        const { documents } = sessionsStore.getState();
+        expect(documents).toHaveLength(2);
+        const kept = documents.find((entry) => entry.id === first.id)!;
+        expect(kept.session).toBe(first.session);
+        expect(kept.session.doc.pivot).toEqual({ x: 0, y: 0 });
+        expect(kept.session.doc.exportSettings.padding).toBe(2);
+        expect(isDirty(kept)).toBe(true);
     });
 
     it("refuses a size outside 1..1024 and leaves the open document alone", async () => {

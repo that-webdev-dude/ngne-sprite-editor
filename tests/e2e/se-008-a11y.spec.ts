@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 import { boxOf, collectErrors, region } from "./se-006-support";
-import { openEditor, openSession, rename } from "./se-007-support";
+import { menuItem, openEditor, openMenu, openSession, rename } from "./se-007-support";
 import {
     audit,
     dialogButton,
@@ -12,7 +12,6 @@ import {
     nameField,
     newSpriteButton,
     newSpriteDialog,
-    openNewSpriteFromMenu,
     openProperties,
     pivotPreset,
     propertiesDialog,
@@ -112,21 +111,22 @@ for (const theme of THEMES) {
         await openIn(page, theme);
         const id = await openSession(page, { name: "first", width: 8, height: 8 });
         await rename(page, id, "first draft", "Pencil");
-        const dialog = await openNewSpriteFromMenu(page);
-        await dialogButton(dialog, "Create").click();
+        // Since tabs (SE-047) New Sprite replaces nothing; closing the document asks.
+        await openMenu(page, "File");
+        await menuItem(page, "file.close").click();
         const confirm = discardDialog(page);
         await expect(confirm).toBeVisible();
-        // The question takes the place of the New sprite dialog, which waits behind it: on the
-        // page, but neither shown nor available.
-        await expect(page.locator(".ui-dialog")).toHaveCount(2);
+        // The question is the one dialog on the page, and it is available.
+        await expect(page.locator(".ui-dialog")).toHaveCount(1);
         await expect(page.locator(".ui-dialog:visible")).toHaveCount(1);
         await expect(page.locator(".ui-dialog:not([inert])")).toHaveCount(1);
         await expectAccessible(page, "discard confirmation", ".ui-dialog:not([inert])");
         await dialogButton(confirm, "Cancel").click();
         await expect(confirm).toBeHidden();
-        // Back in the New sprite dialog, available again.
-        await expect(page.locator(".ui-dialog")).toHaveCount(1);
-        await expectAccessible(page, "New sprite after the question", ".ui-dialog");
+        // The document stays, and the page is available again.
+        await expect(page.locator(".ui-dialog")).toHaveCount(0);
+        await expect(documentName(page)).toHaveText("first draft");
+        await expectAccessible(page, "menu bar after the question", '[data-region="menu-bar"]');
         expect(errors).toEqual([]);
     });
 

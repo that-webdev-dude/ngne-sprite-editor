@@ -327,7 +327,8 @@ preview, thumbnails, the eyedropper and every export read its output. It:
 - Recomposites only a dirty rectangle during strokes.
 - Caches one composite per frame, invalidated from `Command.touched`; cache budget 128 MB per
   document, least recently used. Only the active document keeps composites: a document that
-  stops being active has its cache cleared (SE-047).
+  stops being active has its cache cleared (SE-047), and `bytesOf` of every other open
+  document's session reports 0; it composites again when it is active once more.
 - The cache of the active document belongs to `app` (`app/state/composites`), not to the
   viewport. Every reader takes composites from it and hears of changes from it, after it has
   been brought up to date for a history step, so no reader is served a composite from before
@@ -1825,9 +1826,9 @@ Export is accepted only when all three hold (SE-053):
     plus 1 KiB of zip framing for each of its 65 534 entries) before it reads it. Then it reads
     and checks the file before anything else: a file that cannot be opened is reported by an
     error toast naming the problem (`ProjectError`) and changes nothing, nor does it ask. The
-    opened document takes the place of the active one (tabs: SE-047), with no selection, an
-    empty history, the first frame and the top pixel layer active, and its reference source
-    bytes in the store.
+    opened document gets a tab of its own after the others and becomes the active one
+    (SE-047), with no selection, an empty history, the first frame and the top pixel layer
+    active, and its reference source bytes in the store.
   - A drop of files on the window opens the first file whose name ends in `.ngsprite` (in any
     case); a drop without a project file (and, from SE-044, without an image) is reported by
     an error toast. A drop while a menu or dialog is open, or while a file operation runs, is
@@ -1836,8 +1837,9 @@ Export is accepted only when all three hold (SE-053):
     Access it asks for read permission again first (refused: "No permission to read “x”.",
     the document stays); without it, it reads the bytes last opened or downloaded. It needs a
     file.
-  - Close, Open and Revert ask once before unsaved changes are lost ("Discard unsaved
-    changes?", Cancel / Discard, as New sprite does); Cancel and Escape keep the document.
+  - Close and Revert ask once before unsaved changes are lost ("Discard unsaved changes?",
+    Cancel / Discard); Cancel and Escape keep the document. Open and New Sprite lose nothing
+    since documents have tabs, so they ask nothing (SE-047).
   - One file operation at a time: while one waits for a picker, a question or a write, the
     file commands and New Sprite are disabled. None acts during a stroke. An operation given up
     after it started, because a stroke began or the active document changed meanwhile, says so
@@ -1849,6 +1851,31 @@ Export is accepted only when all three hold (SE-053):
     active document is dirty. While any open document is dirty, or a selection floats (its
     pixels are not in the history yet, SE-032 review), the page asks the browser to confirm
     before it is left (`beforeunload`); with neither, no listener is registered.
+- Document tabs (SE-047; the strip is DESIGN §2):
+  - Every open document has a tab, in the order the documents were opened until a tab is
+    moved. Each keeps its own session (selection, active layer and frame), history, view and
+    reference sources in the session store; the palette's current swatch is remembered per
+    document as well. Open, a drop, Open Recent and New Sprite add a tab after the others and
+    make it the active one.
+  - A file whose document is open already, the same file of the disk (`isSameEntry` of the
+    two handles), selects that tab ("hero.ngsprite is open already"). Another file holding a
+    document of the same id (a copy made with Save As, or a file opened without a handle)
+    opens in a tab of its own under a new id.
+  - Selecting another tab applies the floating selection of the document left first (§5.2)
+    and stops playback (§7.5); nothing switches during a stroke or while a file operation
+    runs. Next Document and Previous Document (View menu, no key: Ctrl+Tab and Ctrl+PageDown
+    belong to the browser) go round the tabs.
+  - Close closes the active tab; a tab's close control, a middle click on it, or Delete on a
+    focused tab closes that tab without selecting it. Each asks once when its document has
+    unsaved changes; closing the last tab shows the empty state.
+- Recent files (SE-047): up to 10 project files, opened or saved with File System Access,
+  newest first; a file listed already moves up. They are kept as their handles in IndexedDB
+  (database `ngne-sprite-editor-recent`), best effort as the export folders (§9.6), and shown
+  on the empty state (DESIGN §6) and in File → Open Recent, which ends with Clear Recent
+  Files. Without File System Access nothing is listed. Opening one asks the browser for read
+  permission once when it is not granted; refused, or the file gone (`NotFoundError`), the
+  entry is taken off the list and an error toast says so. A prompt the browser cannot show
+  (the user's gesture has lapsed) keeps the entry and reports the browser's message.
 - Autosave: each dirty document is snapshotted to IndexedDB 2 s after its last change
   (`doc.json` plus raw image buffers keyed by image ID; only changed images are rewritten). On
   launch, unsaved snapshots are offered for recovery. Closing a tab with unsaved changes

@@ -1,4 +1,5 @@
 import type { StoreApi } from "zustand/vanilla";
+import { randomId } from "../../core/model";
 import type { DocSession, SpriteDoc } from "../../core/model";
 import {
     MAX_PROJECT_CONTENT_BYTES,
@@ -21,6 +22,8 @@ import type { OpenDocument, SessionsState } from "../state/sessions";
 import { fileDialogs as appFileDialogs } from "./dialogs";
 import type { DiscardAction, FileDialogs } from "./dialogs";
 import { isProjectFileName, projectFileName } from "./fileName";
+import { recentFiles } from "./recentFiles";
+import type { RecentEntry, RecentFiles } from "./recentFiles";
 
 // The file workflows of SPEC §10 (SE-041): Open, Save, Save As, Close and Revert of the active
 // document, and opening a dropped project file. A document remembers the file it was opened
@@ -36,6 +39,11 @@ import { isProjectFileName, projectFileName } from "./fileName";
 // stroke it does not keep an operation from running: Save, Save As, Close and Revert apply it
 // first, and Open (and a drop) once the file has been read, so the question before unsaved
 // changes are lost covers it (SE-032 review).
+//
+// Tabs (SE-047): Open, a drop and Open Recent add the document as a tab of its own and make
+// it the active one; nothing is lost, so they ask nothing. A file whose document is open
+// already makes that tab the active one. Close closes the active tab or the one it is given.
+// A file opened or saved with File System Access goes first in the recent files.
 
 /**
  * Zip framing and compression overhead allowed per entry on top of the content of a project
@@ -81,6 +89,8 @@ export interface FileWorkflowOptions {
     applyFloating?(): void;
     /** Whether the active document holds a floating selection; the default is the app's. */
     isFloating?(): boolean;
+    /** The recent files (SE-047); the default is the app's. */
+    recent?: Pick<RecentFiles, "add" | "remove">;
 }
 
 export interface FileWorkflows {
@@ -101,16 +111,24 @@ export interface FileWorkflows {
      * first. Not during a stroke.
      */
     canAct(): boolean;
-    /** Asks for a project file and opens it in place of the active document. */
+    /** Asks for a project file and opens it in a tab of its own, the active one (SE-047). */
     open(): Promise<boolean>;
-    /** Opens the first project file among `files` (a drop) in place of the active document. */
+    /** Opens the first project file among `files` (a drop), as `open` does. */
     openFiles(files: readonly ChosenFile[]): Promise<boolean>;
+    /**
+     * Opens the file of a recent entry, as `open` does (SE-047). Read permission is asked for
+     * once when it is not granted; refused, or the file gone, the entry is taken off the list.
+     */
+    openRecent(entry: RecentEntry): Promise<boolean>;
     /** Saves the active document to its file, or asks where when it has none. */
     save(): Promise<boolean>;
     /** Saves the active document to a file chosen now, which becomes its file. */
     saveAs(): Promise<boolean>;
-    /** Closes the active document, asking first when it has unsaved changes. */
-    close(): Promise<boolean>;
+    /**
+     * Closes the open document `id` (by default the active one), asking first when it has
+     * unsaved changes. Not during a stroke of the active document.
+     */
+    close(id?: string): Promise<boolean>;
     /** Reads the active document's file again in its place, asking first when it is dirty. */
     revert(): Promise<boolean>;
     /**
@@ -159,6 +177,11 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
     // test that replaces the floating module with one of its own keeps working.
     const applyFloating = options.applyFloating ?? (() => applyAppFloating());
     const isFloating = options.isFloating ?? (() => isAppFloating());
+    const recent = options.recent ?? recentFiles;
+    /** Lists a file in the recent files; a failure there never fails the operation. */
+    const remember = (handle: ProjectFileHandle | null) => {
+        if (handle) void recent.add(handle).catch(() => {});
+    };
 
     const files = new Map<string, DocumentFile>();
     const listeners = new Set<() => void>();
@@ -246,29 +269,45 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
                     `limit is ${MAX_PROJECT_FILE_BYTES} bytes.`,
             );
         }
-        // The file is read first: a file that cannot be opened asks nothing and changes nothing.
+        // The file is read first: a file that cannot be opened changes nothing.
         const project = await read(chosen.name, () => chosen.read(), "open");
         if (!project) return false;
+        const handle = await chosen.handle();
+        const { doc, referenceSources } = project.contents;
+        // The same file opened again: the tab of its document becomes the active one.
+        const kept = files.get(doc.id)?.handle ?? null;
+        const again = handle !== null && kept !== null && ((await kept.isSame?.(handle)) ?? false);
+        // The active document stops being the active one: its floating selection is applied
+        // (SPEC §5.2), and nothing happens during its stroke. Nothing of it is lost, so
+        // nothing is asked (SE-047).
         const active = activeDocument(sessions.getState());
         if (active) {
-            // A floating selection is applied before the question, which then covers it.
             try {
                 applyFloating();
             } catch (error) {
                 return failed(reason(error));
             }
             if (active.history.transaction) return failed(interruption(active));
-            if (!(await mayDiscard(active, "open", chosen.name))) return false;
-            if (!stillActive(active)) return failed(interruption(active));
         }
-        const handle = await chosen.handle();
-        const { doc, referenceSources } = project.contents;
+        const state = sessions.getState();
+        if (state.documents.some((entry) => entry.id === doc.id)) {
+            if (again && files.get(doc.id)?.handle === kept) {
+                state.activate(doc.id);
+                remember(handle);
+                notices.info(`${chosen.name} is open already`);
+                return true;
+            }
+            // Another file of the same document (a copy saved with Save As), or one opened
+            // without a handle: a document of its own, under a new id.
+            doc.id = randomId();
+        }
         try {
-            sessions.getState().replaceActive(sessionOf(doc), { referenceSources });
+            state.open(sessionOf(doc), { referenceSources });
         } catch (error) {
             return failed(reason(error));
         }
         setFile(doc.id, { name: chosen.name, handle, bytes: handle ? null : project.bytes });
+        remember(handle);
         notices.info(`Opened ${chosen.name}`);
         return true;
     };
@@ -351,6 +390,7 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
             sessions.getState().markSaved(current.id, state);
             setFile(current.id, { name, handle: target, bytes: target ? null : bytes });
         }
+        remember(target);
         notices.info(`Saved ${name}`);
         // What follows a save (`exportOnSave`) reports its own failures: the save stands.
         const saved = stillOpen();
@@ -363,6 +403,33 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
                 }
             }
         }
+        return true;
+    };
+
+    /**
+     * Closes a document that is not the active one (a tab's close, SE-047), asking first when
+     * it has unsaved changes. Nothing closes during a stroke of the active document; a float
+     * there stays as it is.
+     */
+    const closeBackground = async (opened: OpenDocument): Promise<boolean> => {
+        const name = opened.session.doc.name;
+        const inStroke = () => {
+            const active = activeDocument(sessions.getState());
+            return active?.history.transaction ? !isFloating() : false;
+        };
+        if (inStroke()) return false;
+        if (!(await mayDiscard(opened, "close", null))) return false;
+        const state = sessions.getState();
+        const why = !state.documents.some((entry) => entry.session === opened.session)
+            ? "The document was closed meanwhile."
+            : inStroke()
+              ? "A stroke is in progress."
+              : null;
+        if (why) {
+            notices.error(`Could not close “${name}”. ${why}`);
+            return false;
+        }
+        state.close(opened.id);
         return true;
     };
 
@@ -429,10 +496,13 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
         save: () => exclusive(() => saveActive(false)),
         saveAs: () => exclusive(() => saveActive(true)),
 
-        close: () =>
+        close: (id) =>
             exclusive(async () => {
-                const opened = activeDocument(sessions.getState());
+                const state = sessions.getState();
+                const active = activeDocument(state);
+                const opened = id === undefined ? active : state.documents.find((d) => d.id === id);
                 if (!opened) return false;
+                if (opened !== active) return closeBackground(opened);
                 try {
                     applyFloating();
                 } catch (error) {
@@ -449,6 +519,46 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
                 }
                 sessions.getState().close(document.id);
                 return true;
+            }),
+
+        openRecent: (entry) =>
+            exclusive(async () => {
+                const { handle } = entry;
+                const failed = (why: string) => {
+                    notices.error(`Could not open “${entry.name}”. ${why}`);
+                    return false;
+                };
+                const forget = async (why: string) => {
+                    await recent.remove(entry.key).catch(() => {});
+                    return failed(`${why} It was removed from the recent files.`);
+                };
+                const active = activeDocument(sessions.getState());
+                // A floating selection is applied once the file has been read (`openChosen`).
+                if (active?.history.transaction && !isFloating()) {
+                    return failed(interruption(active));
+                }
+                // Asked once, within the gesture of the command; refused, the entry goes.
+                let granted: boolean;
+                try {
+                    granted = await handle.requestRead();
+                } catch (error) {
+                    return failed(reason(error));
+                }
+                if (!granted) return forget("No permission to read the file.");
+                let size: number;
+                try {
+                    size = (await handle.size?.()) ?? 0;
+                } catch (error) {
+                    return isNotFound(error)
+                        ? forget("The file no longer exists.")
+                        : failed(reason(error));
+                }
+                return openChosen({
+                    name: entry.name,
+                    size,
+                    read: () => handle.read(),
+                    handle: async () => handle,
+                });
             }),
 
         revert: () =>

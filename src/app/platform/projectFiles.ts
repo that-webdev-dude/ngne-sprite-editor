@@ -33,6 +33,16 @@ export interface ProjectFileHandle {
     requestWrite(): Promise<boolean>;
     /** Replaces the file's content; the file keeps its old content when this fails. */
     write(bytes: Uint8Array<ArrayBuffer>): Promise<void>;
+    /**
+     * What IndexedDB stores to give the file back after a reload (a native
+     * `FileSystemFileHandle` is structured-cloneable): `projectFileHandleFrom` takes it back.
+     * Absent where the handle cannot be kept (SE-047, recent files).
+     */
+    readonly stored?: unknown;
+    /** Whether `other` is the same file of the disk (chosen again, say); SE-047. */
+    isSame?(other: ProjectFileHandle): Promise<boolean>;
+    /** The file's size in bytes, known before it is read; fails as `read` does. SE-047. */
+    size?(): Promise<number>;
 }
 
 /** A file the user chose to open: from a picker, a file input or a drop. */
@@ -81,6 +91,7 @@ interface NativeFileHandle {
     createWritable(): Promise<NativeWritable>;
     queryPermission?(descriptor: PermissionMode): Promise<PermissionState>;
     requestPermission?(descriptor: PermissionMode): Promise<PermissionState>;
+    isSameEntry?(other: unknown): Promise<boolean>;
 }
 
 interface PickerOptions {
@@ -121,9 +132,30 @@ async function request(native: NativeFileHandle, descriptor: PermissionMode): Pr
     return (await native.requestPermission?.(descriptor)) === "granted";
 }
 
+function isFileHandle(value: unknown): value is NativeFileHandle {
+    if (typeof value !== "object" || value === null) return false;
+    const candidate = value as Partial<NativeFileHandle>;
+    return (
+        candidate.kind === "file" &&
+        typeof candidate.name === "string" &&
+        typeof candidate.getFile === "function"
+    );
+}
+
 function wrapHandle(native: NativeFileHandle): ProjectFileHandle {
     return {
         name: native.name,
+        stored: native,
+        async isSame(other) {
+            if (other.stored === native) return true;
+            if (!native.isSameEntry || !isFileHandle(other.stored)) return false;
+            try {
+                return await native.isSameEntry(other.stored);
+            } catch {
+                return false;
+            }
+        },
+        size: async () => (await native.getFile()).size,
         read: async () => bytesOf(await native.getFile()),
         requestRead: () => request(native, { mode: "read" }),
         requestWrite: () => request(native, { mode: "readwrite" }),
@@ -231,6 +263,14 @@ export function browserProjectFiles(): ProjectFilePlatform {
             return userActivation?.isActive ?? true;
         },
     };
+}
+
+/**
+ * A project file from what IndexedDB kept of it (`ProjectFileHandle.stored`, SE-047), or null
+ * when it is not a file handle.
+ */
+export function projectFileHandleFrom(stored: unknown): ProjectFileHandle | null {
+    return isFileHandle(stored) ? wrapHandle(stored) : null;
 }
 
 /**

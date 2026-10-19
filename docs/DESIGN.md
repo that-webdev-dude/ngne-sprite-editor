@@ -60,6 +60,16 @@ Overflow rules (the layout must hold at the minimum window, 1280×720):
   Default at window heights under 800 px: Palette collapsed.
 - **Context bar**: options that do not fit move into a trailing overflow menu.
 - **Document tabs**: shrink to 96 px, then scroll horizontally with an overflow menu.
+  SE-047: a `tablist` centred in the space between the menus and the palette trigger; each
+  tab 28 px high and at most 200 px wide, its name centred between two 24 px columns (the
+  right one the close control, shown on the selected tab and under the pointer), the unsaved
+  marker after the name. The selected tab is `--bg-active` with `--text`, the others
+  `--text-muted`. A press selects a tab, a drag along the strip moves it, a middle click or
+  the close control closes it. The strip is one tab stop: ← → Home End move the focus,
+  Enter or Space selects, Delete closes, Ctrl+Shift+← → move the tab. While the tabs do not
+  fit, the strip scrolls (no scroll bar; the wheel scrolls it sideways) and a chevron button,
+  "All documents", opens a menu of every document with the selected one checked; the
+  selected tab is always scrolled into view.
 - **Tag bar**: grows by one 18 px row per overlap level, up to three rows, then scrolls.
 - Below 1280×720 the app shows a "window too small" notice instead of a broken layout.
 
@@ -429,7 +439,10 @@ transient tool feedback in `--warn`.
   outline hides the system cursor over the document.
 - Zoom readout and "fit" live in the status bar, not as floating buttons over the canvas.
 - Empty state (no document open): centred in the workspace — New sprite, Open, Import PNG and
-  the recent files list, as plain text buttons; no illustration.
+  the recent files list, as plain text buttons; no illustration. SE-047: under the actions, a
+  "Recent files" label in `--text-muted` and a list of one button per file, named by the
+  file, newest first (at most 320 px wide, cut off with an ellipsis); nothing of it while the
+  list is empty.
 
 ## 7. Dialogs and other surfaces
 

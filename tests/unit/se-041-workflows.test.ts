@@ -384,7 +384,7 @@ describe("Save and Save As", () => {
 });
 
 describe("Open", () => {
-    it("opens a saved project in place of the active document: same pixels, sources restored, empty history (until SE-047)", async () => {
+    it("opens a saved project in a tab of its own, the active one: same pixels, sources restored, empty history; the open document stays (SE-047)", async () => {
         const test = harness();
         openSession(test, fixtureSession(), fixtureSources());
         paint(active(test), 3);
@@ -392,12 +392,24 @@ describe("Open", () => {
         const handle = await saveTo(test, "hero.ngsprite");
         const saved = handle.writes[0]!;
 
-        // Reopened from a fresh store.
+        // Reopened from a fresh store, beside a document of its own.
         const other = harness();
-        openNew(other, "scratch");
+        const scratch = openNew(other, "scratch");
+        paint(scratch, 1);
         other.platform.toOpen.push(chosen("hero.ngsprite", saved, handle));
         expect(await other.workflows.open()).toBe(true);
+        // Nothing was asked: the open document loses nothing, and stays as it was.
+        expect(other.questions).toEqual([]);
+        const { documents } = other.sessions.getState();
+        expect(documents.map((entry) => entry.session.doc.name)).toEqual([
+            "scratch",
+            "Hero ✦ idle",
+        ]);
+        expect(documents[0]!.session).toBe(scratch.session);
+        expect(documents[0]!.history.undoCount).toBe(1);
+        expect(isDirty(documents[0]!)).toBe(true);
         const opened = active(other);
+        expect(opened).toBe(documents[1]);
         expect(opened.session.doc.name).toBe("Hero ✦ idle");
         expect(composites(other)).toEqual(before);
         expect(opened.history.undoCount).toBe(0);
@@ -472,7 +484,7 @@ describe("Open", () => {
         expect(test.workflows.busy).toBe(false);
     });
 
-    it("asks once before it replaces a dirty document; cancelling keeps it", async () => {
+    it("opens beside a dirty document without asking; the dirty document keeps its changes (SE-047)", async () => {
         const test = harness();
         const saved = serialize(openNew(test, "first").session.doc, new Map());
         test.sessions.getState().close(active(test).id);
@@ -480,25 +492,18 @@ describe("Open", () => {
         paint(document, 1);
 
         test.platform.toOpen.push(chosen("first.ngsprite", saved, null));
-        const kept = test.workflows.open();
-        await answerDiscard(test, null);
-        expect(await kept).toBe(false);
-        expect(test.questions).toHaveLength(1);
-        expect(test.questions[0]).toMatchObject({
-            document: "second",
-            action: "open",
-            file: "first.ngsprite",
-        });
-        expect(active(test).session).toBe(document.session);
-        expect(test.notices).toEqual([]);
-
-        test.platform.toOpen.push(chosen("first.ngsprite", saved, null));
-        const replaced = test.workflows.open();
-        await answerDiscard(test, true);
-        expect(await replaced).toBe(true);
-        expect(test.questions).toHaveLength(2);
+        expect(await test.workflows.open()).toBe(true);
+        // No question: nothing of "second" is lost.
+        expect(test.questions).toEqual([]);
         expect(active(test).session.doc.name).toBe("first");
-        expect(test.sessions.getState().documents).toHaveLength(1);
+        expect(test.notices).toEqual([{ kind: "info", message: "Opened first.ngsprite" }]);
+        const { documents } = test.sessions.getState();
+        expect(documents).toHaveLength(2);
+        const kept = documents.find((entry) => entry.id === document.id)!;
+        expect(kept.session).toBe(document.session);
+        expect(kept.history.undoCount).toBe(1);
+        expect(isDirty(kept)).toBe(true);
+        expect(test.floatingApplied).toBe(1);
     });
 
     it("gives up with a notice when a stroke began while the file was read", async () => {

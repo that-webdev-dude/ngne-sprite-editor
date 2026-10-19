@@ -78,7 +78,10 @@ export interface OpenOptions {
 }
 
 export interface SessionsState {
-    /** Open documents, in the order they were opened. */
+    /**
+     * Open documents, in the order of their tabs (SE-047): the order they were opened in,
+     * until `move` changes it.
+     */
     documents: readonly OpenDocument[];
     /** Id of the active document, or null when none is open. */
     activeId: string | null;
@@ -96,6 +99,11 @@ export interface SessionsState {
     /** Closes a document; when it was active, its neighbour becomes active. */
     close(id: string): void;
     activate(id: string): void;
+    /**
+     * Moves an open document to `index` of `documents` (its tab, SE-047), clamped to the list;
+     * the others keep their order. Throws for an unknown id.
+     */
+    move(id: string, index: number): void;
     /**
      * Records a state of the document as saved: by default the current one, which is then no
      * longer dirty. A save passes the state it wrote (`savedStateOf` when it made the bytes),
@@ -297,6 +305,14 @@ export function createSessionsStore(): StoreApi<SessionsState> {
                     documents: get().documents.map((entry) => (entry === target ? arrived : entry)),
                     activeId: id,
                 });
+            },
+
+            move(id, index) {
+                const target = find(id);
+                const rest = get().documents.filter((entry) => entry !== target);
+                const at = Math.min(Math.max(0, Math.trunc(index)), rest.length);
+                if (get().documents[at] === target) return;
+                set({ documents: [...rest.slice(0, at), target, ...rest.slice(at)] });
             },
 
             markSaved(id, state) {

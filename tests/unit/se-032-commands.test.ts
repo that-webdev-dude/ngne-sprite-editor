@@ -808,9 +808,9 @@ describe("the file workflows while floating", () => {
         detach();
     });
 
-    it("a dropped project opens once read: the float is applied and the question covers it; an unreadable one changes nothing", async () => {
-        const { detach, questions, notes, workflows, answer } = workflowsOf();
-        cleanWithFloat();
+    it("a dropped project opens once read in a tab of its own: the float is applied, nothing is asked; an unreadable one changes nothing (SE-047)", async () => {
+        const { detach, questions, notes, workflows } = workflowsOf();
+        const floated = cleanWithFloat();
         expect(
             await workflows.openFiles([chosen("bad.ngsprite", new Uint8Array([1, 2, 3]), null)]),
         ).toBe(false);
@@ -824,12 +824,16 @@ describe("the file workflows while floating", () => {
             createDocument({ name: "dropped", width: 3, height: 3 }).doc,
             new Map(),
         );
-        const opening = workflows.openFiles([chosen("dropped.ngsprite", bytes, null)]);
-        await answer(true);
-        expect(await opening).toBe(true);
-        expect(questions).toEqual(["open float"]);
+        expect(await workflows.openFiles([chosen("dropped.ngsprite", bytes, null)])).toBe(true);
+        // The float landed in its document, which stays open beside the new one.
+        expect(questions).toEqual([]);
         expect(isFloating()).toBe(false);
         expect(active().session.doc.name).toBe("dropped");
+        const kept = sessionsStore
+            .getState()
+            .documents.find((entry) => entry.session === floated.session)!;
+        expect(kept.history.undoLabel).toBe("Move");
+        expect(kept.history.transaction).toBeNull();
         expect(notes.slice(1)).toEqual(["info: Opened dropped.ngsprite"]);
         detach();
     });
@@ -855,14 +859,14 @@ describe("the file workflows while floating", () => {
         detach();
     });
 
-    it("New Sprite applies the float before its dialog, which then names the document to discard", async () => {
+    it("New Sprite applies the float before its dialog, which has nothing to discard (SE-047)", async () => {
         const detach = spriteDialogs.attachHost();
         try {
             cleanWithFloat();
             const done = command("file.new").run();
             const request = spriteDialogs.store.getState().request;
             expect(request?.kind).toBe("new-sprite");
-            expect(request?.kind === "new-sprite" ? request.discards : undefined).toBe("float");
+            expect(request?.kind === "new-sprite" ? request.discards : undefined).toBeNull();
             expect(isFloating()).toBe(false);
             expect(active().history.undoLabel).toBe("Move");
             if (request?.kind === "new-sprite") request.answer(null);

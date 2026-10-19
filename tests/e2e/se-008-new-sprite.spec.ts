@@ -9,6 +9,7 @@ import {
     openMenu,
     openSession,
     rename,
+    snapshot,
     statusBar,
 } from "./se-007-support";
 import {
@@ -460,7 +461,9 @@ test("the dialog returns focus to what opened it: the empty-state button, the Fi
     await expect(menuItem(page, "edit.undo")).toBeVisible();
 });
 
-test("creating a document replaces the open one after a discard confirmation", async ({ page }) => {
+test("creating a document beside one with unsaved changes adds a tab and asks nothing (SE-047)", async ({
+    page,
+}) => {
     const errors = collectErrors(page);
     await openEditor(page);
     const first = await openSession(page, { name: "first", width: 8, height: 8 });
@@ -469,51 +472,21 @@ test("creating a document replaces the open one after a discard confirmation", a
     expect(await activeDocument(page)).toMatchObject({ name: "first draft", dirty: true });
 
     const dialog = await openNewSpriteFromMenu(page);
-    const confirm = discardDialog(page);
     await nameField(dialog).fill("second");
     await setNumber(field(dialog, "Width"), 24);
     await create(dialog).click();
 
-    // Asked once, naming the document; nothing has been replaced yet. The question is the one
-    // dialog on screen: the New sprite dialog waits behind it, hidden.
-    await expect(confirm).toBeVisible();
-    await expect(confirm).toContainText("“first draft” has unsaved changes");
-    await expect(page.locator(".ui-dialog:visible")).toHaveCount(1);
-    await expect(
-        page.getByRole("heading", { name: "New sprite", includeHidden: true }),
-    ).toBeHidden();
-    await expect(dialogButton(confirm, "Cancel")).toBeFocused();
-    expect(await storeSnapshot(page)).toMatchObject({
-        count: 1,
-        active: { id: first, name: "first draft", dirty: true },
-    });
-
-    // Cancel goes back to the New sprite dialog with its values; the document stays.
-    await dialogButton(confirm, "Cancel").click();
-    await expect(confirm).toBeHidden();
-    await expect(dialog).toBeVisible();
-    await expect(nameField(dialog)).toHaveValue("second");
-    await expect(field(dialog, "Width")).toHaveValue("24");
-    await expect(create(dialog)).toBeFocused();
-    expect((await activeDocument(page)).id).toBe(first);
-
-    // Escape closes the question only. It is pressed once the question holds the focus: before,
-    // the New sprite dialog is still the top layer and Escape would close that instead.
-    await page.keyboard.press("Enter");
-    await expect(confirm).toBeVisible();
-    await expect(dialogButton(confirm, "Cancel")).toBeFocused();
-    await page.keyboard.press("Escape");
-    await expect(confirm).toBeHidden();
-    await expect(dialog).toBeVisible();
-    expect(await activeDocument(page)).toMatchObject({ id: first, undoLabel: "Pencil" });
-
-    // Discard replaces the document: one session, the new one, with nothing to undo.
-    await create(dialog).click();
-    await expect(confirm).toBeVisible();
-    await dialogButton(confirm, "Discard").click();
+    // Nothing is asked: the open document loses nothing. Both are open, the new one active,
+    // with nothing to undo; the first keeps its change.
     await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(discardDialog(page)).toHaveCount(0);
     const { count, active } = await storeSnapshot(page);
-    expect(count).toBe(1);
+    expect(count).toBe(2);
+    expect(await snapshot(page, first)).toMatchObject({
+        name: "first draft",
+        active: false,
+        undoLabel: "Pencil",
+    });
     expect(active).toMatchObject({
         name: "second",
         width: 24,
@@ -546,7 +519,9 @@ test("cancelling the New sprite dialog keeps the open document and asks nothing"
     });
 });
 
-test("a document without unsaved changes is replaced without a confirmation", async ({ page }) => {
+test("a document without unsaved changes stays open beside the new one, without a confirmation (SE-047)", async ({
+    page,
+}) => {
     await openEditor(page);
     const first = await openSession(page, { name: "first", width: 8, height: 8 });
     // A view preference alone does not make a document dirty (SPEC §5.2) …
@@ -564,8 +539,9 @@ test("a document without unsaved changes is replaced without a confirmation", as
     await nameField(dialog).fill("second");
     await create(dialog).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    expect(await storeSnapshot(page)).toMatchObject({ count: 1, active: { name: "second" } });
+    expect(await storeSnapshot(page)).toMatchObject({ count: 2, active: { name: "second" } });
     expect((await activeDocument(page)).id).not.toBe(first);
+    expect(await snapshot(page, first)).toMatchObject({ name: "first", active: false });
     await expect(documentName(page)).toHaveText("second");
 });
 

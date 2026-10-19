@@ -1,0 +1,119 @@
+/*
+ * SE-047: document tabs in the centre of the menu bar (DESIGN §2). The strip takes the free
+ * space between the menus and the command palette trigger, centred while it fits; tabs shrink
+ * to 96 px, then the strip scrolls sideways and the overflow menu appears.
+ */
+.document-tabs {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    margin: 0 auto;
+    padding: 0 var(--space-12);
+}
+
+/* The strip takes the free space on both of its sides and stays centred. */
+.document-tabs + .command-palette-trigger {
+    margin-left: 0;
+}
+
+.document-tabs__list {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    /* Room for the focus ring, which the scrolling box would cut off. */
+    padding: var(--space-4) 3px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+.document-tabs__list::-webkit-scrollbar {
+    display: none;
+}
+
+/*
+ * A tab: the name centred between two 24 px columns, the right one the close control, so a
+ * single tab's name sits in the middle of the strip.
+ */
+.document-tab {
+    display: grid;
+    flex: 0 1 auto;
+    grid-template-columns: 24px minmax(0, 1fr) 24px;
+    align-items: center;
+    min-width: 96px;
+    max-width: 200px;
+    height: 28px;
+    border-radius: var(--radius-control);
+    color: var(--text-muted);
+    cursor: default;
+    user-select: none;
+    transition:
+        background-color var(--motion-fast) var(--motion-ease),
+        color var(--motion-fast) var(--motion-ease);
+}
+
+.document-tab:hover {
+    background: var(--bg-raised);
+    color: var(--text);
+}
+
+.document-tab[aria-selected="true"] {
+    background: var(--bg-active);
+    color: var(--text);
+    font-weight: var(--font-weight-strong);
+}
+
+.document-tab__label {
+    display: flex;
+    grid-column: 2;
+    align-items: baseline;
+    justify-content: center;
+    gap: var(--space-4);
+    min-width: 0;
+}
+
+.document-tab__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.document-tab__unsaved {
+    flex: none;
+}
+
+/* Shown on the selected tab and on the one under the pointer. */
+.document-tab__close {
+    display: grid;
+    grid-column: 3;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-control);
+    color: var(--text-muted);
+    opacity: 0;
+}
+
+.document-tab[aria-selected="true"] .document-tab__close,
+.document-tab:hover .document-tab__close {
+    opacity: 1;
+}
+
+.document-tab__close:hover {
+    background: var(--bg-active);
+    color: var(--text);
+}
+
+.document-tabs__overflow {
+    flex: none;
+}
+
+.document-tabs__item-name {
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
