@@ -16,6 +16,7 @@ export { PRESET_PALETTES, paletteFromPreset, presetPalette } from "./presets";
 export type { PresetPalette, PresetPaletteId } from "./presets";
 export {
     MAX_PALETTE_FILE_BYTES,
+    PALETTE_FILE_TOO_LARGE,
     PALETTE_FORMATS,
     PaletteFileError,
     paletteFormatOf,

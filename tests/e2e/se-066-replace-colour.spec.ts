@@ -121,12 +121,21 @@ test("a colour that is not one is named, and Replace waits until it is fixed", a
     const from = dialog.getByLabel("From", { exact: true });
     await from.fill("#12");
     await expect(from).toHaveAttribute("aria-invalid", "true");
-    await expect(dialog.getByRole("alert")).toHaveText(
-        "Enter colours as hex: #RRGGBB or #RRGGBBAA.",
-    );
+    const message = dialog.getByRole("alert");
+    await expect(message).toHaveText("From is not a colour: use 3, 4, 6 or 8 hex digits.");
     const replace = dialog.getByRole("button", { name: "Replace", exact: true });
     await expect(replace).toBeDisabled();
+
+    const to = dialog.getByLabel("To", { exact: true });
+    await to.fill("blue");
+    await expect(to).toHaveAttribute("aria-invalid", "true");
+    await expect(message).toHaveText("From and To are not colours: use 3, 4, 6 or 8 hex digits.");
     await from.fill("#00FF00");
+    await expect(from).not.toHaveAttribute("aria-invalid", "true");
+    await expect(message).toHaveText("To is not a colour: use 3, 4, 6 or 8 hex digits.");
+    await expect(replace).toBeDisabled();
+    await to.fill("#00f");
+    await expect(message).toHaveText("");
     await expect(replace).toBeEnabled();
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(dialog).toBeHidden();

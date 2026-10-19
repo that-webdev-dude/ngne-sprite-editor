@@ -51,7 +51,7 @@ test("Import Palette… replaces the palette by a GIMP palette in one undo step"
             colors: [0xff8000ff, 0x400080ff],
         });
     await expect(swatches(page)).toHaveCount(2);
-    expect(await shownColours(page)).toEqual([hex8(0xff8000ff), hex8(0x400080ff)]);
+    await expect.poll(() => shownColours(page)).toEqual([hex8(0xff8000ff), hex8(0x400080ff)]);
     expect(await history(page)).toEqual({ undo: 1, label: "Import Palette" });
     await expect(page.locator(".ui-toast").filter({ hasText: "Imported 2 colours" })).toBeVisible();
 
@@ -151,7 +151,7 @@ test("each sort is one undo step; Original Order restores the order held before 
     await chooseInPaletteMenu(page, "Sort by Hue");
     const byHue = [0x000000ff, 0x80808080, 0xffffffff, 0xff0000ff, 0x00ff00ff, 0x0000ffff];
     await expect.poll(async () => (await palette(page)).colors).toEqual(byHue);
-    expect(await shownColours(page)).toEqual(byHue.map(hex8));
+    await expect.poll(() => shownColours(page)).toEqual(byHue.map(hex8));
     expect(await history(page)).toEqual({ undo: 1, label: "Sort Palette by Hue" });
 
     await chooseInPaletteMenu(page, "Sort by Lightness");
@@ -161,7 +161,7 @@ test("each sort is one undo step; Original Order restores the order held before 
 
     await chooseInPaletteMenu(page, "Original Order");
     await expect.poll(async () => (await palette(page)).colors).toEqual(COLOURS);
-    expect(await shownColours(page)).toEqual(COLOURS.map(hex8));
+    await expect.poll(() => shownColours(page)).toEqual(COLOURS.map(hex8));
     expect(await history(page)).toEqual({ undo: 3, label: "Original Palette Order" });
 
     await undo(page);

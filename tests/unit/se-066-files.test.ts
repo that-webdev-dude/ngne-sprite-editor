@@ -45,10 +45,21 @@ const WRITERS = { gpl: writeGpl, hex: writeHex, pal: writePal };
 const FORMATS: PaletteTextFormat[] = ["gpl", "hex", "pal"];
 
 describe("the 32-colour fixture", () => {
-    it("is DawnBringer 32 in each format, as other programs write it", () => {
+    it("is DawnBringer 32 in each format, as GIMP, Lospec, Aseprite and Paint Shop Pro write it", () => {
         expect(DAWNBRINGER_32).toHaveLength(32);
-        expect(readGpl(fixture("db32.gpl"))).toEqual({
+        // GIMP: Name and Columns headers, a comment, colour names after a tab.
+        expect(readGpl(fixture("db32-gimp.gpl"))).toEqual({
             name: "DawnBringer 32",
+            colors: DAWNBRINGER_32,
+        });
+        // Lospec: the name in a `#Palette Name:` comment, tab-separated values, a hex name.
+        expect(readGpl(fixture("db32-lospec.gpl"))).toEqual({
+            name: "DawnBringer 32",
+            colors: DAWNBRINGER_32,
+        });
+        // Aseprite: no Name or Columns header.
+        expect(readGpl(fixture("db32-aseprite.gpl"))).toEqual({
+            name: null,
             colors: DAWNBRINGER_32,
         });
         expect(readHex(fixture("db32.hex"))).toEqual({ name: null, colors: DAWNBRINGER_32 });
@@ -142,6 +153,16 @@ describe("reading what other programs write", () => {
         expect(readGpl(text("\uFEFFGIMP Palette\n1 1 1\n")).colors).toEqual([0x010101ff]);
     });
 
+    it(".gpl: other `Key: value` headers before the colours are skipped; Name: wins over Lospec's comment", () => {
+        const headers = text(
+            "GIMP Palette\nDescription: warm tones\nX-Tool: 2.0\n#Palette Name: Comment\n" +
+                "Name: Header\n1\t2\t3\tabcdef\n",
+        );
+        expect(readGpl(headers)).toEqual({ name: "Header", colors: [0x010203ff] });
+        // Only before the first colour: afterwards such a line is not a colour.
+        expect(() => readGpl(text("GIMP Palette\n1 2 3\nDescription: late\n"))).toThrow(/Line 3/);
+    });
+
     it(".hex: with or without #, either case, eight digits for alpha, blank lines skipped", () => {
         expect(readHex(text("FF0000\n#00ff00\r\n\n0000ff80\n   abcdef   \n")).colors).toEqual([
             0xff0000ff, 0x00ff00ff, 0x0000ff80, 0xabcdefff,
@@ -229,6 +250,9 @@ describe("malformed files", () => {
     it("a file larger than the limit is refused before it is read", async () => {
         const large = new Uint8Array(MAX_PALETTE_FILE_BYTES + 1);
         await expect(readPaletteFile("hex", large)).rejects.toThrow(PaletteFileError);
+        await expect(readPaletteFile("hex", large)).rejects.toThrow(
+            "The file is larger than 64 MiB.",
+        );
     });
 });
 

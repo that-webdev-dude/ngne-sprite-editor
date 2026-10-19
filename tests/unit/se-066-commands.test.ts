@@ -17,6 +17,7 @@ import {
 } from "../../src/app/palette/paletteActionIds";
 import {
     EDIT_COLOUR,
+    MOVE_COLOUR,
     PALETTE_FROM_SPRITE,
     PALETTE_MENU,
     REMOVE_COLOUR,
@@ -24,7 +25,7 @@ import {
 import { createPaletteFiles } from "../../src/app/palette/paletteFiles";
 import type { PaletteFileOptions } from "../../src/app/palette/paletteFiles";
 import { forgetPaletteOrders } from "../../src/app/palette/paletteOrder";
-import { paletteStore, setCurrentSwatch } from "../../src/app/palette/paletteState";
+import { currentSwatch, paletteStore, setCurrentSwatch } from "../../src/app/palette/paletteState";
 import { createReplaceColour } from "../../src/app/palette/replaceColour";
 import type {
     ReplaceColourRequest,
@@ -38,7 +39,7 @@ import { activeDocument, sessionsStore } from "../../src/app/state/sessions";
 import type { OpenDocument } from "../../src/app/state/sessions";
 import { celAt, celKey, createDocument } from "../../src/core/model";
 import type { DocSession } from "../../src/core/model";
-import { readGpl, readHex, readPal } from "../../src/core/palettes";
+import { MAX_PALETTE_FILE_BYTES, readGpl, readHex, readPal } from "../../src/core/palettes";
 import { rectMask, selectCommand } from "../../src/core/selection";
 
 // SE-066: the palette commands of the app registry for palette files, sort and Replace
@@ -254,10 +255,10 @@ describe("registration", () => {
 
 describe("Import Palette…", () => {
     const encoder = new TextEncoder();
-    const file = (name: string, content: string | Uint8Array): ChosenPaletteFile => ({
-        name,
-        read: async () => (typeof content === "string" ? encoder.encode(content) : content),
-    });
+    const file = (name: string, content: string | Uint8Array): ChosenPaletteFile => {
+        const bytes = typeof content === "string" ? encoder.encode(content) : content;
+        return { name, size: bytes.byteLength, read: async () => bytes };
+    };
 
     function workflow(chosen: ChosenPaletteFile | null, more: Partial<PaletteFileOptions> = {}) {
         const notices = { info: vi.fn(), error: vi.fn() };
@@ -346,6 +347,48 @@ describe("Import Palette…", () => {
         );
         abort();
         expect(document.session.doc.palette.colors).toEqual(COLOURS);
+    });
+
+    it("another document made active while the picker is open: one error toast, no palette changes", async () => {
+        const first = open();
+        let second: OpenDocument | null = null;
+        const { files, notices } = workflow(null, {
+            choose: async () => {
+                const session = createDocument({ name: "other", width: 2, height: 2 });
+                session.doc.palette = { name: "Other", colors: [GREEN] };
+                second = sessionsStore.getState().open(session);
+                return file("a.hex", "ff0000\n");
+            },
+        });
+        expect(await files.importPalette()).toBe(false);
+        expect(active().id).toBe(second!.id);
+        expect(notices.error).toHaveBeenCalledTimes(1);
+        expect(notices.error).toHaveBeenCalledWith(
+            "Could not import “a.hex”. Another document became the active one meanwhile.",
+        );
+        expect(notices.info).not.toHaveBeenCalled();
+        expect(first.session.doc.palette).toEqual({ name: "Test", colors: COLOURS });
+        expect(first.history.undoCount).toBe(0);
+        expect(second!.session.doc.palette).toEqual({ name: "Other", colors: [GREEN] });
+        expect(second!.history.undoCount).toBe(0);
+    });
+
+    it("a file larger than the limit is refused before it is read", async () => {
+        const document = open();
+        const read = vi.fn(async (): Promise<Uint8Array> => {
+            throw new Error("read() must not be called");
+        });
+        const { files, notices } = workflow({
+            name: "huge.png",
+            size: MAX_PALETTE_FILE_BYTES + 1,
+            read,
+        });
+        expect(await files.importPalette()).toBe(false);
+        expect(read).not.toHaveBeenCalled();
+        expect(notices.error).toHaveBeenCalledWith(
+            "Could not import “huge.png”. The file is larger than 64 MiB.",
+        );
+        expect(document.history.undoCount).toBe(0);
     });
 
     it("the app's command applies a floating selection first: a Move step, then the import", async () => {
@@ -453,6 +496,88 @@ describe("sort", () => {
         run(SORT_BY_HUE);
         run(ORIGINAL_ORDER);
         expect(document.session.doc.palette.colors).toEqual(before);
+    });
+
+    it("a colour removed after a sort and the removal undone: Original Order is available again", () => {
+        const document = open();
+        run(SORT_BY_LIGHTNESS);
+        setCurrentSwatch(0);
+        run(REMOVE_COLOUR);
+        expect(command(ORIGINAL_ORDER).enabled()).toBe(false);
+        document.history.undo();
+        expect(command(ORIGINAL_ORDER).enabled()).toBe(true);
+        run(ORIGINAL_ORDER);
+        expect(document.session.doc.palette.colors).toEqual(COLOURS);
+    });
+
+    it("an undone sort leaves its kept order: Original Order then puts back the order before it", () => {
+        const document = open();
+        run(SORT_BY_LIGHTNESS);
+        document.history.undo();
+        expect(document.session.doc.palette.colors).toEqual(COLOURS);
+        // A move after the undo: the kept order is still the one before the undone sort.
+        setCurrentSwatch(0);
+        paletteStore.setState({ target: 1 });
+        run(MOVE_COLOUR);
+        expect(document.session.doc.palette.colors).toEqual([RED, WHITE, BLACK, GREEN, BLUE]);
+        expect(command(ORIGINAL_ORDER).enabled()).toBe(true);
+        run(ORIGINAL_ORDER);
+        expect(document.session.doc.palette.colors).toEqual(COLOURS);
+    });
+
+    it("Import Palette… after a sort forgets the kept order", async () => {
+        const document = open();
+        run(SORT_BY_LIGHTNESS);
+        const files = createPaletteFiles({
+            // The same colours in another order: without the import they could be put back.
+            choose: async () => {
+                const bytes = new TextEncoder().encode("0000ff\nffffff\nff0000\n000000\n00ff00\n");
+                return { name: "same.hex", size: bytes.byteLength, read: async () => bytes };
+            },
+            notices: { info: vi.fn(), error: vi.fn() },
+            files: { run: (task) => task(), canSave: () => true },
+        });
+        expect(await files.importPalette()).toBe(true);
+        expect(document.session.doc.palette.colors).toEqual([BLUE, WHITE, RED, BLACK, GREEN]);
+        expect(command(ORIGINAL_ORDER).enabled()).toBe(false);
+    });
+
+    it("a new session of the same document id starts with no kept order", () => {
+        const document = open();
+        run(SORT_BY_HUE);
+        expect(command(ORIGINAL_ORDER).enabled()).toBe(true);
+        // Revert gives the document a new session with its id: here holding the sorted colours.
+        const session = createDocument({ name: "sheet", width: W, height: H });
+        session.doc.id = document.session.doc.id;
+        session.doc.palette = { name: "Test", colors: [...document.session.doc.palette.colors] };
+        const replaced = sessionsStore.getState().replaceActive(session);
+        expect(replaced.id).toBe(document.id);
+        expect(active().session).toBe(session);
+        expect(command(ORIGINAL_ORDER).enabled()).toBe(false);
+    });
+
+    it("the current swatch keeps its colour through a sort and Original Order; undo leaves its index", () => {
+        const document = open();
+        const current = () => currentSwatch(document.session.doc.palette.colors.length);
+        setCurrentSwatch(COLOURS.indexOf(RED));
+        run(SORT_BY_LIGHTNESS);
+        expect(document.session.doc.palette.colors[current()]).toBe(RED);
+        expect(current()).toBe(2);
+        run(ORIGINAL_ORDER);
+        expect(current()).toBe(1);
+        // As for SE-060's commands, an undo does not move the current swatch.
+        document.history.undo();
+        expect(current()).toBe(1);
+
+        // Of equal colours, the same occurrence: the second red stays the second red.
+        const twice = open([RED, BLUE, RED]);
+        setCurrentSwatch(2);
+        run(SORT_BY_LIGHTNESS);
+        expect(twice.session.doc.palette.colors).toEqual([BLUE, RED, RED]);
+        expect(currentSwatch(3)).toBe(2);
+        setCurrentSwatch(0);
+        run(ORIGINAL_ORDER);
+        expect(currentSwatch(3)).toBe(1);
     });
 
     it("a palette of one colour cannot be sorted", () => {

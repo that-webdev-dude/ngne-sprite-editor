@@ -8,9 +8,11 @@
  */
 import { PALETTE_FORMATS } from "../../core/palettes";
 
-/** A palette file the user chose: its name and its bytes. */
+/** A palette file the user chose: its name, its size and its bytes. */
 export interface ChosenPaletteFile {
     readonly name: string;
+    /** Its size in bytes, known before it is read. */
+    readonly size: number;
     read(): Promise<Uint8Array>;
 }
 
@@ -47,7 +49,11 @@ interface OpenPickerWindow {
 }
 
 function chosen(file: File): ChosenPaletteFile {
-    return { name: file.name, read: async () => new Uint8Array(await file.arrayBuffer()) };
+    return {
+        name: file.name,
+        size: file.size,
+        read: async () => new Uint8Array(await file.arrayBuffer()),
+    };
 }
 
 /** A file input, clicked; resolves null when the user cancels (Chrome fires `cancel`). */

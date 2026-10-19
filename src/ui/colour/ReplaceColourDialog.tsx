@@ -18,6 +18,15 @@ const SCOPES: readonly { value: ReplaceScope; label: string }[] = [
     { value: "sprite", label: "Sprite" },
 ];
 
+/** The message line: which field holds no colour, and the forms it takes; null when both do. */
+function colourProblem(badFrom: boolean, badTo: boolean): string | null {
+    const forms = "use 3, 4, 6 or 8 hex digits.";
+    if (badFrom && badTo) return `From and To are not colours: ${forms}`;
+    if (badFrom) return `From is not a colour: ${forms}`;
+    if (badTo) return `To is not a colour: ${forms}`;
+    return null;
+}
+
 /** A colour as hex text, with a sample of it over the checkerboard. */
 function HexColourField({
     label,
@@ -147,7 +156,7 @@ export function ReplaceColourDialog({ request }: { request: ReplaceColourRequest
                     options={options}
                 />
                 <p className="replace-form__message" id={messageId} role="alert">
-                    {valid ? null : "Enter colours as hex: #RRGGBB or #RRGGBBAA."}
+                    {colourProblem(from === null, to === null)}
                 </p>
             </form>
         </Dialog>

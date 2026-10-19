@@ -38,6 +38,9 @@ export const PALETTE_FORMATS: Readonly<Record<PaletteFormat, PaletteFormatInfo>>
 /** The largest palette file read: far more than any palette needs, less than a large PNG. */
 export const MAX_PALETTE_FILE_BYTES = 64 * 1024 * 1024;
 
+/** What a file larger than `MAX_PALETTE_FILE_BYTES` is told. */
+export const PALETTE_FILE_TOO_LARGE = `The file is larger than ${MAX_PALETTE_FILE_BYTES / (1024 * 1024)} MiB.`;
+
 /** A palette file as read: its colours, and the name it gives, if any (`.gpl` only). */
 export interface PaletteFile {
     name: string | null;
@@ -135,9 +138,11 @@ function checkPalette(colors: readonly number[]): void {
 const GPL_MAGIC = "GIMP Palette";
 
 /**
- * A GIMP palette: the line "GIMP Palette", then optional headers (`Name:`, `Columns:`, and
- * Aseprite's `Channels: RGB` or `RGBA`), comments (`#`) and blank lines, then one colour per
- * line: three decimal values 0–255 (four with `Channels: RGBA`) and an optional colour name.
+ * A GIMP palette: the line "GIMP Palette", then headers (`Name:`, `Columns:`, Aseprite's
+ * `Channels: RGB` or `RGBA`; any other `Key: value` line is skipped), comments (`#`) and blank
+ * lines, then one colour per line: three decimal values 0–255 (four with `Channels: RGBA`),
+ * separated by spaces or tabs, and an optional colour name (GIMP's name, Lospec's hex). Without
+ * a `Name:` header, Lospec's comment `#Palette Name: …` names the palette.
  */
 export function readGpl(bytes: Uint8Array): PaletteFile {
     const lines = linesOf(bytes);
@@ -145,24 +150,33 @@ export function readGpl(bytes: Uint8Array): PaletteFile {
         throw new PaletteFileError(`A GIMP palette starts with “${GPL_MAGIC}”.`, 1);
     }
     let name: string | null = null;
+    let commentName: string | null = null;
     let alpha = false;
     const colors: number[] = [];
+    const nameOf = (value: string) => (value === "" ? null : value.slice(0, MAX_NAME_LENGTH));
     for (let index = 1; index < lines.length; index++) {
         const line = index + 1;
         const text = lines[index].trim();
-        if (text === "" || text.startsWith("#")) continue;
-        const header = /^(Name|Columns|Channels)\s*:\s*(.*)$/i.exec(text);
+        if (text === "") continue;
+        if (text.startsWith("#")) {
+            const lospec = /^#\s*Palette Name\s*:\s*(.*)$/i.exec(text);
+            if (lospec && colors.length === 0) commentName = nameOf(lospec[1].trim());
+            continue;
+        }
+        // Only before the first colour; a colour line starts with a digit.
+        const header = /^([A-Za-z][\w -]*?)\s*:\s*(.*)$/.exec(text);
         if (header && colors.length === 0) {
             const key = header[1].toLowerCase();
             const value = header[2].trim();
-            if (key === "name") name = value === "" ? null : value.slice(0, MAX_NAME_LENGTH);
+            if (key === "name") name = nameOf(value);
             else if (key === "channels") {
                 if (!/^rgba?$/i.test(value)) {
                     throw new PaletteFileError(`Channels “${value}” is not RGB or RGBA.`, line);
                 }
                 alpha = value.toUpperCase() === "RGBA";
             }
-            // Columns only lays the palette out in GIMP.
+            // Columns only lays the palette out in GIMP; other keys are skipped, as Aseprite
+            // skips the lines that are not colours.
             continue;
         }
         const parts = text.split(/\s+/);
@@ -178,7 +192,7 @@ export function readGpl(bytes: Uint8Array): PaletteFile {
         if (colors.length > MAX_PALETTE_COLORS) checkCount(colors.length);
     }
     checkCount(colors.length);
-    return { name, colors };
+    return { name: name ?? commentName, colors };
 }
 
 /** A GIMP palette of `palette`, its name on the `Name:` line, each colour named by its hex. */
@@ -345,9 +359,7 @@ export async function readPaletteFile(
     bytes: Uint8Array,
 ): Promise<PaletteFile> {
     if (bytes.byteLength > MAX_PALETTE_FILE_BYTES) {
-        throw new PaletteFileError(
-            `The file is larger than ${MAX_PALETTE_FILE_BYTES / (1024 * 1024)} MB.`,
-        );
+        throw new PaletteFileError(PALETTE_FILE_TOO_LARGE);
     }
     switch (format) {
         case "gpl":

@@ -1,6 +1,8 @@
 import type { StoreApi } from "zustand/vanilla";
 import { exportName } from "../../core/export";
 import {
+    MAX_PALETTE_FILE_BYTES,
+    PALETTE_FILE_TOO_LARGE,
     PALETTE_FORMATS,
     paletteFormatOf,
     paletteNameOfFile,
@@ -20,13 +22,19 @@ import type { ChoosePaletteFile, ChosenPaletteFile } from "../platform/paletteFi
 import { applyFloating as applyAppFloating } from "../selection/floating";
 import { activeDocument, sessionsStore } from "../state/sessions";
 import type { OpenDocument, SessionsState } from "../state/sessions";
+import { forgetPaletteOrder } from "./paletteOrder";
 
 // Palette files of the active document (SPEC §7.1, Palette files; SE-066):
 //
 // - Import Palette… asks for a `.gpl`, `.hex`, `.pal` or `.png` file (its ending names the
 //   format), reads it with `core/palettes`, and replaces the palette by its colours in one undo
 //   step ("Import Palette"), named by the file (`.gpl`: its `Name:`; otherwise the file name
-//   without its ending). A file that cannot be read is one error toast and changes nothing.
+//   without its ending). A file that cannot be read is one error toast and changes nothing;
+//   so is a file larger than `MAX_PALETTE_FILE_BYTES` (refused before it is read), and a file
+//   read once another document became the active one. The import forgets the original order
+//   a sort kept (`paletteOrder.ts`).
+// - The export's file name is `exportName` of the palette's name, or of the document's name
+//   when the palette's is blank.
 // - Export Palette writes the palette as `<name>.gpl`, `.hex` or `.pal` through the save
 //   picker, or downloads it, as the exports beside the bundle do (`otherExport`, SE-052).
 //
@@ -77,9 +85,6 @@ export function createPaletteFiles(options: PaletteFileOptions = {}): PaletteFil
     // Looked up when called: tests may replace the floating module.
     const applyFloating = options.applyFloating ?? (() => applyAppFloating());
 
-    const current = (id: string): OpenDocument | null =>
-        sessions.getState().documents.find((entry) => entry.id === id) ?? null;
-
     /** The palette of `read` for `document`, then one undo step that makes it the palette. */
     const replace = (document: OpenDocument, file: ChosenPaletteFile, read: PaletteFile) => {
         const name =
@@ -90,6 +95,8 @@ export function createPaletteFiles(options: PaletteFileOptions = {}): PaletteFil
             "Import Palette",
         );
         if (command) document.history.execute(command);
+        // An imported palette is another palette: no original order is kept for it.
+        forgetPaletteOrder(document.session);
         notices.info(`Imported ${colours(read.colors.length)} from “${file.name}”`);
     };
 
@@ -103,7 +110,7 @@ export function createPaletteFiles(options: PaletteFileOptions = {}): PaletteFil
                 // `applyFloating` has reported why.
                 return false;
             }
-            if (current(start.id)?.history.transaction) {
+            if (start.history.transaction) {
                 notices.error("Could not import a palette. A stroke is in progress.");
                 return false;
             }
@@ -122,15 +129,27 @@ export function createPaletteFiles(options: PaletteFileOptions = {}): PaletteFil
             };
             const format = paletteFormatOf(chosen.name);
             if (!format) return fail("It is not a palette file (.gpl, .hex, .pal or .png).");
+            // Refused before it is read into memory.
+            if (chosen.size > MAX_PALETTE_FILE_BYTES) return fail(PALETTE_FILE_TOO_LARGE);
             let read: PaletteFile;
             try {
                 read = await readPaletteFile(format, await chosen.read());
             } catch (error) {
                 return fail(reason(error));
             }
-            // The document as it is now: the picker may have been open for a while.
-            const document = current(start.id);
-            if (!document) return fail("The document was closed meanwhile.");
+            // The document as it is now: the picker may have been open for a while. The
+            // palette goes to the document the import started in, and only while it is the
+            // active one (as `interruption` of the file workflows says).
+            const state = sessions.getState();
+            const document = activeDocument(state);
+            if (!document || document.session !== start.session) {
+                const open = state.documents.some((entry) => entry.session === start.session);
+                return fail(
+                    open
+                        ? "Another document became the active one meanwhile."
+                        : "The document was closed meanwhile.",
+                );
+            }
             if (document.history.transaction) return fail("A stroke is in progress.");
             try {
                 replace(document, chosen, read);

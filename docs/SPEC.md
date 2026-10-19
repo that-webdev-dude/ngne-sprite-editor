@@ -806,24 +806,40 @@ DESIGN §7):
   JASC `.pal`, and reads a PNG; the file's ending names the format. A palette with a colour
   that is not opaque is written with alpha (`.gpl` with Aseprite's `Channels: RGBA` header and
   four values, `.hex` with RRGGBBAA, `.pal` with a fourth value) and read back so; an opaque
-  palette is written in the plain form. A PNG gives its distinct colours of alpha above 0 in
-  the order its pixels first show them, row by row; more than 256 are refused, not reduced. A
-  file that does not follow its format, holds no colour or more than 256, or is larger than
-  64 MB is malformed.
+  palette is written in the plain form. The alpha forms are read by this editor and by
+  Aseprite; GIMP and other tools read only opaque palettes, which is why every-opaque palettes
+  are written plain. `.gpl` is read as GIMP, Aseprite and Lospec write it: `Key: value` lines
+  other than `Name:` and `Channels:` before the first colour are skipped, Lospec's comment
+  `#Palette Name: …` names the palette when there is no `Name:`, and values may be separated by
+  tabs and followed by a colour name or a hex. A PNG gives its distinct colours of alpha above
+  0 in the order its pixels first show them, row by row; more than 256 are refused, not
+  reduced. A file that does not follow its format, holds no colour or more than 256, or is
+  larger than 64 MiB is malformed; the size is checked before the file is read.
 - Import Palette… replaces the palette in one undo step ("Import Palette"), named by the
-  `.gpl`'s `Name:` or else the file name without its ending. A malformed file is one error
-  toast naming the file (and the line), and changes nothing. Export Palette as .gpl…, .hex… or
-  .pal… saves `<name>.<ending>` as the exports beside the bundle do (§9.6); it is disabled for
-  an empty palette. Both are file operations: one at a time, a float applied first, not during
-  a stroke.
+  `.gpl`'s name or else the file name without its ending. It goes to the document it started
+  in, and only while that document is still the active one (otherwise an error toast says
+  another document became the active one, or that it was closed). A malformed file is one
+  error toast naming the file (and the line), and changes nothing. Export Palette as .gpl…,
+  .hex… or .pal… saves `<name>.<ending>`, `<name>` being the palette's name slugified as the
+  bundle's `<name>` is (§9.1, `exportName`), or the document's name slugified when the
+  palette's is blank, as the exports beside the
+  bundle do (§9.6); it is disabled for an empty palette. Both are file operations: one at a
+  time, a float applied first, not during a stroke.
 - Sort by Hue (greys first, dark to light; then hue, saturation, value, alpha) and Sort by
   Lightness (OKLab L, dark to light; then alpha) are palette commands: one undo step, none when
-  the order would not change; colours with equal keys keep their order. Original Order puts
-  back, in one undo step, the order the palette had before its first sort. That order is
-  editor state, kept per open document and not saved: a sort keeps the order it finds unless
-  the order kept holds the palette's colours (each as often), so sorts and moves keep it; a
-  colour added, removed or edited, or another palette loaded, makes Original Order unavailable
-  until the next sort.
+  the order would not change; colours with equal keys keep their order. The current swatch
+  keeps its colour (of equal colours, the same occurrence); an undo leaves its index, as for
+  the other palette commands.
+- Original Order puts back, in one undo step, a kept order. A sort keeps the order the
+  palette has before it, unless an order is kept already that holds the palette's colours,
+  each as often; Original Order is available while the palette holds exactly the kept order's
+  colours, each as often, in another order. So sorts and moves keep the order from before the
+  first sort; a colour added, removed or edited, or another palette loaded, makes Original
+  Order unavailable until the colours are those again (an undo of the change brings it back)
+  or the next sort keeps a new order. Import Palette… forgets the kept order. The kept order
+  is editor state, kept per document session and not saved: a document opened again or
+  reverted starts with none. Undo is not followed: an undone sort leaves the order it kept, so
+  Original Order may then put back the order from before that undone sort.
 - Replace Colour… writes To over every pixel that matches From: each of R, G, B and A differs
   by at most the tolerance (0–255). A pixel or colour of alpha 0 is compared as 0,0,0,0, and a
   To of alpha 0 is written as 0,0,0,0. Scope: Selection (the selected pixels of the active
