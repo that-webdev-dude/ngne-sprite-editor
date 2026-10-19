@@ -87,7 +87,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-051 | NGNE bundle writers                               | L    | 003, 021, 050                      | —             | Done   |
 | SE-052 | Export dialog and delivery                        | L    | 006, 041, 051, 053                 | —             | Done   |
 | SE-053 | Export conformance against NGNE (gate G2)         | L    | 002, 051                           | G0            | Done   |
-| SE-054 | Preview panel (NGNE `BrowserGame`)                | L    | 002, 006, 007, 011, 051            | G0, G1        | Ready  |
+| SE-054 | Preview panel (NGNE `BrowserGame`)                | L    | 002, 006, 007, 011, 051            | G0, G1        | In progress |
 | **M6** | **[Palette and parity extras](M6-palette-and-parity.md)** | |                                   |               |        |
 | SE-060 | Palette panel                                     | M    | 016, 043                           | —             | Done   |
 | SE-061 | Blend modes and cel opacity                       | M    | 010, 022                           | —             | Ready  |
