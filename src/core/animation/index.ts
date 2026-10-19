@@ -4,4 +4,4 @@
 export { expandTag } from "./expandTag";
 export type { AnimationEntry, TagPlayback } from "./expandTag";
 export { entryAt, PlaybackClock, playbackSequence, sequenceDuration } from "./playbackClock";
-export type { PlaybackPosition, PlaybackSequence } from "./playbackClock";
+export type { ClockSequence, PlaybackPosition, PlaybackSequence } from "./playbackClock";

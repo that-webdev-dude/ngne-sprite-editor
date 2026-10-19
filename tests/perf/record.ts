@@ -23,14 +23,23 @@ export interface PerfEntry {
     resultMs: number;
     /** The samples or summary statistics behind the result. */
     details: Record<string, unknown>;
+    /**
+     * What `resultMs` and `budgetMs` count: milliseconds (the default, when absent) or a
+     * number of things, such as frames skipped (SE-024 review E). Written to the record only
+     * when given.
+     */
+    unit?: "ms" | "count";
 }
 
 /** The console line of a record. */
 export function recordLine(entry: PerfEntry): string {
-    const result = `${entry.id}: ${entry.resultMs.toFixed(3)} ms (${entry.statistic})`;
+    const count = entry.unit === "count";
+    const shown = count ? String(entry.resultMs) : `${entry.resultMs.toFixed(3)} ms`;
+    const result = `${entry.id}: ${shown} (${entry.statistic})`;
     if (entry.budgetMs === undefined) return `${result}, no budget`;
     const pass = entry.resultMs <= entry.budgetMs;
-    return `${result}, budget ${entry.budgetMs} ms, ${pass ? "within" : "over"} budget`;
+    const budget = count ? String(entry.budgetMs) : `${entry.budgetMs} ms`;
+    return `${result}, budget ${budget}, ${pass ? "within" : "over"} budget`;
 }
 
 /**

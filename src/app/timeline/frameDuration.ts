@@ -1,3 +1,4 @@
+import { stopPlaybackForEdit } from "../playback/playbackState";
 import { activeDocument, sessionsStore } from "../state/sessions";
 import type { OpenDocument } from "../state/sessions";
 import { effectiveSelection, targetFrameIds } from "./selection";
@@ -52,6 +53,8 @@ export function shownDuration(document: OpenDocument, state: TimelineState): Sho
  * before it is applied.
  */
 export function beginDurationEdit(): void {
+    // The field acts on the frames on screen, not on those playback steps to (SE-024).
+    stopPlaybackForEdit();
     const document = activeDocument(sessionsStore.getState());
     if (!document) return;
     const state = { ...timelineStore.getState(), durationEdit: null };

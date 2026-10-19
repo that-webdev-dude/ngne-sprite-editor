@@ -568,7 +568,8 @@ Reference hardware: §3. Document 256×256, 8 layers.
 
 The playback budget (SE-024, `tests/perf/se-024-playback.perf.ts`) is measured on the reference
 document (8 layers) at 1× speed over two passes once the grid is drawn from: an entry is skipped
-when no frame submitted while it is the active frame shows it.
+when the clock jumped over it or no frame submitted while it is the active frame shows it
+(submitted to NGNE, not known to be presented). The record's result is that count.
 
 If the stroke budget is unreachable (SE-002 question 1, or SE-015's measurement), SE-015
 implements the fallback: the in-progress stroke is echoed immediately on the Canvas2D overlay
@@ -1180,20 +1181,29 @@ Recorded by SE-024 (playback; the display path is in §6.4):
   with no catch-up. An entry shows from its start, included, to its end, excluded; a speed
   change counts from the moment it is made. Playback starts at the active frame's first entry
   of the sequence; a sequence that does not loop and would start on its last entry starts on
-  its first. A tag with `repeat = n` stops playback on its last entry.
+  its first. A tag with `repeat = n` stops playback on its last entry. The clock keeps one pass
+  and a pass count, never the n passes written out, and finds the entry at a time by a binary
+  search over the pass, so neither the start nor a step grows with `repeat`.
 - Play / Pause takes the Frame menu's item, the transport's play button and Enter (`canvas`,
   `timeline`). It is enabled with two frames or more, not during a stroke or an open gesture;
   while pixels float it applies them first (§5.2). Pause stops on the frame the viewport drew
   last, which becomes the active frame.
 - Speed: Frame → Playback Speed, 0.25×, 0.5×, 1×, 1.5×, 2×, 3× and 4× (Aseprite's play button
   menu, with 4×). The speed is kept for the page, for every document, and not saved.
-- Editing stops playback first. A press that begins a stroke of any tool but the hand and the
-  zoom stops it before the stroke reads its frame: the frame on screen becomes the active one,
-  and the stroke paints there. `applyFloating`, which every command that changes the document
-  calls first (§5.2), stops it the same way. Any step of the playing document's history, a
-  transaction opened in it (a paste), another active frame (frame navigation, a timeline
-  click), another active document and a closed one stop it too. The hand, the zoom, the wheel,
-  the view commands and a tool change leave it playing.
+- Editing stops playback first, on the frame on screen, which becomes the active one: the
+  active frame runs at least one animation frame ahead of the frame drawn (more on the frame
+  cache path), and an edit acts on the frame the user sees. Every command run from a key, a
+  menu, the command palette or a button (`invokeCommand`) stops it before it runs, except
+  Play / Pause and its speeds, the view commands (zoom, fit, grids, the timeline and onion
+  skin toggles), tool selection and holds, the colour swap and reset, region focus, the
+  command palette, the shortcut sheet and Preferences (`keepsPlaying`, `app/playback`). Not
+  every editing command calls `applyFloating` first (§5.2, SE-032 review: Delete, Cut, Paste,
+  Undo, Redo and the canvas arrows do not), so the stop is not left to it; `applyFloating`
+  stops playback as well, for the file workflows it serves outside a command. A press that begins a stroke of any tool but the hand and the
+  zoom, a click in the timeline grid and the duration field taking the focus stop it the same
+  way. After the fact, any step of the playing document's history, a transaction opened in it,
+  another active frame, another active document and a closed one stop it. The hand, the zoom
+  and the wheel leave it playing.
 - Onion skin: 0–3 frames before and after, base opacity with per-step falloff, optional tint
   (red before, blue after; 50% blend toward the tint colour, done on the CPU), placement behind
   or in front, optionally limited to the active tag's range.

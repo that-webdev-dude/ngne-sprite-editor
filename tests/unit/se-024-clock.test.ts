@@ -234,3 +234,83 @@ describe("PlaybackClock with a controlled time source", () => {
         expect(() => clock.setSpeed(Number.NaN, 0)).toThrow(RangeError);
     });
 });
+
+describe("a long tag played many times (review F)", () => {
+    /** 10 000 frames of 1 to 7 ms, one ping-pong tag over all of them, repeat 255. */
+    function longTag(): SpriteDoc {
+        const doc = sprite([100]);
+        doc.frames = Array.from({ length: 10_000 }, (_, index) => ({
+            id: `f${index}`,
+            durationMs: 1 + (index % 7),
+        }));
+        doc.tags = [
+            {
+                id: "long",
+                name: "long",
+                color: 0xff0000ff,
+                fromFrameId: "f0",
+                toFrameId: "f9999",
+                direction: "pingpong",
+                repeat: 255,
+            },
+        ];
+        return doc;
+    }
+
+    it("keeps one pass and a count of 255, not 255 passes written out", () => {
+        const sequence = playbackSequence(longTag(), "f0");
+        expect(sequence.pass).toHaveLength(19_998);
+        expect(sequence).toMatchObject({ passes: 255, loop: false, start: 0, tagId: "long" });
+    });
+
+    it("ends at 255 × the pass's duration, on the pass's last entry", () => {
+        const sequence = playbackSequence(longTag(), "f0");
+        let passMs = 0;
+        for (const entry of sequence.pass) passMs += entry.ms;
+        const clock = new PlaybackClock(sequence, 0);
+        clock.advance(254 * passMs + 2);
+        // The 255th pass, past its first entry (f0, 1 ms): f1.
+        expect(clock.position()).toEqual({ index: 254 * 19_998 + 1, frameId: "f1", ended: false });
+        clock.advance(255 * passMs - 1);
+        expect(clock.position()).toEqual({
+            index: 255 * 19_998 - 1,
+            frameId: "f1",
+            ended: false,
+        });
+        clock.advance(255 * passMs);
+        expect(clock.position()).toEqual({ index: 255 * 19_998 - 1, frameId: "f1", ended: true });
+        expect(clock.elapsed).toBe(255 * passMs);
+    });
+
+    it("reads one entry per tick, however long the pass, and never the written-out sequence", () => {
+        const { pass } = playbackSequence(longTag(), "f0");
+        let reads = 0;
+        const counted = new Proxy(pass as AnimationEntry[], {
+            get(target, key, receiver) {
+                if (typeof key === "string" && /^\d+$/.test(key)) reads++;
+                return Reflect.get(target, key, receiver) as unknown;
+            },
+        });
+        const clock = new PlaybackClock({ pass: counted, passes: 255, start: 0 }, 0);
+        // The pass's start times are worked out once, reading each entry once.
+        expect(reads).toBe(19_998);
+        for (let tick = 1; tick <= 1000; tick++) {
+            reads = 0;
+            clock.advance(tick * 997);
+            clock.position();
+            expect(reads).toBeLessThanOrEqual(1);
+        }
+        const sequence = playbackSequence(longTag(), "f0");
+        const guarded = {
+            pass: sequence.pass,
+            passes: sequence.passes,
+            start: sequence.start,
+            get entries(): never {
+                throw new Error("the written-out sequence was read");
+            },
+        };
+        const played = new PlaybackClock(guarded, 0);
+        played.advance(1e9);
+        expect(played.position().ended).toBe(true);
+    });
+});

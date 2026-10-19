@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appCommands } from "../../src/app/commands/appCommands";
+import { invokeCommand } from "../../src/app/commands/invoke";
+import { installKeymap } from "../../src/app/keymap/install";
+import { beginDurationEdit } from "../../src/app/timeline/frameDuration";
 import { buildMenu } from "../../src/app/commands/menuModel";
 import type { Command } from "../../src/app/commands/types";
 import { setKeyContext } from "../../src/app/keymap/contextState";
 import { createPlayback, editorPlayback, playbackTime } from "../../src/app/playback/playback";
 import type { PlaybackSources } from "../../src/app/playback/playback";
 import { formatSpeed, speedCommandId } from "../../src/app/playback/playback.commands";
-import { PLAYBACK_SPEEDS, playbackStore } from "../../src/app/playback/playbackState";
+import { keepsPlaying, PLAYBACK_SPEEDS, playbackStore } from "../../src/app/playback/playbackState";
 import { isFloating } from "../../src/app/selection/floating";
 import { floatingState } from "../../src/app/selection/floatingState";
 import { DEFAULT_TOOL, editorStore } from "../../src/app/state/editor";
@@ -103,13 +106,22 @@ function open(count: number, durations: readonly number[] = []): OpenDocument {
     session.doc.frames.forEach((frame, index) => {
         frame.durationMs = durations[index] ?? 100;
         const imageId = `image-${index}`;
-        const data = new Uint8ClampedArray(SIZE * SIZE * 4).fill(index * 20 + 10);
-        session.doc.images.set(imageId, { width: SIZE, height: SIZE, data });
+        session.doc.images.set(imageId, { width: SIZE, height: SIZE, data: fixturePixels(index) });
         session.doc.cels.set(celKey(session.activeLayerId, frame.id), { imageId, opacity: 255 });
     });
     session.activeFrameId = session.doc.frames[0]!.id;
     sessionsStore.getState().touch(document.id);
     return document;
+}
+
+/**
+ * The pixels frame `index` (0-based) is opened with: one grey, `index × 20 + 10`, with a white
+ * texel at 0, 0, so a flip shows.
+ */
+function fixturePixels(index: number): Uint8ClampedArray {
+    const data = new Uint8ClampedArray(SIZE * SIZE * 4).fill(index * 20 + 10);
+    data.set([255, 255, 255, 255], 0);
+    return data;
 }
 
 /** The 1-based number of the active frame. */
@@ -255,9 +267,7 @@ describe("what stops editor playback", () => {
         toolPipeline.up(pointer(1, 1, { buttons: 0 }));
         expect(document.history.undoLabel).toBe("Pencil");
         expect(Array.from(celPixels(document, 4))).not.toEqual(before);
-        expect(Array.from(celPixels(document, 5))).toEqual(
-            Array.from(new Uint8ClampedArray(SIZE * SIZE * 4).fill(4 * 20 + 10)),
-        );
+        expect(Array.from(celPixels(document, 5))).toEqual(Array.from(fixturePixels(4)));
     });
 
     it("the hand and the zoom move the view and leave it playing", () => {
@@ -283,9 +293,9 @@ describe("what stops editor playback", () => {
         expect(document.session.doc.frames).toHaveLength(9);
         expect(activeNumber(document)).toBe(7);
         // The copy (frame 7 now) has frame 6's pixels.
-        expect(celPixels(document, 7)[0]).toBe(5 * 20 + 10);
-        expect(celPixels(document, 6)[0]).toBe(5 * 20 + 10);
-        expect(celPixels(document, 8)[0]).toBe(6 * 20 + 10);
+        expect(celPixels(document, 7)[4]).toBe(5 * 20 + 10);
+        expect(celPixels(document, 6)[4]).toBe(5 * 20 + 10);
+        expect(celPixels(document, 8)[4]).toBe(6 * 20 + 10);
     });
 
     it("a click in the timeline grid stops it on the frame on screen, also on the active cel", () => {
@@ -358,6 +368,196 @@ describe("what stops editor playback", () => {
     });
 });
 
+describe("a command run while playing acts on the frame on screen (review A)", () => {
+    const SELECTED = { x: 2, y: 2, width: 3, height: 2 };
+
+    /**
+     * An 8-frame document with a selection, playing, the active frame 5 and the frame on
+     * screen 4: the viewport has not drawn the last step yet.
+     */
+    function lagged(options: { select?: boolean } = {}): OpenDocument {
+        const document = open(8);
+        if (options.select !== false) {
+            const mask = rectMask(SIZE, SIZE, SELECTED);
+            const select = selectCommand(document.session, mask, "replace", "Select");
+            if (select) document.history.execute(select);
+        }
+        editorPlayback.start();
+        play(document, [0, 100, 200, 300, 400]);
+        mounted?.drawn({ key: frameKey(frameId(document, 4)), version: 1 });
+        expect(activeNumber(document)).toBe(5);
+        return document;
+    }
+
+    /** Runs a command as keys, menus, the palette and buttons do. */
+    async function invoke(id: string): Promise<void> {
+        const failures: unknown[] = [];
+        const ran = invokeCommand(command(id), (error) => void failures.push(error));
+        expect(ran, id).toBe(true);
+        // Paste and Cut finish after the clipboard.
+        for (let turn = 0; turn < 5; turn++) await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(failures).toEqual([]);
+    }
+
+    /** The texel at `x, y` of frame `number`'s cel. */
+    const texel = (document: OpenDocument, number: number, x: number, y: number) =>
+        Array.from(
+            celPixels(document, number).subarray((y * SIZE + x) * 4, (y * SIZE + x) * 4 + 4),
+        );
+
+    function expectStoppedOn4(document: OpenDocument): void {
+        expect(editorPlayback.playing).toBe(false);
+        expect(activeNumber(document)).toBe(4);
+        expect(Array.from(celPixels(document, 5))).toEqual(Array.from(fixturePixels(4)));
+    }
+
+    it("Delete clears the selection of frame 4", async () => {
+        const document = lagged();
+        await invoke("edit.delete");
+        expectStoppedOn4(document);
+        expect(texel(document, 4, 3, 3)).toEqual([0, 0, 0, 0]);
+        expect(texel(document, 4, 6, 6)).toEqual(texel(document, 6, 6, 6).map(() => 70));
+    });
+
+    it("Cut clears the selection of frame 4", async () => {
+        const document = lagged();
+        await invoke("edit.cut");
+        expectStoppedOn4(document);
+        expect(texel(document, 4, 3, 3)).toEqual([0, 0, 0, 0]);
+    });
+
+    it("Fill fills the selection of frame 4", async () => {
+        const document = lagged();
+        editorStore.getState().setForeground(0x12345678);
+        await invoke("edit.fill");
+        expectStoppedOn4(document);
+        expect(texel(document, 4, 3, 3)).toEqual([0x12, 0x34, 0x56, 0x78]);
+    });
+
+    it("Paste puts the copy on frame 4", async () => {
+        const document = lagged();
+        editorPlayback.stop();
+        // Copied from frame 5 before playing again: the system clipboard is absent in Node.
+        await invoke("edit.copy");
+        editorPlayback.start();
+        play(document, [500, 600]);
+        mounted?.drawn({ key: frameKey(frameId(document, 6)), version: 1 });
+        expect(activeNumber(document)).toBe(7);
+        await invoke("edit.paste");
+        expect(editorPlayback.playing).toBe(false);
+        expect(activeNumber(document)).toBe(6);
+        expect(isFloating()).toBe(true);
+        expect(floatingState.float?.transaction.frameId).toBe(frameId(document, 6));
+        expect(Array.from(celPixels(document, 7))).toEqual(Array.from(fixturePixels(6)));
+    });
+
+    it("Flip Horizontal flips frame 4", async () => {
+        const document = lagged({ select: false });
+        await invoke("edit.flipHorizontal");
+        expectStoppedOn4(document);
+        expect(texel(document, 4, SIZE - 1, 0)).toEqual([255, 255, 255, 255]);
+        expect(texel(document, 4, 0, 0)).toEqual([70, 70, 70, 70]);
+    });
+
+    it("the canvas arrows lift the selection of frame 4", async () => {
+        const document = lagged();
+        await invoke("selection.liftNudge.right");
+        expect(editorPlayback.playing).toBe(false);
+        expect(activeNumber(document)).toBe(4);
+        expect(isFloating()).toBe(true);
+        // The lifted pixels moved one texel right in frame 4's cel; frame 5 is as it was.
+        expect(texel(document, 4, 2, 2)).toEqual([0, 0, 0, 0]);
+        expect(Array.from(celPixels(document, 5))).toEqual(Array.from(fixturePixels(4)));
+    });
+
+    it("Undo stops on frame 4 before it acts", async () => {
+        const document = lagged();
+        expect(document.history.undoLabel).toBe("Select");
+        await invoke("edit.undo");
+        expect(editorPlayback.playing).toBe(false);
+        expect(activeNumber(document)).toBe(4);
+        expect(document.session.selection).toBeNull();
+    });
+
+    it("Next Frame goes on from the frame on screen", async () => {
+        const document = lagged({ select: false });
+        await invoke(TIMELINE_COMMANDS.nextFrame);
+        expect(editorPlayback.playing).toBe(false);
+        expect(activeNumber(document)).toBe(5);
+    });
+
+    it("Zoom In and a tool change leave it playing", async () => {
+        const document = lagged({ select: false });
+        await invoke("view.zoomIn");
+        await invoke("tool.pencil");
+        expect(editorPlayback.playing).toBe(true);
+        expect(activeNumber(document)).toBe(5);
+        expect(editorStore.getState().tool).toBe("pencil");
+    });
+
+    it("a key acts through invokeCommand too: Delete on the canvas clears frame 4", () => {
+        const document = lagged();
+        const target = new EventTarget();
+        const uninstall = installKeymap({
+            registry: appCommands,
+            target,
+            environment: () => ({
+                overlayOpen: false,
+                focus: "viewport",
+                inTimeline: false,
+                nativeKeys: new Set(),
+                typeahead: false,
+                gesture: false,
+                floating: false,
+            }),
+        });
+        try {
+            const event = Object.assign(new Event("keydown", { cancelable: true }), {
+                key: "Delete",
+                ctrlKey: false,
+                altKey: false,
+                shiftKey: false,
+                metaKey: false,
+                repeat: false,
+                isComposing: false,
+            });
+            target.dispatchEvent(event);
+            expect(event.defaultPrevented).toBe(true);
+        } finally {
+            uninstall();
+        }
+        expect(editorPlayback.playing).toBe(false);
+        expect(activeNumber(document)).toBe(4);
+        expect(texel(document, 4, 3, 3)).toEqual([0, 0, 0, 0]);
+        expect(Array.from(celPixels(document, 5))).toEqual(Array.from(fixturePixels(4)));
+    });
+
+    it("the keep-playing set is playback's: Play / Pause, speeds, view, tools; not edits", () => {
+        expect(keepsPlaying(PLAY_PAUSE_COMMAND)).toBe(true);
+        for (const id of [
+            "view.zoomIn",
+            "view.fit",
+            "view.timeline",
+            "tool.pencil",
+            "tool.hand.hold",
+        ]) {
+            expect(keepsPlaying(id), id).toBe(true);
+        }
+        for (const speed of PLAYBACK_SPEEDS) expect(keepsPlaying(speedCommandId(speed))).toBe(true);
+        for (const id of ["edit.delete", "edit.undo", "frame.next", "file.save", "edit.paste"]) {
+            expect(keepsPlaying(id), id).toBe(false);
+        }
+    });
+
+    it("the duration field taking the focus stops it on the frame on screen", () => {
+        const document = lagged({ select: false });
+        beginDurationEdit();
+        expect(editorPlayback.playing).toBe(false);
+        expect(activeNumber(document)).toBe(4);
+    });
+});
+
 describe("Play / Pause and the speeds as commands", () => {
     it("binds Enter in the canvas and timeline contexts and takes the Frame menu's item", () => {
         const play = command(PLAY_PAUSE_COMMAND);
@@ -385,12 +585,20 @@ describe("Play / Pause and the speeds as commands", () => {
             speedCommandId(1.5),
         ]);
         expect(command(PLAY_PAUSE_COMMAND).title()).toBe("Play at 1.5×");
-        // The submenu sits in Play / Pause's group of the Frame menu.
+        // The submenu sits below Play / Pause, in its group of the Frame menu (other items of
+        // that group, SE-025's, may come between them).
         const frame = buildMenu(appCommands.list(), ["Frame"]);
         const at = frame.findIndex(
             (node) => node.kind === "command" && node.command.id === PLAY_PAUSE_COMMAND,
         );
-        expect(frame[at + 1]).toMatchObject({ kind: "submenu", title: "Playback Speed" });
+        const submenus = frame.filter(
+            (node) => node.kind === "submenu" && node.title === "Playback Speed",
+        );
+        expect(submenus).toHaveLength(1);
+        const speeds = frame.indexOf(submenus[0]!);
+        expect(at).toBeGreaterThanOrEqual(0);
+        expect(speeds).toBeGreaterThan(at);
+        expect(frame.slice(at, speeds).map((node) => node.kind)).not.toContain("separator");
     });
 
     it("is disabled without a document, on one frame, and during a stroke", () => {

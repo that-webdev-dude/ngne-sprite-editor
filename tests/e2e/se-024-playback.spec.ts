@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 // Declares `window.__ngneTest` and its `viewport` probe, the development-only test hooks.
 import type {} from "../../src/app/viewport/mountViewport";
 import type * as PlaybackModule from "../../src/app/playback/playback";
+import type * as AppPipeline from "../../src/app/tools/appPipeline";
 import type * as CoreModel from "../../src/core/model";
 import { collectErrors } from "./se-006-support";
 import { openEditor } from "./se-007-support";
@@ -174,6 +175,107 @@ test("an 8-frame, 100 ms animation shows each frame for its interval and loops a
 });
 
 test("starting a stroke during playback stops it on the displayed frame and paints there", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openEditor(page);
+    await openAnimation(page, SMALL);
+    await page.evaluate(() => {
+        const editor = window.__ngneTest!.editor.getState();
+        editor.setTool("pencil");
+    });
+    await settle(page);
+    await controlClock(page, 0);
+    await viewport(page).focus();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => playing(page)).toBe(true);
+    await stepTo(page, 350);
+    expect(await activeFrame(page)).toBe(4);
+    expect(await shownAt(page, CENTRE.x, CENTRE.y)).toEqual(colourOf(3));
+
+    // The clock moves to 450 ms. Right after the step that reads it, in the same animation
+    // frame, frame 5 is the active frame and the viewport still shows frame 4: a press on
+    // texel 2, 3 then reaches the pointer pipeline. The stroke stops playback on frame 4, the
+    // frame on screen, and paints it.
+    const texel = { x: 32 + 2 * 8 + 4, y: 24 + 3 * 8 + 4 };
+    const press = await page.evaluate(async (texel) => {
+        const path = "/src/app/tools/appPipeline.ts";
+        const { toolPipeline } = (await import(/* @vite-ignore */ path)) as typeof AppPipeline;
+        const host = document.querySelector("[data-viewport-canvas]")!.getBoundingClientRect();
+        const input = (buttons: number) => ({
+            pointerId: 1,
+            button: 0,
+            buttons,
+            clientX: host.x + texel.x,
+            clientY: host.y + texel.y,
+            shiftKey: false,
+            ctrlKey: false,
+            altKey: false,
+            metaKey: false,
+            timeStamp: performance.now(),
+        });
+        const activeNumber = () => {
+            const state = window.__ngneTest!.sessions.getState();
+            const document = state.documents.find((entry) => entry.id === state.activeId)!;
+            const { doc, activeFrameId } = document.session;
+            return doc.frames.findIndex((frame) => frame.id === activeFrameId) + 1;
+        };
+        const se024 = window.__se024!;
+        const read = se024.playback.playbackTime.now;
+        return new Promise<{ activeAtPress: number; began: boolean }>((resolve) => {
+            let pressed = false;
+            se024.playback.playbackTime.now = () => {
+                const time = read();
+                if (time === 450 && !pressed) {
+                    pressed = true;
+                    // Runs once the step has run, before the next animation frame draws.
+                    queueMicrotask(() => {
+                        const activeAtPress = activeNumber();
+                        const began = toolPipeline.down(input(1));
+                        toolPipeline.up(input(0));
+                        resolve({ activeAtPress, began });
+                    });
+                }
+                return time;
+            };
+            se024.now = 450;
+        });
+    }, texel);
+    expect(press).toEqual({ activeAtPress: 5, began: true });
+    expect(await playing(page)).toBe(false);
+    // The clock goes on; nothing steps any more.
+    await page.evaluate(() => (window.__se024!.now = 5000));
+    await settle(page);
+    expect(await activeFrame(page)).toBe(4);
+    const painted = await page.evaluate(() => {
+        const state = window.__ngneTest!.sessions.getState();
+        const document = state.documents.find((entry) => entry.id === state.activeId)!;
+        const { doc, activeLayerId } = document.session;
+        const pixel = (frame: number, x: number, y: number) => {
+            const cel = doc.cels.get(`${activeLayerId}:${doc.frames[frame - 1]!.id}`)!;
+            const image = doc.images.get(cel.imageId)!;
+            const at = (y * image.width + x) * 4;
+            return Array.from(image.data.subarray(at, at + 4));
+        };
+        return {
+            label: document.history.undoLabel,
+            foreground: window.__ngneTest!.editor.getState().foreground,
+            frame4: pixel(4, 2, 3),
+            frame4Other: pixel(4, 9, 9),
+            frame5: pixel(5, 2, 3),
+        };
+    });
+    expect(painted.label).toBe("Pencil");
+    expect(painted.frame4).not.toEqual(colourOf(3));
+    expect(painted.frame4Other).toEqual(colourOf(3));
+    expect(painted.frame5).toEqual(colourOf(4));
+    // On screen: frame 4 with the new texel.
+    expect(await shownAt(page, CENTRE.x, CENTRE.y)).toEqual(colourOf(3));
+    expect(await shownAt(page, texel.x, texel.y)).toEqual(painted.frame4);
+    expect(errors).toEqual([]);
+});
+
+test("starting a stroke during playback stops it on the displayed frame and paints there (real pointer)", async ({
     page,
 }) => {
     const errors = collectErrors(page);

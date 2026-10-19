@@ -186,7 +186,7 @@ export function createPlayback(sources: PlaybackSources): EditorPlayback {
         const now = sources.now();
         const clock = new PlaybackClock(sequence, now, state.getState().speed);
         if (!sources.visible()) clock.pause(now);
-        const frameIds = [...new Set(sequence.entries.map((entry) => entry.frameId))];
+        const frameIds = [...new Set(sequence.pass.map((entry) => entry.frameId))];
         const current: Run = {
             document,
             clock,

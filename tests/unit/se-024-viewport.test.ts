@@ -428,7 +428,14 @@ describe("ViewportSlots: playback through the frame cache (a range too large for
         view.open(document, "k0");
         view.play(TEN);
         await view.land();
-        const shown: number[] = [shownIndex(view)];
+        // The key made current at each step, and what was drawn after how many steps.
+        const requested = ["k0"];
+        const shown: Observation[] = [];
+        const look = () => {
+            const index = shownIndex(view);
+            shown.push({ key: index < 0 ? null : TEN[index]!, step: requested.length - 1 });
+        };
+        look();
         // Steps come faster than uploads: two or three steps inside each upload, uploads
         // resolving out of order now and then.
         const pending: { resolve(): void }[] = [];
@@ -436,17 +443,19 @@ describe("ViewportSlots: playback through the frame cache (a range too large for
         for (let round = 0; round < 40; round++) {
             const steps = 2 + (round % 2);
             for (let step = 0; step < steps; step++) {
-                view.step(TEN[next % TEN.length]!);
+                const key = TEN[next % TEN.length]!;
+                view.step(key);
+                requested.push(key);
                 next++;
                 await view.start();
                 for (const call of view.renderer.calls.splice(0)) pending.push(call);
-                shown.push(shownIndex(view));
+                look();
             }
             // Resolve the newest first every third round, otherwise the oldest.
             const call = round % 3 === 0 ? pending.pop() : pending.shift();
             call?.resolve();
             await flush();
-            shown.push(shownIndex(view));
+            look();
         }
         // Every upload lands, also those queued behind the ones in flight.
         for (;;) {
@@ -455,19 +464,66 @@ describe("ViewportSlots: playback through the frame cache (a range too large for
             if (calls.length === 0) break;
             for (const call of calls) call.resolve();
         }
-        shown.push(shownIndex(view));
-        expect(shown.join(" ")).not.toContain("-1");
-        // Steps run through k0 … k9 four times and more: order is by step, so unwrap the loop.
-        let lap = 0;
-        const unwrapped = shown.map((index, at) => {
-            if (at > 0 && index < shown[at - 1]! % TEN.length) lap++;
-            return lap * TEN.length + index;
-        });
-        for (let at = 1; at < unwrapped.length; at++) {
-            expect(unwrapped[at]!, `${shown.join(" ")}`).toBeGreaterThanOrEqual(unwrapped[at - 1]!);
-        }
+        look();
+        // Never the checkerboard alone, and each frame drawn is one of a step at or after the
+        // step of the frame drawn before it.
+        const steps = playingSteps(requested, shown);
         // Frames were skipped, and playback still went on to the end.
-        expect(new Set(shown).size).toBeGreaterThan(2);
-        expect(shown.at(-1)).toBe((next - 1) % TEN.length);
+        expect(new Set(steps).size).toBeGreaterThan(2);
+        expect(shown.at(-1)?.key).toBe(requested.at(-1));
+    });
+});
+
+/** A frame drawn (null: none, the checkerboard alone) after `step` steps. */
+interface Observation {
+    key: string | null;
+    step: number;
+}
+
+/**
+ * The step each drawn frame belongs to: the earliest step that made its key current, at or
+ * after the step of the frame drawn before it and at or before the steps made so far. Throws
+ * when a frame has no such step (drawn out of order, or never asked for) or none was drawn.
+ */
+function playingSteps(requested: readonly string[], shown: readonly Observation[]): number[] {
+    let last = 0;
+    return shown.map(({ key, step }, at) => {
+        if (key === null) throw new Error(`observation ${at}: the checkerboard alone`);
+        let found = -1;
+        for (let candidate = last; candidate <= step; candidate++) {
+            if (requested[candidate] === key) {
+                found = candidate;
+                break;
+            }
+        }
+        if (found < 0) {
+            throw new Error(`observation ${at}: ${key} is not of a step from ${last} to ${step}`);
+        }
+        last = found;
+        return found;
+    });
+}
+
+describe("playingSteps: the order check of the frame cache path", () => {
+    const requested = ["k0", "k1", "k2", "k3", "k4", "k5", "k6"];
+    const at = (indexes: string, step = 6): Observation[] =>
+        indexes.split(" ").map((index) => ({ key: `k${index}`, step }));
+
+    it("accepts frames drawn in playing order, skips included", () => {
+        expect(playingSteps(requested, at("0 1 2 5 5 6"))).toEqual([0, 1, 2, 5, 5, 6]);
+    });
+
+    it("refuses a frame played before the one drawn last: 0 1 2 5 3 1 4", () => {
+        expect(() => playingSteps(requested, at("0 1 2 5 3 1 4"))).toThrow(/k3 is not of a step/);
+    });
+
+    it("refuses a frame of a step not made yet, and the checkerboard alone", () => {
+        expect(() =>
+            playingSteps(requested, [
+                { key: "k0", step: 0 },
+                { key: "k2", step: 1 },
+            ]),
+        ).toThrow(/k2/);
+        expect(() => playingSteps(requested, [{ key: null, step: 0 }])).toThrow(/checkerboard/);
     });
 });

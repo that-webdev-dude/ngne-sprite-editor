@@ -12,6 +12,7 @@ import type * as PlaybackModule from "../../src/app/playback/playback";
 import type * as ViewportLinkModule from "../../src/app/viewport/viewportLink";
 import type * as CoreModel from "../../src/core/model";
 import { record } from "./record";
+import { analysePlayback } from "./se-024-analyse";
 
 // SE-024 (SPEC §6.6): editor playback from `ed:play`, 64 frames of 256×256, 100 ms each, with
 // no skipped frame. Run alone on the reference machine, one GPU at a time:
@@ -27,12 +28,14 @@ import { record } from "./record";
 // (the composite still blends all eight). Playback starts with `ed:play` (Play / Pause, the
 // registry's command) on the page's own clock; the measurement begins once the viewport draws
 // from the `ed:play` grid of the 64 frames and has run a second more, and lasts two passes
-// (12.8 s). An entry of the sequence is skipped when no frame the viewport submits while it is
-// the active one shows its frame. The viewport must upload nothing meanwhile: every frame comes
-// from the grid. The result is the number of entries skipped (a count; `record.ts` labels every
-// result ms), against SPEC §6.6's budget of none. The lateness of each entry's first frame
-// after the entry began, the gaps between frames that change the picture and the frames
-// submitted per second are in the details.
+// (12.8 s). An entry of the sequence is skipped when the clock jumped over it (each recorded
+// active frame must be the successor of the one before) or when no frame the viewport submits
+// while it is the active one shows its frame (`se-024-analyse.ts`). Submitted means handed to
+// NGNE (`onDrawn`), not known to be presented on screen. The window must cover about two
+// passes, and the viewport must upload nothing meanwhile: every frame comes from the grid. The
+// result is the number of entries skipped (`unit: "count"`), against SPEC §6.6's budget of
+// none. The lateness of each entry's first frame after the entry began, the gaps between
+// frames that change the picture and the frames submitted per second are in the details.
 
 const WINDOW = { width: 1920, height: 1080 };
 const RATIO = 1;
@@ -86,12 +89,17 @@ const GPUS: Record<string, GpuConfig> = {
 const gpuId = process.env.PERF_GPU ?? "";
 const gpu = GPUS[gpuId];
 
-/** What the page records while playback runs. */
+/** What the page records while playback runs (`PlaybackRecording`, and the window). */
 interface Recording {
     /** Each change of the active frame playback made: its frame and when. */
     entries: { frameId: string; at: number }[];
-    /** Each frame the viewport submitted: the frame key it drew and when. */
+    /**
+     * Each frame the viewport submitted (`onDrawn`: submitted, not known to be presented):
+     * the frame key it drew and when.
+     */
     drawn: { key: string | null; at: number }[];
+    /** The id of the first frame (the document's own); the others are `frame-2` … */
+    firstFrameId: string;
     /** Wall time and counters at the start and the end of the window. */
     start: { at: number; submitted: number; uploads: number };
     end: { at: number; submitted: number; uploads: number; grid: number | null };
@@ -203,9 +211,12 @@ function startRecording(page: Page): Promise<void> {
         )) as typeof ViewportLinkModule;
         const hooks = window.__ngneTest!;
         const probe = hooks.viewport!;
+        const state = hooks.sessions.getState();
+        const open = state.documents.find((entry) => entry.id === state.activeId)!;
         const bench: Recording = {
             entries: [],
             drawn: [],
+            firstFrameId: open.session.doc.frames[0]!.id,
             start: { at: 0, submitted: 0, uploads: 0 },
             end: { at: 0, submitted: 0, uploads: 0, grid: null },
         };
@@ -263,35 +274,6 @@ function stopRecording(page: Page): Promise<Recording> {
         if (!playing) throw new Error("se-024: playback stopped during the measurement");
         return bench;
     });
-}
-
-/**
- * The entries of the window (the first and the last, which the window cuts, left out) and
- * which of them no submitted frame showed while they were active.
- */
-function analyse(recording: Recording) {
-    const { entries, drawn } = recording;
-    const lateness: number[] = [];
-    const skipped: { frameId: string; at: number }[] = [];
-    for (let index = 1; index < entries.length - 1; index++) {
-        const entry = entries[index]!;
-        const next = entries[index + 1]!;
-        const key = `${entry.frameId}:plain`;
-        const first = drawn.find(
-            (frame) => frame.key === key && frame.at >= entry.at && frame.at < next.at,
-        );
-        if (first) lateness.push(first.at - entry.at);
-        else
-            skipped.push({ frameId: entry.frameId, at: Math.round(entry.at - recording.start.at) });
-    }
-    // The gaps between frames that showed another frame than the one before.
-    const changes: number[] = [];
-    let last: { key: string | null; at: number } | null = null;
-    for (const frame of drawn) {
-        if (last && frame.key !== last.key) changes.push(frame.at - last.at);
-        if (!last || frame.key !== last.key) last = frame;
-    }
-    return { entries: Math.max(0, entries.length - 2), lateness, skipped, changes };
 }
 
 it.skipIf(!gpu)(
@@ -378,11 +360,25 @@ it.skipIf(!gpu)(
                         `${recording.end.grid}). Nothing was measured.`,
                 );
             }
-            const { entries, lateness, skipped, changes } = analyse(recording);
+            // The frames in playing order: the forward loop over all 64.
+            const order = Array.from({ length: FRAMES }, (_, index) =>
+                index === 0 ? recording.firstFrameId : `frame-${index + 1}`,
+            );
+            const { entries, lateness, skipped, changes } = analysePlayback(recording, order);
+            if (entries < PASSES * FRAMES - 3) {
+                throw new Error(
+                    `se-024: the window covered ${entries} entries, not about ` +
+                        `${PASSES * FRAMES}. Nothing was measured.`,
+                );
+            }
             const seconds = (recording.end.at - recording.start.at) / 1000;
             const details = {
                 entries,
-                skippedEntries: skipped,
+                skippedEntries: skipped.map((entry) => ({
+                    ...entry,
+                    at: Math.round(entry.at - recording.start.at),
+                })),
+                drawn: "onDrawn: frames submitted to NGNE, not known to be presented on screen",
                 firstFrameAfterEntry: summary(lateness),
                 gapsBetweenPictureChanges: summary(changes),
                 framesSubmittedPerSecond:
@@ -402,9 +398,11 @@ it.skipIf(!gpu)(
                 measurement:
                     `Editor playback from the ed:play grid of ${FRAMES} frames of ${SIDE}×${SIDE} ` +
                     `(${LAYERS} layers), ${DURATION_MS} ms each, at 1× speed on the page's clock, ` +
-                    `${PASSES} passes, Chrome on ${gpu.label}: entries of the sequence that no ` +
-                    "submitted frame showed while they were the active frame.",
-                statistic: `entries skipped of ${entries} (a count, not milliseconds)`,
+                    `${PASSES} passes, Chrome on ${gpu.label}: entries of the sequence that the ` +
+                    "clock jumped over or that no submitted frame showed while they were the " +
+                    "active frame.",
+                statistic: `entries skipped of ${entries}`,
+                unit: "count",
                 budgetMs: 0,
                 resultMs: skipped.length,
                 details,
