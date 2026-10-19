@@ -2,8 +2,9 @@ import type { PreviewPacker } from "./previewController";
 import type { PackResponse } from "./previewPack";
 
 // The preview's packer on the page side: one module worker (`previewPack.worker.ts`) per
-// mounted panel. Composites go to it as transferred copies; the packed atlas comes back
-// transferred. The worker keeps the composites, so only changed frames are sent again.
+// mounted panel. Composites go to it as transferred copies, in batches ahead of a request or
+// with it; the packed atlas comes back transferred. The worker keeps the composites, so only
+// changed frames are sent again.
 
 /** A packer that runs in a new worker; `dispose` ends the worker. */
 export function createWorkerPacker(): PreviewPacker {
@@ -38,6 +39,11 @@ export function createWorkerPacker(): PreviewPacker {
         failAll(new Error("The preview's packing worker sent a message that could not be read."));
 
     return {
+        send(batch) {
+            if (failure) return;
+            const transfer = batch.frames.map((frame) => frame.data.buffer as ArrayBuffer);
+            worker.postMessage(batch, transfer);
+        },
         pack(request) {
             if (failure) return Promise.reject(failure);
             return new Promise((resolve, reject) => {

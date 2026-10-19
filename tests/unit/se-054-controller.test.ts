@@ -1,9 +1,21 @@
-import { describe, expect, it } from "vitest";
-import { connectPreview, PACK_QUIET_MS } from "../../src/app/preview/previewController";
-import type { PageVisibility, PreviewPacker } from "../../src/app/preview/previewController";
-import type { PackRequest, PackResponse } from "../../src/app/preview/previewPack";
+import { describe, expect, it, vi } from "vitest";
+import type { StoreApi } from "zustand/vanilla";
+import {
+    connectPreview,
+    PACK_QUIET_MS,
+    PACK_SLICE_MS,
+} from "../../src/app/preview/previewController";
+import type {
+    PageVisibility,
+    PreviewPacker,
+    PreviewSources,
+} from "../../src/app/preview/previewController";
+import type { PackBatch, PackRequest, PackResponse } from "../../src/app/preview/previewPack";
 import { ALL_FRAMES, createPreviewState } from "../../src/app/preview/previewState";
+import type { PreviewState } from "../../src/app/preview/previewState";
 import { createActiveComposites } from "../../src/app/state/composites";
+import type { ActiveComposites } from "../../src/app/state/composites";
+import type { CompositeCache } from "../../src/core/composite";
 import { createSessionsStore } from "../../src/app/state/sessions";
 import { addFrameCommand } from "../../src/core/frames";
 import { createDocument, sequentialIds } from "../../src/core/model";
@@ -52,8 +64,12 @@ class RecordingPort implements PreviewPort {
 
 class FakePacker implements PreviewPacker {
     requests: PackRequest[] = [];
+    batches: PackBatch[] = [];
     #answers: ((response: PackResponse) => void)[] = [];
     disposed = false;
+    send(batch: PackBatch) {
+        this.batches.push(batch);
+    }
     pack(request: PackRequest): Promise<PackResponse> {
         this.requests.push(request);
         return new Promise((resolve) => this.#answers.push(resolve));
@@ -113,7 +129,15 @@ function sprite(name: string, width = 4, height = 4): DocSession {
     return createDocument({ name, width, height }, sequentialIds(`${name}-`));
 }
 
-function setup() {
+function setup(
+    options: {
+        /** Called before the connection is made. */
+        prepare?(state: StoreApi<PreviewState>): void;
+        /** The composites the connection reads, in place of the active document's. */
+        composites?(real: ActiveComposites): PreviewSources["composites"];
+        now?(): number;
+    } = {},
+) {
     const sessions = createSessionsStore();
     const composites = createActiveComposites(sessions);
     const state = createPreviewState();
@@ -121,14 +145,16 @@ function setup() {
     const packer = new FakePacker();
     const timers = new Timers();
     const visibility = new Visibility();
+    options.prepare?.(state);
     const connection = connectPreview(port, {
         sessions,
-        composites,
+        composites: options.composites?.(composites) ?? composites,
         state,
         packer,
         visibility,
         setTimer: timers.set,
         clearTimer: timers.clear,
+        ...(options.now ? { now: options.now } : {}),
     });
     return { sessions, composites, state, port, packer, timers, visibility, connection };
 }
@@ -400,5 +426,178 @@ describe("connectPreview: when the game runs", () => {
         expect(port.running).toBe(false);
         expect(packer.disposed).toBe(true);
         expect(timers.pending.size).toBe(0);
+    });
+});
+
+/** Adds a tag over the first two frames of the document: one history step. */
+function addTag(document: { session: DocSession; history: History }, name: string) {
+    const { doc } = document.session;
+    document.history.execute(
+        createTagCommand(doc, {
+            name,
+            color: 0xff0000ff,
+            fromFrameId: doc.frames[0]!.id,
+            toFrameId: doc.frames[1]!.id,
+            direction: "forward",
+            repeat: 0,
+        }),
+    );
+}
+
+describe("connectPreview: review fixes", () => {
+    it("connected with no document open, resets what the panel showed before (a collapse, then every document closed)", () => {
+        const { state, port } = setup({
+            prepare: (state) => state.setState({ status: { kind: "ready" }, animations: ["x"] }),
+        });
+        expect(state.getState().status).toEqual({ kind: "none" });
+        expect(state.getState().animations).toEqual([]);
+        expect(port.running).toBe(false);
+    });
+
+    it("a composite that cannot be made shows its message and asks for no other pack", () => {
+        const { sessions, timers, state, packer } = setup({
+            composites: (real) => ({
+                subscribe: real.subscribe,
+                cacheOf: () =>
+                    ({
+                        get: () => {
+                            throw new RangeError("out of memory");
+                        },
+                    }) as unknown as CompositeCache,
+            }),
+        });
+        const session = sprite("hero");
+        const document = sessions.getState().open(session);
+        document.history.execute(addFrameCommand(session.doc, session.activeFrameId));
+        addTag(document, "Walk");
+        // The tag's animation is selected: the one the too-large fallback would pack.
+        state.setState({ chosen: "walk" });
+        timers.run();
+        expect(state.getState().status).toEqual({ kind: "error", message: "out of memory" });
+        expect(packer.requests).toEqual([]);
+        // No pack asked for again at once, and again after it: no busy loop.
+        expect(timers.pending.size).toBe(0);
+        expect(state.getState().packing).toBe(false);
+    });
+
+    it(`reads composites in slices of ${PACK_SLICE_MS} ms, one task each, each slice sent as a batch`, () => {
+        // Each read of the clock is 10 ms later: one frame fills a slice.
+        let clock = 0;
+        const { sessions, packer, timers, state } = setup({ now: () => (clock += 10) });
+        const session = sprite("hero");
+        const document = sessions.getState().open(session);
+        for (let index = 0; index < 2; index++) {
+            document.history.execute(addFrameCommand(session.doc, session.activeFrameId));
+        }
+        const ids = session.doc.frames.map((frame) => frame.id);
+        expect(ids).toHaveLength(3);
+
+        timers.run();
+        // The first slice went as a batch that resets the worker; the next waits for a task.
+        expect(packer.batches).toEqual([
+            { kind: "frames", reset: true, frames: [expect.objectContaining({ id: ids[0] })] },
+        ]);
+        expect(packer.requests).toEqual([]);
+        expect(timers.delays()).toEqual([0]);
+        expect(state.getState().packing).toBe(true);
+
+        timers.run();
+        expect(packer.batches).toHaveLength(2);
+        expect(packer.batches[1]).toEqual({
+            kind: "frames",
+            reset: false,
+            frames: [expect.objectContaining({ id: ids[1] })],
+        });
+        expect(packer.requests).toEqual([]);
+
+        // The last slice goes with the request.
+        timers.run();
+        expect(packer.requests).toHaveLength(1);
+        expect(packer.requests[0]!.reset).toBe(false);
+        expect(packer.requests[0]!.frames.map((frame) => frame.id)).toEqual([ids[2]]);
+        expect(timers.delays()).toEqual([]);
+    });
+
+    it("a pack read in slices ends when another document is shown", () => {
+        let clock = 0;
+        const { sessions, packer, timers } = setup({ now: () => (clock += 10) });
+        const one = sprite("one");
+        const document = sessions.getState().open(one);
+        document.history.execute(addFrameCommand(one.doc, one.activeFrameId));
+        timers.run();
+        expect(packer.batches).toHaveLength(1);
+
+        const two = sprite("two");
+        sessions.getState().open(two);
+        // The pending slice of "one" is gone; "two" is packed at once, from a reset.
+        expect(timers.delays()).toEqual([0]);
+        timers.run();
+        timers.run();
+        const sentIds = [
+            ...packer.batches.flatMap((batch) => batch.frames),
+            ...packer.requests.flatMap((request) => request.frames),
+        ].map((frame) => frame.id);
+        expect(sentIds).toEqual([one.doc.frames[0]!.id, two.doc.frames[0]!.id]);
+        expect(packer.requests.map((request) => request.doc.name)).toEqual(["two"]);
+        expect(packer.requests[0]!.reset).toBe(true);
+    });
+
+    it("a tag change keeps the composites the worker holds: nothing is composited again", async () => {
+        const { sessions, composites, packer, timers } = setup();
+        const session = sprite("hero");
+        const document = sessions.getState().open(session);
+        document.history.execute(addFrameCommand(session.doc, session.activeFrameId));
+        timers.run();
+        await packer.answer(packed());
+
+        const cache = composites.cacheOf(session)!;
+        const get = vi.spyOn(cache, "get");
+        addTag(document, "Walk");
+        timers.run();
+        expect(packer.requests).toHaveLength(2);
+        expect(packer.requests[1]!.frames).toEqual([]);
+        expect(packer.requests[1]!.doc.tags.map((tag) => tag.name)).toEqual(["Walk"]);
+        expect(get).not.toHaveBeenCalled();
+        await packer.answer(packed());
+
+        // A change of the frame list still sends every frame.
+        document.history.execute(addFrameCommand(session.doc, session.activeFrameId));
+        timers.run();
+        expect(packer.requests[2]!.frames).toHaveLength(3);
+    });
+
+    it("a change of the view alone is not compared and packs nothing; a field set outside the history is", async () => {
+        const { sessions, packer, timers } = setup();
+        const session = sprite("hero");
+        const document = sessions.getState().open(session);
+        document.history.execute(addFrameCommand(session.doc, session.activeFrameId));
+        timers.run();
+        await packer.answer(packed());
+
+        // Every read of the frames and tags of the document is counted.
+        let reads = 0;
+        const counted = <Value extends object>(value: Value): Value =>
+            new Proxy(value, {
+                get(target, key, receiver) {
+                    reads++;
+                    return Reflect.get(target, key, receiver) as unknown;
+                },
+            });
+        session.doc.frames = counted(session.doc.frames);
+        session.doc.tags = counted(session.doc.tags);
+
+        sessions.getState().setView(document.id, { scale: 4, originX: 10 });
+        sessions.getState().setView(document.id, { originY: -3 });
+        expect(reads).toBe(0);
+        expect(timers.delays()).toEqual([]);
+        expect(packer.requests).toHaveLength(1);
+
+        // A test hook's change, told with `touch`: compared, and packed.
+        session.doc.frames[0]!.durationMs = 40;
+        sessions.getState().touch(document.id);
+        expect(timers.delays()).toEqual([PACK_QUIET_MS]);
+        timers.run();
+        expect(packer.requests[1]!.doc.frames[0]!.durationMs).toBe(40);
+        expect(packer.requests[1]!.frames).toEqual([]);
     });
 });

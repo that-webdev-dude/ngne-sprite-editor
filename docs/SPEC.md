@@ -659,6 +659,9 @@ Reference hardware: §3. Document 256×256, 8 layers.
 | Idle editor: frames submitted per second                               | 0               |
 | Cold load to interactive (production build, local)                     | ≤ 2 s           |
 
+The idle budget applies to the editor viewport; an expanded preview that plays submits one frame
+per animation entry, and none while paused, collapsed or showing a single-entry animation.
+
 The playback budget (SE-024, `tests/perf/se-024-playback.perf.ts`) is measured on the reference
 document (8 layers) at 1× speed over two passes once the grid is drawn from: an entry is skipped
 when the clock jumped over it or no frame submitted while it is the active frame shows it

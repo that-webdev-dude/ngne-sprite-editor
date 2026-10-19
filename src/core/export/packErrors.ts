@@ -17,7 +17,8 @@ export const MAX_ATLAS_EXTRUDE = 2;
  * - `options`: an option is outside its range; the message names it.
  * - `atlas-size`: the atlas would be larger than `MAX_ATLAS_SIDE` on a side. The message
  *   names the limit and the size the atlas needs, which is also in `required`.
- * - `memory`: the atlas is within the limit but too large to allocate.
+ * - `memory`: the atlas is within the limit but too large to allocate, or larger than the
+ *   caller's `PackLimits.maxBytes` (then with its size in `required`).
  */
 export type PackErrorCode = "no-frames" | "frame" | "options" | "atlas-size" | "memory";
 
@@ -25,7 +26,10 @@ export type PackErrorCode = "no-frames" | "frame" | "options" | "atlas-size" | "
 export class PackError extends Error {
     override readonly name = "PackError";
     readonly code: PackErrorCode;
-    /** With `atlas-size`: the size the atlas needs, in pixels. Otherwise undefined. */
+    /**
+     * With `atlas-size`, or `memory` for `PackLimits.maxBytes`: the size the atlas needs, in
+     * pixels. Otherwise undefined.
+     */
     readonly required: { width: number; height: number } | undefined;
 
     constructor(

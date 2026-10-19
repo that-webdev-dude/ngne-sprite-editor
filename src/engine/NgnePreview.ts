@@ -1,7 +1,7 @@
 import { BrowserGame } from "@ngne/core";
 import type { Frame, FrameScheduler, SceneDefinition } from "@ngne/core";
 import { animationFrame, spriteAtTopLeft } from "../core/export/sprite-runtime";
-import type { SpriteAtlas } from "../core/export/sprite-runtime";
+import type { AtlasAnimation, SpriteAtlas } from "../core/export/sprite-runtime";
 import type { PixelBuffer } from "../core/model";
 import { bitmapFromPixels } from "./bitmaps";
 import { DemandScheduler, frameDelay, TICK_MS } from "./preview/demandScheduler";
@@ -46,6 +46,9 @@ const MAX_TICKS = Math.ceil((4 * 65_535) / TICK_MS) + 1;
 /** Interval of the renderer's status read while a game runs (as the viewport's, SPEC §6.4). */
 const STATUS_CHECK_MS = 1000;
 
+/** Diagnostics the page keeps for the probe; older ones give way. */
+const PAGE_DIAGNOSTICS = 200;
+
 /** An atlas for the preview: the packed image and the sheet that describes it. */
 export interface PreviewAtlas {
     /** The atlas image, straight-alpha RGBA8. It is not written to once handed over. */
@@ -81,6 +84,11 @@ export interface NgnePreviewOptions {
     onDiagnostic?(message: string, error: unknown): void;
     /** The scheduler of the next game created; NGNE's own (`requestAnimationFrame`) when none. */
     scheduler?(): PreviewScheduler | undefined;
+    /**
+     * The animation drawn while the published sheet lacks both the one set and the one drawn
+     * last (the app's "All frames"); none when not given.
+     */
+    fallbackAnimation?: string;
 }
 
 /** What a frame of the preview showed. */
@@ -97,9 +105,16 @@ export interface PreviewDrawn {
 export interface PreviewProbe {
     /** Games alive in the page: created and not disposed. */
     readonly liveGames: number;
+    /** The most games alive in the page at once. */
+    readonly peakLiveGames: number;
+    /** Games created in the page. */
+    readonly gamesCreated: number;
     /** Frames rendered by every game of the page (`afterFrame` calls). */
     readonly frames: number;
-    /** Every diagnostic reported by a preview of the page, in order (not dropped ticks). */
+    /**
+     * The diagnostics the previews of the page reported (not dropped ticks), each message
+     * once, in order: the newest 200.
+     */
     readonly diagnostics: readonly string[];
     /** The lifecycle of this preview's game; null while it has none. */
     readonly lifecycle: string | null;
@@ -139,11 +154,32 @@ function serialized<Result>(task: () => Promise<Result>): Promise<Result> {
 }
 
 /** Page-wide counters, for the probe. */
-const page = { liveGames: 0, frames: 0, diagnostics: [] as string[] };
+const page = {
+    liveGames: 0,
+    peakLiveGames: 0,
+    gamesCreated: 0,
+    frames: 0,
+    diagnostics: [] as string[],
+    /** The messages in `diagnostics`. */
+    seen: new Set<string>(),
+};
 
-/** The tag of an atlas upload: the atlas and the serial it was set with. */
+/** Keeps a diagnostic for the probe: each message once, the newest `PAGE_DIAGNOSTICS`. */
+function keepDiagnostic(message: string): void {
+    if (page.seen.has(message)) return;
+    page.seen.add(message);
+    page.diagnostics.push(message);
+    while (page.diagnostics.length > PAGE_DIAGNOSTICS) {
+        page.seen.delete(page.diagnostics.shift()!);
+    }
+}
+
+/**
+ * The tag of an atlas upload: the sheet of the atlas and the serial it was set with. Not its
+ * pixels: once uploaded they are the texture's, and the page lets them go.
+ */
 interface AtlasTag {
-    atlas: PreviewAtlas;
+    sheet: SpriteAtlas;
     serial: number;
 }
 
@@ -165,6 +201,8 @@ interface Instance {
     failed: boolean;
     /** What the last frame drew. */
     drawn: PreviewDrawn | null;
+    /** The animation the last frame drew from the atlas; null before one. */
+    drawnKey: string | null;
     /** Runs the game's frames on demand; null under a scheduler the options gave. */
     demand: DemandScheduler | null;
     /** Sprites the last frame submitted, and the renderer's status at the last read. */
@@ -223,9 +261,10 @@ export class NgnePreview implements PreviewPort {
     constructor(host: HTMLElement, options: NgnePreviewOptions = {}) {
         this.#host = host;
         this.#options = options;
+        // Each message once per mounted panel (SPEC §6.5); the page's record has each once.
         this.#report = oncePerMessage((message, error) => {
             console.error("NGNE preview:", error);
-            page.diagnostics.push(message);
+            keepDiagnostic(message);
             options.onDiagnostic?.(message, error);
         });
         this.probe = this.#createProbe();
@@ -240,6 +279,9 @@ export class NgnePreview implements PreviewPort {
     }
 
     setDisplaySize(size: { width: number; height: number }): void {
+        const display = this.#display;
+        // Called on every change of the sessions store: the style is written on a change only.
+        if (size.width === display.width && size.height === display.height) return;
         this.#display = { width: size.width, height: size.height };
         if (this.#instance) this.#style(this.#instance.canvas);
     }
@@ -267,21 +309,21 @@ export class NgnePreview implements PreviewPort {
         this.#catchUp();
         this.#animation = key;
         this.#ageMs = 0;
-        this.#wake();
+        this.#instance?.demand?.wake();
     }
 
     setPlaying(playing: boolean): void {
         if (playing === this.#playing) return;
         this.#catchUp();
         this.#playing = playing;
-        this.#wake();
+        this.#instance?.demand?.wake();
     }
 
     setSpeed(speed: number): void {
         if (speed === this.#speed) return;
         this.#catchUp();
         this.#speed = speed;
-        this.#wake();
+        this.#instance?.demand?.wake();
     }
 
     /**
@@ -315,7 +357,7 @@ export class NgnePreview implements PreviewPort {
         instance.lastStatus = status;
         if (status !== "ready") return;
         if (before !== "ready" || (instance.drewSprites > 0 && renderer.sprites === 0)) {
-            instance.demand?.wake();
+            this.#wake();
         }
     }
 
@@ -325,8 +367,13 @@ export class NgnePreview implements PreviewPort {
         this.#wake();
     }
 
-    /** Something drawn changed: a frame at the next animation frame. */
+    /**
+     * Something drawn changed: a frame at the next animation frame. The time since the last
+     * frame is counted first (`#catchUp`), so that frame does not tick through a long still
+     * spell at once.
+     */
     #wake(): void {
+        this.#catchUp();
         this.#instance?.demand?.wake();
     }
 
@@ -336,11 +383,31 @@ export class NgnePreview implements PreviewPort {
      */
     #due(): number {
         if (this.#continuous) return 0;
-        const tag = this.#instance?.queue?.published(PREVIEW_ATLAS_SLOT);
-        if (!this.#playing || !this.#atlas || !tag || tag.serial < this.#floor) return Infinity;
-        const animation = tag.atlas.sheet.animations[this.#animation];
+        const instance = this.#instance;
+        const tag = instance?.queue?.published(PREVIEW_ATLAS_SLOT);
+        if (!instance || !tag || !this.#playing || !this.#atlas || tag.serial < this.#floor) {
+            return Infinity;
+        }
+        const animation = this.#played(tag.sheet, instance)?.animation;
         if (!animation) return Infinity;
         return frameDelay(animation, this.#ageMs, this.#speed);
+    }
+
+    /**
+     * The animation to draw from `sheet`: the one set; while the sheet lacks it (a tag just
+     * made, renamed or deleted, until the repack is uploaded), the one drawn last, else the
+     * options' fallback; null when the sheet has none of them.
+     */
+    #played(
+        sheet: SpriteAtlas,
+        instance: Instance,
+    ): { key: string; animation: AtlasAnimation } | null {
+        for (const key of [this.#animation, instance.drawnKey, this.#options.fallbackAnimation]) {
+            if (key != null && Object.hasOwn(sheet.animations, key)) {
+                return { key, animation: sheet.animations[key] };
+            }
+        }
+        return null;
     }
 
     /** Ends the preview: its game is stopped and disposed in the serialized chain. */
@@ -479,11 +546,14 @@ export class NgnePreview implements PreviewPort {
             started: false,
             failed: false,
             drawn: null,
+            drawnKey: null,
             demand,
             drewSprites: 0,
             lastStatus: null,
         };
         page.liveGames++;
+        page.gamesCreated++;
+        page.peakLiveGames = Math.max(page.peakLiveGames, page.liveGames);
         this.#instance = instance;
         this.#host.append(canvas);
     }
@@ -499,6 +569,9 @@ export class NgnePreview implements PreviewPort {
             await instance.game.start();
         }
         instance.running = true;
+        // The clock stood still while the game was stopped (a hidden tab): that time is not
+        // played.
+        instance.demand?.skip();
         if (!instance.queue) {
             // The renderer exists once `start()` has resolved (SPEC §6.2 #14).
             const renderer = instance.game.renderer;
@@ -506,7 +579,9 @@ export class NgnePreview implements PreviewPort {
             instance.queue = new UploadQueue<AtlasTag>({
                 target: renderer,
                 // The new atlas is drawn at the next animation frame.
-                onPublish: () => instance.demand?.wake(),
+                onPublish: () => {
+                    if (instance === this.#instance) this.#wake();
+                },
                 onError: (_slot, error) => {
                     this.#report(error);
                     // A rejected `texture()` is retried only on a fresh renderer (SPEC §6.4).
@@ -554,7 +629,7 @@ export class NgnePreview implements PreviewPort {
         const atlas = this.#atlas;
         const queue = instance?.queue;
         if (!atlas || !queue) return;
-        const tag: AtlasTag = { atlas, serial: this.#serial };
+        const tag: AtlasTag = { sheet: atlas.sheet, serial: this.#serial };
         queue.request(PREVIEW_ATLAS_SLOT, async () => {
             await this.probe.uploadGate?.(PREVIEW_ATLAS_SLOT);
             return { bitmap: await bitmapFromPixels(atlas.pixels), tag };
@@ -591,13 +666,14 @@ export class NgnePreview implements PreviewPort {
             // Nothing from the atlas before its first upload on this game resolved.
             const tag = instance.queue?.published(PREVIEW_ATLAS_SLOT);
             if (!this.#atlas || !tag || tag.serial < this.#floor) return;
-            const { sheet } = tag.atlas;
-            const key = this.#animation;
-            if (!Object.hasOwn(sheet.animations, key)) return;
+            const { sheet } = tag;
+            const played = this.#played(sheet, instance);
+            if (!played) return;
             const ageMs = this.#ageMs;
-            const id = animationFrame(sheet, key, ageMs);
+            const id = animationFrame(sheet, played.key, ageMs);
             spriteAtTopLeft(frame, sheet, PREVIEW_ATLAS_SLOT, id, 0, 0, { layer: 1 });
             instance.drawn = { frame: id, ageMs, serial: tag.serial };
+            instance.drawnKey = played.key;
             this.#failures = 0;
         } catch (error) {
             this.#report(error);
@@ -615,12 +691,14 @@ export class NgnePreview implements PreviewPort {
                 seek: (ageMs: number) => {
                     this.#catchUp();
                     this.#ageMs = ageMs;
-                    this.#wake();
+                    this.#instance?.demand?.wake();
                 },
                 wake: () => this.#wake(),
             } as unknown as PreviewProbe,
             {
                 liveGames: read(() => page.liveGames),
+                peakLiveGames: read(() => page.peakLiveGames),
+                gamesCreated: read(() => page.gamesCreated),
                 frames: read(() => page.frames),
                 diagnostics: read(() => [...page.diagnostics]),
                 lifecycle: read(() => this.#instance?.game.game.lifecycle ?? null),
@@ -644,9 +722,7 @@ export class NgnePreview implements PreviewPort {
                 published: read(() => (this.#instance ? this.#published(this.#instance) : null)),
                 publishedSize: read(() => {
                     const tag = this.#instance?.queue?.published(PREVIEW_ATLAS_SLOT);
-                    return tag
-                        ? { width: tag.atlas.sheet.width, height: tag.atlas.sheet.height }
-                        : null;
+                    return tag ? { width: tag.sheet.width, height: tag.sheet.height } : null;
                 }),
                 ageMs: read(() => this.#ageMs),
                 continuous: {

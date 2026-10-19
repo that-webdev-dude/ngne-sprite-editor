@@ -7,7 +7,7 @@ import { connectPreview } from "./previewController";
 import type { PageVisibility } from "./previewController";
 import { previewDisplay } from "./previewDisplay";
 import { createWorkerPacker } from "./previewPacker";
-import { previewState } from "./previewState";
+import { ALL_FRAMES, previewState } from "./previewState";
 
 declare module "../testing/testHooks" {
     interface EditorTestHooks {
@@ -52,6 +52,8 @@ export function mountPreview(stage: HTMLElement, host: HTMLElement): MountedPrev
                 diagnostics: [...state.diagnostics, message].slice(-SHOWN_DIAGNOSTICS),
             })),
         scheduler: () => hooks?.previewScheduler,
+        // While a repack is on its way, a tag just made, renamed or deleted plays this.
+        fallbackAnimation: ALL_FRAMES,
     });
     const connection = connectPreview(preview, {
         sessions: sessionsStore,

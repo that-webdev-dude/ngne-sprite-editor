@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SpriteAtlas } from "../../src/core/export";
+import { TICK_MS } from "../../src/engine/preview/demandScheduler";
+import type { FrameSchedulerLike } from "../../src/engine/preview/demandScheduler";
 
 // SE-054: `engine/NgnePreview` against a stand-in `BrowserGame` (SPEC §6.2 #14, §6.5): lifecycle
 // calls serialized for the page, the atlas uploaded by the host after `start()` resolved, nothing
@@ -376,6 +378,198 @@ describe("NgnePreview", () => {
             "pv:atlas",
         ]);
         await p.dispose();
+    });
+
+    it("keeps drawing the animation drawn last while the published sheet lacks the one set, until the new atlas is uploaded", async () => {
+        const p = await preview();
+        p.setAnimation("a");
+        p.setSize({ width: 4, height: 4 });
+        p.setRunning(true);
+        p.setAtlas(atlas(0));
+        await flush();
+        await flush();
+        const game = FakeGame.games[0]!;
+        game.renderer!.uploads[0]!.done.resolve();
+        await flush();
+        expect(sprites(game.frame())).toMatchObject([{ u: 0 }]);
+
+        // A tag just made (or renamed): the repack that has it is not uploaded yet.
+        p.setAnimation("b");
+        expect(sprites(game.frame())).toMatchObject([{ u: 0 }]);
+        const base = atlas(0);
+        const next = {
+            pixels: base.pixels,
+            sheet: {
+                ...base.sheet,
+                frames: { ...base.sheet.frames, g: { ...base.sheet.frames.f!, x: 32 } },
+                animations: {
+                    ...base.sheet.animations,
+                    b: {
+                        playback: "loop" as const,
+                        durationMs: 100,
+                        entries: [{ frame: "g", ms: 100 }],
+                    },
+                },
+            },
+        };
+        p.setAtlas(next);
+        await flush();
+        expect(sprites(game.frame())).toMatchObject([{ u: 0 }]);
+        game.renderer!.uploads[1]!.done.resolve();
+        await flush();
+        expect(sprites(game.frame())).toMatchObject([{ u: 0.5 }]);
+        await p.dispose();
+    });
+
+    it("draws the options' fallback animation when the sheet has neither the one set nor one drawn before", async () => {
+        const { NgnePreview } = await import("../../src/engine/NgnePreview");
+        const p = new NgnePreview(host as unknown as HTMLElement, { fallbackAnimation: "a" });
+        p.setAnimation("renamed");
+        p.setSize({ width: 4, height: 4 });
+        p.setRunning(true);
+        p.setAtlas(atlas(0));
+        await flush();
+        await flush();
+        const game = FakeGame.games[0]!;
+        game.renderer!.uploads[0]!.done.resolve();
+        await flush();
+        expect(sprites(game.frame())).toMatchObject([{ u: 0 }]);
+        await p.dispose();
+    });
+
+    describe("the game's clock after a still spell", () => {
+        let now = 0;
+        let rafs: FrameRequestCallback[] = [];
+        beforeEach(() => {
+            now = 1000;
+            rafs = [];
+            vi.spyOn(performance, "now").mockImplementation(() => now);
+            vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+                rafs.push(callback);
+                return rafs.length;
+            });
+            vi.stubGlobal("cancelAnimationFrame", () => undefined);
+        });
+        afterEach(() => {
+            vi.restoreAllMocks();
+        });
+
+        /**
+         * Runs the game's frames as NGNE's fixed step does on the scheduler it was given: the
+         * ticks of each frame are the time since the one before, in 1/60 s.
+         */
+        function drive(game: FakeGame) {
+            const scheduler = (game.options as unknown as { scheduler: FrameSchedulerLike })
+                .scheduler;
+            const ticks: number[] = [];
+            let last = 0;
+            const loop = (time: number) => {
+                const elapsed = last ? time - last : 0;
+                last = time;
+                ticks.push(Math.floor(elapsed / TICK_MS + 1e-9));
+                scheduler.request(loop);
+            };
+            scheduler.request(loop);
+            /** Runs the animation frames asked for, at `now` + `late` ms. */
+            const run = (late = 0) => {
+                for (const callback of rafs.splice(0)) callback(now + late);
+            };
+            return { ticks, run };
+        }
+
+        it("a frame asked for after minutes of nothing to draw runs a tick or so, not all of them", async () => {
+            const p = await preview();
+            p.setAnimation("a");
+            p.setSize({ width: 4, height: 4 });
+            p.setRunning(true);
+            await flush();
+            const { ticks, run } = drive(FakeGame.games[0]!);
+            run();
+            expect(ticks).toEqual([0]);
+            // Ten minutes later something drawn changes.
+            now += 600_000;
+            p.setBackground(0xffffff);
+            run(16);
+            expect(ticks).toHaveLength(2);
+            expect(ticks[1]).toBeLessThanOrEqual(2);
+            await p.dispose();
+        });
+
+        it("the time a game was stopped (a hidden tab) is not added to the age", async () => {
+            const p = await preview();
+            p.setAnimation("a");
+            p.setSize({ width: 4, height: 4 });
+            p.setRunning(true);
+            await flush();
+            const { run } = drive(FakeGame.games[0]!);
+            run();
+            p.setRunning(false);
+            await flush();
+            now += 600_000;
+            p.setRunning(true);
+            await flush();
+            // A change of the rate counts the time since the last frame: none was played.
+            p.setSpeed(2);
+            expect(p.probe.ageMs).toBeLessThan(100);
+            await p.dispose();
+        });
+    });
+
+    it("writes the canvas's style only when the display size changes", async () => {
+        const p = await preview();
+        p.setSize({ width: 4, height: 4 });
+        p.setRunning(true);
+        await flush();
+        const canvas = FakeGame.games[0]!.options.canvas as FakeCanvas;
+        let writes = 0;
+        canvas.style = new Proxy<Record<string, string>>(
+            {},
+            {
+                set(target, key, value: string) {
+                    writes++;
+                    target[key as string] = value;
+                    return true;
+                },
+            },
+        );
+        p.setDisplaySize({ width: 40, height: 40 });
+        expect(writes).toBe(2);
+        // Pan, zoom, playback: the sessions store changes, the display size does not.
+        p.setDisplaySize({ width: 40, height: 40 });
+        p.setDisplaySize({ width: 40, height: 40 });
+        expect(writes).toBe(2);
+        p.setDisplaySize({ width: 80, height: 40 });
+        expect(writes).toBe(4);
+        expect(canvas.style).toMatchObject({ width: "80px", height: "40px" });
+        await p.dispose();
+    });
+
+    it("the page keeps each diagnostic once whichever panel reported it, the newest 200", async () => {
+        const messages: string[][] = [[], []];
+        const panels = [
+            await preview({ onDiagnostic: (message) => messages[0]!.push(message) }),
+            await preview({ onDiagnostic: (message) => messages[1]!.push(message) }),
+        ];
+        for (const p of panels) {
+            p.setSize({ width: 4, height: 4 });
+            p.setRunning(true);
+        }
+        await flush();
+        await flush();
+        const [one, two] = FakeGame.games;
+        one!.options.diagnostic(new Error("se-054 O: shared"));
+        two!.options.diagnostic(new Error("se-054 O: shared"));
+        // Each panel lists it once; the page has it once.
+        expect(messages).toEqual([["se-054 O: shared"], ["se-054 O: shared"]]);
+        const shared = panels[0]!.probe.diagnostics.filter((m) => m === "se-054 O: shared");
+        expect(shared).toHaveLength(1);
+
+        for (let index = 0; index < 250; index++) one!.options.diagnostic(new Error(`O ${index}`));
+        const kept = panels[1]!.probe.diagnostics;
+        expect(kept).toHaveLength(200);
+        expect(kept[kept.length - 1]).toBe("O 249");
+        expect(kept[0]).toBe("O 50");
+        await Promise.all(panels.map((p) => p.dispose()));
     });
 
     it("advances the age by dt × 1000 × speed while playing", async () => {

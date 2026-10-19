@@ -55,6 +55,15 @@ export interface PackedRect {
     frameIndices: number[];
 }
 
+/** A limit a caller sets beyond those of SPEC §9.4. */
+export interface PackLimits {
+    /**
+     * Most bytes the atlas image may take (4 per pixel). A larger atlas is refused with the
+     * "memory" error, with its size in `required`, before it is allocated.
+     */
+    maxBytes?: number;
+}
+
 export interface PackResult {
     /** The atlas image. Every pixel with alpha 0 is 0,0,0,0. */
     atlas: PixelBuffer;
@@ -322,11 +331,13 @@ function extrudeRect(
  * "no-frames" for an empty list; "frame" for a buffer whose data does not match its size;
  * "atlas-size" when a side of the atlas would exceed `MAX_ATLAS_SIDE`, with the size it
  * needs in `required` and before anything is allocated for it; "memory" when the atlas
- * cannot be allocated.
+ * cannot be allocated, or when it would take more than `limits.maxBytes` (with the size in
+ * `required`, before it is allocated).
  */
 export function pack(
     frames: readonly PixelBuffer[],
     options: Partial<PackOptions> = {},
+    limits: PackLimits = {},
 ): PackResult {
     const { layout, padding, extrude, trim, mergeDuplicates } = resolveOptions(options);
     assertFrames(frames);
@@ -348,6 +359,16 @@ export function pack(
         throw new PackError(
             "atlas-size",
             `The atlas needs ${width}x${height} px; the limit is ${MAX_ATLAS_SIDE} px per side.`,
+            { required: { width, height } },
+        );
+    }
+
+    const { maxBytes } = limits;
+    if (maxBytes !== undefined && width * height * 4 > maxBytes) {
+        throw new PackError(
+            "memory",
+            `The atlas would take ${width}x${height} px, ${width * height * 4} bytes; ` +
+                `the limit is ${maxBytes} bytes.`,
             { required: { width, height } },
         );
     }

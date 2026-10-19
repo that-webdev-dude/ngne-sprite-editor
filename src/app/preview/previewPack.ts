@@ -28,6 +28,17 @@ export interface PackFrame {
     data: Uint8ClampedArray;
 }
 
+/**
+ * Composites sent ahead of a request, one slice of the main thread's work at a time
+ * (`previewController.ts`): the worker keeps them and answers nothing.
+ */
+export interface PackBatch {
+    kind: "frames";
+    /** Forget every composite kept first, as `PackRequest.reset`. */
+    reset: boolean;
+    frames: PackFrame[];
+}
+
 export interface PackRequest {
     /** Echoed in the response. */
     id: number;
@@ -71,8 +82,19 @@ export function createPackState(): PackState {
     return { frames: new Map() };
 }
 
-/** Thrown when an atlas packs within the side limit but over `PREVIEW_ATLAS_BYTES`. */
+/** Thrown when an atlas would be within the side limit but over `PREVIEW_ATLAS_BYTES`. */
 class PreviewSizeError extends Error {}
+
+/** Keeps the composites of a batch or a request, after forgetting all of them on `reset`. */
+function keep(state: PackState, reset: boolean, frames: readonly PackFrame[]): void {
+    if (reset) state.frames.clear();
+    for (const frame of frames) state.frames.set(frame.id, frame.data);
+}
+
+/** Keeps the composites of a batch for the next request. */
+export function handleBatch(state: PackState, batch: PackBatch): void {
+    keep(state, batch.reset, batch.frames);
+}
 
 /** True for the failures that the fallback to one tag, then "Too large to preview", answer. */
 function isTooLarge(error: unknown): boolean {
@@ -95,23 +117,26 @@ function packWith(state: PackState, doc: SpriteDoc, settings: ExportSettings) {
         if (!data) throw new Error(`The preview has no composite of frame ${index + 1}.`);
         return { width: doc.width, height: doc.height, data };
     });
-    const result = atlasFor(frames, doc, settings);
-    const bytes = result.atlas.data.byteLength;
-    if (bytes > PREVIEW_ATLAS_BYTES) {
+    try {
+        // The 64 MB are checked from the atlas's size before the atlas is allocated.
+        const result = atlasFor(frames, doc, settings, { maxBytes: PREVIEW_ATLAS_BYTES });
+        return { ...result, indices };
+    } catch (error) {
+        const required = error instanceof PackError && error.code === "memory" && error.required;
+        if (!required) throw error;
+        const { width, height } = required;
         const mb = (n: number) => Math.round(n / (1024 * 1024));
         throw new PreviewSizeError(
-            `The atlas would be ${result.atlas.width} × ${result.atlas.height} px ` +
-                `(${mb(bytes)} MB); the preview holds at most ${mb(PREVIEW_ATLAS_BYTES)} MB.`,
+            `The atlas would be ${width} × ${height} px (${mb(width * height * 4)} MB); ` +
+                `the preview holds at most ${mb(PREVIEW_ATLAS_BYTES)} MB.`,
         );
     }
-    return { ...result, indices };
 }
 
 /** Packs the preview's atlas for `request` and keeps its composites for the next one. */
 export function handlePack(state: PackState, request: PackRequest): PackResponse {
     const { id } = request;
-    if (request.reset) state.frames.clear();
-    for (const frame of request.frames) state.frames.set(frame.id, frame.data);
+    keep(state, request.reset, request.frames);
     const known = new Set(request.doc.frames.map((frame) => frame.id));
     for (const frameId of [...state.frames.keys()]) {
         if (!known.has(frameId)) state.frames.delete(frameId);

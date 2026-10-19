@@ -8,7 +8,7 @@ import { planExport } from "./exportPlan";
 import type { ExportPlan } from "./exportPlan";
 import { frameId } from "./names";
 import { pack } from "./pack";
-import type { PackedRect } from "./pack";
+import type { PackedRect, PackLimits } from "./pack";
 import { validateAtlas } from "./validateAtlas";
 
 /** A packed atlas: its image and the content of its `<name>.atlas.json`. */
@@ -41,6 +41,7 @@ export function atlasOfPlan(
     doc: SpriteDoc,
     settings: ExportSettings,
     plan: ExportPlan,
+    limits: PackLimits = {},
 ): AtlasResult {
     const { name, frameIndices, animations } = plan;
     if (frames.length !== frameIndices.length) {
@@ -50,7 +51,7 @@ export function atlasOfPlan(
                 `were given: one is needed for each, in the order of exportFrameIndices.`,
         );
     }
-    const { atlas, rects } = pack(frames, settings);
+    const { atlas, rects } = pack(frames, settings, limits);
 
     const rectOf = new Array<PackedRect>(frames.length);
     for (const rect of rects) {
@@ -124,12 +125,14 @@ export function atlasOfPlan(
  *
  * Throws `ExportError` ("settings", "frames", "too-many-frames", "too-many-entries",
  * "document"), each before anything is packed except "document" for a value the finished
- * atlas shows to be outside the format, and the `PackError` of `pack`.
+ * atlas shows to be outside the format, and the `PackError` of `pack`, which applies
+ * `limits` (the preview's 64 MB, SE-054).
  */
 export function atlasFor(
     frames: readonly PixelBuffer[],
     doc: SpriteDoc,
     settings: ExportSettings = doc.exportSettings,
+    limits: PackLimits = {},
 ): AtlasResult {
-    return atlasOfPlan(frames, doc, settings, planExport(doc, settings));
+    return atlasOfPlan(frames, doc, settings, planExport(doc, settings), limits);
 }

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { atlasFor } from "../../src/core/export";
+import { describe, expect, it, vi } from "vitest";
+import { atlasFor, MAX_ATLAS_FRAMES } from "../../src/core/export";
 import { defaultExportSettings } from "../../src/core/model";
 import type { ExportSettings, FrameInfo, SpriteDoc, Tag } from "../../src/core/model";
 import {
@@ -8,7 +8,21 @@ import {
     PREVIEW_ATLAS_BYTES,
 } from "../../src/app/preview/previewPack";
 import type { PackDocument, PackFrame, PackRequest } from "../../src/app/preview/previewPack";
+import type * as Pixels from "../../src/core/pixels";
 import { noise } from "./se-051-support";
+
+/** Every pixel buffer `createPixelBuffer` made, by size: the atlas is one of them. */
+const allocations = vi.hoisted(() => [] as { width: number; height: number }[]);
+vi.mock("../../src/core/pixels", async (importOriginal) => {
+    const actual = await importOriginal<typeof Pixels>();
+    return {
+        ...actual,
+        createPixelBuffer: (width: number, height: number, color?: number) => {
+            allocations.push({ width, height });
+            return actual.createPixelBuffer(width, height, color);
+        },
+    };
+});
 
 // SE-054: the packing of the preview, as it runs in the worker (SPEC §6.5): `atlasFor` over the
 // composites the worker keeps, so only changed frames travel after the first pack; the
@@ -180,6 +194,40 @@ describe("handlePack", () => {
         expect(response).toMatchObject({ kind: "too-large" });
         if (response.kind !== "too-large") return;
         expect(response.message).toContain(`${PREVIEW_ATLAS_BYTES / 1024 / 1024} MB`);
+    });
+
+    it("refuses an atlas over 64 MB from its size, before the atlas is allocated", () => {
+        // As above: 5120 × 4096 px, 80 MB.
+        const doc = packDoc(1024, 1024, 17);
+        const sent = composites(doc);
+        allocations.length = 0;
+        const response = handlePack(
+            createPackState(),
+            request(doc, sent, { reset: true, settings: { padding: 0 } }),
+        );
+        expect(response).toMatchObject({ kind: "too-large" });
+        if (response.kind !== "too-large") return;
+        expect(response.message).toContain("would be 5120 × 4096 px (80 MB)");
+        const over = allocations.filter(
+            ({ width, height }) => width * height * 4 > PREVIEW_ATLAS_BYTES,
+        );
+        expect(over).toEqual([]);
+        // The mock sees the packer's allocations: an atlas that fits is allocated through it.
+        allocations.length = 0;
+        const small = packDoc(4, 4, 2);
+        handlePack(createPackState(), request(small, composites(small), { reset: true }));
+        expect(allocations.length).toBeGreaterThan(0);
+    });
+
+    it("answers more frames than an atlas holds with the too-many-frames message", () => {
+        const count = MAX_ATLAS_FRAMES + 1;
+        const doc = packDoc(1, 1, count);
+        const sent = doc.frames.map((frame) => ({ id: frame.id, data: new Uint8ClampedArray(4) }));
+        const response = handlePack(createPackState(), request(doc, sent, { reset: true }));
+        expect(response).toMatchObject({ kind: "failed" });
+        if (response.kind !== "failed") return;
+        expect(response.message).toContain(`${count} frames`);
+        expect(response.message).toContain(`${MAX_ATLAS_FRAMES}`);
     });
 
     it("answers an export error with its message: too many animation entries", () => {

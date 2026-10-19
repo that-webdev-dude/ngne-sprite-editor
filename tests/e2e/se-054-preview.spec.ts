@@ -98,7 +98,10 @@ function keepProbe(page: Page): Promise<void> {
 }
 
 /** Reads a counter of the kept probe. */
-function probeValue(page: Page, name: "liveGames" | "frames"): Promise<number> {
+function probeValue(
+    page: Page,
+    name: "liveGames" | "peakLiveGames" | "gamesCreated" | "frames",
+): Promise<number> {
     return page.evaluate(
         (name) =>
             (window as unknown as { __se054Probe: Record<string, number> }).__se054Probe[name]!,
@@ -106,7 +109,7 @@ function probeValue(page: Page, name: "liveGames" | "frames"): Promise<number> {
     );
 }
 
-test("drawing a pencil stroke updates the preview within 500 ms", async ({ page }) => {
+test("drawing a pencil stroke updates the preview within 500 ms @alone", async ({ page }) => {
     const errors = collectErrors(page);
     await openPreviewEditor(page);
     const view = { scale: 8, originX: 48, originY: 32 };
@@ -353,6 +356,8 @@ test("opening, switching and closing documents 20 times leaves at most one live 
     }
     await previewSettled(page);
     expect(most).toBeLessThanOrEqual(1);
+    // Between the samples as well: the page's high-water mark.
+    expect(await probeValue(page, "peakLiveGames")).toBeLessThanOrEqual(1);
     expect(await probeValue(page, "liveGames")).toBe(1);
     // The page's devices: the viewport's renderers and the one game.
     const devices = await page.evaluate(() => ({
@@ -556,12 +561,14 @@ test("an NGNE failure is shown in the panel, and the game is made again", async 
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await openPreviewEditor(page);
+    await keepProbe(page);
     // Collapsed while the document opens: the viewport's uploads are done first.
     await previewToggle(page).click();
     await expect(previewToggle(page)).toHaveAttribute("aria-expanded", "false");
     const { images } = await solidFrames(page, "failing", 8, 8, 1);
     await settle(page);
     await page.evaluate(() => window.__se011.failCopies(1));
+    const created = await probeValue(page, "gamesCreated");
     await previewToggle(page).click();
     // NGNE reports the failed copy; the panel lists what it reported.
     const list = previewSection(page).getByRole("list", { name: "Preview diagnostics" });
@@ -571,6 +578,9 @@ test("an NGNE failure is shown in the panel, and the game is made again", async 
     await expect(list.getByRole("listitem")).toHaveText(reported);
     await previewSettled(page);
     expect(showsImage(await readPreview(page), images)).toBe(0);
+    // The game that failed was disposed and another made: two games since the expand.
+    expect(await probeValue(page, "gamesCreated")).toBeGreaterThanOrEqual(created + 2);
+    expect(await probeValue(page, "liveGames")).toBe(1);
     expect(errors).toEqual([]);
 });
 
@@ -612,6 +622,7 @@ test("the controls: play and pause, the animation, the speed and the background 
     await expect(page.getByRole("option", { name: "1×", exact: true })).toBeFocused();
     await page.getByRole("option", { name: "2×", exact: true }).click();
     await expect(speed).toHaveText("2×");
+    await expect(page.getByRole("listbox")).toHaveCount(0);
     expect(await page.evaluate(() => window.__ngneTest!.previewState!.getState().speed)).toBe(2);
 
     // The background chip cycles dark, light, mid grey; the game draws it under the frame.
