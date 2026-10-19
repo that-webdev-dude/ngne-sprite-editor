@@ -8,7 +8,8 @@ import { imageQuad, QUAD_LAYER } from "./geometry";
 import type { Quad } from "./geometry";
 import { blitCell, cellUv, createGridImage, playGridLayout } from "./playGrid";
 import type { PlayGridLayout } from "./playGrid";
-import type { ViewportChecker, ViewportDocument, ViewportView } from "./types";
+import { ReferenceSlots, referenceSlotIndex } from "./referenceSlots";
+import type { ViewportChecker, ViewportDocument, ViewportReference, ViewportView } from "./types";
 
 // The texture slots of one renderer of the viewport (SPEC §6.4) and what goes into them: the
 // upload queue, the frame cache and the checkerboard. It decides what to upload for a scene
@@ -48,6 +49,11 @@ export interface Scene {
      * while nothing plays.
      */
     playing?: readonly string[] | null;
+    /**
+     * The visible reference layers of the document, bottom to top (SE-045); absent or empty
+     * for none.
+     */
+    references?: readonly ViewportReference[];
 }
 
 /**
@@ -59,6 +65,8 @@ export function replaceSceneDocument(scene: Scene, document: ViewportDocument | 
     scene.document = document;
     scene.epoch++;
     scene.current = null;
+    // The references went with the document as well (SE-045).
+    scene.references = [];
 }
 
 /** What an upload put into a slot. */
@@ -105,6 +113,11 @@ export interface SlotsHost {
     target: TextureTarget;
     /** Makes the upload source of a straight-alpha RGBA8 image. */
     bitmap(pixels: PixelBuffer): Promise<ImageBitmap>;
+    /**
+     * Makes the upload source of a reference (SE-045): `image` resampled on the CPU to
+     * `width` × `height` (SPEC §7.6). A host without it shows no reference.
+     */
+    referenceBitmap?(image: PixelBuffer, width: number, height: number): Promise<ImageBitmap>;
     /** True once the renderer itself has failed: it rejects every upload from then on. */
     rendererFailed(): boolean;
     /** A slot changed what it shows: the scene has to be drawn again. */
@@ -124,6 +137,8 @@ export interface SlotsHost {
 export class ViewportSlots {
     readonly queue: UploadQueue<SlotTag>;
     readonly frames = new FrameSlots(FRAME_SLOT_COUNT);
+    /** The reference slots `ed:ref:0..3` (SE-045). */
+    readonly references: ReferenceSlots;
     readonly #scene: Scene;
     readonly #host: SlotsHost;
     /**
@@ -162,6 +177,15 @@ export class ViewportSlots {
             onPublish: (slot, tag) => this.#published(slot, tag),
             onError: (slot, error) => this.#failed(slot, error),
         });
+        this.references = new ReferenceSlots(scene, this.queue, {
+            referenceBitmap: (image, width, height) => {
+                if (!host.referenceBitmap) throw new Error("This viewport shows no references.");
+                return host.referenceBitmap(image, width, height);
+            },
+            placeholder: () => host.bitmap({ width: 1, height: 1, data: new Uint8ClampedArray(4) }),
+            gate: (slot) => host.gate(slot),
+            onStuck: () => this.#reportStuck(),
+        });
     }
 
     /** True once this renderer cannot show the scene in full any more (see `onStuck`). */
@@ -190,6 +214,7 @@ export class ViewportSlots {
         this.#syncChecker();
         this.#syncPlay();
         this.#syncCurrent();
+        this.references.sync();
     }
 
     /**
@@ -256,6 +281,7 @@ export class ViewportSlots {
         if (checker && checker.key !== null && checker.epoch === scene.epoch) {
             quads.push(imageQuad(CHECKER_SLOT, QUAD_LAYER.checker, scene.view, checker));
         }
+        quads.push(...this.references.quads());
         const cell = this.#playCell();
         if (cell) {
             const { layout, index, image } = cell;
@@ -277,6 +303,7 @@ export class ViewportSlots {
 
     /** Ends the slots with their renderer: nothing more is uploaded or reported. */
     dispose(): void {
+        this.references.dispose();
         this.queue.dispose();
     }
 
@@ -406,6 +433,10 @@ export class ViewportSlots {
     }
 
     #published(slot: string, tag: SlotTag): void {
+        if (referenceSlotIndex(slot) >= 0) {
+            this.#host.onChange();
+            return;
+        }
         if (slot === PLAY_SLOT) {
             this.#playPublished(tag);
             this.#host.onChange();
@@ -430,6 +461,12 @@ export class ViewportSlots {
     }
 
     #failed(slot: string, error: unknown): void {
+        if (referenceSlotIndex(slot) >= 0) {
+            this.references.failed(slot);
+            this.#host.onError(error);
+            this.#host.onChange();
+            return;
+        }
         if (slot === PLAY_SLOT) {
             // Playback steps through the frame cache instead: for good on this renderer when
             // `texture()` rejected; for this playback when the grid could not be built.

@@ -226,6 +226,36 @@
     background: var(--text-muted);
 }
 
+/*
+ * The Reference group (SE-045): a label in the layer column, then a row per reference layer
+ * whose one cell spans the frame columns and names the placement.
+ */
+.timeline__group-label {
+    position: sticky;
+    left: 0;
+    display: flex;
+    align-items: center;
+    width: 200px;
+    height: var(--row-height);
+    padding: 0 var(--space-8);
+    border-top: var(--border-width) solid var(--border);
+    border-right: var(--border-width) solid var(--border);
+    background: var(--bg-panel);
+    color: var(--text-muted);
+    font-size: var(--font-size-label);
+}
+
+.timeline__reference-cell {
+    justify-items: start;
+    padding-left: var(--space-8);
+}
+
+.timeline__placement {
+    color: var(--text-muted);
+    font-size: var(--font-size-label);
+    white-space: nowrap;
+}
+
 /* The layer properties popover. */
 .timeline-properties__form {
     display: grid;
@@ -249,4 +279,21 @@
 
 .timeline-properties__slider {
     grid-column: 1 / -1;
+}
+
+/* A reference layer's fields (SE-045): X, Y and Scale in a column, then placement and fit. */
+.timeline-properties__reference {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: var(--space-8);
+    justify-items: end;
+}
+
+.timeline-properties__reference .ui-number {
+    width: 112px;
+}
+
+.timeline-properties__placement,
+.timeline-properties__fit {
+    justify-self: stretch;
 }

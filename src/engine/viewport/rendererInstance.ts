@@ -2,6 +2,7 @@ import { Camera, Frame, WebGPURenderer } from "@ngne/core";
 import type { RendererResourceInspection, RendererStatus } from "@ngne/core";
 import { bitmapFromPixels } from "../bitmaps";
 import { QUAD_LAYER } from "./geometry";
+import type { PixelBuffer } from "../../core/model";
 import type { DeviceSize } from "./types";
 import { ViewportSlots } from "./viewportSlots";
 import type { Scene } from "./viewportSlots";
@@ -40,6 +41,8 @@ export interface InstanceHooks {
     onStuck(instance: RendererInstance): void;
     /** Test hook: when it returns a promise, the upload of `slot` starts after it. */
     gate(slot: string): Promise<void> | undefined;
+    /** Makes the upload source of a reference at a size (SE-045, `ReferenceSources`). */
+    referenceBitmap(image: PixelBuffer, width: number, height: number): Promise<ImageBitmap>;
 }
 
 /** A renderer on its own canvas, with its texture slots. */
@@ -81,6 +84,7 @@ export class RendererInstance {
             onError: (error) => hooks.onError(error),
             onStuck: () => hooks.onStuck(this),
             gate: (slot) => hooks.gate(slot),
+            referenceBitmap: (image, width, height) => hooks.referenceBitmap(image, width, height),
         });
     }
 

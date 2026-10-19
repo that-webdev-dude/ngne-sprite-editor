@@ -2,6 +2,7 @@ import type { PixelBuffer, Rect } from "../../core/model";
 import type { ViewportChecker } from "../../engine/viewport/types";
 import type {} from "../../import-meta";
 import type { OverlayLayer } from "../overlay/types";
+import { activeReferenceCover } from "../references/referenceCover";
 import { viewportLink } from "../viewport/viewportLink";
 import { strokeEcho } from "./strokeEcho";
 import type { StrokeEcho } from "./strokeEcho";
@@ -17,6 +18,33 @@ import type { StrokeEcho } from "./strokeEcho";
 
 /** Order in the overlay's stack: below the outline (100), the grids and the brush cursor. */
 export const STROKE_ECHO_ORDER = 50;
+/**
+ * Where reference layers lie on the canvas while the echo draws (SE-045), in document pixels:
+ * the rectangles of the visible references placed behind the pixel layers and of those in
+ * front. NGNE draws a reference behind under the composite's pixels that are not opaque, and
+ * one in front over everything (SPEC §6.4, quad layers 2 and 6), while the echo is opaque: it
+ * gives way to them. Over a reference in front it draws nothing; over one behind it draws only
+ * opaque pixels, which hide the reference in NGNE as well. NGNE shows the pixels it leaves out
+ * once their upload is drawn.
+ */
+export interface EchoCover {
+    readonly behind: readonly Readonly<Rect>[];
+    readonly front: readonly Readonly<Rect>[];
+}
+
+/** No reference on the canvas. */
+export const NO_COVER: EchoCover = { behind: [], front: [] };
+
+/** The texels a rectangle of document pixels touches, as whole-texel edges. */
+function texelSpan(rect: Readonly<Rect>) {
+    return {
+        left: Math.floor(rect.x),
+        top: Math.floor(rect.y),
+        right: Math.ceil(rect.x + rect.width),
+        bottom: Math.ceil(rect.y + rect.height),
+    };
+}
+
 /** The dark theme's checkerboard, while no viewport has reported one. */
 const DEFAULT_CHECKER: ViewportChecker = { a: 0x3a3a3a, b: 0x4a4a4a, size: 8 };
 
@@ -45,20 +73,33 @@ declare module "../testing/testHooks" {
 
 /**
  * What NGNE shows for the pixels of `rect` of a composite (straight RGBA8) drawn over the
- * checkerboard: opaque RGBA, one pixel per document pixel, row by row.
+ * checkerboard: opaque RGBA, one pixel per document pixel, row by row. A pixel the echo leaves
+ * to NGNE because a reference lies there (`cover`, SE-045) is transparent: any pixel a
+ * reference in front touches, and a pixel that is not opaque where a reference behind touches
+ * it.
  */
 export function echoPixels(
     buffer: PixelBuffer,
     rect: Rect,
     checker: ViewportChecker,
+    cover: EchoCover = NO_COVER,
 ): Uint8ClampedArray<ArrayBuffer> {
     const out = new Uint8ClampedArray(rect.width * rect.height * 4);
     const { size } = checker;
+    const front = cover.front.map(texelSpan);
+    const behind = cover.behind.map(texelSpan);
+    const inside = (spans: typeof front, x: number, y: number) =>
+        spans.some((span) => x >= span.left && x < span.right && y >= span.top && y < span.bottom);
     let at = 0;
     for (let y = rect.y; y < rect.y + rect.height; y++) {
         for (let x = rect.x; x < rect.x + rect.width; x++) {
             const from = (y * buffer.width + x) * 4;
             const alpha = buffer.data[from + 3] ?? 0;
+            if (inside(front, x, y) || (alpha < 255 && inside(behind, x, y))) {
+                // Left transparent: NGNE's reference shows through the overlay.
+                at += 4;
+                continue;
+            }
             const under =
                 (Math.floor(x / size) + Math.floor(y / size)) % 2 === 0 ? checker.a : checker.b;
             const backdrop = [(under >>> 16) & 255, (under >>> 8) & 255, under & 255];
@@ -83,12 +124,14 @@ export interface StrokeEchoLayer {
 
 /**
  * The draw layer of `echo`, drawing over the checkerboard `checker()` names (the one the
- * viewport draws; the dark theme's while there is none). The probe goes on the page with the
- * overlay in development builds.
+ * viewport draws; the dark theme's while there is none), and giving way to the references
+ * `cover()` names (SE-045; none when absent). The probe goes on the page with the overlay in
+ * development builds.
  */
 export function createStrokeEchoLayer(
     echo: StrokeEcho,
     checker: () => ViewportChecker | null,
+    cover: () => EchoCover = () => NO_COVER,
 ): StrokeEchoLayer {
     /** Where a region is put before it is scaled onto the overlay; let go when the echo ends. */
     let scratch: OffscreenCanvas | null = null;
@@ -122,6 +165,7 @@ export function createStrokeEchoLayer(
             const rects = echo.regions().map((region) => region.rect);
             if (rects.length === 0) return;
             const colours = checker() ?? DEFAULT_CHECKER;
+            const references = cover();
             context.imageSmoothingEnabled = false;
             for (const rect of rects) {
                 const { width, height } = rect;
@@ -134,7 +178,11 @@ export function createStrokeEchoLayer(
                 const source = scratch.getContext("2d");
                 if (!source) return;
                 source.putImageData(
-                    new ImageData(echoPixels(target.buffer, rect, colours), width, height),
+                    new ImageData(
+                        echoPixels(target.buffer, rect, colours, references),
+                        width,
+                        height,
+                    ),
                     0,
                     0,
                 );
@@ -166,5 +214,5 @@ export function createStrokeEchoLayer(
 }
 
 export const overlayLayers: OverlayLayer[] = [
-    createStrokeEchoLayer(strokeEcho, () => viewportLink.checker).layer,
+    createStrokeEchoLayer(strokeEcho, () => viewportLink.checker, activeReferenceCover).layer,
 ];

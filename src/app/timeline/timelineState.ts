@@ -25,13 +25,33 @@ export interface DurationEdit {
     readonly frameIds: readonly string[];
 }
 
-/** The layer properties popover (DESIGN §7): what it shows, applied when it closes. */
+/**
+ * The fields of a reference layer in the layer properties popover (DESIGN §7, SE-045): its
+ * position and scale (`ReferenceLayer`), its placement, and the fitted placement Reset to Fit
+ * puts in the fields (null while the source is not decoded).
+ */
+export interface ReferenceDraft {
+    readonly x: number;
+    readonly y: number;
+    /** Document pixels per source pixel. */
+    readonly scale: number;
+    readonly placement: "behind" | "front";
+    readonly fit: { readonly x: number; readonly y: number; readonly scale: number } | null;
+}
+
+/**
+ * The layer properties popover (DESIGN §7): what it shows, applied when it closes. Each kind
+ * of layer adds its own group of fields (`reference` for a reference layer, SE-045); a later
+ * ticket adds a field beside them (the blend mode, SE-061).
+ */
 export interface PropertiesDraft {
     readonly documentId: string;
     readonly layerId: string;
     readonly name: string;
     /** 0..255. */
     readonly opacity: number;
+    /** The fields of a reference layer; null for a pixel layer. */
+    readonly reference: ReferenceDraft | null;
 }
 
 export interface TimelineState {
@@ -95,6 +115,15 @@ export function cancelRename(): void {
 export function editProperties(change: Partial<Pick<PropertiesDraft, "name" | "opacity">>): void {
     const { properties } = timelineStore.getState();
     if (properties) timelineStore.setState({ properties: { ...properties, ...change } });
+}
+
+/** Changes the reference fields of the open popover (SE-045); none for a pixel layer. */
+export function editReferenceProperties(change: Partial<Omit<ReferenceDraft, "fit">>): void {
+    const { properties } = timelineStore.getState();
+    if (!properties?.reference) return;
+    timelineStore.setState({
+        properties: { ...properties, reference: { ...properties.reference, ...change } },
+    });
 }
 
 /** Closes the layer properties popover without applying it. Changes no document. */

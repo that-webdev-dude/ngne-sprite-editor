@@ -2,9 +2,17 @@ import { Popover as RadixPopover } from "radix-ui";
 import { useId, useRef } from "react";
 import { MAX_NAME_LENGTH } from "../../core/model";
 import { TIMELINE_COMMANDS } from "../../app/timeline/timelineCommandIds";
-import { editProperties } from "../../app/timeline/timelineState";
-import type { PropertiesDraft } from "../../app/timeline/timelineState";
+import {
+    MAX_REFERENCE_OFFSET,
+    MAX_REFERENCE_SCALE,
+    MIN_REFERENCE_SCALE,
+} from "../../core/project/format";
+import { editProperties, editReferenceProperties } from "../../app/timeline/timelineState";
+import type { PropertiesDraft, ReferenceDraft } from "../../app/timeline/timelineState";
 import { runCommand } from "../commands/runCommand";
+import { Button } from "../primitives/Button";
+import { NumberField } from "../primitives/NumberField";
+import { SegmentedControl } from "../primitives/SegmentedControl";
 import { Slider } from "../primitives/Slider";
 import "../primitives/popover.css";
 
@@ -17,8 +25,69 @@ export function finishProperties(): void {
     runCommand(TIMELINE_COMMANDS.applyLayerProperties);
 }
 
+/** Scale is shown in percent: document pixels per 100 source pixels. */
+const PERCENT = 100;
+
 /**
- * The layer properties popover (DESIGN §7: name, opacity; the blend mode is SE-061's), beside
+ * The fields of a reference layer (DESIGN §7, SE-045): X and Y of its top-left corner in
+ * document pixels, its scale in percent, its placement, and Reset to Fit, which puts the
+ * fitted values in the fields. Like the name and opacity, they apply when the popover closes.
+ */
+function ReferenceFields({ draft }: { draft: ReferenceDraft }) {
+    const offset = { min: -MAX_REFERENCE_OFFSET, max: MAX_REFERENCE_OFFSET, step: 1, precision: 2 };
+    const { fit } = draft;
+    return (
+        <div className="timeline-properties__reference">
+            <NumberField
+                label="X"
+                unit="px"
+                {...offset}
+                value={draft.x}
+                onChange={(x) => editReferenceProperties({ x })}
+            />
+            <NumberField
+                label="Y"
+                unit="px"
+                {...offset}
+                value={draft.y}
+                onChange={(y) => editReferenceProperties({ y })}
+            />
+            <NumberField
+                label="Scale"
+                unit="%"
+                min={MIN_REFERENCE_SCALE * PERCENT}
+                max={MAX_REFERENCE_SCALE * PERCENT}
+                step={1}
+                precision={4}
+                value={draft.scale * PERCENT}
+                onChange={(percent) => editReferenceProperties({ scale: percent / PERCENT })}
+            />
+            <SegmentedControl
+                className="timeline-properties__placement"
+                label="Placement"
+                value={draft.placement}
+                onChange={(placement) => editReferenceProperties({ placement })}
+                options={[
+                    { value: "behind", label: "Behind" },
+                    { value: "front", label: "In front" },
+                ]}
+            />
+            <Button
+                className="timeline-properties__fit"
+                disabled={!fit}
+                onClick={() => {
+                    if (fit) editReferenceProperties({ x: fit.x, y: fit.y, scale: fit.scale });
+                }}
+            >
+                Reset to Fit
+            </Button>
+        </div>
+    );
+}
+
+/**
+ * The layer properties popover (DESIGN §7: name, opacity; for a reference layer X, Y, scale and
+ * placement, SE-045; the blend mode is SE-061's), beside
  * the row of its layer. What it shows changes no document until it closes — by Enter, Escape
  * or a press outside — and then once, in one undo step. The focus returns to where it was when
  * the popover opened, or to `fallback` when that is gone (a menu item).
@@ -90,6 +159,7 @@ export function LayerProperties({ draft, fallback }: { draft: PropertiesDraft; f
                         value={draft.opacity}
                         onChange={(opacity) => editProperties({ opacity })}
                     />
+                    {draft.reference ? <ReferenceFields draft={draft.reference} /> : null}
                 </form>
             </RadixPopover.Content>
         </RadixPopover.Portal>

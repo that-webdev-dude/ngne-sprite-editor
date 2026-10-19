@@ -13,10 +13,12 @@ import {
     setLayerVisibleCommand,
 } from "../../core/layers";
 import type { Layer } from "../../core/model";
+import { fitToCanvas, setReferenceCommand } from "../../core/references";
 import { appCommands } from "../commands/appCommands";
 import type { CommandSpec } from "../commands/types";
 import type { OpenDocument } from "../state/sessions";
-import { effectiveSelection, gridOrder, targetLayerIds } from "./selection";
+import { referenceSourceSize } from "../references/references";
+import { effectiveSelection, rowOrder, targetLayerIds } from "./selection";
 import { TIMELINE_COMMANDS as IDS } from "./timelineCommandIds";
 import {
     activateCel,
@@ -26,6 +28,7 @@ import {
     settledDocumentOf,
 } from "./timelineDocument";
 import { setTimelineVisible, timelineStore } from "./timelineState";
+import type { PropertiesDraft } from "./timelineState";
 
 // Layer commands of the timeline (SPEC §7.3, §7.8; SE-022): new, duplicate and delete take
 // the Layer menu items planned for them; New Layer is Shift+N. Layer Properties… opens the
@@ -34,6 +37,9 @@ import { setTimelineVisible, timelineStore } from "./timelineState";
 // of the active layer, as a double-click on its name does (Apply Layer Name ends it). Show /
 // Hide and Lock / Unlock act on the layer whose row button ran them, otherwise on the active
 // layer. ↑ and ↓ in the timeline make the layer above or below active (Move the active cell).
+// Reference layers (SE-045) take the same commands but Duplicate Layer; their popover adds X,
+// Y, scale and placement, applied in the same undo step. ↑ and ↓ go on from the bottom pixel
+// layer into the Reference group under it.
 //
 // Every command that changes the document applies a floating selection first and does
 // nothing during a stroke (`timelineDocument.ts`). Apply Layer Name and Apply Layer Properties
@@ -57,13 +63,16 @@ function layerOf(document: OpenDocument, layerId: string): Layer | undefined {
     return document.session.doc.layers.find((layer) => layer.id === layerId);
 }
 
-/** The pixel layer a layer command acts on: the row's (`layerTarget`) or the active one. */
+/**
+ * The layer a layer command acts on: the row's (`layerTarget`) or the active one, a pixel or a
+ * reference layer.
+ */
 function subjectLayer(): { document: OpenDocument; layer: Layer } | null {
     const document = availableDocument();
     if (!document) return null;
     const id = timelineStore.getState().layerTarget ?? document.session.activeLayerId;
     const layer = layerOf(document, id);
-    return layer?.kind === "pixel" ? { document, layer } : null;
+    return layer ? { document, layer } : null;
 }
 
 function selectionOf(document: OpenDocument) {
@@ -115,6 +124,13 @@ function openProperties(): void {
     const subject = subjectLayer();
     if (!subject) return;
     const { document, layer } = subject;
+    let reference: PropertiesDraft["reference"] = null;
+    if (layer.kind === "reference") {
+        const size = referenceSourceSize(document, layer);
+        const { x, y, scale, placement } = layer;
+        const fit = size ? fitToCanvas(document.session.doc, size.width, size.height) : null;
+        reference = { x, y, scale, placement, fit };
+    }
     setTimelineVisible(true);
     timelineStore.setState({
         rename: null,
@@ -123,13 +139,15 @@ function openProperties(): void {
             layerId: layer.id,
             name: layer.name,
             opacity: layer.opacity,
+            reference,
         },
     });
 }
 
 /**
- * Apply Layer Properties: closes the popover; its name and opacity become one undo step of
- * the layer's document, or none when neither changed. A name that is empty after trimming is
+ * Apply Layer Properties: closes the popover; its name and opacity (and a reference layer's
+ * X, Y, scale and placement) become one undo step of the layer's document, or none when
+ * nothing changed. A name that is empty after trimming is
  * not applied (the layer keeps its name). While the document cannot take the edit, the popover
  * stays open with what it shows.
  */
@@ -149,6 +167,12 @@ function applyProperties(): void {
     }
     const opacity = setLayerOpacityCommand(session, layer.id, properties.opacity);
     if (opacity) edits.push(opacity);
+    const { reference } = properties;
+    if (reference && layer.kind === "reference") {
+        const { x, y, scale, placement } = reference;
+        const placed = setReferenceCommand(session, layer.id, { x, y, scale, placement });
+        if (placed) edits.push(placed);
+    }
     const [first] = edits;
     if (!first) return;
     document.history.execute(
@@ -190,11 +214,14 @@ function applyRename(): void {
     if (command) document.history.execute(command);
 }
 
-/** The pixel layer `step` rows above (1) or below (-1) the active one, if there is one. */
+/**
+ * The layer `step` rows above (1) or below (-1) the active one, if there is one: the rows of
+ * the pixel layers, then those of the Reference group (`rowOrder`).
+ */
 function neighbourLayer(step: 1 | -1): string | null {
     const document = availableDocument();
     if (!document) return null;
-    const { layerIds } = gridOrder(document.session.doc);
+    const layerIds = rowOrder(document.session.doc);
     const index = layerIds.indexOf(document.session.activeLayerId);
     if (index === -1) return null;
     return layerIds[index + step] ?? null;

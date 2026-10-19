@@ -494,6 +494,24 @@ Texture slots (IDs are fixed for the life of a renderer)
   drawn from `ed:play` is reported as drawn with its key and the grid's version (`onDrawn`), so
   the stroke echo (§6.6) clears as it does for a frame slot.
 
+Reference slots (SE-045; §7.6):
+- The app decodes a source once (`app/references/referenceImages`) and gives the viewport the
+  visible reference layers of the shown document whose source is decoded
+  (`NgneViewport.setReferences`). The viewport keeps a slot per layer while the layer is given,
+  and puts the 1×1 image in a slot when its layer goes (deleted, hidden, another document).
+- Each decoded source becomes its display source once (≤ 4096 px per side, a high-quality
+  downscale); an upload is the display source resampled to the reference's device rectangle,
+  `[round(originX + x × zoom), round(originY + y × zoom)]` to the rounded far edges, so a
+  texel lands on a device pixel. When that rectangle is larger than the display source on
+  either side, the display source is uploaded as is. Above 16 MP (4096 × 4096 texels) in all,
+  every reference's size is scaled by one factor.
+- A layer whose slot holds nothing of its image is uploaded at once; a new size on screen (a
+  zoom, a new scale) is uploaded once it has held for 100 ms, and until then the texture
+  uploaded before is drawn over the new rectangle. A slot is drawn only when its published
+  texture is of the layer's own image in this document. The quad is clipped to the document
+  rectangle (UV sub-rectangle) and drawn with `alpha` = opacity / 255 at layer 2 or 6. The
+  viewport is not settled while a resample waits.
+
 Quad order (NGNE `layer` value): 0 workspace colour · 1 checkerboard · 2 references placed
 behind · 3 onion skins behind · 4 current frame · 5 onion skins in front · 6 references placed
 in front. Tiled mode draws the current frame slot nine times. The workspace colour is a rect
@@ -1265,6 +1283,38 @@ Recorded by SE-024 (playback; the display path is in §6.4):
   to 16 MP; larger requests are scaled down proportionally.
 - Sprite operations: canvas size, crop, trim and sprite size adjust `x`, `y` and `scale` so the
   reference stays over the same content. Flip and rotate canvas leave reference layers untouched.
+
+Recorded by SE-045 (`core/references`, `app/references`; the display path is in §6.4):
+
+- A new reference layer is visible, unlocked, at opacity 128, behind, fitted inside the canvas
+  ("contain") and centred, named after its file without `.png` ("Reference" through the app
+  function). It goes directly above the topmost reference layer in the stack, or to the bottom
+  when there is none, and the active layer stays active. The source bytes go into the
+  document's store before the step, and stay there after a delete or an undo, so a redo finds
+  them; Save writes only the sources a layer names (§10).
+- Layer → New Reference Layer from File… opens a file input for one PNG. A fifth reference
+  layer is refused before the picker opens, and again once the file is decoded, by the error
+  toast "A sprite can have at most four reference layers."; the document is unchanged. A file
+  that is not a PNG, larger than 64 MiB (FORMAT §1.8), or a document that was closed or began
+  a stroke meanwhile, is reported as "Could not add the reference layer. <reason>".
+  `addReferenceLayerFromPng(bytes, { documentId, name, rect })` is the same path for SE-044
+  (`rect`: fitted and centred in the cropped region instead of the canvas), and
+  `changeReference(layerId, change)` sets position, scale and placement in one step (SE-046).
+- Every change is one undo step: add; position, scale and placement (one step for any of them
+  together, `setReferenceCommand`); Reset Reference to Fit (the canvas fit again, placement
+  kept); and the layer commands, which take reference layers: rename, visibility, lock,
+  opacity, delete (not Duplicate). Position and scale are bounded as a file holds them
+  (FORMAT §1.8). A change of position, scale or placement names the layer and no frame in
+  `touched`; adding one changes the structure.
+- Layer menu: New Reference Layer from File… (planned item), then after Layer Properties…
+  Reset Reference to Fit and the placement toggle ("Move Reference in Front of Layers" /
+  "Move Reference Behind Layers"). They act on the reference layer of the row that ran them,
+  otherwise on the active layer when it is a reference layer.
+- Stroke echo (§6.6; the SE-015 review): the echo gives way to references. Over a visible
+  reference placed in front it draws nothing, and over one placed behind it draws only the
+  composite's opaque pixels, which hide the reference in NGNE as well; the pixels it leaves out
+  (transparent and translucent ones, the eraser's) show through NGNE once their upload is
+  drawn. A texel counts as covered when the reference's rectangle touches it.
 
 ### 7.7 Sprite operations
 

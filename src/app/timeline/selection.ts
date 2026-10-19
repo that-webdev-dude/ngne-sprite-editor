@@ -60,14 +60,25 @@ export interface GridOrder {
 }
 
 /**
- * The rows and columns of the timeline grid. Reference layers have no cels and are no row of
- * the grid (SPEC §7.6; their group is SE-045's).
+ * The rows and columns of the timeline grid's cels. Reference layers have no cels: their rows,
+ * in a group of their own under the pixel layers (SE-045), are not part of a cel or a layer
+ * range.
  */
 export function gridOrder(doc: SpriteDoc): GridOrder {
     return {
         layerIds: doc.layers.filter((layer) => layer.kind === "pixel").map((layer) => layer.id),
         frameIds: doc.frames.map((frame) => frame.id),
     };
+}
+
+/**
+ * Every row of the timeline from the bottom up (SE-045): the reference layers, bottom to top,
+ * under the pixel layers, bottom to top, as the panel lists them top first. What ↑ and ↓ walk.
+ */
+export function rowOrder(doc: SpriteDoc): string[] {
+    const ids = (kind: string) =>
+        doc.layers.filter((layer) => layer.kind === kind).map((layer) => layer.id);
+    return [...ids("reference"), ...ids("pixel")];
 }
 
 const sameCel = (a: CelRef, b: CelRef) => a.layerId === b.layerId && a.frameId === b.frameId;

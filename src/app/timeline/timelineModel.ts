@@ -36,6 +36,22 @@ export interface TimelineLayer {
     readonly key: string;
 }
 
+/**
+ * A reference layer as its row in the Reference group shows it (DESIGN §5.6, SE-045): no
+ * cels, the header's controls only.
+ */
+export interface TimelineReference {
+    readonly id: string;
+    readonly name: string;
+    readonly visible: boolean;
+    readonly locked: boolean;
+    /** 0..255. */
+    readonly opacity: number;
+    readonly placement: "behind" | "front";
+    /** Changes whenever anything above changes: what a row is rendered again for. */
+    readonly key: string;
+}
+
 /** A tag as the tag bar shows it (DESIGN §5.6, SE-023). */
 export interface TimelineTag {
     readonly id: string;
@@ -67,6 +83,11 @@ export interface TimelineModel {
     readonly frames: readonly TimelineFrame[];
     /** The pixel layers, top of the stack first: the order of the rows. */
     readonly layers: readonly TimelineLayer[];
+    /**
+     * The reference layers, top of the stack first: the rows of the Reference group under the
+     * pixel layers (SE-045).
+     */
+    readonly references: readonly TimelineReference[];
     readonly activeLayerId: string;
     readonly activeFrameId: string;
     readonly tags: TimelineTags;
@@ -97,9 +118,15 @@ export function timelineModel(documentId: string, session: DocSession): Timeline
     for (const cel of doc.cels.values()) users.set(cel.imageId, (users.get(cel.imageId) ?? 0) + 1);
 
     const layers: TimelineLayer[] = [];
+    const references: TimelineReference[] = [];
     for (let index = doc.layers.length - 1; index >= 0; index--) {
         const layer = doc.layers[index];
-        if (layer.kind !== "pixel") continue;
+        if (layer.kind === "reference") {
+            const { id, name, visible, locked, opacity, placement } = layer;
+            const key = `${JSON.stringify([id, name])}${+visible}${+locked}:${opacity}:${placement}`;
+            references.push({ id, name, visible, locked, opacity, placement, key });
+            continue;
+        }
         const images = doc.frames.map((frame) => celAt(doc, layer.id, frame.id)?.imageId ?? null);
         const cels = images.map((imageId): CelState => {
             if (imageId === null) return "empty";
@@ -118,6 +145,7 @@ export function timelineModel(documentId: string, session: DocSession): Timeline
         documentId,
         frames: doc.frames.map(({ id, durationMs }) => ({ id, durationMs })),
         layers,
+        references,
         activeLayerId: session.activeLayerId,
         activeFrameId: session.activeFrameId,
         tags: timelineTags(doc, session.activeFrameId),
@@ -138,6 +166,8 @@ function sameModel(a: TimelineModel, b: TimelineModel): boolean {
         ) &&
         a.layers.length === b.layers.length &&
         a.layers.every((layer, index) => layer.key === b.layers[index]?.key) &&
+        a.references.length === b.references.length &&
+        a.references.every((layer, index) => layer.key === b.references[index]?.key) &&
         a.tags.key === b.tags.key
     );
 }

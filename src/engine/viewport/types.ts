@@ -39,6 +39,29 @@ export interface ViewportDocument {
     version?(key: string): number;
 }
 
+/**
+ * A reference layer as the viewport draws it (SPEC §7.6, SE-045): only visible ones are
+ * given. The viewport resamples `image` on the CPU to its size on screen and draws it at
+ * `layer` 2 (behind) or 6 (front) with `opacity`, clipped to the document rectangle.
+ */
+export interface ViewportReference {
+    /** The layer's ID: the viewport keeps a texture slot per layer. */
+    readonly id: string;
+    /**
+     * The decoded source, straight RGBA8. The same object while the source is the same: the
+     * viewport keeps what it made of it by identity and never writes to it.
+     */
+    readonly image: PixelBuffer;
+    /** Top-left in document pixels (fractional allowed). */
+    readonly x: number;
+    readonly y: number;
+    /** Document pixels per source pixel. */
+    readonly scale: number;
+    /** 0..255. */
+    readonly opacity: number;
+    readonly placement: "behind" | "front";
+}
+
 /** View state of SPEC §6.4, in device pixels. */
 export interface ViewportView {
     /** Device pixels per document pixel. */
@@ -85,4 +108,9 @@ export interface ViewportPort {
      * without playback (a test's) need not have it.
      */
     setPlayback?(keys: readonly string[] | null): void;
+    /**
+     * The visible reference layers of the document on show, bottom to top (SE-045). Optional,
+     * so a port without references (a test's) need not have it.
+     */
+    setReferences?(references: readonly ViewportReference[]): void;
 }

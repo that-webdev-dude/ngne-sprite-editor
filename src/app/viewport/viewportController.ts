@@ -2,10 +2,12 @@ import type { StoreApi } from "zustand/vanilla";
 import { frameIndex } from "../../core/model";
 import type { DocSession } from "../../core/model";
 import { frameKey, parseFrameKey } from "../../engine/viewport/types";
-import type { ViewportChecker, ViewportPort } from "../../engine/viewport/types";
+import type { ViewportChecker, ViewportPort, ViewportReference } from "../../engine/viewport/types";
 import { playbackStore } from "../playback/playbackState";
 import type { PlaybackState } from "../playback/playbackState";
 import { preferences as appPreferences } from "../preferences/preferences";
+import { referenceImages as appReferenceImages } from "../references/referenceImages";
+import type { ReferenceImages } from "../references/referenceImages";
 import type { PreferenceStore } from "../preferences/preferences";
 import { activeComposites } from "../state/composites";
 import type { ActiveComposites } from "../state/composites";
@@ -57,6 +59,12 @@ export interface ViewportSources {
      * playing range (`ViewportPort.setPlayback`); none when absent.
      */
     playback?: StoreApi<PlaybackState>;
+    /**
+     * The decoded reference images (SE-045): the visible reference layers of the shown
+     * document whose source is decoded are drawn (`ViewportPort.setReferences`); none when
+     * absent.
+     */
+    referenceImages?: ReferenceImages;
 }
 
 /** The sources of the app's viewport: its stores, its composite cache and `viewportLink`. */
@@ -67,6 +75,7 @@ export function appViewportSources(): ViewportSources {
         composites: activeComposites,
         version: () => viewportLink.version,
         playback: playbackStore,
+        referenceImages: appReferenceImages,
     };
 }
 
@@ -143,6 +152,29 @@ export function connectViewport(
         viewport.setPlayback?.(frames ? frames.map((id) => frameKey(id)) : null);
     };
 
+    /**
+     * The visible reference layers of the shown document with a decoded source, bottom to
+     * top (SE-045). The viewport compares them with what it has, so an unchanged list costs a
+     * comparison.
+     */
+    const images = sources.referenceImages;
+    const pushReferences = () => {
+        if (!images || !viewport.setReferences) return;
+        const document = activeDocument(sessions.getState());
+        const references: ViewportReference[] = [];
+        if (document && document.session === shown) {
+            for (const layer of document.session.doc.layers) {
+                if (layer.kind !== "reference" || !layer.visible) continue;
+                const bytes = document.referenceSources.get(layer.sourceId);
+                const image = bytes ? images.get(bytes) : null;
+                if (!image) continue;
+                const { id, x, y, scale, opacity, placement } = layer;
+                references.push({ id, image, x, y, scale, opacity, placement });
+            }
+        }
+        viewport.setReferences(references);
+    };
+
     const follow = () => {
         const document = activeDocument(sessions.getState());
         // The session object, not the id: the same file opened again is another session.
@@ -150,7 +182,10 @@ export function connectViewport(
             show(document);
             followPlayback();
         }
-        if (!document) return;
+        if (!document) {
+            pushReferences();
+            return;
+        }
         const active = document.session.activeFrameId;
         if (active !== frameId) {
             frameId = active;
@@ -160,6 +195,7 @@ export function connectViewport(
             view = document.view;
             viewport.setView(view);
         }
+        pushReferences();
     };
 
     viewport.setBackground(theme.workspace);
@@ -167,6 +203,7 @@ export function connectViewport(
     follow();
     const stopSessions = sessions.subscribe(follow);
     const stopPlayback = sources.playback?.subscribe(followPlayback) ?? (() => {});
+    const stopImages = images?.subscribe(pushReferences) ?? (() => {});
     const stopPreferences = preferences.subscribe((key) => {
         if (key === "checkerboard") pushChecker();
     });
@@ -185,6 +222,7 @@ export function connectViewport(
         dispose() {
             stopSessions();
             stopPlayback();
+            stopImages();
             stopPreferences();
             stopComposites();
             shown = null;

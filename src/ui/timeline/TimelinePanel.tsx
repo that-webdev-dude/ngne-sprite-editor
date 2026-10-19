@@ -9,7 +9,7 @@ import { TIMELINE_COMMANDS } from "../../app/timeline/timelineCommandIds";
 import { useTimelineState } from "../../app/timeline/timelineState";
 import { runCommand } from "../commands/runCommand";
 import { finishProperties, LayerProperties } from "./LayerProperties";
-import { LayerRow } from "./LayerRow";
+import { LayerRow, ReferenceRow } from "./LayerRow";
 import { TagBar } from "./TagBar";
 import {
     activeCell,
@@ -216,6 +216,36 @@ export function TimelinePanel() {
                             onRenameEnd={focusActive}
                         />
                     ))}
+                    {model.references.length > 0 ? (
+                        // The Reference group (SE-045): under the pixel layers, top first.
+                        <div
+                            className="timeline__references"
+                            role="rowgroup"
+                            aria-label="Reference"
+                        >
+                            <div className="timeline__group-label" aria-hidden="true">
+                                Reference
+                            </div>
+                            {model.references.map((layer) => (
+                                <ReferenceRow
+                                    key={layer.id}
+                                    layer={layer}
+                                    frameCount={frameIds.length}
+                                    tinted={layer.id === model.activeLayerId}
+                                    focusRow={layer.id === liveLayerId}
+                                    frameId={
+                                        live?.documentId === model.documentId
+                                            ? live.frameId
+                                            : model.activeFrameId
+                                    }
+                                    selection={current}
+                                    renaming={renaming?.layerId === layer.id ? renaming.name : null}
+                                    onHeaderPress={focusActive}
+                                    onRenameEnd={focusActive}
+                                />
+                            ))}
+                        </div>
+                    ) : null}
                 </div>
                 {editing ? <LayerProperties draft={editing} fallback={focusActive} /> : null}
             </RadixPopover.Root>

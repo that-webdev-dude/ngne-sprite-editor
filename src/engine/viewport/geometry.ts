@@ -42,6 +42,8 @@ export interface Quad {
     v?: number;
     uw?: number;
     vh?: number;
+    /** NGNE's `alpha`, 0 to 1; opaque when absent. A reference's opacity (SE-045). */
+    alpha?: number;
 }
 
 /**

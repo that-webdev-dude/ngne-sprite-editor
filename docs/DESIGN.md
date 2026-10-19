@@ -331,6 +331,23 @@ Behaviour (SE-022):
 - Tab (viewport focused) and View → Hide Timeline hide the panel; the viewport takes its rows.
   The panel is shown again at every start.
 
+Reference group (SE-045; SPEC §7.6):
+
+- Under the pixel layers, while the document has reference layers: the label "Reference" in
+  the layer column (`--text-muted`, label size), then one row per reference layer, top of the
+  stack first, in a row group named "Reference". A row's header is a pixel layer's: visibility,
+  lock, name (double-click renames) and opacity, which opens the layer properties popover. The
+  rest of the row is one cell across the frame columns, since a reference layer has no cels;
+  it names the placement ("Behind", "In front").
+- A press on the header or the cell makes the reference layer the active layer (and selects
+  it); while it is, that cell is the grid's tab stop and its header's controls are in the tab
+  order, as for the active pixel row. ↓ from the bottom pixel layer goes on into the group, ↑
+  from its top row back. Delete Layer deletes it; Duplicate Layer is disabled.
+- The layer properties popover of a reference layer adds, after name and opacity: X and Y (px,
+  two decimals), Scale (%, four decimals), Placement (Behind / In front) and Reset to Fit,
+  which puts the fitted values in the fields. They apply with name and opacity when the
+  popover closes, in one undo step.
+
 Playback (SE-024; SPEC §7.5):
 
 - The play button is Play / Pause: a play icon named "Play" ("Play at 2×" at another speed
