@@ -1464,14 +1464,19 @@ Recorded by SE-046 (`app/references/referenceMove`, `referenceTransform`, `refer
   "Layer is locked", a hidden one with "Layer is hidden"; nothing moves.
 - A corner drag keeps the opposite corner where it is. Its factor is that of the axis farther
   from 1, as a corner with Shift scales a floating selection (SE-033). The scale stops at a
-  longer side of one document pixel and at `MAX_REFERENCE_SCALE`, the position at
-  ±`MAX_REFERENCE_OFFSET` (FORMAT §1.8): clamped during the drag, never refused.
+  longer side of one document pixel (or at the layer's own scale when that is smaller
+  already) and at `MAX_REFERENCE_SCALE`, the position at ±`MAX_REFERENCE_OFFSET` (FORMAT
+  §1.8): clamped during the drag, never refused. With the scale unchanged nothing moves, so a
+  click on a corner records nothing.
 - While the drag lasts the document is unchanged: the viewport and the overlay show the layer
   where the drag has it (`referencePreview`). The release records it as one step, "Move
   Reference" or "Scale Reference", with the position and scale shown (an undo during the drag
   acts on the document as it is, and the release records from there); a drag that ends where
   it began records nothing. Escape or a pointer cancel shows the layer as before and records
-  nothing. A layer locked during the drag is refused at the release with the lock's reason.
+  nothing. A layer locked or hidden during the drag is refused at the release with the
+  reason a press gets; another layer made active during the drag cancels it (shown as before,
+  nothing recorded). The box stays while a held key or a tool key changes the active tool
+  before the release.
 
 ### 7.7 Sprite operations
 

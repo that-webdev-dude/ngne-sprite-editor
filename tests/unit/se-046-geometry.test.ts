@@ -109,6 +109,30 @@ describe("scaleReferenceFrom", () => {
         expect(() => assertReferenceChange(large)).not.toThrow();
     });
 
+    it("returns the start itself with no travel, also where the corners' positions round (review A)", () => {
+        const fitted = [
+            { x: 0, y: 1.7333333333333343, scale: 0.5333333333333332 },
+            START,
+            { x: 3.55e-15, y: 0.1, scale: 1 / 3 },
+        ];
+        for (const start of fitted) {
+            for (const id of REFERENCE_CORNERS) {
+                expect(scaleReferenceFrom(start, SIZE, id, 0, 0), id).toBe(start);
+            }
+        }
+    });
+
+    it("keeps a scale already below the minimum at a press, and lets it grow (review B)", () => {
+        const tiny = { x: 4, y: 5, scale: MIN_REFERENCE_SCALE * 10 };
+        expect(tiny.scale).toBeLessThan(minimumReferenceScale(SIZE));
+        for (const id of REFERENCE_CORNERS) {
+            expect(scaleReferenceFrom(tiny, SIZE, id, 0, 0), id).toBe(tiny);
+        }
+        // Smaller still is not taken; larger is.
+        expect(scaleReferenceFrom(tiny, SIZE, "se", -1, -1).scale).toBe(tiny.scale);
+        expect(scaleReferenceFrom(tiny, SIZE, "se", 1, 0).scale).toBeGreaterThan(tiny.scale);
+    });
+
     it("keeps the position within a file's bounds when the opposite corner would leave them", () => {
         const far = { x: MAX_REFERENCE_OFFSET - 1, y: 0, scale: 1 };
         const after = scaleReferenceFrom(far, SIZE, "nw", -1e9, 0);

@@ -29,15 +29,33 @@ export function createReferencePreview(): ReferencePreviewStore {
 export const referencePreview: ReferencePreviewStore = createReferencePreview();
 
 /**
- * The position and scale `layer` of `session` is shown at: those of `preview` while it names
- * that layer of that session, the layer's own otherwise.
+ * Whether `preview` shows `layerId` of `session`: it names them, and that layer is still the
+ * active one (another made active cancels the drag, SE-046 review E, so it is shown as the
+ * document has it at once).
+ */
+export function previews(
+    preview: ReferencePreview | null,
+    session: DocSession,
+    layerId: string,
+): preview is ReferencePreview {
+    return (
+        !!preview &&
+        preview.session === session &&
+        preview.layerId === layerId &&
+        session.activeLayerId === layerId
+    );
+}
+
+/**
+ * The position and scale `layer` of `session` is shown at: those of `preview` while it shows
+ * that layer (`previews`), the layer's own otherwise.
  */
 export function shownGeometry(
     preview: ReferencePreview | null,
     session: DocSession,
     layer: Pick<ReferenceLayer, "id" | "x" | "y" | "scale">,
 ): { x: number; y: number; scale: number } {
-    if (preview && preview.session === session && preview.layerId === layer.id) {
+    if (previews(preview, session, layer.id)) {
         return { x: preview.x, y: preview.y, scale: preview.scale };
     }
     return { x: layer.x, y: layer.y, scale: layer.scale };

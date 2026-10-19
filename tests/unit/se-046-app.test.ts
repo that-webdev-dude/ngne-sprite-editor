@@ -80,6 +80,10 @@ describe("connectViewport: a reference layer during a drag", () => {
             { id: "ref-2", x: 2, y: 0, scale: 1 },
         ]);
 
+        // The Move tool drags the active layer.
+        const pixelLayer = session.activeLayerId;
+        session.activeLayerId = "ref-2";
+        sessions.getState().touch(document.id);
         preview.setState({ session, layerId: "ref-2", x: 5.5, y: -1, scale: 0.5 });
         expect(at()).toEqual([
             { id: "ref-1", x: 2, y: 0, scale: 1 },
@@ -97,7 +101,17 @@ describe("connectViewport: a reference layer during a drag", () => {
             { id: "ref-1", x: 2, y: 0, scale: 1 },
             { id: "ref-2", x: 2, y: 0, scale: 1 },
         ]);
+        session.activeLayerId = "ref-1";
+        sessions.getState().touch(document.id);
         preview.setState({ session, layerId: "ref-1", x: 3, y: 1, scale: 2 });
+        expect(at()[0]).toEqual({ id: "ref-1", x: 3, y: 1, scale: 2 });
+        // Another layer made active cancels the drag: shown as the document has it at once,
+        // before the tool hears of it (SE-046 review E).
+        session.activeLayerId = pixelLayer;
+        sessions.getState().touch(document.id);
+        expect(at()[0]).toEqual({ id: "ref-1", x: 2, y: 0, scale: 1 });
+        session.activeLayerId = "ref-1";
+        sessions.getState().touch(document.id);
         expect(at()[0]).toEqual({ id: "ref-1", x: 3, y: 1, scale: 2 });
         preview.setState(null, true);
         expect(at()[0]).toEqual({ id: "ref-1", x: 2, y: 0, scale: 1 });
@@ -181,17 +195,38 @@ describe("the reference box on the overlay", () => {
             "lineTo 63.5 39.5",
             "lineTo -0.5 39.5",
         ]);
-        // Four handles, each a dark square and a light one inside it: the corners.
-        expect(calls.filter((call) => call.startsWith("rect"))).toEqual([
-            "rect -3 5 7 7",
-            "rect 61 5 7 7",
-            "rect 61 37 7 7",
-            "rect -3 37 7 7",
-            "rect -2 6 5 5",
-            "rect 62 6 5 5",
-            "rect 62 38 5 5",
-            "rect -2 38 5 5",
-        ]);
+        // Four handles, each a dark square and a light one inside it, on the corners; none on
+        // the middles of the sides. Their sizes are the transform box's (SE-033), not pinned.
+        const centres = calls
+            .filter((call) => call.startsWith("rect"))
+            .map((call) => {
+                const [x, y, w, h] = call.split(" ").slice(1).map(Number) as [
+                    number,
+                    number,
+                    number,
+                    number,
+                ];
+                return { x: x + w / 2, y: y + h / 2 };
+            });
+        expect(centres).toHaveLength(8);
+        const near = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+            Math.abs(a.x - b.x) <= 1 && Math.abs(a.y - b.y) <= 1;
+        for (const corner of [
+            { x: 0, y: 8 },
+            { x: 64, y: 8 },
+            { x: 64, y: 40 },
+            { x: 0, y: 40 },
+        ]) {
+            expect(centres.filter((centre) => near(centre, corner))).toHaveLength(2);
+        }
+        for (const middle of [
+            { x: 32, y: 8 },
+            { x: 64, y: 24 },
+            { x: 32, y: 40 },
+            { x: 0, y: 24 },
+        ]) {
+            expect(centres.filter((centre) => near(centre, middle))).toHaveLength(0);
+        }
 
         // A drag shows where it takes the layer: one redraw per change of the box, none for
         // a change of the document that leaves it as it is (SE-013: NGNE draws pixels).
@@ -210,6 +245,16 @@ describe("the reference box on the overlay", () => {
             "lineTo 39.5 27.5",
             "lineTo 7.5 27.5",
         ]);
+        // Space (the hand) or a tool key during the drag: the box stays while it lasts
+        // (SE-046 review D).
+        tool = "hand";
+        expect(outline(frame())).toEqual([
+            "moveTo 7.5 11.5",
+            "lineTo 39.5 11.5",
+            "lineTo 39.5 27.5",
+            "lineTo 7.5 27.5",
+        ]);
+        tool = MOVE_TOOL_ID;
         stop();
         preview.setState(null, true);
 

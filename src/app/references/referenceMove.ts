@@ -23,7 +23,8 @@ import type { ReferenceCorner, SourceSize } from "./referenceTransform";
 // step ("Move Reference" or "Scale Reference"); a drag that ends where it began records
 // nothing, and Escape or a pointer cancel puts the layer back as it was shown before. A locked
 // or hidden reference layer does not move, and the status bar says why, with the paint tools'
-// messages ("Layer is locked", "Layer is hidden").
+// messages ("Layer is locked", "Layer is hidden"); so is one locked or hidden during the
+// drag, at the release. Another layer made active during the drag cancels it.
 
 /** The labels of the steps a drag records. */
 export const MOVE_REFERENCE_LABEL = "Move Reference";
@@ -113,8 +114,22 @@ export function createReferenceMove(sources: ReferenceMoveSources = {}): Referen
         }
     };
 
-    const follow = (context: ToolContext, pointer: ToolPointer) => {
+    /**
+     * The drag of `context`, while the layer it drags is still the active one. Another layer
+     * made active meanwhile cancels it: the layer is shown as before and nothing is recorded
+     * (SE-046 review E).
+     */
+    const dragOf = (context: ToolContext): ReferenceDrag | null => {
         const drag = drags.get(context);
+        if (!drag) return null;
+        if (context.session.activeLayerId === drag.layerId) return drag;
+        drags.delete(context);
+        hide(context, drag);
+        return null;
+    };
+
+    const follow = (context: ToolContext, pointer: ToolPointer) => {
+        const drag = dragOf(context);
         if (!drag) return;
         const next =
             drag.corner && drag.size
@@ -176,27 +191,39 @@ export function createReferenceMove(sources: ReferenceMoveSources = {}): Referen
         follow,
         release(context, pointer) {
             follow(context, pointer);
-            const drag = drags.get(context);
+            const drag = dragOf(context);
             if (!drag) return;
             drags.delete(context);
             const { start, now } = drag;
             const moved = now.x !== start.x || now.y !== start.y || now.scale !== start.scale;
-            // The placement shown is the one recorded, all of it: an undo during the drag may
-            // have changed the layer since the press. The step first, then the preview goes,
-            // so the layer is shown where it was dropped throughout.
-            const result = moved
-                ? change(
-                      context,
-                      drag.layerId,
-                      { x: now.x, y: now.y, scale: now.scale },
-                      drag.corner ? SCALE_REFERENCE_LABEL : MOVE_REFERENCE_LABEL,
-                  )
-                : { changed: false };
-            hide(context, drag);
+            let result: ReferenceChangeResult = { changed: false };
+            try {
+                const layer = context.session.doc.layers.find((entry) => entry.id === drag.layerId);
+                if (!moved) {
+                    // Nothing to record.
+                } else if (layer?.kind === "reference" && !layer.visible) {
+                    // Hidden during the drag: refused as a press on a hidden layer is (review E).
+                    result = { changed: false, refused: PAINT_REFUSED.hidden };
+                } else {
+                    // The placement shown is the one recorded, all of it: an undo during the
+                    // drag may have changed the layer since the press. The step first, then the
+                    // preview goes, so the layer is shown where it was dropped throughout.
+                    result = change(
+                        context,
+                        drag.layerId,
+                        { x: now.x, y: now.y, scale: now.scale },
+                        drag.corner ? SCALE_REFERENCE_LABEL : MOVE_REFERENCE_LABEL,
+                    );
+                }
+            } finally {
+                // Also when the change throws: the preview never outlives its drag (review C).
+                hide(context, drag);
+            }
             if (result.refused) context.feedback(result.refused);
         },
         cancel(context) {
-            const drag = drags.get(context);
+            // `dragOf` hides a drag whose layer is no longer active itself.
+            const drag = dragOf(context);
             if (!drag) return;
             drags.delete(context);
             hide(context, drag);

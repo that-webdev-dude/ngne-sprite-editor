@@ -87,8 +87,9 @@ export function minimumReferenceScale(size: SourceSize): number {
  * at its own position, the pointer now `dx`, `dy` document pixels from where it was pressed:
  * one scale for both sides, about the opposite corner, which stays where it is. The factor is
  * that of the axis farther from 1, as a corner with Shift scales a floating selection
- * (SE-033); the scale is kept from `minimumReferenceScale` to `MAX_REFERENCE_SCALE`, and the
- * position within the bounds of a file (only there can the opposite corner move).
+ * (SE-033); the scale is kept from `minimumReferenceScale` (or `start.scale`, when that is
+ * smaller) to `MAX_REFERENCE_SCALE`, and the position within the bounds of a file (only there
+ * can the opposite corner move). When the scale stays, `start` itself is returned.
  */
 export function scaleReferenceFrom(
     start: ReferencePlacement,
@@ -100,19 +101,25 @@ export function scaleReferenceFrom(
     const { h, v } = HANDLES[corner];
     const width = size.width * start.scale;
     const height = size.height * start.scale;
-    // The opposite corner, and the dragged one where the pointer has taken it.
-    const anchorX = h < 0 ? start.x + width : start.x;
-    const anchorY = v < 0 ? start.y + height : start.y;
-    const cornerX = (h < 0 ? start.x : start.x + width) + dx;
-    const cornerY = (v < 0 ? start.y : start.y + height) + dy;
-    const factorH = (h * (cornerX - anchorX)) / width;
-    const factorV = (v * (cornerY - anchorY)) / height;
+    // Each axis's factor from its side's length and the pointer's travel along it, so no
+    // travel is a factor of exactly 1; one from the corners' positions can be off 1 by their
+    // rounding (SE-046 review A).
+    const factorH = (width + h * dx) / width;
+    const factorV = (height + v * dy) / height;
     const factor = Math.abs(factorH - 1) >= Math.abs(factorV - 1) ? factorH : factorV;
     const wanted = start.scale * factor;
+    // A layer already below the minimum (the popover, a file, a sprite operation) keeps its
+    // scale as the lower bound instead of snapping up at a press (review B).
+    const lowest = Math.min(start.scale, minimumReferenceScale(size));
     const scale = Math.min(
         MAX_REFERENCE_SCALE,
-        Math.max(minimumReferenceScale(size), Number.isFinite(wanted) ? wanted : start.scale),
+        Math.max(lowest, Number.isFinite(wanted) ? wanted : start.scale),
     );
+    // Unscaled, nothing moves: a press on a corner and a drag back to it change nothing.
+    if (scale === start.scale) return start;
+    // The opposite corner stays.
+    const anchorX = h < 0 ? start.x + width : start.x;
+    const anchorY = v < 0 ? start.y + height : start.y;
     const x = h < 0 ? anchorX - size.width * scale : anchorX;
     const y = v < 0 ? anchorY - size.height * scale : anchorY;
     return { x: clampOffset(x), y: clampOffset(y), scale };

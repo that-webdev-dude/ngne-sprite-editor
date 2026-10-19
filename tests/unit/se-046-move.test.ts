@@ -5,6 +5,7 @@ import {
     MOVE_REFERENCE_LABEL,
     SCALE_REFERENCE_LABEL,
 } from "../../src/app/references/referenceMove";
+import type { ReferenceMoveSources } from "../../src/app/references/referenceMove";
 import { REFERENCE_CORNERS } from "../../src/app/references/referenceTransform";
 import type { ReferenceCorner } from "../../src/app/references/referenceTransform";
 import { createFloatingState } from "../../src/app/selection/floatingState";
@@ -14,7 +15,7 @@ import { HANDLES } from "../../src/app/selection/transform/handles";
 import type { PointerInput } from "../../src/app/tools/pipeline";
 import { PAINT_REFUSED } from "../../src/app/tools/paintTarget";
 import { createStrokeEcho } from "../../src/app/tools/strokeEcho";
-import { setLayerLockedCommand } from "../../src/core/layers";
+import { setLayerLockedCommand, setLayerVisibleCommand } from "../../src/core/layers";
 import { createDocument, sequentialIds } from "../../src/core/model";
 import type { DocSession, ReferenceLayer } from "../../src/core/model";
 import { addReferenceLayerCommand } from "../../src/core/references";
@@ -41,7 +42,7 @@ interface Setup {
     layer: () => ReferenceLayer;
 }
 
-function setUp(): Setup {
+function setUp(change?: ReferenceMoveSources["change"]): Setup {
     const h = harness();
     let version = 0;
     const floating = createFloatingState({
@@ -58,7 +59,7 @@ function setUp(): Setup {
         createMoveTool({
             floating,
             ratio: () => 1,
-            references: { preview, sourceSize: () => SOURCE },
+            references: { preview, sourceSize: () => SOURCE, ...(change && { change }) },
         }),
         "test",
     );
@@ -276,5 +277,81 @@ describe("the Move tool on a reference layer", () => {
         expect(geometry(layer())).toEqual({ ...moved, y: moved.y + 2 });
         h.document().history.undo();
         expect(geometry(layer())).toEqual(undone);
+    });
+
+    it("a press on a corner released where it was, or moved and brought back, records nothing (SE-046 review A)", () => {
+        const { h, preview, layer } = setUp();
+        const start = geometry(layer());
+        // The fixture's fitted scale, 16 / 30, is the case whose corner factor drifted off 1.
+        expect(start.scale).toBe(16 / 30);
+        const steps = h.document().history.undoCount;
+        for (const corner of REFERENCE_CORNERS) {
+            const at = cornerOf(layer(), corner);
+            press(h, at.x, at.y);
+            release(h, at.x, at.y);
+            expect(geometry(layer()), corner).toEqual(start);
+            press(h, at.x, at.y);
+            h.pipeline.move([point(at.x + 2.5, at.y - 1.75)]);
+            expect(preview.getState()?.scale, corner).not.toBe(start.scale);
+            h.pipeline.move([point(at.x, at.y)]);
+            release(h, at.x, at.y);
+            expect(geometry(layer()), corner).toEqual(start);
+            expect(h.document().history.undoCount, corner).toBe(steps);
+        }
+    });
+
+    it("a change that throws at the release leaves no preview behind (SE-046 review C)", () => {
+        const { h, preview, layer } = setUp(() => {
+            throw new Error("se-046: refused by the test");
+        });
+        const start = geometry(layer());
+        press(h, 3, 4);
+        h.pipeline.move([point(6, 6)]);
+        expect(preview.getState()).not.toBeNull();
+        release(h, 6, 6);
+        expect(h.errors).toHaveLength(1);
+        expect(preview.getState()).toBeNull();
+        expect(geometry(layer())).toEqual(start);
+    });
+
+    it("a layer hidden during the drag is refused at the release, as a hidden layer is (SE-046 review E)", () => {
+        const { h, preview, session, layer } = setUp();
+        const start = geometry(layer());
+        press(h, 3, 4);
+        h.pipeline.move([point(6, 6)]);
+        h.document().history.execute(setLayerVisibleCommand(session, "ref", false)!);
+        const steps = h.document().history.undoCount;
+        release(h, 6, 6);
+        expect(h.status.getState().feedback).toBe(PAINT_REFUSED.hidden);
+        expect(geometry(layer())).toEqual(start);
+        expect(preview.getState()).toBeNull();
+        expect(h.document().history.undoCount).toBe(steps);
+    });
+
+    it("another layer made active during the drag cancels it: shown as before, nothing recorded (SE-046 review E)", () => {
+        const { h, preview, session, layer } = setUp();
+        const start = geometry(layer());
+        const steps = h.document().history.undoCount;
+        const pixelLayer = session.doc.layers.find((entry) => entry.kind === "pixel")!.id;
+        for (const back of [false, true]) {
+            press(h, 3, 4);
+            h.pipeline.move([point(6, 6)]);
+            expect(preview.getState()).not.toBeNull();
+            session.activeLayerId = pixelLayer;
+            h.sessions.getState().touch(h.document().id);
+            // Made active again before the release: the drag stays cancelled.
+            if (back) {
+                h.pipeline.move([point(7, 7)]);
+                session.activeLayerId = "ref";
+                h.sessions.getState().touch(h.document().id);
+            }
+            h.pipeline.move([point(8, 8)]);
+            expect(preview.getState()).toBeNull();
+            release(h, 8, 8);
+            expect(preview.getState()).toBeNull();
+            expect(geometry(layer())).toEqual(start);
+            expect(h.document().history.undoCount).toBe(steps);
+            session.activeLayerId = "ref";
+        }
     });
 });

@@ -7,7 +7,7 @@ import { activeDocument, sessionsStore } from "../state/sessions";
 import type { OpenDocument } from "../state/sessions";
 import { toolState } from "../tools/activeTool";
 import { referenceImages } from "./referenceImages";
-import { referencePreview, shownGeometry } from "./referencePreview";
+import { previews, referencePreview, shownGeometry } from "./referencePreview";
 import type { ReferencePreviewStore } from "./referencePreview";
 import { referenceSourceSize } from "./references";
 import { REFERENCE_CORNERS, referenceBox } from "./referenceTransform";
@@ -16,7 +16,8 @@ import type { SourceSize } from "./referenceTransform";
 // The box of the active reference layer (SE-046; DESIGN §6): while the Move tool is the active
 // tool and the active layer is a visible, unlocked reference layer whose source is decoded,
 // its outline and the four corner handles that scale it, drawn as the transform box of a
-// floating selection is (DESIGN §5.2) and where a drag shows the layer meanwhile. Over the
+// floating selection is (DESIGN §5.2) and where a drag shows the layer meanwhile, also while
+// a held key or a tool key has made another tool active before the drag's release. Over the
 // ants and the pending selection (500, 600), under a float's transform box (700), which the
 // Move tool never shows together with this one. The layer asks for a redraw only when the box
 // it draws changes, not at every change of the stores it reads (SE-013: an idle overlay, and
@@ -41,13 +42,17 @@ export interface ReferenceBoxSources {
 
 /** The box drawn over `document`, or null for none. */
 function shownBox(sources: ReferenceBoxSources, document: OpenDocument): FreeTransform | null {
-    if (sources.activeTool() !== MOVE_TOOL_ID) return null;
     const { session } = document;
+    const preview = sources.preview.getState();
+    // A drag in progress keeps its box when a held key (Space) or a tool key changes the
+    // active tool before its release (SE-046 review D).
+    const dragging = previews(preview, session, session.activeLayerId);
+    if (sources.activeTool() !== MOVE_TOOL_ID && !dragging) return null;
     const layer = session.doc.layers.find((entry) => entry.id === session.activeLayerId);
     if (layer?.kind !== "reference" || !layer.visible || layer.locked) return null;
     const size = sources.sourceSize(document, layer);
     if (!size) return null;
-    return referenceBox(shownGeometry(sources.preview.getState(), session, layer), size);
+    return referenceBox(shownGeometry(preview, session, layer), size);
 }
 
 function sameBox(a: FreeTransform | null, b: FreeTransform | null): boolean {
