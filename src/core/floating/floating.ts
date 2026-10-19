@@ -5,10 +5,13 @@ import type { BitMask, DocSession, IdGenerator, PixelBuffer, Rect, Selection } f
 import { createMask, fullMask, maskHas, selectionOf, selectionsEqual } from "../selection";
 import {
     flipContent,
+    isIdentity,
     normalizeAngle,
     renderTransform,
     rotateBox,
     rotateContent,
+    transformBounds,
+    transformSampler,
 } from "./transform";
 import type { FlipAxis, FreeTransform } from "./transform";
 
@@ -213,13 +216,27 @@ export class FloatingSelection {
     readonly #before: Selection | null;
     /** The pixels lifted or pasted, flipped and turned by quarter turns (SE-033). */
     #source: FloatingContent;
-    /** The source placed by the free transform: what floats; never clipped while it floats. */
+    /**
+     * What is written into the image: the source itself while untransformed (never clipped),
+     * else the source rendered by the free transform over the part of its bounds on the canvas
+     * only (SE-033 review B); the source is kept, so a move that uncovers clipped content
+     * renders it anew.
+     */
     #content: FloatingContent;
     /** The free transform's box and angle (SE-033); the source's size and 0° when untransformed. */
     #transform: FreeTransform;
-    /** The document position of the content's top-left pixel. */
+    /** The document position of `#content`'s top-left pixel. */
     #x: number;
     #y: number;
+    /** The rectangle of the whole float, which may reach past the canvas. */
+    #bounds: Rect;
+    /** A transformed float whose bounds reach past the canvas: `#content` is clipped. */
+    #clipped = false;
+    /** The whole transformed content, rendered when asked for while `#content` is clipped. */
+    #whole: FloatingContent | null = null;
+    /** The source's orientation against the pixels lifted: quarter turns after a mirror. */
+    #turns = 0;
+    #mirrored = false;
     /** Where the content is written now: its rectangle on the canvas, or null when off it. */
     #placed: Rect | null;
     #open = true;
@@ -252,6 +269,12 @@ export class FloatingSelection {
         this.#before = init.session.selection;
         this.#x = init.x;
         this.#y = init.y;
+        this.#bounds = {
+            x: init.x,
+            y: init.y,
+            width: init.content.pixels.width,
+            height: init.content.pixels.height,
+        };
         this.#placed = init.placed;
     }
 
@@ -349,9 +372,13 @@ export class FloatingSelection {
         return this.#open;
     }
 
-    /** The floating pixels, as the free transform places them; never clipped while they float. */
+    /**
+     * The floating pixels, as the free transform places them, whole: never clipped while they
+     * float (a transformed float reaching past the canvas renders them whole when asked).
+     */
     get content(): FloatingContent {
-        return this.#content;
+        if (!this.#clipped) return this.#content;
+        return (this.#whole ??= renderTransform(this.#source, this.#transform).content);
     }
 
     /** The pixels lifted or pasted, flipped and turned by quarter turns, before the free transform. */
@@ -370,17 +397,16 @@ export class FloatingSelection {
 
     /** The document position of the content's top-left pixel. */
     get x(): number {
-        return this.#x;
+        return this.#bounds.x;
     }
 
     get y(): number {
-        return this.#y;
+        return this.#bounds.y;
     }
 
     /** The content's rectangle in the document, which may reach past the canvas. */
     get bounds(): Rect {
-        const { width, height } = this.content.pixels;
-        return { x: this.#x, y: this.#y, width, height };
+        return { ...this.#bounds };
     }
 
     /** The part of `bounds` on the canvas, where the content is written now; null when none. */
@@ -390,7 +416,13 @@ export class FloatingSelection {
 
     /** Whether document pixel `x, y` holds a pixel of the float (inside its mask). */
     contains(x: number, y: number): boolean {
-        return maskHas(this.content.mask, x - this.#x, y - this.#y);
+        const source = this.#source;
+        const transform = this.#transform;
+        if (isIdentity(transform, source.pixels.width, source.pixels.height)) {
+            return maskHas(source.mask, x - transform.x, y - transform.y);
+        }
+        const index = transformSampler(source, transform)(x, y);
+        return index >= 0 && (source.mask.data[index >> 3]! & (1 << (index & 7))) !== 0;
     }
 
     /**
@@ -401,12 +433,21 @@ export class FloatingSelection {
     moveTo(x: number, y: number): Rect | null {
         this.#assertOpen("moveTo");
         assertWhole("FloatingSelection.moveTo", x, y);
-        if (x === this.#x && y === this.#y) return null;
-        // The box moves with the content: the rendering does not change.
-        this.#transform.x += x - this.#x;
-        this.#transform.y += y - this.#y;
-        this.#x = x;
-        this.#y = y;
+        const dx = x - this.#bounds.x;
+        const dy = y - this.#bounds.y;
+        if (dx === 0 && dy === 0) return null;
+        // The box moves with the content: the rendering does not change, but what was clipped
+        // off the canvas may come into it, so a clipped rendering is made anew.
+        const transform = {
+            ...this.#transform,
+            x: this.#transform.x + dx,
+            y: this.#transform.y + dy,
+        };
+        if (this.#clipped) return this.#place(this.#source, transform);
+        this.#transform = transform;
+        this.#bounds = { ...this.#bounds, x, y };
+        this.#x += dx;
+        this.#y += dy;
         const changed = this.#render();
         this.#follow();
         return changed;
@@ -414,7 +455,7 @@ export class FloatingSelection {
 
     /** Moves the content by `dx`, `dy` pixels: `moveTo` from where it is. */
     moveBy(dx: number, dy: number): Rect | null {
-        return this.moveTo(this.#x + dx, this.#y + dy);
+        return this.moveTo(this.#bounds.x + dx, this.#bounds.y + dy);
     }
 
     /**
@@ -456,10 +497,28 @@ export class FloatingSelection {
     flip(axis: FlipAxis): Rect | null {
         this.#assertOpen("flip");
         const now = this.#transform;
+        // The source's orientation is R^t·F^m; a horizontal flip after it is R^−t·F^(m+1),
+        // a vertical one (R²·F) R^(2−t)·F^(m+1).
+        this.#turns = ((((axis === "horizontal" ? 0 : 2) - this.#turns) % 4) + 4) % 4;
+        this.#mirrored = !this.#mirrored;
         return this.#place(flipContent(this.#source, axis), {
             ...now,
             angle: normalizeAngle(-now.angle),
         });
+    }
+
+    /**
+     * Whether the float differs from the pixels lifted or pasted by more than a move: its
+     * source is flipped or turned (flips and turns that cancel out do not count), or its box
+     * is scaled or turned (SE-033 review H).
+     */
+    get transformed(): boolean {
+        const { pixels } = this.#source;
+        return (
+            this.#turns !== 0 ||
+            this.#mirrored ||
+            !isIdentity(this.#transform, pixels.width, pixels.height)
+        );
     }
 
     /**
@@ -471,6 +530,7 @@ export class FloatingSelection {
         this.#assertOpen("rotate");
         assertWhole("FloatingSelection.rotate", turns);
         const now = this.#transform;
+        this.#turns = (((this.#turns + turns) % 4) + 4) % 4;
         return this.#place(rotateContent(this.#source, turns), {
             ...rotateBox(now, turns),
             angle: now.angle,
@@ -552,12 +612,32 @@ export class FloatingSelection {
 
     /** Makes `source` placed by `transform` the float's content, written and followed. */
     #place(source: FloatingContent, transform: FreeTransform): Rect | null {
-        const rendered = renderTransform(source, transform);
+        const { width, height } = this.#session.doc;
+        // Only the part on the canvas is rendered (SE-033 review B); an untransformed source
+        // is written as it is.
+        const rendered = renderTransform(source, transform, { x: 0, y: 0, width, height });
+        const identity = isIdentity(transform, source.pixels.width, source.pixels.height);
+        const bounds = identity
+            ? {
+                  x: transform.x,
+                  y: transform.y,
+                  width: source.pixels.width,
+                  height: source.pixels.height,
+              }
+            : transformBounds(transform);
         this.#source = source;
         this.#transform = transform;
         this.#content = rendered.content;
         this.#x = rendered.x;
         this.#y = rendered.y;
+        this.#bounds = bounds;
+        this.#clipped =
+            !identity &&
+            (bounds.x < 0 ||
+                bounds.y < 0 ||
+                bounds.x + bounds.width > width ||
+                bounds.y + bounds.height > height);
+        this.#whole = null;
         const changed = this.#render();
         this.#follow();
         return changed;
@@ -578,8 +658,12 @@ export class FloatingSelection {
         const { width, height } = image;
         const old = this.#placed;
         if (old) this.#restoreBase(old);
-        const { pixels, mask } = this.content;
-        const next = clipTo(this.bounds, width, height);
+        const { pixels, mask } = this.#content;
+        const next = clipTo(
+            { x: this.#x, y: this.#y, width: pixels.width, height: pixels.height },
+            width,
+            height,
+        );
         if (next) {
             const from = pixels.data;
             const to = image.data;
@@ -614,7 +698,7 @@ export class FloatingSelection {
             return;
         }
         const mask = createMask(width, height);
-        const content = this.content.mask;
+        const content = this.#content.mask;
         for (let y = placed.y; y < placed.y + placed.height; y++) {
             const row = (y - this.#y) * content.width - this.#x;
             for (let x = placed.x; x < placed.x + placed.width; x++) {

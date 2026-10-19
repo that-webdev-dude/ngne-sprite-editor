@@ -194,8 +194,9 @@ The bar's content comes from a registry (`*.contextbar.tsx`), so later tickets a
 without editing the bar. On the overlay (draw layer 700, over the ants and the pending shape,
 under the brush cursor) the float's box is a 1 device px white line on a 3 px black one, turned
 as the float is, with eight 7 CSS px handles (white squares with a black border) on its corners
-and the middles of its sides; the box and handles are drawn by one function that a reference
-layer's box (SE-046) can share.
+and the middles of its sides. SE-046 may reuse `handlePoints`, `hitBox` and `drawTransformBox`
+(`app/selection/transform`) for a reference layer's box; `scaleBox` rounds the box to whole
+pixels and is for floating selections only (SE-033 review G).
 
 ### 5.3 Colour
 
@@ -393,6 +394,9 @@ transient tool feedback in `--warn`.
   select show as the ants show a selection — the same ring and dashes, drawn by the same
   painter — standing still at phase 0, over the ants of the selection there is (draw layer
   order 600) (SE-031).
+- Transform box: while a selection floats, its box (turned as the float is) and eight handles,
+  drawn as DESIGN §5.2 describes; draw layer order 700, over the pending selection (600) and
+  under the brush cursor (900) (SE-033).
 - Brush cursor: 1 px outline of the brush footprint snapped to pixels, two-tone so it shows on
   any content (black just outside the footprint, white outside that; an inverted outline cannot
   be drawn on the overlay, which does not hold NGNE's pixels); a paint tool that draws a brush

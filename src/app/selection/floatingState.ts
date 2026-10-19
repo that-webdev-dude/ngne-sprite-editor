@@ -138,6 +138,8 @@ interface Current {
     readonly live: LiveComposite;
     /** Cancels telling the session store of the selection in the next animation frame. */
     cancelTouch: (() => void) | null;
+    /** The float's label when it began: a "Move" becomes "Transform" while transformed. */
+    readonly label: string;
 }
 
 export function createFloatingState(sources: FloatingSources): FloatingState {
@@ -197,7 +199,13 @@ export function createFloatingState(sources: FloatingSources): FloatingState {
             float.cancel();
             throw error;
         }
-        current = { session: document.session, float, live, cancelTouch: null };
+        current = {
+            session: document.session,
+            float,
+            live,
+            cancelTouch: null,
+            label: float.label,
+        };
         sources.context(true);
         show(current);
         // What a paste wrote is on screen at once.
@@ -224,7 +232,10 @@ export function createFloatingState(sources: FloatingSources): FloatingState {
         const now = current;
         if (!now) return;
         const changed = change(now.float);
-        if (now.float.label === "Move") now.float.label = TRANSFORM_LABEL;
+        // A lifted float is a Transform while it differs by more than a move; flips or turns
+        // that cancel out leave it a Move (SE-033 review H). A paste stays a Paste.
+        if (now.label === "Move")
+            now.float.label = now.float.transformed ? TRANSFORM_LABEL : "Move";
         moved(changed);
     };
 

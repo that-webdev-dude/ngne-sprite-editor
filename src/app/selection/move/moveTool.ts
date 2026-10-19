@@ -1,3 +1,4 @@
+import { MAX_TRANSFORM_SIDE } from "../../../core/floating";
 import type { FloatingSelection, FreeTransform } from "../../../core/floating";
 import { celAt } from "../../../core/model";
 import type { Point } from "../../view/coordinates";
@@ -54,6 +55,8 @@ interface TransformDrag extends DragBase {
     /** The float's transform and label at the press: a cancel puts them back. */
     readonly origin: FreeTransform;
     readonly label: string;
+    /** The longest side the box may take (`FloatingSelection.setTransform`). */
+    readonly limit: number;
     /** The last pointer of the drag, for a Shift pressed or released while it lasts. */
     last: ToolPointer;
 }
@@ -95,7 +98,7 @@ export function createMoveTool(sources: MoveToolSources): ToolSpec {
         const shift = pointer.modifiers.shift;
         floating.setTransform(
             drag.kind === "scale" && drag.handle
-                ? scaleBox(drag.origin, drag.handle, pointer.position, shift)
+                ? scaleBox(drag.origin, drag.handle, pointer.position, shift, drag.limit)
                 : rotateBoxTo(drag.origin, drag.start, pointer.position, shift),
         );
     };
@@ -116,6 +119,11 @@ export function createMoveTool(sources: MoveToolSources): ToolSpec {
             start: { x: pointer.position.x, y: pointer.position.y },
             origin: transform,
             label: float.label,
+            limit: Math.max(
+                MAX_TRANSFORM_SIDE,
+                float.source.pixels.width,
+                float.source.pixels.height,
+            ),
             last: pointer,
         });
         return true;

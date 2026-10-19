@@ -401,3 +401,163 @@ describe("a float transformed (core/floating)", () => {
         float.cancel();
     });
 });
+
+// SE-033 review D, E1, B: the sampling of SPEC §7.2 checked against the formula itself, a
+// turned render built pixel by pixel from it, and a float clipped to the canvas.
+
+/** A `width` × 1 content whose pixel x is (x + 1, 0, 0, 255): its index in the red byte. */
+function row(width: number): FloatingContent {
+    const data = new Uint8ClampedArray(width * 4);
+    for (let x = 0; x < width; x++) data.set([x + 1, 0, 0, 255], x * 4);
+    return contentOfImage({ width, height: 1, data });
+}
+
+/**
+ * The source pixel SPEC §7.2 gives document pixel `px, py` under `t`, written out here: its
+ * centre turned back about the box's centre to (u, v), then (⌊u · sw / W⌋, ⌊v · sh / H⌋);
+ * null when the centre is outside the box.
+ */
+function specSample(t: FreeTransform, sw: number, sh: number, px: number, py: number) {
+    const radians = (t.angle * Math.PI) / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    const dx = px + 0.5 - (t.x + t.width / 2);
+    const dy = py + 0.5 - (t.y + t.height / 2);
+    const u = dx * cos + dy * sin + t.width / 2;
+    const v = -dx * sin + dy * cos + t.height / 2;
+    if (u < 0 || u >= t.width || v < 0 || v >= t.height) return null;
+    return { x: Math.floor((u * sw) / t.width), y: Math.floor((v * sh) / t.height) };
+}
+
+/** The pixel a render shows at document pixel `px, py` (null outside its mask). */
+function renderedAt(
+    rendered: { content: FloatingContent; x: number; y: number },
+    px: number,
+    py: number,
+): number[] | null {
+    const x = px - rendered.x;
+    const y = py - rendered.y;
+    const { pixels, mask } = rendered.content;
+    if (x < 0 || y < 0 || x >= pixels.width || y >= pixels.height) return null;
+    return maskHas(mask, x, y) ? pixel(rendered.content, x, y) : null;
+}
+
+describe("the sampling of SPEC §7.2 (review D, E)", () => {
+    it("2 px scaled into 49: columns 0–23 take source pixel 0, columns 24–48 source pixel 1", () => {
+        const rendered = renderTransform(row(2), { x: 0, y: 0, width: 49, height: 1, angle: 0 });
+        const taken = Array.from({ length: 49 }, (_, x) => pixel(rendered.content, x, 0)[0]! - 1);
+        expect(taken).toEqual([...Array<number>(24).fill(0), ...Array<number>(25).fill(1)]);
+    });
+
+    it("every scale of a row from 1–12 px into 1–64 px takes ⌊u · sw / W⌋, in exact integers", () => {
+        for (let sw = 1; sw <= 12; sw++) {
+            const source = row(sw);
+            for (let width = 1; width <= 64; width++) {
+                const rendered = renderTransform(source, {
+                    x: 0,
+                    y: 0,
+                    width,
+                    height: 1,
+                    angle: 0,
+                });
+                for (let x = 0; x < width; x++) {
+                    // u = x + ½: ⌊(2x + 1) · sw / 2W⌋ with no floating point.
+                    const expected = Math.floor(((2 * x + 1) * sw) / (2 * width));
+                    expect(pixel(rendered.content, x, 0)[0]! - 1, `${sw} → ${width} at ${x}`).toBe(
+                        expected,
+                    );
+                }
+            }
+        }
+    });
+
+    it("a box scaled and turned by 45° or 30° holds, pixel by pixel, what the formula gives", () => {
+        const source = content(5, 3);
+        for (const angle of [45, 30, -120]) {
+            const t: FreeTransform = { x: 1, y: 2, width: 7, height: 5, angle };
+            const rendered = renderTransform(source, t);
+            let covered = 0;
+            for (let py = -12; py < 20; py++) {
+                for (let px = -12; px < 20; px++) {
+                    const at = specSample(t, 5, 3, px, py);
+                    const expected =
+                        at && maskHas(source.mask, at.x, at.y) ? pixel(source, at.x, at.y) : null;
+                    expect(renderedAt(rendered, px, py), `${angle}° at ${px}, ${py}`).toEqual(
+                        expected,
+                    );
+                    if (expected) covered++;
+                }
+            }
+            expect(covered).toBeGreaterThan(20);
+        }
+    });
+
+    it("clipped to a rectangle, it is the same render cut to it", () => {
+        const source = content(5, 3);
+        const t: FreeTransform = { x: -3, y: -1, width: 9, height: 6, angle: 17 };
+        const whole = renderTransform(source, t);
+        const clip = { x: 0, y: 0, width: 4, height: 3 };
+        const cut = renderTransform(source, t, clip);
+        expect(cut.x).toBeGreaterThanOrEqual(0);
+        expect(cut.y).toBeGreaterThanOrEqual(0);
+        for (let py = -8; py < 10; py++) {
+            for (let px = -8; px < 10; px++) {
+                const inside = px >= 0 && py >= 0 && px < 4 && py < 3;
+                expect(renderedAt(cut, px, py)).toEqual(inside ? renderedAt(whole, px, py) : null);
+            }
+        }
+    });
+});
+
+describe("a transformed float reaching past the canvas (review B)", () => {
+    it("is written only where the canvas is, keeps its content whole, and shows all of it when moved back", () => {
+        const { session, history, target } = setUp();
+        const selection = selectionOf(rectMask(W, H, { x: 1, y: 1, width: 3, height: 2 }));
+        session.selection = selection;
+        const float = FloatingSelection.lift(history, { ...target, selection });
+        const t: FreeTransform = { x: 4, y: 3, width: 6, height: 4, angle: 10 };
+        float.setTransform(t);
+        const whole = renderTransform(float.source, t);
+        // Its content is whole, and its bounds reach past the canvas.
+        expect(float.bounds).toEqual({
+            x: whole.x,
+            y: whole.y,
+            width: whole.content.pixels.width,
+            height: whole.content.pixels.height,
+        });
+        expect(float.bounds.x + float.bounds.width).toBeGreaterThan(W);
+        expect(Array.from(float.content.pixels.data)).toEqual(
+            Array.from(whole.content.pixels.data),
+        );
+        // A pixel of it off the canvas is still the float's.
+        const off = { x: W, y: 4 };
+        expect(float.contains(off.x, off.y)).toBe(renderedAt(whole, off.x, off.y) !== null);
+
+        // Moved back fully onto the canvas: every pixel of it is in the image.
+        float.moveTo(0, 0);
+        const moved = renderTransform(float.source, float.transform);
+        expect(moved.x).toBe(0);
+        const image = bytes(session);
+        let shown = 0;
+        for (let py = 0; py < moved.content.pixels.height; py++) {
+            for (let px = 0; px < moved.content.pixels.width; px++) {
+                const expected = renderedAt(moved, px, py);
+                if (!expected) continue;
+                expect(rgba(image, px, py), `${px}, ${py}`).toEqual(expected);
+                shown++;
+            }
+        }
+        expect(shown).toBe(
+            Array.from({ length: moved.content.pixels.width * moved.content.pixels.height }).filter(
+                (_, i) =>
+                    maskHas(
+                        moved.content.mask,
+                        i % moved.content.pixels.width,
+                        Math.floor(i / moved.content.pixels.width),
+                    ),
+            ).length,
+        );
+        expect(moved.content.pixels.width).toBeLessThanOrEqual(W);
+        float.cancel();
+    });
+});

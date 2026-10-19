@@ -123,6 +123,56 @@ describe("a handle drag", () => {
         });
     });
 
+    it("with Shift a corner takes the change farther from 1, so shrinking along one side shrinks both (review C)", () => {
+        // Width halves, height stays: the halving wins.
+        expect(scaleBox(BOX, "se", { x: 4, y: 3 }, true)).toEqual({
+            x: 2,
+            y: 1,
+            width: 2,
+            height: 1,
+            angle: 0,
+        });
+        // Growing: width stays, height triples: the tripling wins.
+        expect(scaleBox(BOX, "se", { x: 6, y: 7 }, true)).toEqual({
+            x: 2,
+            y: 1,
+            width: 12,
+            height: 6,
+            angle: 0,
+        });
+    });
+
+    it("stops each side at the limit; with Shift the factor is cut so the aspect is kept (review A)", () => {
+        expect(scaleBox(BOX, "e", { x: 9000, y: 2 }, false, 100)).toEqual({
+            x: 2,
+            y: 1,
+            width: 100,
+            height: 2,
+            angle: 0,
+        });
+        expect(scaleBox(BOX, "nw", { x: -9000, y: -9000 }, false, 100)).toEqual({
+            x: -94,
+            y: -97,
+            width: 100,
+            height: 100,
+            angle: 0,
+        });
+        expect(scaleBox(BOX, "se", { x: 9000, y: 3 }, true, 100)).toEqual({
+            x: 2,
+            y: 1,
+            width: 100,
+            height: 50,
+            angle: 0,
+        });
+        expect(scaleBox(BOX, "s", { x: 4, y: 9000 }, true, 100)).toEqual({
+            x: -46,
+            y: 1,
+            width: 100,
+            height: 50,
+            angle: 0,
+        });
+    });
+
     it("on a turned box follows the box's own axes and keeps its angle", () => {
         const turned: FreeTransform = { x: 0, y: 0, width: 4, height: 4, angle: 90 };
         // Turned a quarter, the box's east side faces down: dragging "e" down widens it.

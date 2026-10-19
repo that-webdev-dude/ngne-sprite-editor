@@ -16,6 +16,8 @@ export {
     rotateBox,
     rotateContent,
     toBoxSpace,
+    transformBounds,
+    transformSampler,
     turnOf,
 } from "./transform";
 export type { FlipAxis, FloatBox, FreeTransform, RenderedContent } from "./transform";

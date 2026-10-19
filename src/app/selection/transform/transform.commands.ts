@@ -4,6 +4,7 @@ import type { CommandSpec } from "../../commands/types";
 import { activeDocument, sessionsStore } from "../../state/sessions";
 import type { OpenDocument } from "../../state/sessions";
 import { toolState } from "../../tools/activeTool";
+import { toolPipeline } from "../../tools/appPipeline";
 import { selectionFeedback } from "../feedback";
 import { floatingState } from "../floatingState";
 import { floatRefusal } from "../move/floatTarget";
@@ -42,6 +43,9 @@ type Change = { flip: FlipAxis } | { turns: number };
 
 /** The active document while a transform command can act on it. */
 function target(): OpenDocument | null {
+    // Refused during a stroke, a drag of the floating pixels included: a flip in the middle of
+    // a handle drag would mix the drag's angle with the flipped source (SE-033 review F).
+    if (toolPipeline.stroking) return null;
     const document = activeDocument(sessionsStore.getState());
     if (!document) return null;
     if (floatingState.floats(document)) return document;
@@ -102,10 +106,10 @@ export const commands: CommandSpec[] = [
     {
         id: TRANSFORM_COMMANDS.set,
         title: "Set Floating Selection Transform",
-        enabled: () => floatingState.float?.selects === true,
+        enabled: () => !toolPipeline.stroking && floatingState.float?.selects === true,
         run() {
             const draft = takeTransformDraft();
-            if (!draft || floatingState.float?.selects !== true) return;
+            if (!draft || toolPipeline.stroking || floatingState.float?.selects !== true) return;
             floatingState.setTransform(draft);
         },
     },

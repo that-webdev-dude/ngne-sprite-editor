@@ -1079,11 +1079,14 @@ Transforms (SE-033):
   side when that is more) and an angle in whole degrees in (−180, 180], clockwise, about the
   box's centre. What floats is the source scaled into the box and turned, by nearest-neighbour
   sampling: a document pixel belongs to it when its centre, turned back about the centre, lies
-  inside the box, and takes the source pixel under that point (⌊u · source width / W⌋, likewise
-  for v) when that pixel is in the source's mask. It only holds colours of the source; an
-  untransformed float is its source as it is, and multiples of 90° are computed exactly. Each
-  change renders it anew from the source, so scaling up and back loses nothing. A move carries
-  the box along.
+  inside the box at (u, v) from the box's top-left, and takes the source pixel
+  (⌊u · source width / W⌋, ⌊v · source height / H⌋) when that pixel is in the source's mask
+  (the product taken before the division; SE-033 review D). It only holds colours of the
+  source; an untransformed float is its source as it is, and multiples of 90° are computed
+  exactly. Each change renders it anew from the source, so scaling up and back loses nothing.
+  A move carries the box along. Only the part of a transformed float on the canvas is rendered
+  and written (its content stays whole: what lies off the canvas is rendered when asked for,
+  and a move that brings it onto the canvas renders it anew; review B).
 - Flip Horizontal, Flip Vertical, Rotate 90° CW, Rotate 90° CCW and Rotate 180° (Edit menu; §7.8
   gives them no key): while pixels float they act on the float; with a selection they lift
   it into a float of the Move tool first and leave it floating, as Aseprite's Flip and Rotate
@@ -1094,12 +1097,15 @@ Transforms (SE-033):
   empty cel has nothing to turn. They permute the source exactly: a flip mirrors it and negates
   the angle, a quarter turn turns it and swaps W and H about the box's centre, its corner moved
   by half their difference truncated toward zero, so four turns give the float back. They are
-  enabled while pixels float and refused during a stroke and on the layers paint is refused on.
+  enabled while pixels float and refused during a stroke, a drag of the Move tool included
+  (review F), and on the layers paint is refused on.
 - Free transform with the Move tool, while a selection floats: a press off the float's pixels
   on one of the eight handles of its box (within 5 CSS px) scales it — the handle's sides go to
   the pixel boundaries nearest the pointer along the box's own axes, the opposite sides stay,
-  no side shorter than 1 px; with Shift both sides scale by one factor, a corner by its larger
-  change, a side's middle by its own with the other side centred. A press outside the box
+  no side shorter than 1 px nor longer than the limit above (review A); with Shift both sides
+  scale by one factor, cut so neither passes the limit: a corner by its larger change, the one
+  farther from 1, so it shrinks as well as grows (review C), a side's middle by its own with the
+  other side centred. A press outside the box
   within 16 CSS px of it turns it about its centre by the angle the pointer swept, in whole
   degrees, with Shift in multiples of 15°. Shift pressed or released during the drag takes
   effect at once. A press on a pixel of the float still moves it, even under a handle, and a
@@ -1107,11 +1113,12 @@ Transforms (SE-033):
   box, the angle and the step's label back as they were at its press. The handles and the ring
   are not offered for a whole cel lifted with no selection, which is applied at its release.
 - The context bar's fields (DESIGN §5.2) set the same box and angle through a registered
-  command (Set Floating Selection Transform): a value typed there gives the same pixels as the
-  drag that gives that value.
+  command (Set Floating Selection Transform), refused during a stroke as the commands above: a
+  value typed there gives the same pixels as the drag that gives that value.
 - The float stays one transaction: its transforms record nothing until it is applied, as one
-  step labelled Transform for a lifted float that was transformed (Move when it was only moved,
-  Paste for a pasted one); a cancel or undo restores the pixels from before the lift. Copy while
+  step labelled Transform for a lifted float while it differs from the pixels lifted by more
+  than a move — its source flipped or turned (flips and turns that cancel out do not count), or
+  its box scaled or turned (review H) — and Move otherwise; a pasted float stays Paste; a cancel or undo restores the pixels from before the lift. Copy while
   pixels float copies them as transformed. The cursor does not change over the handles (the
   tool cursor depends on no pointer position).
 

@@ -111,16 +111,20 @@ export function hitBox(
 /**
  * The box after a drag of handle `handle` from the box `start` to document position `point`
  * (SE-033): the handle's sides go to the pixel boundaries nearest the pointer, along the box's
- * own axes, the opposite sides stay, and no side gets shorter than 1 px. With `keepAspect`
- * both sides scale by one factor: a corner by the larger of its two changes, a side's middle
- * by its own, the other side centred where it was. The box stays turned by `start.angle`
- * about its new centre, rounded to whole pixels.
+ * own axes, the opposite sides stay, and no side gets shorter than 1 px or longer than
+ * `limit` (the float's `MAX_TRANSFORM_SIDE` rule; SE-033 review A). With `keepAspect` both
+ * sides scale by one factor, kept within the limit: a corner by the larger of its two changes
+ * (the one farther from 1, shrinking as well as growing; review C), a side's middle by its
+ * own, the other side centred where it was. The box stays turned by `start.angle` about its
+ * new centre, rounded to whole pixels. It is for floating selections, whose boxes are whole
+ * pixels; a reference layer (SE-046) needs its own.
  */
 export function scaleBox(
     start: FreeTransform,
     handle: HandleId,
     point: Point,
     keepAspect: boolean,
+    limit = Infinity,
 ): FreeTransform {
     const { h, v } = HANDLES[handle];
     const { width: w0, height: h0 } = start;
@@ -129,17 +133,19 @@ export function scaleBox(
     let right = w0;
     let top = 0;
     let bottom = h0;
-    if (h < 0) left = Math.min(Math.round(at.u), right - 1);
-    if (h > 0) right = Math.max(Math.round(at.u), left + 1);
-    if (v < 0) top = Math.min(Math.round(at.v), bottom - 1);
-    if (v > 0) bottom = Math.max(Math.round(at.v), top + 1);
+    if (h < 0) left = Math.max(Math.min(Math.round(at.u), right - 1), right - limit);
+    if (h > 0) right = Math.min(Math.max(Math.round(at.u), left + 1), left + limit);
+    if (v < 0) top = Math.max(Math.min(Math.round(at.v), bottom - 1), bottom - limit);
+    if (v > 0) bottom = Math.min(Math.max(Math.round(at.v), top + 1), top + limit);
     if (keepAspect) {
         const factorH = (right - left) / w0;
         const factorV = (bottom - top) / h0;
-        const factor =
-            h !== 0 && v !== 0 ? Math.max(factorH, factorV) : h !== 0 ? factorH : factorV;
-        const width = Math.max(1, Math.round(w0 * factor));
-        const height = Math.max(1, Math.round(h0 * factor));
+        const corner = Math.abs(factorH - 1) >= Math.abs(factorV - 1) ? factorH : factorV;
+        const wanted = h !== 0 && v !== 0 ? corner : h !== 0 ? factorH : factorV;
+        // Neither side past the limit: the factor is cut, so the aspect is kept.
+        const factor = Math.min(wanted, limit / w0, limit / h0);
+        const width = Math.min(limit, Math.max(1, Math.round(w0 * factor)));
+        const height = Math.min(limit, Math.max(1, Math.round(h0 * factor)));
         // The sides the handle moves follow the factor; the others stay, or are centred.
         if (h < 0) left = right - width;
         else if (h > 0) right = left + width;

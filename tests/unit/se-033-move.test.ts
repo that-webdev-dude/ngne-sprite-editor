@@ -11,6 +11,7 @@ import { overlayLayers } from "../../src/app/overlay/overlayLayers";
 import type { PointerInput } from "../../src/app/tools/pipeline";
 import { createStrokeEcho } from "../../src/app/tools/strokeEcho";
 import { createViewMapping } from "../../src/app/view/coordinates";
+import { MAX_TRANSFORM_SIDE } from "../../src/core/floating";
 import type { FreeTransform } from "../../src/core/floating";
 import { celAt, celKey, createDocument, sequentialIds } from "../../src/core/model";
 import type { DocSession, PixelBuffer } from "../../src/core/model";
@@ -209,7 +210,7 @@ describe("a free transform dragged with the Move tool", () => {
         expect(angle % 15).not.toBe(0);
     });
 
-    it("Escape during a handle drag takes back that drag only: the transform and the label as before it", () => {
+    it("a pointer cancel during a handle drag takes back that drag only: the transform and the label as before it", () => {
         const setup = setUp();
         const { h, floating, session } = setup;
         lift(setup);
@@ -263,6 +264,62 @@ describe("a free transform dragged with the Move tool", () => {
         drag(two.h, [far, 3.5], [[5, 3.5 + 6]]);
         expect(two.floating.floats()).toBe(true);
         expect(two.floating.float!.transform.angle).not.toBe(0);
+    });
+
+    it("a handle dragged far past the size limit stops at it: no error, the float still floating (review A)", () => {
+        const setup = setUp();
+        const { h, floating } = setup;
+        lift(setup);
+        // The east handle, at the middle of the right side (7, 3.5), dragged 5000 px out.
+        drag(
+            h,
+            [7, 3.5],
+            [
+                [2000, 3.5],
+                [5007, 3.5],
+            ],
+        );
+        expect(h.errors).toEqual([]);
+        expect(floating.floats()).toBe(true);
+        expect(floating.float!.transform).toEqual({ ...RECT, width: MAX_TRANSFORM_SIDE, angle: 0 });
+        // With Shift on a corner both sides stop where the longer one meets the limit.
+        const aspect = setUp();
+        lift(aspect);
+        drag(aspect.h, [7, 5], [[5000, 6]], { shiftKey: true });
+        expect(aspect.h.errors).toEqual([]);
+        expect(aspect.floating.float!.transform).toEqual({
+            ...RECT,
+            width: MAX_TRANSFORM_SIDE,
+            height: (MAX_TRANSFORM_SIDE * RECT.height) / RECT.width,
+            angle: 0,
+        });
+        expect(aspect.floating.floats()).toBe(true);
+    });
+
+    it("is labelled Transform only while it differs by more than a move: flips that cancel out leave a Move (review H)", () => {
+        const setup = setUp();
+        const { h, floating } = setup;
+        lift(setup);
+        floating.flip("horizontal");
+        expect(floating.float!.label).toBe(TRANSFORM_LABEL);
+        floating.flip("horizontal");
+        expect(floating.float!.label).toBe("Move");
+        floating.flip("horizontal");
+        floating.flip("vertical");
+        // Both flips: a half turn.
+        expect(floating.float!.label).toBe(TRANSFORM_LABEL);
+        floating.rotate(2);
+        expect(floating.float!.label).toBe("Move");
+        floating.rotate(1);
+        floating.rotate(-1);
+        expect(floating.float!.label).toBe("Move");
+        floating.setTransform({ ...floating.float!.transform, angle: 30 });
+        expect(floating.float!.label).toBe(TRANSFORM_LABEL);
+        floating.setTransform({ ...floating.float!.transform, angle: 0 });
+        expect(floating.float!.label).toBe("Move");
+        floating.moveBy(1, 0);
+        floating.apply();
+        expect(h.document().history.undoLabel).toBe("Move");
     });
 
     it("the box follows a nudge, and a cancel after transforms puts the cel back byte for byte", () => {

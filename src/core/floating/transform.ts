@@ -1,4 +1,4 @@
-import type { BitMask, PixelBuffer } from "../model";
+import type { PixelBuffer, Rect } from "../model";
 import { createMask } from "../selection";
 import type { FloatingContent } from "./floating";
 
@@ -63,34 +63,35 @@ export function turnOf(degrees: number): { cos: number; sin: number } {
     return { cos: Math.cos(radians), sin: Math.sin(radians) };
 }
 
-function bitOf(mask: BitMask, index: number): boolean {
-    return (mask.data[index >> 3]! & (1 << (index & 7))) !== 0;
-}
-
-function setBit(mask: BitMask, index: number): void {
-    mask.data[index >> 3]! |= 1 << (index & 7);
-}
-
 /**
- * The content with each pixel moved by `map` from (x, y) of the source to (tx, ty) of a
- * `width` × `height` result: a permutation, every byte and mask bit carried over.
+ * The content with each pixel moved by `map` from (x, y) of the source to the pixel index it
+ * returns in a `width` × `height` result: a permutation, every byte and mask bit carried over.
  */
 function permute(
     content: FloatingContent,
     width: number,
     height: number,
-    map: (x: number, y: number) => [number, number],
+    map: (x: number, y: number) => number,
 ): FloatingContent {
     const { pixels, mask } = content;
+    const from = pixels.data;
     const data = new Uint8ClampedArray(width * height * 4);
     const out = createMask(width, height);
+    const bits = mask.data;
+    const outBits = out.data;
     for (let y = 0; y < pixels.height; y++) {
         for (let x = 0; x < pixels.width; x++) {
-            const from = y * pixels.width + x;
-            const [tx, ty] = map(x, y);
-            const to = ty * width + tx;
-            data.set(pixels.data.subarray(from * 4, from * 4 + 4), to * 4);
-            if (bitOf(mask, from)) setBit(out, to);
+            const source = y * pixels.width + x;
+            const target = map(x, y);
+            const a = source * 4;
+            const b = target * 4;
+            data[b] = from[a]!;
+            data[b + 1] = from[a + 1]!;
+            data[b + 2] = from[a + 2]!;
+            data[b + 3] = from[a + 3]!;
+            if ((bits[source >> 3]! & (1 << (source & 7))) !== 0) {
+                outBits[target >> 3]! |= 1 << (target & 7);
+            }
         }
     }
     return { pixels: { width, height, data }, mask: out };
@@ -100,8 +101,8 @@ function permute(
 export function flipContent(content: FloatingContent, axis: FlipAxis): FloatingContent {
     const { width, height } = content.pixels;
     return axis === "horizontal"
-        ? permute(content, width, height, (x, y) => [width - 1 - x, y])
-        : permute(content, width, height, (x, y) => [x, height - 1 - y]);
+        ? permute(content, width, height, (x, y) => y * width + (width - 1 - x))
+        : permute(content, width, height, (x, y) => (height - 1 - y) * width + x);
 }
 
 /**
@@ -113,13 +114,20 @@ export function rotateContent(content: FloatingContent, turns: number): Floating
     const { width, height } = content.pixels;
     switch (((turns % 4) + 4) % 4) {
         case 1:
-            return permute(content, height, width, (x, y) => [height - 1 - y, x]);
+            // (x, y) → (height − 1 − y, x) in a height × width result.
+            return permute(content, height, width, (x, y) => x * height + (height - 1 - y));
         case 2:
-            return permute(content, width, height, (x, y) => [width - 1 - x, height - 1 - y]);
+            return permute(
+                content,
+                width,
+                height,
+                (x, y) => (height - 1 - y) * width + (width - 1 - x),
+            );
         case 3:
-            return permute(content, height, width, (x, y) => [y, width - 1 - x]);
+            // (x, y) → (y, width − 1 − x).
+            return permute(content, height, width, (x, y) => (width - 1 - x) * height + y);
         default:
-            return permute(content, width, height, (x, y) => [x, y]);
+            return permute(content, width, height, (x, y) => y * width + x);
     }
 }
 
@@ -187,76 +195,142 @@ export function fromBoxSpace(
     };
 }
 
+/** Slack for rounding noise when the box's corners are compared with pixel centres. */
+const EPS = 1e-9;
+
 /**
- * Renders `source` by `transform` with nearest-neighbour sampling: the pixels whose centres
- * the turned box covers, as content of their bounding rectangle, and where that lies. A pixel
- * covered by the box but taken from outside the source's mask is transparent and outside the
- * result's mask. With the identity transform the source itself is returned.
+ * The rectangle of the pixels whose centres the turned box of `transform` may cover, from its
+ * corners: a centre `c` with min ≤ c < max on each axis (the box's own test decides which of
+ * them it covers). Untransformed or turned by a multiple of 90°, it is exactly the box's
+ * pixels.
  */
-export function renderTransform(
+export function transformBounds(transform: FreeTransform): Rect {
+    const corners = boxCorners(transform);
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const [x, y] of corners) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+    }
+    // `+ 0`: never a negative zero.
+    const x0 = Math.ceil(minX - 0.5 - EPS) + 0;
+    const y0 = Math.ceil(minY - 0.5 - EPS) + 0;
+    const x1 = Math.ceil(maxX - 0.5 + EPS);
+    const y1 = Math.ceil(maxY - 0.5 + EPS);
+    // A box of at least 1 × 1 covers at least the pixel at its centre.
+    return { x: x0, y: y0, width: Math.max(1, x1 - x0), height: Math.max(1, y1 - y0) };
+}
+
+/**
+ * The source pixel each document pixel takes under `transform` (SPEC §7.2): the index of
+ * source pixel (⌊u · sw / width⌋, ⌊v · sh / height⌋), where (u, v) is the pixel's centre turned
+ * back about the box's centre, or −1 when that centre is outside the box. The source's mask
+ * is not consulted.
+ */
+export function transformSampler(
     source: FloatingContent,
     transform: FreeTransform,
-): RenderedContent {
+): (px: number, py: number) => number {
     const { width: sw, height: sh } = source.pixels;
     const { width, height } = transform;
-    if (isIdentity(transform, sw, sh)) return { content: source, x: transform.x, y: transform.y };
-    // Candidate pixels: those whose centres lie within the corners' bounds, one more each way
-    // for rounding; the test below decides.
-    const corners = boxCorners(transform);
-    const xs = corners.map(([x]) => x);
-    const ys = corners.map(([, y]) => y);
-    const left = Math.floor(Math.min(...xs)) - 1;
-    const top = Math.floor(Math.min(...ys)) - 1;
-    const right = Math.ceil(Math.max(...xs)) + 1;
-    const bottom = Math.ceil(Math.max(...ys)) + 1;
     const { cos, sin } = turnOf(transform.angle);
     const cx = transform.x + width / 2;
     const cy = transform.y + height / 2;
-    const scaleX = sw / width;
-    const scaleY = sh / height;
-    /** The source pixel index under the centre of pixel `px, py`, or −1 outside the box. */
-    const sample = (px: number, py: number): number => {
+    return (px, py) => {
         const dx = px + 0.5 - cx;
         const dy = py + 0.5 - cy;
         const u = dx * cos + dy * sin + width / 2;
         const v = -dx * sin + dy * cos + height / 2;
         if (!(u >= 0 && u < width && v >= 0 && v < height)) return -1;
-        const sx = Math.min(Math.floor(u * scaleX), sw - 1);
-        const sy = Math.min(Math.floor(v * scaleY), sh - 1);
+        // ⌊u · sw / width⌋, the product taken first (SE-033 review D).
+        const sx = Math.min(Math.floor((u * sw) / width), sw - 1);
+        const sy = Math.min(Math.floor((v * sh) / height), sh - 1);
         return sy * sw + sx;
     };
-    // The covered pixels' bounds: the result's rectangle.
-    let x0 = Infinity;
-    let y0 = Infinity;
-    let x1 = -Infinity;
-    let y1 = -Infinity;
-    for (let py = top; py < bottom; py++) {
-        for (let px = left; px < right; px++) {
-            if (sample(px, py) < 0) continue;
-            if (px < x0) x0 = px;
-            if (px > x1) x1 = px;
-            if (py < y0) y0 = py;
-            if (py > y1) y1 = py;
-        }
+}
+
+/**
+ * Renders `source` by `transform` with nearest-neighbour sampling: the pixels of
+ * `transformBounds` (only those inside `clip`, when given) as content, with where it lies. A
+ * pixel the turned box does not cover, or covers with a pixel from outside the source's mask,
+ * is transparent and outside the result's mask. With the identity transform the source itself
+ * is returned, unclipped. When nothing of the bounds lies in `clip`, the result is one
+ * transparent pixel outside the mask at the bounds' corner, which is outside `clip`.
+ */
+export function renderTransform(
+    source: FloatingContent,
+    transform: FreeTransform,
+    clip?: Rect,
+): RenderedContent {
+    const { width: sw, height: sh } = source.pixels;
+    if (isIdentity(transform, sw, sh)) return { content: source, x: transform.x, y: transform.y };
+    const bounds = transformBounds(transform);
+    let x0 = bounds.x;
+    let y0 = bounds.y;
+    let x1 = bounds.x + bounds.width;
+    let y1 = bounds.y + bounds.height;
+    if (clip) {
+        x0 = Math.max(x0, clip.x);
+        y0 = Math.max(y0, clip.y);
+        x1 = Math.min(x1, clip.x + clip.width);
+        y1 = Math.min(y1, clip.y + clip.height);
     }
-    if (x0 > x1) {
-        // A box of at least 1 × 1 covers the pixel at its centre; kept for safety.
-        x0 = x1 = Math.floor(cx);
-        y0 = y1 = Math.floor(cy);
+    if (x1 <= x0 || y1 <= y0) {
+        return {
+            content: {
+                pixels: { width: 1, height: 1, data: new Uint8ClampedArray(4) },
+                mask: createMask(1, 1),
+            },
+            x: bounds.x,
+            y: bounds.y,
+        };
     }
-    const rw = x1 - x0 + 1;
-    const rh = y1 - y0 + 1;
-    const pixels: PixelBuffer = { width: rw, height: rh, data: new Uint8ClampedArray(rw * rh * 4) };
+    const rw = x1 - x0;
+    const rh = y1 - y0;
+    const data = new Uint8ClampedArray(rw * rh * 4);
     const mask = createMask(rw, rh);
+    const bits = mask.data;
     const from = source.pixels.data;
+    const sourceBits = source.mask.data;
+    // `transformSampler` written out inline, with the same arithmetic in the same order (so
+    // the same pixels on the box's edges), the row's terms taken out of the loop.
+    const { width, height } = transform;
+    const { cos, sin } = turnOf(transform.angle);
+    const cx = transform.x + width / 2;
+    const cy = transform.y + height / 2;
+    const halfW = width / 2;
+    const halfH = height / 2;
     for (let row = 0; row < rh; row++) {
+        const dy = y0 + row + 0.5 - cy;
+        const dySin = dy * sin;
+        const dyCos = dy * cos;
         for (let column = 0; column < rw; column++) {
-            const index = sample(x0 + column, y0 + row);
-            if (index < 0 || !bitOf(source.mask, index)) continue;
+            const dx = x0 + column + 0.5 - cx;
+            const u = dx * cos + dySin + halfW;
+            if (!(u >= 0 && u < width)) continue;
+            const v = -dx * sin + dyCos + halfH;
+            if (!(v >= 0 && v < height)) continue;
+            // ⌊u · sw / width⌋ (u ≥ 0, so a truncation), kept inside the source.
+            let sx = ((u * sw) / width) | 0;
+            let sy = ((v * sh) / height) | 0;
+            if (sx >= sw) sx = sw - 1;
+            if (sy >= sh) sy = sh - 1;
+            const index = sy * sw + sx;
+            if ((sourceBits[index >> 3]! & (1 << (index & 7))) === 0) continue;
             const to = row * rw + column;
-            pixels.data.set(from.subarray(index * 4, index * 4 + 4), to * 4);
-            setBit(mask, to);
+            const a = index * 4;
+            const b = to * 4;
+            data[b] = from[a]!;
+            data[b + 1] = from[a + 1]!;
+            data[b + 2] = from[a + 2]!;
+            data[b + 3] = from[a + 3]!;
+            bits[to >> 3]! |= 1 << (to & 7);
         }
     }
+    const pixels: PixelBuffer = { width: rw, height: rh, data };
     return { content: { pixels, mask }, x: x0, y: y0 };
 }

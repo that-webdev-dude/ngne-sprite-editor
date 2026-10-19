@@ -1,16 +1,28 @@
 import { expect, test } from "@playwright/test";
-import type { Locator, Page } from "@playwright/test";
-import { collectErrors, region } from "./se-006-support";
+import { collectErrors } from "./se-006-support";
 import { menuItem, openMenu } from "./se-007-support";
-import { openDocument, openViewportEditor, paint, pattern, settle } from "./se-011-support";
-import type { TestDocument } from "./se-011-support";
-import { clientAt, geometry, viewportArea } from "./se-012-support";
-import type { Point, View } from "./se-012-support";
-import { overlayPixels, overlaySettled, setGrids } from "./se-013-support";
+import { viewportArea } from "./se-012-support";
+import { overlayPixels, overlaySettled } from "./se-013-support";
 import { historyOf, toolsState } from "./se-014-support";
 import { celBytes } from "./se-015-support";
-import { moveOver } from "./se-017-support";
 import { setSelection } from "./se-030-support";
+import {
+    dragAt,
+    field,
+    floating,
+    lift,
+    pressToolKey,
+    RECT,
+    rows,
+    setUp,
+    SOURCE,
+    transformGroup,
+    typeField,
+    undo,
+    undoLabel,
+    VIEW,
+    WIDTH,
+} from "./se-033-support";
 
 // SE-033: selection transforms as the user works with them (SPEC §7.2; DESIGN §5.2, §6).
 // While a selection floats, the context bar shows X, Y, W, H and the angle with Apply and
@@ -18,105 +30,6 @@ import { setSelection } from "./se-030-support";
 // outside its box turns it; typing the same values in the context bar gives the very same
 // cel. Apply is one undo step; Cancel and Escape put back the pixels from before the lift.
 // Flip and Rotate in the Edit menu lift the selection into such a float.
-
-const WIDTH = 16;
-const HEIGHT = 12;
-const VIEW: View = { scale: 8, originX: 40, originY: 24 };
-const SOURCE = pattern(WIDTH, HEIGHT, 5);
-const RECT = { x: 3, y: 4, width: 4, height: 3 };
-
-function rows(rect: typeof RECT): string[] {
-    return Array.from({ length: HEIGHT }, (_, y) =>
-        Array.from({ length: WIDTH }, (_, x) =>
-            x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height
-                ? "#"
-                : ".",
-        ).join(""),
-    );
-}
-
-async function setUp(page: Page): Promise<TestDocument> {
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await openViewportEditor(page);
-    const document = await openDocument(page, { width: WIDTH, height: HEIGHT }, VIEW);
-    await setGrids(page, document.id, { pixelGrid: false, grid: { visible: false } });
-    await paint(page, document.id, SOURCE);
-    await settle(page);
-    return document;
-}
-
-async function pressToolKey(page: Page, key: string, id: string): Promise<void> {
-    await viewportArea(page).focus();
-    await expect(viewportArea(page)).toBeFocused();
-    await page.keyboard.press(key);
-    await expect.poll(async () => (await toolsState(page)).selected).toBe(id);
-}
-
-function floating(page: Page): Promise<boolean> {
-    return page.evaluate(() => window.__ngneTest!.keyContexts.getState().floating);
-}
-
-function undoLabel(page: Page, id: string): Promise<string | null> {
-    return page.evaluate(
-        (id) =>
-            window.__ngneTest!.sessions.getState().documents.find((entry) => entry.id === id)!
-                .history.undoLabel,
-        id,
-    );
-}
-
-/** The client position of document position `point` (with its fraction). */
-async function docClient(page: Page, point: Point): Promise<Point> {
-    const layout = await geometry(page);
-    return clientAt(layout, {
-        x: VIEW.originX + point.x * VIEW.scale,
-        y: VIEW.originY + point.y * VIEW.scale,
-    });
-}
-
-/** A press at document position `from`, moves through `through`, the release at the last. */
-async function dragAt(page: Page, from: Point, through: readonly Point[]): Promise<void> {
-    const start = await docClient(page, from);
-    await page.mouse.move(start.x, start.y);
-    await page.mouse.down();
-    for (const point of through) {
-        const client = await docClient(page, point);
-        await page.mouse.move(client.x, client.y, { steps: 3 });
-    }
-    await page.mouse.up();
-}
-
-/** Selects RECT, takes the Move tool and lifts it with a click on one of its pixels. */
-async function lift(page: Page, document: TestDocument): Promise<void> {
-    await setSelection(page, document.id, rows(RECT));
-    await pressToolKey(page, "KeyV", "move");
-    await moveOver(page, VIEW, [{ x: 4, y: 5 }]);
-    await page.mouse.down();
-    await page.mouse.up();
-    await expect.poll(() => floating(page)).toBe(true);
-}
-
-const contextBar = (page: Page) => region(page, "context-bar");
-const transformGroup = (page: Page) => contextBar(page).getByRole("group", { name: "Transform" });
-const field = (page: Page, name: string): Locator =>
-    transformGroup(page).getByRole("spinbutton", { name, exact: true });
-
-/** Types `value` into a field of the context bar and applies it with Enter. */
-async function typeField(page: Page, name: string, value: number): Promise<void> {
-    const target = field(page, name);
-    await target.click();
-    await expect(target).toBeFocused();
-    await target.fill(String(value));
-    await target.press("Enter");
-    await expect(target).toHaveValue(String(value));
-}
-
-/** Presses Ctrl+Z with the viewport focused. */
-async function undo(page: Page): Promise<void> {
-    await viewportArea(page).focus();
-    await expect(viewportArea(page)).toBeFocused();
-    await page.keyboard.press("Control+KeyZ");
-}
 
 test("while a selection floats the context bar shows X, Y, W, H and the angle with Apply and Cancel, and the overlay its box and handles", async ({
     page,
@@ -194,6 +107,38 @@ test("a drag of the south-east handle scales the float; W and H typed in the con
     await expect.poll(() => floating(page)).toBe(false);
     expect(await celBytes(page, document.id)).toEqual(dragged);
     expect(await historyOf(page, document.id)).toEqual({ undo: steps + 1, open: false });
+    expect(errors).toEqual([]);
+});
+
+test("W typed without Enter is set by a press on the canvas before that press applies the float: the same cel as the drag (DESIGN §5.2)", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    const document = await setUp(page);
+    await lift(page, document);
+    // The east handle, at the middle of the right side (7, 5.5), to x = 11: W = 8.
+    await dragAt(page, { x: 7, y: 5.5 }, [
+        { x: 9.2, y: 5.5 },
+        { x: 11, y: 5.5 },
+    ]);
+    await expect(field(page, "W")).toHaveValue("8");
+    await transformGroup(page).getByRole("button", { name: "Apply" }).click();
+    await expect.poll(() => floating(page)).toBe(false);
+    const dragged = (await celBytes(page, document.id))!;
+    const steps = (await historyOf(page, document.id)).undo;
+
+    await undo(page);
+    await expect.poll(() => celBytes(page, document.id)).toEqual(SOURCE);
+    await lift(page, document);
+    const width = field(page, "W");
+    await width.click();
+    await expect(width).toBeFocused();
+    await width.fill("8");
+    // A press on the canvas far beyond the box and its ring, the field still focused.
+    await dragAt(page, { x: 15.5, y: 11.5 }, []);
+    await expect.poll(() => floating(page)).toBe(false);
+    expect(await celBytes(page, document.id)).toEqual(dragged);
+    expect(await historyOf(page, document.id)).toEqual({ undo: steps, open: false });
     expect(errors).toEqual([]);
 });
 

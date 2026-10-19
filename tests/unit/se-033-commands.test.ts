@@ -13,6 +13,9 @@ import { activeDocument, sessionsStore } from "../../src/app/state/sessions";
 import type { OpenDocument } from "../../src/app/state/sessions";
 import { statusStore } from "../../src/app/state/status";
 import { toolState } from "../../src/app/tools/activeTool";
+import { connectToolMapping, toolPipeline } from "../../src/app/tools/appPipeline";
+import type { PointerInput } from "../../src/app/tools/pipeline";
+import { plainMapping } from "./se-014-support";
 import { celAt, celKey, createDocument } from "../../src/core/model";
 import type { DocSession, PixelBuffer } from "../../src/core/model";
 import { rectMask, selectCommand } from "../../src/core/selection";
@@ -235,6 +238,75 @@ describe("the transform commands", () => {
         select({ x: 0, y: 0, width: 2, height: 2 });
         floatingState.lift(active());
         for (const id of TRANSFORM_IDS) expect(command(id).enabled(), id).toBe(true);
+    });
+});
+
+describe("during a drag of the Move tool", () => {
+    /** A pointer input at document position `x, y` under a view of 8× at the origin. */
+    const point = (x: number, y: number, fields: Partial<PointerInput> = {}): PointerInput => ({
+        pointerId: 1,
+        button: -1,
+        buttons: 1,
+        clientX: x * 8,
+        clientY: y * 8,
+        shiftKey: false,
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+        timeStamp: 0,
+        ...fields,
+    });
+
+    /** A document at 8× with (1, 1)–(3, 2) selected, the Move tool and the mapping on. */
+    function setUpDrag(): () => void {
+        const document = open();
+        sessionsStore.getState().setView(document.id, { scale: 8, originX: 0, originY: 0 });
+        const disconnect = connectToolMapping(() => plainMapping(sessionsStore));
+        select({ x: 1, y: 1, width: 3, height: 2 });
+        toolState.select(MOVE_TOOL_ID);
+        // Lifted by a click on one of its pixels.
+        toolPipeline.down(point(1.5, 1.5, { button: 0, buttons: 1 }));
+        toolPipeline.up(point(1.5, 1.5, { button: 0, buttons: 0 }));
+        expect(floatingState.floats()).toBe(true);
+        return disconnect;
+    }
+
+    it("Escape (the registered command) takes back a handle drag only: box, label and pixels as before it; the float stays", () => {
+        const disconnect = setUpDrag();
+        try {
+            const kept = floatingState.float!.transform;
+            const label = floatingState.float!.label;
+            const shown = bytes();
+            // The south-east handle at (4, 3), dragged out to (6, 4).
+            toolPipeline.down(point(4, 3, { button: 0, buttons: 1 }));
+            toolPipeline.move([point(6, 4)]);
+            expect(floatingState.float!.transform).toEqual({ ...kept, width: 5, height: 3 });
+            expect(floatingState.float!.label).toBe(TRANSFORM_LABEL);
+            void command(FLOATING_COMMANDS.cancel).run();
+            expect(toolPipeline.stroking).toBe(false);
+            expect(floatingState.floats()).toBe(true);
+            expect(floatingState.float!.transform).toEqual(kept);
+            expect(floatingState.float!.label).toBe(label);
+            expect(bytes()).toEqual(shown);
+        } finally {
+            disconnect();
+        }
+    });
+
+    it("the five transforms and Set Transform are disabled, enabled again once the drag ends (review F)", () => {
+        const disconnect = setUpDrag();
+        try {
+            const ids = [...TRANSFORM_IDS, TRANSFORM_COMMANDS.set];
+            for (const id of ids) expect(command(id).enabled(), id).toBe(true);
+            toolPipeline.down(point(4, 3, { button: 0, buttons: 1 }));
+            toolPipeline.move([point(5, 4)]);
+            expect(toolPipeline.stroking).toBe(true);
+            for (const id of ids) expect(command(id).enabled(), id).toBe(false);
+            toolPipeline.up(point(5, 4, { button: 0, buttons: 0 }));
+            for (const id of ids) expect(command(id).enabled(), id).toBe(true);
+        } finally {
+            disconnect();
+        }
     });
 });
 
