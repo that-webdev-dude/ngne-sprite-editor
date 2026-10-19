@@ -1605,6 +1605,30 @@ Recorded by SE-052 (the dialog is DESIGN §7, Export), with its review's decisio
   not export “x”. <reason>" (a failed write as above); a picker or question cancelled is not
   reported.
 
+Recorded by SE-063 (the dialog is DESIGN §7, Export GIF):
+
+- Export GIF… is the File menu item after Export PNG Sequence…, without a key, an export of
+  `otherExport` from its own module (`app/export/gif.commands.ts`); the encoding is
+  `core/gif`, with `gifenc` 1.0.3 (its API declared in `src/gifenc.d.ts`, since it ships no
+  types). Its dialog offers Frames (All frames, or one tag) and Scale 1–8 (nearest
+  neighbour). It opens with the frames the export settings name and the scale last chosen in
+  the session, and changes neither the document nor its export settings. The file is
+  `<name>.gif`, or `<name>-<animation ID>.gif` for a tag, with `@<scale>x` before `.gif`
+  above 1.
+- Frames: all frames play forward and loop without end. A tag gives one pass of `expandTag`
+  (ping-pong and reverse included); its repeat is the loop count: 0 loops without end, 1 plays
+  once (no NETSCAPE2.0 block), n plays n times (loop count n − 1, which Chrome's `ImageDecoder`
+  reads as `repetitionCount` n − 1).
+- Each frame is the whole canvas, cleared after it shows (disposal 2), with a colour table of
+  its own from `buildPalette`: the frame's own colours when it has at most 256 (255 when a
+  pixel is transparent, the last index being the transparent one), else that many chosen by
+  it, each pixel taking the nearest in OKLab without dithering. A pixel with alpha 128 or
+  more shows its colour opaque; any other is transparent. Delays are the frame durations
+  rounded to 10 ms (halves up), at least 20 ms.
+- Reduced colours are not a failure: after the result toast, an info toast "Colours reduced
+  in N frames of the GIF: a GIF frame holds at most 256." A stroke begun while the dialog was
+  open stops the export ("A stroke is in progress.").
+
 ### 9.7 Conformance
 
 Export is accepted only when all three hold (SE-053):

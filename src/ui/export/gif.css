@@ -1,0 +1,13 @@
+/* Export GIF (SE-063): Frames and Scale on one line, the result line under them. */
+.gif-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8) var(--space-16);
+}
+
+.gif-form__result {
+    flex-basis: 100%;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}

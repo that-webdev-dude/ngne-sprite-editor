@@ -10,12 +10,13 @@ const manifest = JSON.parse(
 ) as Manifest;
 
 describe("package.json", () => {
-    // SPEC §4; `gifenc` joins with SE-063.
+    // SPEC §4; `gifenc` joined with SE-063.
     it("has exactly the runtime dependencies of the specification", () => {
         expect(Object.keys(manifest.dependencies).sort()).toEqual([
             "@ngne/core",
             "fast-png",
             "fflate",
+            "gifenc",
             "lucide-react",
             "radix-ui",
             "react",
