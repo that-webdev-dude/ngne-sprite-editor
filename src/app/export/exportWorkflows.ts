@@ -71,10 +71,18 @@ export interface ExportWorkflowOptions {
 
 /** What an export beside the bundle makes: one file to save, holding `count` files. */
 export interface OtherExportResult {
+    /** The file; with `produce`, only its name is read (its `bytes` may be empty). */
     file: BundleFile;
     type: ExportFileType;
     /** How many files the result toast names: 1, or the files a zip holds. */
     count: number;
+    /**
+     * Makes the file's bytes once it has a place to go: after the save picker (which then
+     * opens within the user's gesture, before a long encode), before a download (SE-063
+     * review). What it throws is reported as the export's failure (its message), and nothing
+     * is written.
+     */
+    produce?(): Promise<Uint8Array<ArrayBuffer>>;
 }
 
 /** What `otherExport` hands the function that makes the file. */
@@ -112,7 +120,8 @@ export interface ExportWorkflows {
      * An export beside the bundle, as a file operation of its own: applies a floating
      * selection, has `make` make the file, saves it through the save picker or downloads it,
      * and reports the result or the failure in one toast. Frame PNG, sprite sheet and PNG
-     * sequence use it; a later export (GIF, SE-063) registers a command that calls it.
+     * sequence use it; a later export (GIF, SE-063) registers a command that calls it. A
+     * result with `produce` has its bytes made only once the file has a place to go.
      */
     otherExport(make: OtherExportMaker): Promise<boolean>;
     /** The active frame as a PNG, at a scale the user chooses. */
@@ -239,15 +248,22 @@ export function createExportWorkflows(options: ExportWorkflowOptions = {}): Expo
 
     /** Saves one file through the save picker, or downloads it. */
     const saveFile = async (document: string, result: OtherExportResult): Promise<boolean> => {
-        const { file, type, count } = result;
+        const { file, type, count, produce } = result;
+        const bytesOf = () => (produce ? produce() : Promise.resolve(file.bytes));
         if (!platform.canChooseFile()) {
-            platform.download(file.name, file.bytes, type);
+            let bytes: Uint8Array<ArrayBuffer>;
+            try {
+                bytes = await bytesOf();
+            } catch (error) {
+                return failed(document, exportFailure(error));
+            }
+            platform.download(file.name, bytes, type);
             return exported(count, file.name);
         }
         try {
             const target = await platform.chooseFile(file.name, type);
             if (!target) return false;
-            await target.write(file.bytes);
+            await target.write(await bytesOf());
             return exported(count, target.name);
         } catch (error) {
             return failed(document, exportFailure(error));

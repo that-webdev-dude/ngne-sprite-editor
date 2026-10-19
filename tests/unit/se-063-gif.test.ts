@@ -4,6 +4,7 @@ import {
     GIF_ALPHA_THRESHOLD,
     MAX_GIF_SCALE,
     MIN_GIF_DELAY_MS,
+    encodeGif,
     gifDelayMs,
     gifFile,
     gifFileName,
@@ -238,16 +239,16 @@ describe("gifFile", () => {
         const first = gifFile(doc, { frames: "all", scale: 1 });
         expect(first.reducedFrames).toBe(1);
         const gif = decodeGif(first.file.bytes);
-        expect(gif.frames).toHaveLength(2);
-        const [reduced, exact] = renderGif(gif);
+        expect(gif.frames).toHaveLength(3);
+        const [before, reduced, after] = renderGif(gif);
         // The table is buildPalette's 256 colours of the frame; every pixel shows one of them.
-        const palette = buildPalette([compositeFrame(doc, "frame-0")], 256);
+        const palette = buildPalette([compositeFrame(doc, "frame-1")], 256);
         expect(palette).toHaveLength(256);
-        const table = gif.frames[0]!.table.map(
+        const table = gif.frames[1]!.table.map(
             ([r, g, b]) => ((r << 24) | (g << 16) | (b << 8) | 0xff) >>> 0,
         );
         expect(table).toEqual(palette);
-        expect(gif.frames[0]!.transparentIndex).toBeNull();
+        expect(gif.frames[1]!.transparentIndex).toBeNull();
         const allowed = new Set(palette);
         for (let at = 0; at < reduced!.length; at += 4) {
             expect(reduced![at + 3]).toBe(255);
@@ -259,10 +260,62 @@ describe("gifFile", () => {
                 0;
             expect(allowed.has(colour)).toBe(true);
         }
-        expect(Buffer.from(exact!).equals(Buffer.from(expectedImage(doc, "frame-1")))).toBe(true);
+        expect(Buffer.from(before!).equals(Buffer.from(expectedImage(doc, "frame-0")))).toBe(true);
+        expect(Buffer.from(after!).equals(Buffer.from(expectedImage(doc, "frame-2")))).toBe(true);
         // Deterministic: the same document gives the same bytes.
         const again = gifFile(doc, { frames: "all", scale: 1 }).file.bytes;
         expect(Buffer.from(again).equals(Buffer.from(first.file.bytes))).toBe(true);
+    });
+
+    it("counts a reduced frame a ping-pong shows twice once: the document's frames", () => {
+        const doc = manyColours();
+        const swing = gifFile(doc, { frames: { tagId: tagId(doc, "Swing") }, scale: 1 });
+        expect(swing.frameCount).toBe(4);
+        expect(swing.reducedFrames).toBe(1);
+        const gif = decodeGif(swing.file.bytes);
+        // GIF frames 1 and 3 both show document frame 1, reduced the same way.
+        expect(gif.frames[1]!.table).toEqual(gif.frames[3]!.table);
+        expect(Array.from(gif.frames[1]!.indices)).toEqual(Array.from(gif.frames[3]!.indices));
+    });
+
+    it("encodeGif makes the same bytes in steps, pausing between frames", async () => {
+        const doc = fourFrames();
+        const options = { frames: { tagId: tagId(doc, "Bounce") }, scale: 2 };
+        let pauses = 0;
+        const stepped = await encodeGif(doc, options, async () => {
+            pauses++;
+        });
+        const whole = gifFile(doc, options);
+        expect(Buffer.from(stepped.file.bytes).equals(Buffer.from(whole.file.bytes))).toBe(true);
+        expect(stepped.file.name).toBe(whole.file.name);
+        expect([stepped.frameCount, stepped.reducedFrames]).toEqual([6, 0]);
+        // Between each frame and the next: five times for six frames.
+        expect(pauses).toBe(5);
+    });
+
+    it("encodeGif lets the event loop run between frames by default", async () => {
+        const doc = fourFrames();
+        const order: string[] = [];
+        const encoding = encodeGif(doc, { frames: "all", scale: 1 }).then(() => {
+            order.push("encoded");
+        });
+        // A timer set after the encode started runs before it ends: the encode yields.
+        setTimeout(() => order.push("timer"), 0);
+        await encoding;
+        expect(order).toEqual(["timer", "encoded"]);
+    });
+
+    it("encodeGif stops with what the pause throws; a bad scale throws before any frame", async () => {
+        const doc = fourFrames();
+        let pauses = 0;
+        await expect(
+            encodeGif(doc, { frames: "all", scale: 1 }, async () => {
+                pauses++;
+                throw new Error("A stroke is in progress.");
+            }),
+        ).rejects.toThrow("A stroke is in progress.");
+        expect(pauses).toBe(1);
+        await expect(encodeGif(doc, { frames: "all", scale: 9 })).rejects.toThrow(RangeError);
     });
 
     it("names the file after the export name and the tag's animation ID", () => {

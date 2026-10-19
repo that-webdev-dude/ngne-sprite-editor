@@ -81,7 +81,7 @@ function document(
 }
 
 /** Durations of the four frames of `fourFrames`, in ms. */
-export const FOUR_FRAME_DURATIONS = [100, 15, 155, 84] as const;
+export const FOUR_FRAME_DURATIONS = [100, 4, 155, 84] as const;
 /** The delays a GIF writes for them: rounded to 10 ms, at least 20 ms. */
 export const FOUR_FRAME_DELAYS = [100, 20, 160, 80] as const;
 
@@ -123,11 +123,20 @@ export function fourFrames(): SpriteDoc {
 }
 
 /**
- * 24 × 24, two frames of 100 ms: frame 0 has 576 different opaque colours, more than a GIF
- * frame holds; frame 1 has two.
+ * 24 × 24, three frames of 100 ms: frame 1 has 576 different opaque colours, more than a GIF
+ * frame holds; frames 0 and 2 have two each. Its tag "Swing" is a ping-pong over the three,
+ * which shows frame 1 twice (0 1 2 1).
  */
 export function manyColours(): SpriteDoc {
     const many = image(24, 24, (x, y) => [x * 10, y * 10, (x * 24 + y) % 256, 255]);
     const two = image(24, 24, (x) => (x < 12 ? [255, 0, 0, 255] : [0, 0, 255, 255]));
-    return document("Many Colours", 24, 24, [100, 100], [many, two]);
+    const other = image(24, 24, (_, y) => (y < 12 ? [0, 160, 0, 255] : [240, 220, 0, 255]));
+    return document(
+        "Many Colours",
+        24,
+        24,
+        [100, 100, 100],
+        [two, many, other],
+        [{ name: "Swing", from: 0, to: 2, direction: "pingpong", repeat: 0 }],
+    );
 }

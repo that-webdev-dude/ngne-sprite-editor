@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { collectErrors, settleTimers } from "./se-006-support";
 import { openEditor } from "./se-007-support";
 import { field } from "./se-008-support";
@@ -51,6 +51,19 @@ async function dialogsClosed(page: Page): Promise<void> {
     await settleTimers(page);
 }
 
+/** The dialog's Frames select. */
+const frames = (dialog: Locator): Locator =>
+    dialog.getByRole("combobox", { name: "Frames", exact: true });
+
+/**
+ * Chooses an entry of the Frames select, then waits until the closed list has given the focus
+ * back to the select (Radix does it after the list closes), before the next key or field.
+ */
+async function chooseFrames(page: Page, dialog: Locator, option: string): Promise<void> {
+    await choose(page, dialog, "Frames", option);
+    await expect(frames(dialog)).toBeFocused();
+}
+
 test("a GIF of the 4-frame fixture decodes to 4 frames with their delays and exact colours", async ({
     page,
 }) => {
@@ -60,9 +73,7 @@ test("a GIF of the 4-frame fixture decodes to 4 frames with their delays and exa
     await openGifFixture(page, "fourFrames");
 
     const dialog = await openGifDialog(page);
-    await expect(dialog.getByRole("combobox", { name: "Frames", exact: true })).toHaveText(
-        "All frames",
-    );
+    await expect(frames(dialog)).toHaveText("All frames");
     await expect(field(dialog, "Scale")).toHaveValue("1");
     await expect(dialog.locator("[data-gif-result]")).toHaveText(
         "four-frames.gif · 16 × 16 px · 4 frames · loops forever",
@@ -92,7 +103,7 @@ test("a ping-pong tag exports its expanded sequence, scaled", async ({ page }) =
     await openGifFixture(page, "fourFrames");
 
     const dialog = await openGifDialog(page);
-    await choose(page, dialog, "Frames", "Bounce (1–4)");
+    await chooseFrames(page, dialog, "Bounce (1–4)");
     const scale = field(dialog, "Scale");
     await scale.fill("2");
     await scale.blur();
@@ -119,25 +130,30 @@ test("a tag played twice loops once more; one played once does not loop", async 
     await openGifFixture(page, "fourFrames");
 
     let dialog = await openGifDialog(page);
-    await choose(page, dialog, "Frames", "Twice (3–4)");
+    await chooseFrames(page, dialog, "Twice (3–4)");
+    const scale = field(dialog, "Scale");
+    await scale.fill("3");
+    await scale.blur();
     await expect(dialog.locator("[data-gif-result]")).toHaveText(
-        "four-frames-twice.gif · 16 × 16 px · 2 frames · plays 2 times",
+        "four-frames-twice@3x.gif · 48 × 48 px · 2 frames · plays 2 times",
     );
     let gif = await decodeInBrowser(page, (await exportAndDownload(page, dialog)).bytes);
     expect(gif.repetitionCount).toBe(1);
-    await expectFrames(page, gif.images, [2, 3], 16);
+    await expectFrames(page, gif.images, [2, 3], 16, 3);
     await dialogsClosed(page);
 
     dialog = await openGifDialog(page);
     // The dialog opens with the scale last chosen; the frames are the export settings' again.
-    await choose(page, dialog, "Frames", "Back (2–4)");
+    await expect(frames(dialog)).toHaveText("All frames");
+    await expect(field(dialog, "Scale")).toHaveValue("3");
+    await chooseFrames(page, dialog, "Back (2–4)");
     await expect(dialog.locator("[data-gif-result]")).toHaveText(
-        "four-frames-back.gif · 16 × 16 px · 3 frames · plays once",
+        "four-frames-back@3x.gif · 48 × 48 px · 3 frames · plays once",
     );
     gif = await decodeInBrowser(page, (await exportAndDownload(page, dialog)).bytes);
     expect(gif.repetitionCount).toBe(0);
     expect(gif.durations).toEqual([3, 2, 1].map((index) => FOUR_FRAME_DELAYS[index]));
-    await expectFrames(page, gif.images, [3, 2, 1], 16);
+    await expectFrames(page, gif.images, [3, 2, 1], 16, 3);
     expect(errors).toEqual([]);
 });
 
@@ -154,16 +170,20 @@ test("frames with more than 256 colours export with a quantization warning toast
     expect(name).toBe("many-colours.gif");
     await expect(infoToast(page, "Exported 1 file to “many-colours.gif”")).toBeVisible();
     await expect(
-        infoToast(page, "Colours reduced in 1 frame of the GIF: a GIF frame holds at most 256."),
+        infoToast(
+            page,
+            "Colours reduced in 1 of the document's frames: a GIF frame holds at most 256.",
+        ),
     ).toBeVisible();
     await expect(errorToast(page)).toHaveCount(0);
 
     const gif = await decodeInBrowser(page, bytes);
-    expect(gif.frameCount).toBe(2);
-    expect(colourCount(gif.images[0]!)).toBeLessThanOrEqual(256);
-    expect(colourCount(gif.images[0]!)).toBeGreaterThan(200);
-    // The frame within the limit keeps its colours exactly.
+    expect(gif.frameCount).toBe(3);
+    expect(colourCount(gif.images[1]!)).toBeLessThanOrEqual(256);
+    expect(colourCount(gif.images[1]!)).toBeGreaterThan(200);
+    // The frames within the limit keep their colours exactly.
     const composites = await frameComposites(page);
-    expect(gif.images[1]).toEqual(gifImage(composites[1]!, 24));
+    expect(gif.images[0]).toEqual(gifImage(composites[0]!, 24));
+    expect(gif.images[2]).toEqual(gifImage(composites[2]!, 24));
     expect(errors).toEqual([]);
 });

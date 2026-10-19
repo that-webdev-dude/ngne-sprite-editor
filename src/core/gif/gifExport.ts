@@ -25,7 +25,8 @@ import type { PixelBuffer } from "../pixels";
 // - Delays are the frames' durations rounded to 10 ms, at least `MIN_GIF_DELAY_MS`.
 // - The image is scaled by a whole number, 1–8, with nearest-neighbour sampling.
 //
-// Pure: no DOM. The same document and options give the same bytes.
+// Pure: no DOM. The same document and options give the same bytes, made at once (`gifFile`)
+// or in steps that let the event loop run between frames (`encodeGif`).
 
 /** Smallest and largest scale of a GIF. */
 export const MIN_GIF_SCALE = 1;
@@ -206,10 +207,10 @@ export interface GifResult {
 }
 
 /**
- * The animated GIF of a document (see the top of this module). Throws `RangeError` for a
- * scale outside 1–8 or a tag the document does not have.
+ * The steps of an encode: each `next()` writes one frame of the GIF; the last returns the
+ * result. Checks the scale and the frames when it is made, before any step runs.
  */
-export function gifFile(doc: SpriteDoc, options: GifOptions): GifResult {
+function gifSteps(doc: SpriteDoc, options: GifOptions): Generator<void, GifResult, void> {
     const { frames, scale } = options;
     if (!Number.isInteger(scale) || scale < MIN_GIF_SCALE || scale > MAX_GIF_SCALE) {
         throw new RangeError(
@@ -218,29 +219,73 @@ export function gifFile(doc: SpriteDoc, options: GifOptions): GifResult {
         );
     }
     const { entries, plays } = gifSequence(doc, frames);
-    const width = doc.width * scale;
-    const height = doc.height * scale;
-    /** By frame ID: a frame a ping-pong shows twice is composited and indexed once. */
-    const images = new Map<string, GifFrameImage>();
-    const encoder = GIFEncoder();
-    entries.forEach((entry, position) => {
-        let image = images.get(entry.frameId);
-        if (!image) {
-            image = gifFrameImage(compositeFrame(doc, entry.frameId));
-            images.set(entry.frameId, image);
+    return (function* () {
+        const width = doc.width * scale;
+        const height = doc.height * scale;
+        /** By frame ID: a frame a ping-pong shows twice is composited and indexed once. */
+        const images = new Map<string, GifFrameImage>();
+        const encoder = GIFEncoder();
+        for (const [position, entry] of entries.entries()) {
+            if (position > 0) yield;
+            let image = images.get(entry.frameId);
+            if (!image) {
+                image = gifFrameImage(compositeFrame(doc, entry.frameId));
+                images.set(entry.frameId, image);
+            }
+            encoder.writeFrame(scaledIndices(image, scale), width, height, {
+                palette: colorTable(image),
+                transparent: image.transparentIndex !== -1,
+                transparentIndex: Math.max(0, image.transparentIndex),
+                delay: gifDelayMs(entry.ms),
+                // Read with the first frame only.
+                repeat: position === 0 ? gifLoopCount(plays) : 0,
+                dispose: 2,
+            });
         }
-        encoder.writeFrame(scaledIndices(image, scale), width, height, {
-            palette: colorTable(image),
-            transparent: image.transparentIndex !== -1,
-            transparentIndex: Math.max(0, image.transparentIndex),
-            delay: gifDelayMs(entry.ms),
-            // Read with the first frame only.
-            repeat: position === 0 ? gifLoopCount(plays) : 0,
-            dispose: 2,
-        });
-    });
-    encoder.finish();
-    const reducedFrames = [...images.values()].filter((image) => image.reduced).length;
-    const name = gifFileName(doc, exportName(doc.name), frames, scale);
-    return { file: { name, bytes: encoder.bytes() }, frameCount: entries.length, reducedFrames };
+        encoder.finish();
+        const reducedFrames = [...images.values()].filter((image) => image.reduced).length;
+        const name = gifFileName(doc, exportName(doc.name), frames, scale);
+        return {
+            file: { name, bytes: encoder.bytes() },
+            frameCount: entries.length,
+            reducedFrames,
+        };
+    })();
+}
+
+/**
+ * The animated GIF of a document (see the top of this module), made at once. Throws
+ * `RangeError` for a scale outside 1–8 or a tag the document does not have.
+ */
+export function gifFile(doc: SpriteDoc, options: GifOptions): GifResult {
+    const steps = gifSteps(doc, options);
+    for (;;) {
+        const step = steps.next();
+        if (step.done) return step.value;
+    }
+}
+
+/** Waits for the next task of the event loop: whatever else is queued runs first. */
+export function nextTask(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/**
+ * `gifFile` in steps, for a page that must stay responsive: `pause` is awaited between one
+ * frame and the next (by default the next task of the event loop), so timers, input and
+ * rendering run meanwhile. What `pause` throws stops the encode and is thrown from here; it
+ * is where a caller checks that the document has not changed meanwhile. The bytes are those
+ * of `gifFile`. Throws as `gifFile` does before the first frame.
+ */
+export async function encodeGif(
+    doc: SpriteDoc,
+    options: GifOptions,
+    pause: () => Promise<void> = nextTask,
+): Promise<GifResult> {
+    const steps = gifSteps(doc, options);
+    for (;;) {
+        const step = steps.next();
+        if (step.done) return step.value;
+        await pause();
+    }
 }

@@ -1,4 +1,4 @@
-﻿import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { appCommands } from "../../src/app/commands/appCommands";
 import { buildMenu, menuCommands } from "../../src/app/commands/menuModel";
 import type { Command } from "../../src/app/commands/types";
@@ -6,7 +6,7 @@ import { GIF_FILE, createGifExport, reducedColoursMessage } from "../../src/app/
 import { createGifDialogs } from "../../src/app/export/gifDialog";
 import type { GifDialogs, GifRequest } from "../../src/app/export/gifDialog";
 import { sessionsStore } from "../../src/app/state/sessions";
-import { gifFile } from "../../src/core/gif";
+import { encodeGif, gifFile } from "../../src/core/gif";
 import { createDocument } from "../../src/core/model";
 import type { SpriteDoc } from "../../src/core/model";
 import { fourFrames, manyColours } from "../e2e/se-063-documents";
@@ -56,8 +56,16 @@ interface GifHarness {
     exportGif: () => Promise<boolean>;
     /** Every GIF dialog shown. */
     shown: GifRequest[];
+    /** Runs while the save picker is open, before it answers: what the user does meanwhile. */
+    duringPicker: (() => void) | null;
+    /** The pause the encode uses between frames, around the export's own; null: its own. */
+    pause: ((own: () => Promise<void>) => Promise<void>) | null;
 }
 
+/**
+ * Export GIF… over the SE-052 harness. `test.events` records, in order: "apply floating",
+ * "gif dialog", "save picker", "encode" (the encoder called), "write <name>" (a file saved).
+ */
 function gifHarness(doc: SpriteDoc = fourFrames()): GifHarness {
     const test = exportHarness();
     const layerId = doc.layers[0]!.id;
@@ -71,12 +79,49 @@ function gifHarness(doc: SpriteDoc = fourFrames()): GifHarness {
             test.events.push("gif dialog");
         }
     });
+    const platform = test.exportPlatform;
+    const chooseFile = platform.chooseFile.bind(platform);
+    platform.chooseFile = async (name, type) => {
+        test.events.push("save picker");
+        harness.duringPicker?.();
+        const target = await chooseFile(name, type);
+        if (!target) return null;
+        return {
+            name: target.name,
+            async write(bytes) {
+                await target.write(bytes);
+                test.events.push(`write ${target.name}`);
+            },
+        };
+    };
     const exportGif = createGifExport({
         workflows: test.exports,
         dialogs,
         notices: { info: (message) => void test.notices.push({ kind: "info", message }) },
+        encode(doc, options, pause) {
+            test.events.push("encode");
+            const around = harness.pause;
+            return encodeGif(doc, options, around ? () => around(pause!) : pause);
+        },
     });
-    return { test, dialogs, exportGif, shown };
+    const harness: GifHarness = {
+        test,
+        dialogs,
+        exportGif,
+        shown,
+        duringPicker: null,
+        pause: null,
+    };
+    return harness;
+}
+
+/** Opens a stroke on the active document, as the pencil does; returns its transaction. */
+function beginStroke(test: ExportHarness) {
+    const document = active(test);
+    return document.history.begin({
+        layerId: document.session.activeLayerId,
+        frameId: document.session.activeFrameId,
+    });
 }
 
 function waitForGifDialog(harness: GifHarness): Promise<GifRequest> {
@@ -116,7 +161,14 @@ describe("Export GIF… through otherExport", () => {
         const running = harness.exportGif();
         (await waitForGifDialog(harness)).answer({ choice: "tag:tag-0", scale: 2 });
         expect(await running).toBe(true);
-        expect(test.events).toEqual(["apply floating", "gif dialog"]);
+        // The file is chosen first, then encoded (SE-063 review).
+        expect(test.events).toEqual([
+            "apply floating",
+            "gif dialog",
+            "save picker",
+            "encode",
+            "write chosen.gif",
+        ]);
         expect(test.exportPlatform.suggested).toEqual(["four-frames-bounce@2x.gif"]);
         const expected = gifFile(active(test).session.doc, {
             frames: { tagId: "tag-0" },
@@ -176,23 +228,38 @@ describe("Export GIF… through otherExport", () => {
         expect(test.exportPlatform.downloads).toHaveLength(1);
         expect(infos(test)).toEqual([
             "Exported 1 file to “many-colours.gif”",
-            "Colours reduced in 1 frame of the GIF: a GIF frame holds at most 256.",
+            "Colours reduced in 1 of the document's frames: a GIF frame holds at most 256.",
         ]);
         expect(reducedColoursMessage(3)).toBe(
-            "Colours reduced in 3 frames of the GIF: a GIF frame holds at most 256.",
+            "Colours reduced in 3 of the document's frames: a GIF frame holds at most 256.",
         );
         expect(errors(test)).toEqual([]);
+    });
+
+    it("counts the document's frames in the warning: a ping-pong shows its reduced frame twice", async () => {
+        const harness = gifHarness(manyColours());
+        const { test } = harness;
+        test.exportPlatform.access = false;
+        const running = harness.exportGif();
+        (await waitForGifDialog(harness)).answer({ choice: "tag:tag-0", scale: 1 });
+        expect(await running).toBe(true);
+        // The GIF holds 0 1 2 1: document frame 1 is reduced, and shown twice.
+        expect(
+            gifFile(active(test).session.doc, { frames: { tagId: "tag-0" }, scale: 1 }),
+        ).toMatchObject({
+            frameCount: 4,
+            reducedFrames: 1,
+        });
+        expect(infos(test)).toEqual([
+            "Exported 1 file to “many-colours-swing.gif”",
+            "Colours reduced in 1 of the document's frames: a GIF frame holds at most 256.",
+        ]);
     });
 
     it("refuses during a stroke: at the start, and when one began while the dialog was open", async () => {
         const harness = gifHarness();
         const { test } = harness;
-        const document = active(test);
-        const begin = () =>
-            document.history.begin({
-                layerId: document.session.activeLayerId,
-                frameId: document.session.activeFrameId,
-            });
+        const begin = () => beginStroke(test);
         const running = harness.exportGif();
         const request = await waitForGifDialog(harness);
         const stroke = begin();
@@ -222,5 +289,152 @@ describe("Export GIF… through otherExport", () => {
         request.answer(null);
         expect(await running).toBe(false);
         expect(test.workflows.busy).toBe(false);
+    });
+});
+
+describe("Export GIF…: the file is chosen first, then encoded (SE-063 review)", () => {
+    it("asks for the file before the encode runs; a cancelled picker encodes nothing", async () => {
+        const harness = gifHarness();
+        const { test } = harness;
+        test.exportPlatform.toSave.push(null);
+        const running = harness.exportGif();
+        (await waitForGifDialog(harness)).answer({ choice: "all", scale: 1 });
+        expect(await running).toBe(false);
+        expect(test.events).toEqual(["apply floating", "gif dialog", "save picker"]);
+        expect(test.notices).toEqual([]);
+    });
+
+    it("stops when a stroke began while the save picker was open", async () => {
+        const harness = gifHarness();
+        const { test } = harness;
+        test.exportPlatform.toSave.push("chosen.gif");
+        let stroke: ReturnType<typeof beginStroke> | null = null;
+        harness.duringPicker = () => {
+            stroke = beginStroke(test);
+        };
+        const running = harness.exportGif();
+        (await waitForGifDialog(harness)).answer({ choice: "all", scale: 1 });
+        expect(await running).toBe(false);
+        expect(errors(test)).toEqual(["Could not export “Four Frames”. A stroke is in progress."]);
+        expect(test.events).not.toContain("encode");
+        expect(test.exportPlatform.saved).toEqual([]);
+        stroke!.abort();
+    });
+
+    it("stops when a stroke begins, or the document changes, while it encodes", async () => {
+        for (const meanwhile of ["stroke", "change"] as const) {
+            const harness = gifHarness();
+            const { test } = harness;
+            test.exportPlatform.toSave.push("chosen.gif");
+            let stroke: ReturnType<typeof beginStroke> | null = null;
+            let pauses = 0;
+            harness.pause = async (own) => {
+                // During the encode, after its first frame.
+                if (++pauses === 1) {
+                    stroke = beginStroke(test);
+                    if (meanwhile === "change") {
+                        stroke.image.data.fill(255);
+                        stroke.markDirty({ x: 0, y: 0, width: 16, height: 16 });
+                        stroke.commit("Paint");
+                        stroke = null;
+                    }
+                }
+                await own();
+            };
+            const running = harness.exportGif();
+            (await waitForGifDialog(harness)).answer({ choice: "all", scale: 1 });
+            expect(await running, meanwhile).toBe(false);
+            expect(errors(test), meanwhile).toEqual([
+                `Could not export “Four Frames”. ${
+                    meanwhile === "stroke"
+                        ? "A stroke is in progress."
+                        : "The document changed while the GIF was made. Export it again."
+                }`,
+            ]);
+            expect(test.events, meanwhile).toContain("encode");
+            expect(test.exportPlatform.saved, meanwhile).toEqual([]);
+            expect(pauses, meanwhile).toBe(1);
+            (stroke as ReturnType<typeof beginStroke> | null)?.abort();
+        }
+    });
+
+    it("does not block the page for the whole encode: a timer set as it starts runs before it ends", async () => {
+        const harness = gifHarness();
+        const { test } = harness;
+        test.exportPlatform.toSave.push("chosen.gif");
+        // The timer is set when the encoder is called, before its first frame.
+        const push = test.events.push.bind(test.events);
+        test.events.push = (...items) => {
+            if (items.includes("encode")) setTimeout(() => push("timer"), 0);
+            return push(...items);
+        };
+        const running = harness.exportGif();
+        (await waitForGifDialog(harness)).answer({ choice: "all", scale: 1 });
+        expect(await running).toBe(true);
+        const events = test.events.slice(test.events.indexOf("encode"));
+        expect(events).toEqual(["encode", "timer", "write chosen.gif"]);
+    });
+
+    it("otherExport: a producer runs after the picker or before the download; its failure is one toast", async () => {
+        const harness = gifHarness();
+        const { test } = harness;
+        const file = { name: "made.bin", bytes: new Uint8Array(0) };
+        const type = GIF_FILE;
+        const platform = test.exportPlatform;
+        test.exportPlatform.toSave.push("chosen.gif");
+        const produce = async () => {
+            test.events.push("produce");
+            return Uint8Array.from([7, 8, 9]);
+        };
+        expect(
+            await test.exports.otherExport(async () => {
+                test.events.push("make");
+                return { file, type, count: 1, produce };
+            }),
+        ).toBe(true);
+        expect(test.events).toEqual([
+            "apply floating",
+            "make",
+            "save picker",
+            "produce",
+            "write chosen.gif",
+        ]);
+        expect(platform.saved).toEqual([{ name: "chosen.gif", bytes: Uint8Array.from([7, 8, 9]) }]);
+
+        platform.access = false;
+        expect(
+            await test.exports.otherExport(async () => ({ file, type, count: 1, produce })),
+        ).toBe(true);
+        expect(platform.downloads).toEqual([
+            { name: "made.bin", bytes: Uint8Array.from([7, 8, 9]), kind: "gif" },
+        ]);
+
+        const failing = async (): Promise<Uint8Array<ArrayBuffer>> => {
+            throw new Error("Out of memory.");
+        };
+        expect(
+            await test.exports.otherExport(async () => ({
+                file,
+                type,
+                count: 1,
+                produce: failing,
+            })),
+        ).toBe(false);
+        platform.access = true;
+        platform.toSave.push("other.gif");
+        expect(
+            await test.exports.otherExport(async () => ({
+                file,
+                type,
+                count: 1,
+                produce: failing,
+            })),
+        ).toBe(false);
+        expect(errors(test)).toEqual([
+            "Could not export “Four Frames”. Out of memory.",
+            "Could not export “Four Frames”. Out of memory.",
+        ]);
+        expect(platform.downloads).toHaveLength(1);
+        expect(platform.saved).toHaveLength(1);
     });
 });

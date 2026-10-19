@@ -1657,15 +1657,22 @@ Recorded by SE-063 (the dialog is DESIGN §7, Export GIF):
   (ping-pong and reverse included); its repeat is the loop count: 0 loops without end, 1 plays
   once (no NETSCAPE2.0 block), n plays n times (loop count n − 1, which Chrome's `ImageDecoder`
   reads as `repetitionCount` n − 1).
-- Each frame is the whole canvas, cleared after it shows (disposal 2), with a colour table of
-  its own from `buildPalette`: the frame's own colours when it has at most 256 (255 when a
-  pixel is transparent, the last index being the transparent one), else that many chosen by
-  it, each pixel taking the nearest in OKLab without dithering. A pixel with alpha 128 or
-  more shows its colour opaque; any other is transparent. Delays are the frame durations
-  rounded to 10 ms (halves up), at least 20 ms.
+- Each frame is the whole canvas, cleared after it shows (disposal 2), with colours of its
+  own from `buildPalette`: the frame's own colours when it has at most 256 (255 when a pixel
+  is transparent), else that many chosen by it, each pixel taking the nearest in OKLab without
+  dithering. The transparent index is the one right after the frame's colours; the table is
+  padded to a power of two. The first frame's table is written as the global colour table,
+  each later frame's as its local one. A pixel with alpha 128 or more shows its colour
+  opaque; any other is transparent. Delays are the frame durations rounded to 10 ms (halves
+  up), at least 20 ms.
+- The file is chosen first (the save picker, within the user's gesture), then encoded, one
+  frame at a time with the page running in between (`encodeGif`). A stroke begun while the
+  dialog or the picker was open, or during the encode, stops the export ("A stroke is in
+  progress."), and so does a change made during the encode ("The document changed while the
+  GIF was made. Export it again."); nothing is written then.
 - Reduced colours are not a failure: after the result toast, an info toast "Colours reduced
-  in N frames of the GIF: a GIF frame holds at most 256." A stroke begun while the dialog was
-  open stops the export ("A stroke is in progress.").
+  in N of the document's frames: a GIF frame holds at most 256.", each frame counted once
+  however often the GIF shows it.
 
 ### 9.7 Conformance
 

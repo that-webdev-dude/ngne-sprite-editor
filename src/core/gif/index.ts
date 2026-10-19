@@ -7,11 +7,13 @@ export {
     MAX_GIF_SCALE,
     MIN_GIF_DELAY_MS,
     MIN_GIF_SCALE,
+    encodeGif,
     gifDelayMs,
     gifFile,
     gifFileName,
     gifFrameImage,
     gifLoopCount,
     gifSequence,
+    nextTask,
 } from "./gifExport";
 export type { GifFrameImage, GifFrames, GifOptions, GifResult, GifSequence } from "./gifExport";
