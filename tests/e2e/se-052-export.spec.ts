@@ -30,6 +30,7 @@ import {
     exportSettings,
     folderFiles,
     folderStub,
+    permissionAfterReload,
     framePngDialog,
     listedFiles,
     openExportDialog,
@@ -38,6 +39,9 @@ import {
     putFiles,
     removeExportPickers,
     removeFile,
+    removeFolder,
+    setExportSettings,
+    runAfterGestureLapsed,
     stubExportFolders,
 } from "./se-052-support";
 
@@ -508,5 +512,115 @@ test("the export folder is kept in IndexedDB: after a reload, Export Again write
     await expectFolderToHold(page, "kept", expected);
     expect(await dialogsSeen(page)).toEqual([]);
     expect(await folderStub(page)).toMatchObject({ folderPickers: 0, permissionRequests: 0 });
+    expect(errors).toEqual([]);
+});
+
+test("after a reload Chrome may ask again for the kept folder: Export Again prompts once and writes", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await stubExportFolders(page);
+    await openEditor(page);
+    await openFixture(page, "c");
+    await exportInto(page, "kept");
+    const expected = byName(await expectedBundle(page));
+
+    await permissionAfterReload(page, "prompt");
+    await page.reload();
+    await openEditor(page);
+    await openFixture(page, "c");
+    await removeFile(page, "kept", "twice.png");
+    await recordDialogs(page);
+    // The key is the gesture the prompt needs.
+    await page.keyboard.press("Control+Shift+KeyE");
+    await expect(infoToast(page, "Exported 4 files to “kept”")).toBeVisible();
+    await expectFolderToHold(page, "kept", expected);
+    expect(await dialogsSeen(page)).toEqual([]);
+    expect(await folderStub(page)).toMatchObject({
+        folderPickers: 0,
+        permissionRequests: 1,
+        permission: "granted",
+    });
+    expect(errors).toEqual([]);
+});
+
+test("a removed export folder: Export Again shows the Export dialog", async ({ page }) => {
+    const errors = collectErrors(page);
+    await stubExportFolders(page);
+    await openHero(page);
+    await drawStroke(page, STROKES[0]!);
+    await exportInto(page, "sprites");
+
+    await removeFolder(page, "sprites");
+    await page.keyboard.press("Control+Shift+KeyE");
+    const dialog = exportDialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(folderName(dialog)).toHaveText("sprites");
+    await expect(errorToast(page)).toHaveCount(0);
+    expect(await folderFiles(page, "sprites")).toEqual(new Map());
+
+    // Its Export names the problem: choose another folder.
+    await button(dialog, "Export").click();
+    await expect(errorToast(page)).toHaveText(
+        /Could not export “hero”\. The folder “sprites” no longer exists\. Use Export…\./,
+    );
+    await expect(errorToast(page)).toHaveCount(1);
+    expect(errors).toEqual([]);
+});
+
+test("Export Again without the user's gesture shows the dialog; its Export prompts once and writes", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await stubExportFolders(page);
+    await openHero(page);
+    await drawStroke(page, STROKES[0]!);
+    await exportInto(page, "sprites");
+    await arrangeFolders(page, { permission: "prompt" });
+    await drawStroke(page, STROKES[1]!);
+    const expected = byName(await expectedBundle(page));
+
+    await runAfterGestureLapsed(page, "file.exportAgain");
+    const dialog = exportDialog(page);
+    await expect(dialog).toBeVisible();
+    expect((await folderStub(page)).permissionRequests).toBe(0);
+    await expect(errorToast(page)).toHaveCount(0);
+
+    await button(dialog, "Export").click();
+    await expectFolderToHold(page, "sprites", expected);
+    expect(await folderStub(page)).toMatchObject({ permissionRequests: 1, permission: "granted" });
+    expect(errors).toEqual([]);
+});
+
+test("exportOnSave without the user's gesture: the save stands and one toast names Export Again", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await stubFileSystemAccess(page);
+    await stubExportFolders(page);
+    await openHero(page);
+    await drawStroke(page, STROKES[0]!);
+    await setExportSettings(page, { exportOnSave: true });
+    await exportInto(page, "sprites");
+    // A first save: the document has its file, written again without asking.
+    await arrangeFiles(page, { nextSave: ["hero.ngsprite"] });
+    await page.keyboard.press("Control+KeyS");
+    await expect(infoToast(page, "Saved hero.ngsprite")).toBeVisible();
+    const exported = await folderFiles(page, "sprites");
+
+    await arrangeFolders(page, { permission: "prompt" });
+    await drawStroke(page, STROKES[1]!);
+    await runAfterGestureLapsed(page, "file.save");
+    await expect
+        .poll(async () => (await fileSystem(page)).writes)
+        .toEqual(["hero.ngsprite", "hero.ngsprite"]);
+    await expect(errorToast(page)).toHaveText(
+        /^Could not export “hero”\. No permission to write to the folder “sprites”\. Use Export Again\./,
+    );
+    await expect(errorToast(page)).toHaveCount(1);
+    await expect(unsavedMarker(page)).toHaveCount(0);
+    expect((await folderStub(page)).permissionRequests).toBe(0);
+    expectSameFiles(await folderFiles(page, "sprites"), exported);
+    await expect(exportDialog(page)).toHaveCount(0);
     expect(errors).toEqual([]);
 });

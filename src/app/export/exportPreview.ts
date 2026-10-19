@@ -76,9 +76,13 @@ export function exportFailure(error: unknown): string {
 const previews = new WeakMap<object, ExportPreview>();
 
 /**
- * `exportPreview` of an open document's record, made once per record: the Export dialog
- * renders it, and the export that follows writes the same bundle. The store replaces the
- * record on every change of the document or its settings (`OpenDocument.revision`).
+ * `exportPreview` of an open document's record, made once per record. The store replaces the
+ * record, with a higher `revision`, on every change of the document, of its export settings
+ * and of its session state (pixels an open transaction writes included, `touch`), so a record
+ * stands for one version of the document and its settings. The Export dialog renders the
+ * preview of the record it is given; an export (`deliver`) takes the preview of the record the
+ * store holds when it bundles, so it reuses the dialog's bundle when nothing changed since the
+ * dialog showed it, and makes a new one otherwise.
  */
 export function previewOf(document: {
     readonly session: { readonly doc: SpriteDoc };
@@ -98,6 +102,10 @@ export function exportPreview(doc: SpriteDoc): ExportPreview {
     try {
         result = bundle(doc);
     } catch (error) {
+        // `ExportError` ("too-many-entries", "settings", "document") or `PackError`
+        // ("atlas-size", "memory"). "too-many-frames" cannot happen in this app: a document has
+        // at most 65 535 frames (FORMAT.md §1.8) and an atlas holds 65 536; it is shown like
+        // the others should the limits ever change.
         return {
             name,
             bundle: null,

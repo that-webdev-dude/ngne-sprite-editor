@@ -1,5 +1,6 @@
 import { unzipSync } from "fflate";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { FOLDER_LOAD_TIMEOUT_MS } from "../../src/app/export/exportFolders";
 import { FloatingApplyError } from "../../src/app/selection/floating";
 import { isDirty } from "../../src/app/state/sessions";
 import { bundle } from "../../src/core/export";
@@ -94,17 +95,29 @@ describe("Export… (the dialog)", () => {
         const request = await waitForDialog(test, "export");
         const undo = active(test).history.undoCount;
 
-        request.setSettings((settings) => {
-            settings.files.asepriteJson = "array";
-            settings.trim = true;
-        });
+        expect(request.setSettings({ files: { asepriteJson: "array" }, trim: true })).toBe(true);
         expect(active(test).session.doc.exportSettings).toMatchObject({
             trim: true,
-            files: { asepriteJson: "array" },
+            files: { asepriteJson: "array", spritesTs: true, previewConfig: true },
         });
         expect(active(test).history.undoCount).toBe(undo);
         // Saved with the document: it is dirty until saved (SPEC §5.2).
         expect(isDirty(active(test))).toBe(true);
+
+        // Values are checked in app: one out of range changes nothing and is reported.
+        const before = structuredClone(active(test).session.doc.exportSettings);
+        expect(request.setSettings({ padding: 9, trim: false })).toBe(false);
+        expect(request.setSettings({ extrude: 1.5 })).toBe(false);
+        expect(request.setSettings({ frames: { tagId: "no-such-tag" } })).toBe(false);
+        expect(active(test).session.doc.exportSettings).toEqual(before);
+        expect(errors(test)).toEqual([
+            "The padding must be a whole number from 0 to 8.",
+            "The extrusion must be a whole number from 0 to 2.",
+            "The frames to export are all frames or a tag of the document.",
+        ]);
+        expect(request.setSettings({ padding: 8 })).toBe(true);
+        expect(active(test).session.doc.exportSettings.padding).toBe(8);
+        test.notices.length = 0;
 
         request.setPivot({ x: 0.5, y: 1 });
         expect(active(test).session.doc.pivot).toEqual({ x: 0.5, y: 1 });
@@ -260,8 +273,55 @@ describe("Export… (the dialog)", () => {
         const folder = fakeFolder("sprites");
         folder.failWrite = new DOMException("The disk is full.", "QuotaExceededError");
         expect(await exportVia(test, folder)).toBe(false);
-        expect(errors(test)).toEqual(["Could not export “hero”. The disk is full."]);
+        expect(errors(test)).toEqual([
+            "Could not write “hero.png” to “sprites”: The disk is full.",
+        ]);
         expect(infos(test)).toEqual([]);
+    });
+
+    it("a write that fails half way names the file and those written, and keeps them ours", async () => {
+        const test = exportHarness();
+        drawnHero(test);
+        // The folder holds a file of the bundle: the first export asks.
+        const folder = fakeFolder("sprites", { "hero.png": new Uint8Array([1]) });
+        folder.failWrite = new DOMException("The disk is full.", "QuotaExceededError");
+        folder.failOn = "hero.atlas.json";
+        const running = exportVia(test, folder);
+        (await waitForDialog(test, "export-overwrite")).answer(true);
+        expect(await running).toBe(false);
+        expect(errors(test)).toEqual([
+            "Could not write “hero.atlas.json” to “sprites”: The disk is full. Written: hero.png.",
+        ]);
+        expect([...folder.files.keys()]).toEqual(["hero.png"]);
+        expect(folder.files.get("hero.png")).toEqual(expectedFiles(test).get("hero.png"));
+        expect(test.storage.records.get(active(test).id)?.confirmed).toBe(true);
+
+        // The next Export Again asks nothing about the document's own files.
+        folder.failWrite = null;
+        expect(await test.exports.exportAgain()).toBe(true);
+        expect(test.shown.map((request) => request.kind)).toEqual(["export", "export-overwrite"]);
+        expectFolderHolds(folder, expectedFiles(test));
+    });
+
+    it("refuses when a stroke begins while it waits, after the permission check: nothing written", async () => {
+        const test = exportHarness();
+        const document = drawnHero(test);
+        const folder = fakeFolder("sprites");
+        expect(await exportVia(test, folder)).toBe(true);
+        folder.writes.length = 0;
+        const opened: { stroke: { abort(): void } | null } = { stroke: null };
+        folder.duringCanWrite = () => {
+            folder.duringCanWrite = null;
+            opened.stroke = document.history.begin({
+                layerId: document.session.activeLayerId,
+                frameId: document.session.activeFrameId,
+            });
+        };
+        expect(await test.exports.exportAgain()).toBe(false);
+        expect(folder.writes).toEqual([]);
+        expect(errors(test)).toEqual(["Could not export “hero”. A stroke is in progress."]);
+        expect(opened.stroke).not.toBeNull();
+        opened.stroke?.abort();
     });
 
     it("downloads <name>.zip with the same files without File System Access", async () => {
@@ -403,6 +463,98 @@ describe("Export Again", () => {
             "hero.zip",
         ]);
     });
+
+    it("shows the dialog when the folder no longer exists; Export from it names Export…", async () => {
+        const test = exportHarness();
+        drawnHero(test);
+        const folder = fakeFolder("sprites");
+        expect(await exportVia(test, folder)).toBe(true);
+        folder.present = false;
+        let running = test.exports.exportAgain();
+        const request = await waitForDialog(test, "export");
+        expect(request.destination.getState().folder).toBe("sprites");
+        expect(errors(test)).toEqual([]);
+        request.answer(true);
+        expect(await running).toBe(false);
+        expect(errors(test)).toEqual([
+            "Could not export “hero”. The folder “sprites” no longer exists. Use Export….",
+        ]);
+
+        // A folder removed while the files are written: the same message.
+        folder.present = true;
+        folder.duringWrite = () => {
+            folder.present = false;
+        };
+        test.notices.length = 0;
+        running = test.exports.exportAgain();
+        expect(await running).toBe(false);
+        expect(errors(test)).toEqual([
+            "Could not export “hero”. The folder “sprites” no longer exists. Use Export….",
+        ]);
+    });
+
+    it("without the user's gesture it does not prompt and shows the dialog", async () => {
+        const test = exportHarness();
+        drawnHero(test);
+        const folder = fakeFolder("sprites");
+        expect(await exportVia(test, folder)).toBe(true);
+        folder.writes.length = 0;
+        folder.granted = false;
+        test.exportPlatform.active = false;
+        const running = test.exports.exportAgain();
+        const request = await waitForDialog(test, "export");
+        expect(folder.requests).toBe(0);
+        // The dialog's Export is a gesture: the prompt is shown then.
+        test.exportPlatform.active = true;
+        request.answer(true);
+        expect(await running).toBe(true);
+        expect(folder.requests).toBe(1);
+        expect(folder.writes).toHaveLength(4);
+        expect(errors(test)).toEqual([]);
+    });
+
+    it("reports an atlas too large to pack (PackError atlas-size) as its toast, writing nothing", async () => {
+        const test = exportHarness();
+        const document = openNew(test, "Wide", 1024, 1);
+        const folder = fakeFolder("sprites");
+        expect(await exportVia(test, folder)).toBe(true);
+        folder.writes.length = 0;
+        // Eight frames in a row with padding 2: 8 × (1024 + 2) + 2 = 8210 px.
+        const { doc } = document.session;
+        for (let index = 1; index < 8; index++)
+            doc.frames.push({ id: `f${index}`, durationMs: 100 });
+        test.sessions.getState().updateExportSettings(document.id, (settings) => {
+            Object.assign(settings, { layout: "row", padding: 2, mergeDuplicates: false });
+        });
+        expect(await test.exports.exportAgain()).toBe(false);
+        expect(folder.writes).toEqual([]);
+        expect(errors(test)).toEqual([
+            "Could not export “Wide”. The atlas needs 8210x6 px; the limit is 8192 px per side.",
+        ]);
+    });
+
+    it("ends with one toast when the stored folder is not read in time; file commands come back", async () => {
+        vi.useFakeTimers();
+        try {
+            const storage = new MemoryStorage();
+            storage.load = () => new Promise(() => {});
+            const test = exportHarness({ storage });
+            drawnHero(test);
+            const running = test.exports.exportAgain();
+            expect(test.workflows.busy).toBe(true);
+            await vi.advanceTimersByTimeAsync(FOLDER_LOAD_TIMEOUT_MS);
+            expect(await running).toBe(false);
+            expect(errors(test)).toEqual([
+                "Could not export “hero”. The browser's storage did not answer in time.",
+            ]);
+            expect(test.workflows.busy).toBe(false);
+            expect(test.workflows.canSave()).toBe(true);
+            expect(test.exports.canExport()).toBe(true);
+            expect(test.shown).toEqual([]);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });
 
 describe("exportOnSave", () => {
@@ -455,7 +607,157 @@ describe("exportOnSave", () => {
         paint(active(test), 4);
         expect(await test.workflows.save()).toBe(true);
         expect(isDirty(active(test))).toBe(false);
-        expect(errors(test)).toEqual(["Could not export “hero”. The disk is full."]);
+        expect(errors(test)).toEqual([
+            "Could not write “hero.png” to “sprites”: The disk is full.",
+        ]);
+    });
+
+    it("refuses a stroke begun while it waits: no folder writes, one toast, the save stands", async () => {
+        const test = exportHarness();
+        const folder = fakeFolder("sprites");
+        await savedAndExported(test, folder);
+        paint(active(test), 3);
+        const document = active(test);
+        const opened: { stroke: { abort(): void } | null } = { stroke: null };
+        folder.duringCanWrite = () => {
+            folder.duringCanWrite = null;
+            opened.stroke = document.history.begin({
+                layerId: document.session.activeLayerId,
+                frameId: document.session.activeFrameId,
+            });
+        };
+        expect(await test.workflows.save()).toBe(true);
+        expect(test.events.slice(-1)).toEqual(["write hero.ngsprite"]);
+        expect(folder.writes).toEqual([]);
+        expect(test.notices).toEqual([
+            { kind: "info", message: "Saved hero.ngsprite" },
+            { kind: "error", message: "Could not export “hero”. A stroke is in progress." },
+        ]);
+        expect(isDirty(active(test))).toBe(false);
+        opened.stroke?.abort();
+    });
+
+    it("an edit committed while the project is written: the save stands, the export names Export Again", async () => {
+        const test = exportHarness();
+        const folder = fakeFolder("sprites");
+        await savedAndExported(test, folder);
+        paint(active(test), 3);
+        const saved = expectedFiles(test);
+        const before = new Map(folder.files);
+        // The project's write waits until the edit is made.
+        const handle = test.workflows.fileOf(active(test).id)!.handle as unknown as {
+            hold: Promise<void> | null;
+        };
+        let release!: () => void;
+        handle.hold = new Promise((resolve) => (release = resolve));
+        const saving = test.workflows.save();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        paint(active(test), 4);
+        release();
+        expect(await saving).toBe(true);
+        expect(test.events.slice(-1)).toEqual(["write hero.ngsprite"]);
+        // The edit came after the bytes: the document is dirty, the file holds the saved state.
+        expect(isDirty(active(test))).toBe(true);
+        expect(folder.writes).toEqual([]);
+        expect(folder.files).toEqual(before);
+        expect(saved.get("hero.png")).not.toEqual(before.get("hero.png"));
+        expect(test.notices).toEqual([
+            { kind: "info", message: "Saved hero.ngsprite" },
+            {
+                kind: "error",
+                message:
+                    "Could not export “hero”. It changed after it was saved. Use Export Again.",
+            },
+        ]);
+    });
+
+    it("a removed folder: one toast that names Export…, and the save stands", async () => {
+        const test = exportHarness();
+        const folder = fakeFolder("sprites");
+        await savedAndExported(test, folder);
+        paint(active(test), 3);
+        folder.present = false;
+        expect(await test.workflows.save()).toBe(true);
+        expect(isDirty(active(test))).toBe(false);
+        expect(test.notices).toEqual([
+            { kind: "info", message: "Saved hero.ngsprite" },
+            {
+                kind: "error",
+                message:
+                    "Could not export “hero”. The folder “sprites” no longer exists. Use Export….",
+            },
+        ]);
+        expect(test.shown.map((request) => request.kind)).toEqual(["export"]);
+    });
+
+    it("without the user's gesture it does not prompt: one toast that names Export Again", async () => {
+        const test = exportHarness();
+        const folder = fakeFolder("sprites");
+        await savedAndExported(test, folder);
+        paint(active(test), 3);
+        folder.granted = false;
+        test.exportPlatform.active = false;
+        test.platform.active = false;
+        expect(await test.workflows.save()).toBe(true);
+        expect(isDirty(active(test))).toBe(false);
+        expect(folder.requests).toBe(0);
+        expect(folder.writes).toEqual([]);
+        expect(test.notices).toEqual([
+            { kind: "info", message: "Saved hero.ngsprite" },
+            {
+                kind: "error",
+                message:
+                    "Could not export “hero”. No permission to write to the folder “sprites”. " +
+                    "Use Export Again.",
+            },
+        ]);
+    });
+
+    it("never asks the overwrite question: files not yet confirmed give one toast naming Export…", async () => {
+        const test = exportHarness();
+        drawnHero(test);
+        active(test).session.doc.exportSettings.exportOnSave = true;
+        // A folder chosen in the dialog and closed without exporting: not confirmed yet.
+        const folder = fakeFolder("shared", { "hero.png": new Uint8Array([1]) });
+        test.exportPlatform.toChoose.push(folder);
+        const running = test.exports.exportWithDialog();
+        const request = await waitForDialog(test, "export");
+        request.chooseFolder();
+        await expect.poll(() => request.destination.getState().folder).toBe("shared");
+        request.answer(null);
+        expect(await running).toBe(false);
+
+        test.platform.toSave.push(test.disk.handle("hero.ngsprite"));
+        expect(await test.workflows.save()).toBe(true);
+        expect(isDirty(active(test))).toBe(false);
+        expect(test.shown.map((shown) => shown.kind)).toEqual(["export"]);
+        expect(folder.writes).toEqual([]);
+        expect(test.notices).toEqual([
+            { kind: "info", message: "Saved hero.ngsprite" },
+            {
+                kind: "error",
+                message:
+                    "Could not export “hero”. The folder “shared” holds files this export " +
+                    "would replace (hero.png). Use Export… to confirm replacing them.",
+            },
+        ]);
+    });
+
+    it("a project write that fails exports nothing: one “Could not save…” toast", async () => {
+        const test = exportHarness();
+        const folder = fakeFolder("sprites");
+        await savedAndExported(test, folder);
+        paint(active(test), 3);
+        const handle = test.workflows.fileOf(active(test).id)!.handle as unknown as {
+            failWrite: Error | null;
+        };
+        handle.failWrite = new DOMException("The disk is full.", "QuotaExceededError");
+        expect(await test.workflows.save()).toBe(false);
+        expect(folder.writes).toEqual([]);
+        expect(test.notices).toEqual([
+            { kind: "error", message: "Could not save “hero.ngsprite”. The disk is full." },
+        ]);
+        expect(isDirty(active(test))).toBe(true);
     });
 
     it("without a folder says to use Export…; with the option off it does nothing", async () => {
@@ -572,5 +874,51 @@ describe("the other exports", () => {
             "Could not export “hero”. The export is limited to a tag the document does not " +
                 'have ("gone").',
         ]);
+    });
+
+    it("otherExport: an export of a later ticket applies the float, saves its file and reports once", async () => {
+        const test = exportHarness();
+        const document = drawnHero(test);
+        // A file type of its own, as SE-063's GIF will have.
+        const type = {
+            kind: "gif",
+            description: "GIF image",
+            mime: "image/gif",
+            extension: ".gif",
+        };
+        const file = { name: "hero.gif", bytes: new Uint8Array([71, 73, 70]) };
+        test.exportPlatform.toSave.push("chosen.gif");
+        const made: string[] = [];
+        expect(
+            await test.exports.otherExport(async (given, context) => {
+                made.push(`${given.id} ${context.current()?.id}`);
+                return { file, type, count: 1 };
+            }),
+        ).toBe(true);
+        expect(test.events).toEqual(["apply floating"]);
+        expect(made).toEqual([`${document.id} ${document.id}`]);
+        expect(test.exportPlatform.suggested).toEqual(["hero.gif"]);
+        expect(test.exportPlatform.saved).toEqual([{ name: "chosen.gif", bytes: file.bytes }]);
+        expect(infos(test)).toEqual(["Exported 1 file to “chosen.gif”"]);
+
+        // Cancelled by its own dialog: nothing reported. A failure: one toast, its message.
+        expect(await test.exports.otherExport(async () => null)).toBe(false);
+        expect(
+            await test.exports.otherExport(async () => {
+                throw new Error("The palette has more than 256 colours.");
+            }),
+        ).toBe(false);
+        expect(errors(test)).toEqual([
+            "Could not export “hero”. The palette has more than 256 colours.",
+        ]);
+
+        // Without File System Access: a download of that type.
+        test.exportPlatform.access = false;
+        expect(await test.exports.otherExport(async () => ({ file, type, count: 1 }))).toBe(true);
+        expect(test.exportPlatform.downloads).toEqual([
+            { name: "hero.gif", bytes: file.bytes, kind: "gif" },
+        ]);
+        // A file operation: not while another runs.
+        expect(test.workflows.busy).toBe(false);
     });
 });

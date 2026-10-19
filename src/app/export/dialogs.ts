@@ -1,8 +1,8 @@
 import type { StoreApi } from "zustand/vanilla";
-import type { ExportSettings } from "../../core/model";
 import type { Pivot } from "../../core/sprite";
 import { commandDialogs, createDialogRequests, dialogView } from "../dialogs/dialogRequests";
 import type { DialogRequestBase, DialogRequests, DialogView } from "../dialogs/dialogRequests";
+import type { ExportSettingsPatch } from "./settingsPatch";
 
 /**
  * The dialogs of the export commands (DESIGN §7; SE-052): Export, the overwrite confirmation
@@ -31,8 +31,12 @@ export interface ExportDialogRequest {
     documentId: string;
     /** The destination, kept up to date while the dialog is open. */
     destination: StoreApi<ExportDestination>;
-    /** Changes the document's export settings (no history entry; the document becomes dirty). */
-    setSettings(update: (settings: ExportSettings) => void): void;
+    /**
+     * Changes the document's export settings by these values (no history entry; the document
+     * becomes dirty). The values are checked first (`exportSettingsProblem`): a patch that
+     * does not apply changes nothing, is reported, and makes this return false.
+     */
+    setSettings(patch: ExportSettingsPatch): boolean;
     /** Sets the document's pivot with the undoable command of Sprite properties. */
     setPivot(pivot: Pivot): void;
     /** Asks for the document's export folder (the folder picker); with File System Access. */

@@ -18,11 +18,25 @@ export interface FolderStub {
     nextFolder: string[];
     /** Number of directory pickers shown. */
     folderPickers: number;
-    /** "granted": folders may be written; "revoked": queried "prompt", requests refused. */
-    permission: "granted" | "revoked";
-    /** Number of permission requests (prompts) for a folder. */
+    /**
+     * Write permission of the folders, as Chrome has it: "granted"; "prompt", which the user
+     * grants when asked; "revoked", which the user refuses when asked. Both of the last two
+     * query as "prompt". As in Chrome, a request without the user's gesture
+     * (`navigator.userActivation.isActive`) throws a `SecurityError` and shows no prompt.
+     */
+    permission: "granted" | "prompt" | "revoked";
+    /** Number of permission prompts shown for a folder. */
     permissionRequests: number;
+    /**
+     * True while the user's gesture has lapsed: `navigator.userActivation.isActive` is false
+     * until the next real key or pointer press. (Playwright's `page.evaluate` runs as a user
+     * gesture, so a test cannot wait for Chrome's own activation to lapse.)
+     */
+    gestureLapsed: boolean;
 }
+
+/** Where a test leaves the permission the stub starts with after a reload (sessionStorage). */
+const PERMISSION_KEY = "se052-permission";
 
 declare global {
     interface Window {
@@ -35,14 +49,35 @@ declare global {
  * permission methods of directory handles with ones the test controls.
  */
 export async function stubExportFolders(page: Page): Promise<void> {
-    await page.addInitScript(() => {
+    await page.addInitScript((key) => {
+        // A permission left for the next load (`permissionAfterReload`), as Chrome may ask
+        // again for a folder kept in IndexedDB after a reload; granted otherwise.
+        const kept = sessionStorage.getItem(key);
         const stub: FolderStub = {
             nextFolder: [],
             folderPickers: 0,
-            permission: "granted",
+            permission: kept === "prompt" || kept === "revoked" ? kept : "granted",
             permissionRequests: 0,
+            gestureLapsed: false,
         };
         window.__se052Fs = stub;
+        const active = Object.getOwnPropertyDescriptor(UserActivation.prototype, "isActive");
+        Object.defineProperty(UserActivation.prototype, "isActive", {
+            configurable: true,
+            get(this: UserActivation) {
+                return !stub.gestureLapsed && Boolean(active?.get?.call(this));
+            },
+        });
+        // A real key or press is a new gesture (captured before the app sees it).
+        for (const type of ["keydown", "pointerdown"]) {
+            window.addEventListener(
+                type,
+                (event) => {
+                    if (event.isTrusted) stub.gestureLapsed = false;
+                },
+                true,
+            );
+        }
         Object.assign(window, {
             async showDirectoryPicker() {
                 stub.folderPickers++;
@@ -70,12 +105,48 @@ export async function stubExportFolders(page: Page): Promise<void> {
         };
         prototype.requestPermission = async function (this: Permissions, descriptor: unknown) {
             if (this.kind === "directory") {
+                if (stub.permission === "granted") return "granted";
+                if (!navigator.userActivation.isActive) {
+                    throw new DOMException("User activation is required.", "SecurityError");
+                }
                 stub.permissionRequests++;
+                if (stub.permission === "prompt") stub.permission = "granted";
                 return stub.permission === "granted" ? "granted" : "denied";
             }
             return request ? request.call(this, descriptor) : "granted";
         };
-    });
+    }, PERMISSION_KEY);
+}
+
+/** Makes the folder stub start with `permission` after the next reload of the page. */
+export function permissionAfterReload(
+    page: Page,
+    permission: FolderStub["permission"],
+): Promise<void> {
+    return page.evaluate(([key, value]) => sessionStorage.setItem(key, value), [
+        PERMISSION_KEY,
+        permission,
+    ] as const);
+}
+
+/**
+ * Lets the user's gesture lapse, as it does a few seconds after the last key or click, and
+ * runs a registered command then (from a script: no key or click gives a new one).
+ */
+export async function runAfterGestureLapsed(page: Page, id: string): Promise<void> {
+    await page.evaluate((command) => {
+        window.__se052Fs!.gestureLapsed = true;
+        if (navigator.userActivation.isActive) throw new Error("se-052: the gesture is active");
+        void window.__ngneTest!.commands.get(command)!.run();
+    }, id);
+}
+
+/** Removes an OPFS folder and everything in it, as the user deleting the folder does. */
+export function removeFolder(page: Page, folder: string): Promise<void> {
+    return page.evaluate(async (name) => {
+        const root = await navigator.storage.getDirectory();
+        await root.removeEntry(name, { recursive: true });
+    }, folder);
 }
 
 /** Takes the directory and save pickers away before the app loads: exports download. */

@@ -100,6 +100,32 @@ describe("the preview of an export", () => {
         expect(below.warnings).toEqual([]);
     });
 
+    it("pins the 90% boundary on both axes: 7373 px warns, 7372 px does not", () => {
+        // `frames` frames of `side` px along the strip, 1 px across it, unmerged. A side of
+        // 96 px is a 96 px rectangle (even): 76 × (96 + 1) + 1 = 7373. A side of 90 px:
+        // 81 × (90 + 1) + 1 = 7372. Across, a 1 px frame is a 2 px rectangle: 2 + 2 × 1 = 4.
+        const strip = (layout: "row" | "column", side: number, frames: number) => {
+            const size = layout === "row" ? { width: side, height: 1 } : { width: 1, height: side };
+            const doc = createDocument({ name: "Strip", ...size }).doc;
+            for (let index = 1; index < frames; index++) {
+                doc.frames.push({ id: `f${index}`, durationMs: 100 });
+            }
+            doc.exportSettings.layout = layout;
+            doc.exportSettings.mergeDuplicates = false;
+            const preview = exportPreview(doc);
+            return {
+                size: [preview.bundle?.meta.width, preview.bundle?.meta.height],
+                warnings: preview.warnings,
+            };
+        };
+        const warning = (width: number, height: number) =>
+            `The atlas is ${width} × ${height} px, within 10% of the limit of 8192 px a side.`;
+        expect(strip("row", 96, 76)).toEqual({ size: [7373, 4], warnings: [warning(7373, 4)] });
+        expect(strip("row", 90, 81)).toEqual({ size: [7372, 4], warnings: [] });
+        expect(strip("column", 96, 76)).toEqual({ size: [4, 7373], warnings: [warning(4, 7373)] });
+        expect(strip("column", 90, 81)).toEqual({ size: [4, 7372], warnings: [] });
+    });
+
     it("shows the message of the error that refuses the export, and no file", () => {
         const doc = createDocument({ name: "Loop", width: 2, height: 2 }).doc;
         // 258 tags of one frame, each written out 255 times: 65 790 entries.

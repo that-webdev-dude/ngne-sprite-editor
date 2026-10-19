@@ -12,7 +12,6 @@ import { createExportWorkflows } from "../../src/app/export/exportWorkflows";
 import type { ExportWorkflows } from "../../src/app/export/exportWorkflows";
 import type {
     ExportFileHandle,
-    ExportFileKind,
     ExportFolderHandle,
     ExportPlatform,
 } from "../../src/app/platform/exportFiles";
@@ -37,6 +36,14 @@ export interface FakeFolder extends ExportFolderHandle {
     readonly writes: string[];
     /** When set, every write fails with it. */
     failWrite: Error | null;
+    /** When set, the write of this file fails with `failWrite` (the others succeed). */
+    failOn: string | null;
+    /** False once the folder was removed from the disk. */
+    present: boolean;
+    /** Runs inside `canWrite`, before it answers: what the user does meanwhile. */
+    duringCanWrite: (() => void) | null;
+    /** Runs inside each `write`, before it completes. */
+    duringWrite: (() => void) | null;
 }
 
 export function fakeFolder(name: string, files: Record<string, Uint8Array> = {}): FakeFolder {
@@ -49,7 +56,14 @@ export function fakeFolder(name: string, files: Record<string, Uint8Array> = {})
         requests: 0,
         writes: [],
         failWrite: null,
-        canWrite: async () => folder.granted,
+        failOn: null,
+        present: true,
+        duringCanWrite: null,
+        duringWrite: null,
+        async canWrite() {
+            folder.duringCanWrite?.();
+            return folder.granted;
+        },
         async requestWrite() {
             folder.requests++;
             folder.granted = folder.grants;
@@ -57,11 +71,16 @@ export function fakeFolder(name: string, files: Record<string, Uint8Array> = {})
         },
         existing: async (names) => names.filter((entry) => folder.files.has(entry)),
         async write(file, bytes) {
-            if (folder.failWrite) throw folder.failWrite;
+            folder.duringWrite?.();
+            if (!folder.present) throw new DOMException("No folder.", "NotFoundError");
+            if (folder.failWrite && (folder.failOn === null || folder.failOn === file)) {
+                throw folder.failWrite;
+            }
             folder.files.set(file, bytes.slice());
             folder.writes.push(file);
         },
         isSame: async (other) => other.stored === folder.stored,
+        exists: async () => folder.present,
     };
     // What storage keeps: the folder itself, as a native handle would be kept.
     (folder as { stored: unknown }).stored = folder;
@@ -71,6 +90,8 @@ export function fakeFolder(name: string, files: Record<string, Uint8Array> = {})
 export interface FakeExportPlatform extends ExportPlatform {
     /** Whether File System Access is there; false: everything downloads. */
     access: boolean;
+    /** Whether the user's gesture is still active (a permission prompt needs it). */
+    active: boolean;
     /** What the folder picker returns, first to last; null is a cancel. */
     readonly toChoose: (FakeFolder | null)[];
     /** How often the folder picker was shown. */
@@ -81,12 +102,14 @@ export interface FakeExportPlatform extends ExportPlatform {
     readonly suggested: string[];
     /** Files saved through the save picker. */
     readonly saved: { name: string; bytes: Uint8Array }[];
-    readonly downloads: { name: string; bytes: Uint8Array; kind: ExportFileKind }[];
+    /** Each download, with the `kind` of its file type. */
+    readonly downloads: { name: string; bytes: Uint8Array; kind: string }[];
 }
 
 export function fakeExportPlatform(): FakeExportPlatform {
     const platform: FakeExportPlatform = {
         access: true,
+        active: true,
         toChoose: [],
         folderPickers: 0,
         toSave: [],
@@ -112,9 +135,10 @@ export function fakeExportPlatform(): FakeExportPlatform {
             };
             return handle;
         },
-        download(name, bytes, kind) {
-            platform.downloads.push({ name, bytes: bytes.slice(), kind });
+        download(name, bytes, type) {
+            platform.downloads.push({ name, bytes: bytes.slice(), kind: type.kind });
         },
+        hasUserActivation: () => platform.active,
     };
     return platform;
 }

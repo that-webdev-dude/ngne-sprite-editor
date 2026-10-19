@@ -1553,39 +1553,57 @@ even size, because its last column or row is a transparent one of the frame.
 - Other exports: current frame PNG (scale 1–16×), sprite sheet PNG alone, PNG sequence (zip);
   M6 adds GIF.
 
-Recorded by SE-052 (the dialog is DESIGN §7, Export):
+Recorded by SE-052 (the dialog is DESIGN §7, Export), with its review's decisions:
 
-- Export… (Ctrl+E) shows the Export dialog. Its settings change through the `ExportSettings`
-  setter at once (saved, not undoable; the document is dirty until saved), its pivot through
-  the undoable command of Sprite properties. It shows what `bundle()` makes of them, or the
-  message of `ExportError` or `PackError`, which disables Export. Warnings: a tag whose
-  animation ID is not the slug of its name (a later tag of the same slug, or a name without a
-  letter or digit, which gives `tag`), and an atlas with a side above 90% of 8192 px.
+- Export… (Ctrl+E) shows the Export dialog. Its settings change at once through the
+  `ExportSettings` setter (saved, not undoable; the document is dirty until saved), as values
+  `app` checks first (a value out of range changes nothing); its pivot through the undoable
+  command of Sprite properties. It shows what `bundle()` makes of them, or the message of
+  `ExportError` or `PackError`, which disables Export (`too-many-frames` cannot occur: a
+  document has at most 65 535 frames). Warnings: a tag whose animation ID is not the slug of its
+  name (a later tag of the same slug, or a name without a letter or digit, which gives `tag`),
+  and an atlas with a side above 90% of 8192 px (7373 px warns, 7372 px does not). The export
+  writes the bundle the dialog showed when nothing changed since; otherwise a new one.
 - The folder is chosen with the directory picker, in the dialog or at its Export when none is
   chosen, and kept per document ID in IndexedDB (`ngne-sprite-editor-export`), so a reload or a
-  reopened document finds it. Write permission is asked for once when it is not granted. An
-  export writes the bundle's files and removes nothing: a file switched off keeps what an
-  earlier export wrote.
+  reopened document finds it; a database another tab blocks is not waited for, and reading it
+  gives up after 3 s with one error toast. Write permission is asked for at most once per
+  export, and only within the user's gesture. An export writes the bundle's files and removes
+  nothing: a file switched off keeps what an earlier export wrote.
+- Before it bundles, after its prompts and checks, an export stops ("A stroke is in
+  progress.") when a transaction has been opened meanwhile.
 - Before a document's export first writes into a folder, it lists the bundle files the folder
   holds already (another document may have the same `<name>`) and asks Replace or Cancel. Once
-  it has written there, the folder's files are the document's: no question again, also when the
-  same folder is picked again; another folder asks again.
-- Export Again (Ctrl+Shift+E) shows the dialog instead when the document has no folder, or when
-  the one permission prompt is refused. Without File System Access it downloads the zip.
+  one file of the bundle is written there, the folder's files are the document's: no question
+  again, also when the same folder is picked again; another folder asks again.
+- A write that fails stops the export with one toast naming the file and those written before
+  it ("Could not write “hero.atlas.json” to “sprites”: <reason>. Written: hero.png."). A folder
+  that no longer exists is reported as "The folder “x” no longer exists. Use Export…", as §10
+  does for Save.
+- Export Again (Ctrl+Shift+E) shows the dialog instead when the document has no folder, when
+  the folder no longer exists, or when write permission is not given (refused at the prompt, or
+  no gesture to prompt in). Without File System Access it downloads the zip.
 - `exportOnSave` runs after a successful Save or Save As, inside the same file operation, as
-  Export Again does but never with the dialog: no folder, a refused permission, an export error
-  or a failed write is one error toast ("Could not export “x”. …"), and the save stands.
+  Export Again does but never with a dialog or a question. It writes only the document as it
+  was saved: an edit committed while the project was written stops it ("It changed after it
+  was saved. Use Export Again."). No folder, a missing folder, a permission not given ("…Use
+  Export Again." where the gesture has lapsed), files of the folder not yet confirmed ("Use
+  Export… to confirm replacing them"), an export error or a failed write is one error toast, and
+  the save stands. A save that fails exports nothing.
 - The zip has the PNG stored and the text files deflated, with the fixed time stamps of §10.
-- Other exports (File menu, after Export Again), through the save picker or as a download:
-  Export Frame PNG… (the active frame; scale 1–16, at most 8192 px a side, so a large document
-  offers less; `<name>-<index>.png`, `<name>-<index>@<scale>x.png` above 1), Export Sprite Sheet
-  PNG… (the bundle's `<name>.png`) and Export PNG Sequence… (`<name>-frames.zip` of one
-  `<name>-<index>.png` per exported frame: all, or the tag the export settings name; `<index>`
-  as in the frame IDs). Their code is `core/imageExports`.
+- Other exports (File menu, after Export Again), each with its own small dialog where it needs
+  one, through the save picker or as a download: Export Frame PNG… (the active frame; scale
+  1–16, at most 8192 px a side, so a large document offers less; `<name>-<index>.png`,
+  `<name>-<index>@<scale>x.png` above 1), Export Sprite Sheet PNG… (the bundle's `<name>.png`)
+  and Export PNG Sequence… (`<name>-frames.zip` of one `<name>-<index>.png` per exported
+  frame: all, or the tag the export settings name; `<index>` as in the frame IDs). Their code is
+  `core/imageExports`; they run through `otherExport` of `app/export`, which M6's Export GIF…
+  (SE-063) uses the same way, from its own module.
 - Every export is a file operation of §10: one at a time, not during a stroke, a floating
   selection applied first (when it cannot be, its own toast is the only one). Results are info
   toasts "Exported N files to “x”" (the folder, zip or file); a failure is one error toast "Could
-  not export “x”. <reason>"; a picker or question cancelled is not reported.
+  not export “x”. <reason>" (a failed write as above); a picker or question cancelled is not
+  reported.
 
 ### 9.7 Conformance
 

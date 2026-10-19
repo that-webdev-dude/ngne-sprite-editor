@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useStore } from "zustand";
 import type { ExportDialogRequest } from "../../app/export/dialogs";
 import { previewOf } from "../../app/export/exportPreview";
+import type { ExportSettingsPatch } from "../../app/export/settingsPatch";
 import { useSessions } from "../../app/state/sessions";
 import { MAX_ATLAS_EXTRUDE, MAX_ATLAS_PADDING } from "../../core/export/packErrors";
 import type { ExportSettings } from "../../core/model";
@@ -116,7 +117,7 @@ export function ExportDialog({ request }: { request: ExportDialogRequest }) {
 
     const { doc } = document.session;
     const settings = doc.exportSettings;
-    const set = (update: (settings: ExportSettings) => void) => request.setSettings(update);
+    const set = (patch: ExportSettingsPatch) => void request.setSettings(patch);
     const setPivot = (patch: Partial<Pivot>) => request.setPivot({ ...doc.pivot, ...patch });
 
     const frameOptions: SelectOption<string>[] = [
@@ -160,11 +161,11 @@ export function ExportDialog({ request }: { request: ExportDialogRequest }) {
                             hideLabel
                             value={frames}
                             onChange={(value) =>
-                                set((target) => {
-                                    target.frames =
+                                set({
+                                    frames:
                                         value === ALL_FRAMES
                                             ? "all"
-                                            : { tagId: value.slice("tag:".length) };
+                                            : { tagId: value.slice("tag:".length) },
                                 })
                             }
                             options={frameOptions}
@@ -175,9 +176,7 @@ export function ExportDialog({ request }: { request: ExportDialogRequest }) {
                             <Segments
                                 label="Layout"
                                 value={settings.layout}
-                                onChange={(layout) =>
-                                    set((target) => void (target.layout = layout))
-                                }
+                                onChange={(layout) => set({ layout })}
                                 options={LAYOUTS}
                             />
                         </div>
@@ -185,9 +184,7 @@ export function ExportDialog({ request }: { request: ExportDialogRequest }) {
                             <NumberField
                                 label="Padding"
                                 value={settings.padding}
-                                onChange={(padding) =>
-                                    set((target) => void (target.padding = padding))
-                                }
+                                onChange={(padding) => set({ padding })}
                                 unit="px"
                                 min={0}
                                 max={MAX_ATLAS_PADDING}
@@ -195,9 +192,7 @@ export function ExportDialog({ request }: { request: ExportDialogRequest }) {
                             <NumberField
                                 label="Extrude"
                                 value={settings.extrude}
-                                onChange={(extrude) =>
-                                    set((target) => void (target.extrude = extrude))
-                                }
+                                onChange={(extrude) => set({ extrude })}
                                 unit="px"
                                 min={0}
                                 max={MAX_ATLAS_EXTRUDE}
@@ -208,17 +203,13 @@ export function ExportDialog({ request }: { request: ExportDialogRequest }) {
                                 label="Trim"
                                 showLabel
                                 pressed={settings.trim}
-                                onPressedChange={(trim) =>
-                                    set((target) => void (target.trim = trim))
-                                }
+                                onPressedChange={(trim) => set({ trim })}
                             />
                             <Toggle
                                 label="Merge identical frames"
                                 showLabel
                                 pressed={settings.mergeDuplicates}
-                                onPressedChange={(merge) =>
-                                    set((target) => void (target.mergeDuplicates = merge))
-                                }
+                                onPressedChange={(merge) => set({ mergeDuplicates: merge })}
                             />
                         </div>
                     </Section>
@@ -249,26 +240,20 @@ export function ExportDialog({ request }: { request: ExportDialogRequest }) {
                                 label={`${preview.name}.sprites.ts`}
                                 showLabel
                                 pressed={settings.files.spritesTs}
-                                onPressedChange={(on) =>
-                                    set((target) => void (target.files.spritesTs = on))
-                                }
+                                onPressedChange={(on) => set({ files: { spritesTs: on } })}
                             />
                             <Toggle
                                 label={`${preview.name}.preview.config.mjs`}
                                 showLabel
                                 pressed={settings.files.previewConfig}
-                                onPressedChange={(on) =>
-                                    set((target) => void (target.files.previewConfig = on))
-                                }
+                                onPressedChange={(on) => set({ files: { previewConfig: on } })}
                             />
                         </div>
                         <div className="export-dialog__row">
                             <Segments
                                 label="Aseprite JSON"
                                 value={settings.files.asepriteJson}
-                                onChange={(form) =>
-                                    set((target) => void (target.files.asepriteJson = form))
-                                }
+                                onChange={(form) => set({ files: { asepriteJson: form } })}
                                 options={ASEPRITE_FORMS}
                             />
                         </div>
@@ -293,9 +278,7 @@ export function ExportDialog({ request }: { request: ExportDialogRequest }) {
                                 label="Export on save"
                                 showLabel
                                 pressed={settings.exportOnSave}
-                                onPressedChange={(on) =>
-                                    set((target) => void (target.exportOnSave = on))
-                                }
+                                onPressedChange={(on) => set({ exportOnSave: on })}
                             />
                         </div>
                     </Section>

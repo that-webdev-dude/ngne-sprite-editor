@@ -31,6 +31,8 @@ export interface ExportFolderHandle {
     write(name: string, bytes: Uint8Array<ArrayBuffer>): Promise<void>;
     /** Whether `other` is the same folder of the disk (picked again, say). */
     isSame(other: ExportFolderHandle): Promise<boolean>;
+    /** False when the folder no longer exists (moved or deleted since it was chosen). */
+    exists(): Promise<boolean>;
 }
 
 /** A file chosen with the save picker. */
@@ -39,8 +41,33 @@ export interface ExportFileHandle {
     write(bytes: Uint8Array<ArrayBuffer>): Promise<void>;
 }
 
-/** The kinds of single file an export saves. */
-export type ExportFileKind = "png" | "zip";
+/**
+ * The type of a single file an export saves: what the save picker offers and the download's
+ * media type. A later export (GIF, SE-063) defines its own beside these.
+ */
+export interface ExportFileType {
+    /** A short name of the type: "png", "zip". */
+    readonly kind: string;
+    /** What the save picker calls it: "PNG image". */
+    readonly description: string;
+    readonly mime: string;
+    /** With its dot: ".png". */
+    readonly extension: string;
+}
+
+export const PNG_FILE: ExportFileType = {
+    kind: "png",
+    description: "PNG image",
+    mime: "image/png",
+    extension: ".png",
+};
+
+export const ZIP_FILE: ExportFileType = {
+    kind: "zip",
+    description: "Zip archive",
+    mime: "application/zip",
+    extension: ".zip",
+};
 
 export interface ExportPlatform {
     /** True when exports go to a folder (directory picker); false when they download. */
@@ -52,9 +79,14 @@ export interface ExportPlatform {
     /** True when a single file is saved through a save picker; false when it downloads. */
     canChooseFile(): boolean;
     /** Asks where to save a single file; null when the user cancels. */
-    chooseFile(suggestedName: string, kind: ExportFileKind): Promise<ExportFileHandle | null>;
+    chooseFile(suggestedName: string, type: ExportFileType): Promise<ExportFileHandle | null>;
     /** Hands the bytes to the browser as a download named `name`. */
-    download(name: string, bytes: Uint8Array<ArrayBuffer>, kind: ExportFileKind): void;
+    download(name: string, bytes: Uint8Array<ArrayBuffer>, type: ExportFileType): void;
+    /**
+     * Whether the page still has the user's gesture (`navigator.userActivation.isActive`): a
+     * permission prompt needs it, and it lapses a few seconds after the key or click.
+     */
+    hasUserActivation(): boolean;
 }
 
 // --- File System Access, as far as exports use it ------------------------------------------------
@@ -77,6 +109,7 @@ interface NativeDirectoryHandle {
     readonly kind: string;
     readonly name: string;
     getFileHandle(name: string, options?: { create?: boolean }): Promise<NativeFileHandle>;
+    keys?(): AsyncIterator<string>;
     queryPermission?(descriptor: PermissionMode): Promise<PermissionState>;
     requestPermission?(descriptor: PermissionMode): Promise<PermissionState>;
     isSameEntry?(other: unknown): Promise<boolean>;
@@ -100,21 +133,14 @@ interface FileSystemAccessWindow {
 const FOLDER_PICKER_ID = "ngne-sprite-export";
 const FILE_PICKER_ID = "ngne-sprite-export-file";
 
-const FILE_TYPES: Record<ExportFileKind, { mime: string; type: PickerType }> = {
-    png: {
-        mime: "image/png",
-        type: { description: "PNG image", accept: { "image/png": [".png"] } },
-    },
-    zip: {
-        mime: "application/zip",
-        type: { description: "Zip archive", accept: { "application/zip": [".zip"] } },
-    },
-};
-
 const WRITE: PermissionMode = { mode: "readwrite" };
 
 function pickers(): FileSystemAccessWindow {
     return window as unknown as FileSystemAccessWindow;
+}
+
+function pickerType(type: ExportFileType): PickerType {
+    return { description: type.description, accept: { [type.mime]: [type.extension] } };
 }
 
 /** True when the user closed a picker without choosing: not a failure. */
@@ -196,6 +222,19 @@ function wrapFolder(native: NativeDirectoryHandle): ExportFolderHandle {
                 return false;
             }
         },
+        async exists() {
+            if (!native.keys) return true;
+            try {
+                // Listing a folder that was removed fails with NotFoundError; any other
+                // failure (no read permission yet) says nothing about it.
+                const keys = native.keys();
+                await keys.next();
+                await keys.return?.();
+                return true;
+            } catch (error) {
+                return !isNotFound(error);
+            }
+        },
     };
 }
 
@@ -220,13 +259,13 @@ export function browserExportFiles(): ExportPlatform {
 
         canChooseFile: () => typeof pickers().showSaveFilePicker === "function",
 
-        async chooseFile(suggestedName, kind) {
+        async chooseFile(suggestedName, type) {
             const show = pickers().showSaveFilePicker;
             if (typeof show !== "function") return null;
             try {
                 const native = await show.call(window, {
                     id: FILE_PICKER_ID,
-                    types: [FILE_TYPES[kind].type],
+                    types: [pickerType(type)],
                     suggestedName,
                 });
                 return { name: native.name, write: (bytes) => writeTo(native, bytes) };
@@ -236,8 +275,8 @@ export function browserExportFiles(): ExportPlatform {
             }
         },
 
-        download(name, bytes, kind) {
-            const url = URL.createObjectURL(new Blob([bytes], { type: FILE_TYPES[kind].mime }));
+        download(name, bytes, type) {
+            const url = URL.createObjectURL(new Blob([bytes], { type: type.mime }));
             const link = document.createElement("a");
             link.href = url;
             link.download = name;
@@ -247,6 +286,14 @@ export function browserExportFiles(): ExportPlatform {
             link.remove();
             // The download has started from the URL; it is let go once the browser has it.
             setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        },
+
+        hasUserActivation() {
+            const { userActivation } = navigator as Navigator & {
+                userActivation?: { isActive: boolean };
+            };
+            // Without the API the prompt is tried, and a refusal reported.
+            return userActivation?.isActive ?? true;
         },
     };
 }
