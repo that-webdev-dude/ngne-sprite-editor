@@ -126,6 +126,11 @@ Scope
   `expandTag`), per-frame delays rounded to 10 ms (minimum 20 ms), loop count from the tag,
   scale 1–8×, per-frame palette from `buildPalette` capped at 256, 1-bit transparency.
 - Appears as a format in the export dialog.
+- From the SE-052 review (REVIEW F47 J): SPEC §9.6 lists GIF among the other exports, which
+  SE-052 placed in the File menu, each with its own small dialog (Frame PNG). GIF follows them
+  as a File menu item "Export GIF…" with its own dialog, in place of a format in the Export
+  dialog, and is added from its own module through the helper SE-052 exports for other exports
+  in `src/app/export`.
 
 Acceptance
 - GIF of a 4-frame fixture decodes (in a browser test with `ImageDecoder`) to 4 frames with the

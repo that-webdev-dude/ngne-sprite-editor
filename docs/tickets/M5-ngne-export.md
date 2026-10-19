@@ -105,7 +105,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-006, SE-041, SE-051, SE-053                           |
 | Blocks       | SE-063, SE-070                                           |
 | Blocked until | —                                                       |

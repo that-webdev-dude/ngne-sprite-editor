@@ -268,6 +268,11 @@ Scope
 - With an unlocked reference layer active, the Move tool drags it; corner handles on the
   overlay scale it uniformly about the opposite corner.
 - One undo step per drag.
+- From the SE-033 review (REVIEW, run 3 leg 3): the box helpers in
+  `src/app/selection/transform/` (`handlePoints`, `hitBox`, `drawTransformBox`) work with
+  fractional boxes and can be reused; `scaleBox` rounds to whole pixels and scales width and
+  height apart, so the uniform scale about a fixed corner needs its own function. The Move
+  tool's press routing is in `src/app/selection/move/moveTool.ts` (`onDown`).
 
 Acceptance
 - E2E: drag by (10, 4) document pixels changes `x`, `y` by exactly that; undo restores.

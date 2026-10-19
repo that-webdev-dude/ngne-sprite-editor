@@ -18,6 +18,8 @@ Node benchmarks: `PERF_RECORD=1 npx vitest run --config vitest.perf.config.ts te
 | `se-031-magic-wand`      | SE-031 | Magic wand click (press and release) through the tool pipeline on an opaque flat 1024×1024 document, tolerance 0: flood mask, pending area and the selection command at the release; Contiguous on and off, Node, no viewport | 100 ms | 20.6 ms | larger of the two modes' slowest of 10 clicks, each on a fresh document, cold click included | 2026-10-17 |
 | `se-031-wand-pan-intel-uhd` | SE-031 | JavaScript time of the overlay redraw at each 3 px pan step over a non-contiguous wand pick of a checkerboard on a 1024² document at 1× (256² at 4× in `details`), Chrome on Intel UHD | none | 3.9 ms | p95 of 120 pan steps, JavaScript of the draws only | 2026-10-17 |
 | `se-031-wand-pan-rtx-4060`  | SE-031 | The same on RTX 4060 | none | 3.9 ms | as above | 2026-10-17 |
+| `se-024-playback-intel-uhd` | SE-024 | Editor playback from the `ed:play` grid, 64 frames of 256² (8 layers), 100 ms each, 1×, two passes, Chrome on Intel UHD | 0 skipped | 0 of 128 | entries skipped (a count, `unit: count`) | 2026-10-19 |
+| `se-024-playback-rtx-4060` | SE-024 | The same on RTX 4060 | 0 skipped | 0 of 129 | as above | 2026-10-19 |
 
 `se-043-import` was measured again on 2026-10-13 after the colour key moved before the resample
 (first record, 2026-10-12: 56.9 ms).
@@ -32,6 +34,12 @@ informational (no `pass`). Before SE-031's review fix the same pan cost about 95
 192 ms p95 per step at 1024², the ants ring being painted again at every view change (REVIEW.md
 F3). Unrecorded runs right after the records gave 21.4 ms for the wand and 4.4 and 4.1 ms for the
 pan.
+
+`se-024-playback-*` count entries of the sequence that the clock jumped over or that no submitted
+frame showed while they were active; `resultMs` holds that count (`unit: count`), with a budget
+of 0. A frame counts as shown when it was submitted to NGNE (`onDrawn`), not when it was
+presented. First frame after an entry: median 13.4 / 12.3 ms, p95 26.3 / 30.9 ms (Intel UHD /
+RTX 4060). Unrecorded runs right after: 0 of 128 skipped on both GPUs (REVIEW.md F48).
 
 Browser benchmark: `PERF_RECORD=1 PERF_GPU=<intel-uhd|rtx-4060> npx vitest run --config
 vitest.perf.config.ts tests/perf/se-015-stroke-latency.perf.ts`; `PERF_ECHO=off` measures
