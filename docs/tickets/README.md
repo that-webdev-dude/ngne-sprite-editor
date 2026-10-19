@@ -80,7 +80,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-043 | Import pipeline core and preset palettes          | L    | 003, 005                           | A3            | Done   |
 | SE-044 | Import PNG dialog                                 | L    | 006, 021, 041, 043, 045            | —             | In progress |
 | SE-045 | Reference layers                                  | L    | 011, 022, 040                      | —             | Done   |
-| SE-046 | Reference layer move and scale on the canvas      | M    | 032, 045                           | —             | Ready  |
+| SE-046 | Reference layer move and scale on the canvas      | M    | 032, 045                           | —             | In progress |
 | SE-047 | Document tabs and recent files                    | M    | 041                                | —             | Done   |
 | **M5** | **[NGNE export](M5-ngne-export.md)**              |      |                                    |               |        |
 | SE-050 | Atlas packer                                      | M    | 005, 010                           | A2            | Done   |
