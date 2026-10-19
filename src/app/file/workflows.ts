@@ -27,7 +27,8 @@ import { isProjectFileName, projectFileName } from "./fileName";
 // from or last saved to; with File System Access that is a handle Save writes to again.
 //
 // One operation at a time: while one runs (a picker, a question, a write), `busy` is true and
-// the others do nothing. Results and failures are reported as notices (toasts): one for each
+// the others do nothing. Exports run as file operations too (`run`, SE-052), and a successful
+// save runs the steps added with `onSaved` (`exportOnSave`) before its operation ends. Results and failures are reported as notices (toasts): one for each
 // operation that fails or is given up after it started, none when the user cancels. A failure
 // leaves every open document as it was.
 //
@@ -112,6 +113,18 @@ export interface FileWorkflows {
     close(): Promise<boolean>;
     /** Reads the active document's file again in its place, asking first when it is dirty. */
     revert(): Promise<boolean>;
+    /**
+     * Runs `task` as a file operation of its own (an export, SE-052): not while another one
+     * runs (it resolves false then), and with `busy` true meanwhile.
+     */
+    run(task: () => Promise<boolean>): Promise<boolean>;
+    /**
+     * Adds a step that runs after every successful save, inside the save's operation, with the
+     * document as the store holds it once saved: `exportOnSave` (SE-052). The save has
+     * succeeded whatever the step does; it reports its own failures (one that throws is
+     * reported by an error toast). Returns the function that removes it.
+     */
+    onSaved(step: (document: OpenDocument) => Promise<void>): () => void;
 }
 
 /** What went wrong, for a message: an error's own message (ProjectError names the entry). */
@@ -149,6 +162,7 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
 
     const files = new Map<string, DocumentFile>();
     const listeners = new Set<() => void>();
+    const savedSteps = new Set<(document: OpenDocument) => Promise<void>>();
     let busy = false;
 
     const changed = () => {
@@ -331,11 +345,24 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
             }
         }
         const name = target?.name ?? suggested;
-        if (sessions.getState().documents.some((entry) => entry.session === current.session)) {
+        const stillOpen = () =>
+            sessions.getState().documents.find((entry) => entry.session === current.session);
+        if (stillOpen()) {
             sessions.getState().markSaved(current.id, state);
             setFile(current.id, { name, handle: target, bytes: target ? null : bytes });
         }
         notices.info(`Saved ${name}`);
+        // What follows a save (`exportOnSave`) reports its own failures: the save stands.
+        const saved = stillOpen();
+        if (saved) {
+            for (const step of [...savedSteps]) {
+                try {
+                    await step(saved);
+                } catch (error) {
+                    notices.error(reason(error));
+                }
+            }
+        }
         return true;
     };
 
@@ -389,6 +416,15 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
                 }
                 return false;
             }),
+
+        run: (task) => exclusive(task),
+        onSaved(step) {
+            const own = (document: OpenDocument) => step(document);
+            savedSteps.add(own);
+            return () => {
+                savedSteps.delete(own);
+            };
+        },
 
         save: () => exclusive(() => saveActive(false)),
         saveAs: () => exclusive(() => saveActive(true)),

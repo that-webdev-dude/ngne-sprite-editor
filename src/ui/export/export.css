@@ -1,0 +1,151 @@
+/*
+ * SE-052: the Export dialog (DESIGN §7), a large dialog: the settings on the left, what they
+ * make on the right. The overwrite question and the frame PNG dialog.
+ */
+.export-dialog__columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: var(--space-24);
+    align-items: start;
+}
+
+/* A column of names and a column of controls, as Preferences has. */
+.export-dialog__form {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--space-12) var(--space-16);
+    align-items: start;
+}
+
+.export-dialog__label {
+    line-height: var(--control-height);
+}
+
+.export-dialog__group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    min-width: 0;
+}
+
+.export-dialog__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8) var(--space-12);
+    min-width: 0;
+}
+
+.export-dialog__destination {
+    min-width: 0;
+    overflow: hidden;
+    line-height: var(--control-height);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.export-dialog__result {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    min-width: 0;
+}
+
+.export-atlas {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin: 0;
+}
+
+/* The atlas over the transparency checkerboard; the rectangles drawn above it. */
+.export-atlas__frame {
+    position: relative;
+    max-width: 100%;
+    border: var(--border-width) solid var(--border-strong);
+    background: repeating-conic-gradient(var(--check-a) 0 25%, var(--check-b) 0 50%) 0 0 /
+        var(--space-16) var(--space-16);
+    box-sizing: content-box;
+}
+
+.export-atlas__image {
+    display: block;
+    image-rendering: pixelated;
+}
+
+.export-atlas__rects {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.export-atlas__rects rect {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1px;
+    vector-effect: non-scaling-stroke;
+}
+
+.export-atlas__caption {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.export-dialog__files,
+.export-dialog__ids {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-width: 0;
+}
+
+.export-dialog__list {
+    max-height: calc(var(--line-height) * 6);
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+    font-variant-numeric: tabular-nums;
+}
+
+.export-dialog__list li {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-12);
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.export-dialog__size {
+    flex: none;
+    color: var(--text-muted);
+}
+
+.export-dialog__warnings {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    color: var(--warn);
+}
+
+.export-dialog__error {
+    margin: 0;
+    color: var(--danger);
+}
+
+.export-overwrite__files {
+    margin: var(--space-8) 0 0;
+    padding-left: var(--space-16);
+}
+
+.frame-png-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-8) var(--space-16);
+}
+
+.frame-png-form__result {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
