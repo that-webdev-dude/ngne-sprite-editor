@@ -65,7 +65,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-022 | Timeline panel                                    | L    | 007, 011, 020, 021                 | G1            | Done   |
 | SE-023 | Tags UI                                           | M    | 021, 022                           | —             | Done   |
 | SE-024 | Editor playback                                   | M    | 011, 022, 023                      | —             | Done   |
-| SE-025 | Onion skin                                        | M    | 024                                | —             | Ready  |
+| SE-025 | Onion skin                                        | M    | 024                                | —             | In progress |
 | SE-026 | Timeline editing interactions                     | M    | 022, 023                           | —             | Ready  |
 | **M3** | **[Selection and transform](M3-selection-and-transform.md)** | |                                |               |        |
 | SE-030 | Selection model and marching ants                 | M    | 004, 013, 014                      | —             | Done   |
@@ -78,7 +78,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-041 | File workflows                                    | L    | 007, 008, 040                      | G1            | Done   |
 | SE-042 | Autosave and crash recovery                       | M    | 041                                | —             | Ready  |
 | SE-043 | Import pipeline core and preset palettes          | L    | 003, 005                           | A3            | Done   |
-| SE-044 | Import PNG dialog                                 | L    | 006, 021, 041, 043, 045            | —             | Ready  |
+| SE-044 | Import PNG dialog                                 | L    | 006, 021, 041, 043, 045            | —             | In progress |
 | SE-045 | Reference layers                                  | L    | 011, 022, 040                      | —             | Done   |
 | SE-046 | Reference layer move and scale on the canvas      | M    | 032, 045                           | —             | Ready  |
 | SE-047 | Document tabs and recent files                    | M    | 041                                | —             | Done   |
