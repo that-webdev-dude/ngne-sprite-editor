@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { compositeFrame } from "../../src/core/composite";
 import { celKey, createDocument, sequentialIds } from "../../src/core/model";
 import type { OnionSettings, PixelBuffer, SpriteDoc, Tag } from "../../src/core/model";
-import { onionAlpha, onionGhosts, tintOnion } from "../../src/core/onion";
+import { contentBounds, onionAlpha, onionGhosts, tintOnion } from "../../src/core/onion";
 
 // SE-025 in `core`: which frames are onion skins around a frame (SPEC §7.5), their opacity, the
 // CPU tint of their pixels, and that none of it reaches a composite (SPEC §5.3).
@@ -151,6 +151,56 @@ describe("tintOnion: 50% toward red or blue, alpha kept", () => {
         expect([...source.data]).toEqual(before);
         expect(tinted.data).not.toBe(source.data);
         expect(tinted).toMatchObject({ width: 2, height: 1 });
+    });
+
+    it("writes into a buffer of the same size it is given, every pixel, and never into the source", () => {
+        const into = row([1, 2, 3, 4], [5, 6, 7, 8]);
+        const result = tintOnion(row([0, 0, 0, 255], [9, 9, 9, 0]), "after", into);
+        expect(result).toBe(into);
+        expect([...into.data]).toEqual([0, 0, 128, 255, 0, 0, 0, 0]);
+        // Another size, or the source itself: a new buffer.
+        const source = row([0, 0, 0, 255]);
+        expect(tintOnion(source, "before", into)).not.toBe(into);
+        const own = tintOnion(source, "before", source);
+        expect(own).not.toBe(source);
+        expect([...source.data]).toEqual([0, 0, 0, 255]);
+    });
+});
+
+describe("contentBounds: where a ghost shows anything", () => {
+    function image(width: number, height: number, set: readonly [number, number, number][]) {
+        const data = new Uint8ClampedArray(width * height * 4);
+        for (const [x, y, alpha] of set) data[(y * width + x) * 4 + 3] = alpha;
+        return { width, height, data };
+    }
+
+    it("bounds the pixels whose alpha is not 0, colour under alpha 0 aside", () => {
+        expect(contentBounds(image(6, 5, [[2, 1, 1]]))).toEqual({
+            x: 2,
+            y: 1,
+            width: 1,
+            height: 1,
+        });
+        expect(
+            contentBounds(
+                image(6, 5, [
+                    [4, 1, 255],
+                    [1, 3, 7],
+                    [5, 4, 128],
+                ]),
+            ),
+        ).toEqual({ x: 1, y: 1, width: 5, height: 4 });
+        const colourOnly = image(3, 3, []);
+        colourOnly.data.fill(200);
+        for (let at = 3; at < colourOnly.data.length; at += 4) colourOnly.data[at] = 0;
+        expect(contentBounds(colourOnly)).toBeNull();
+        expect(contentBounds(image(4, 4, []))).toBeNull();
+        expect(contentBounds(image(1, 1, [[0, 0, 1]]))).toEqual({
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+        });
     });
 });
 

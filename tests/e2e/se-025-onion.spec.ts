@@ -382,7 +382,64 @@ test("onion skins are hidden while playing and come back after", async ({ page }
         .poll(() => page.evaluate(() => window.__se025!.playback.editorPlayback.playing))
         .toBe(false);
     await settle(page);
-    expect((await drawnGhosts(page)).length).toBeGreaterThan(0);
+    // Paused on frame 2, its ghosts as before playing.
+    expect(await drawnGhosts(page)).toEqual(["1:plain@3", "3:plain@3"]);
+    expect(errors).toEqual([]);
+});
+
+test("a burst of frame changes with three tinted ghosts each side leaves all six on screen", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openEditor(page);
+    const colours: Rgba[] = Array.from({ length: 10 }, (_, index) => [20 * index, 80, 100, 255]);
+    await openAnimation(page, {
+        frames: colours,
+        active: 5,
+        onion: { enabled: true, before: 3, after: 3, opacity: 200, tint: true },
+    });
+    await settle(page);
+    const ghostsOf5 = [
+        "2:before@3",
+        "3:before@3",
+        "4:before@3",
+        "8:after@3",
+        "7:after@3",
+        "6:after@3",
+    ];
+    expect(await drawnGhosts(page)).toEqual(ghostsOf5);
+    // ← ← → → from the keyboard, three times: back on frame 5.
+    await viewport(page).focus();
+    for (let round = 0; round < 3; round++) {
+        for (const key of ["ArrowLeft", "ArrowLeft", "ArrowRight", "ArrowRight"]) {
+            await page.keyboard.press(key);
+        }
+    }
+    await settle(page);
+    expect(await drawnGhosts(page)).toEqual(ghostsOf5);
+    // Faster than keys arrive: Previous and Next Frame run in the page one animation frame
+    // apart, so the uploads of a change are in flight when the next one comes (the review's
+    // sequences, each back on frame 5).
+    const [next, previous] = ["frame.next", "frame.previous"];
+    for (const sequence of [
+        [next, previous],
+        [next, next, previous, previous],
+        [previous, previous, next, next],
+        [next, next, next, previous, previous, previous],
+        [previous, previous, previous, next, next, next],
+    ]) {
+        await page.evaluate(async (sequence) => {
+            const commands = window.__ngneTest!.commands;
+            for (const id of sequence) {
+                await commands.get(id)!.run();
+                await new Promise((resolve) => requestAnimationFrame(resolve));
+            }
+        }, sequence);
+        await settle(page);
+        expect(await drawnGhosts(page), sequence.join(" ")).toEqual(ghostsOf5);
+    }
+    // The frame is frame 5's colour where no ghost is drawn over it.
+    expectNear(await shownAt(page, device(4, 4)), colours[4]!, 0);
     expect(errors).toEqual([]);
 });
 
@@ -433,6 +490,21 @@ test("the transport's toggle and its settings popover change the document's sett
     await page.keyboard.press("F3");
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
 
+    // The popover runs Apply Onion Skin Settings for each change (SPEC §5: the interface
+    // changes a document only through registered commands): its runs are counted.
+    await page.evaluate(() => {
+        const command = window.__ngneTest!.commands.get("view.applyOnionSettings")!;
+        const run = command.run;
+        const spy = window as unknown as { __se025Runs: number };
+        spy.__se025Runs = 0;
+        (command as { run: () => void | Promise<void> }).run = () => {
+            spy.__se025Runs++;
+            return run();
+        };
+    });
+    const runs = () =>
+        page.evaluate(() => (window as unknown as { __se025Runs: number }).__se025Runs);
+
     // The popover: After 0, placement in front, tint.
     await settings.click();
     const popover = page.getByRole("dialog", { name: "Onion skin settings" });
@@ -452,6 +524,19 @@ test("the transport's toggle and its settings popover change the document's sett
     });
     await settle(page);
     expect(await drawnGhosts(page)).toEqual(["1:before@5"]);
+    expect(await runs()).toBe(3);
+    // With the command disabled, a change in the popover changes nothing.
+    await page.evaluate(() => {
+        const command = window.__ngneTest!.commands.get("view.applyOnionSettings")!;
+        (command as { enabled: () => boolean }).enabled = () => false;
+    });
+    await popover.getByRole("button", { name: "Within tag" }).click();
+    await expect(popover.getByRole("button", { name: "Within tag" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+    );
+    expect((await onion()).withinTag).toBe(false);
+    expect(await runs()).toBe(3);
     await page.keyboard.press("Escape");
     await expect(popover).toBeHidden();
     await settleTimers(page);

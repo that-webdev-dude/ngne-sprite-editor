@@ -3,8 +3,14 @@ import { appCommands } from "../../src/app/commands/appCommands";
 import { buildMenu, menuCommands } from "../../src/app/commands/menuModel";
 import { plannedCommands } from "../../src/app/commands/planned.commands";
 import type { Command } from "../../src/app/commands/types";
-import { activeOnion, setOnionSettings, viewportGhosts } from "../../src/app/onion/onion";
-import { ONION_SKIN_COMMAND } from "../../src/app/onion/onion.commands";
+import {
+    activeOnion,
+    onionEdit,
+    setOnionSettings,
+    viewportGhosts,
+    withOnionPatch,
+} from "../../src/app/onion/onion";
+import { ONION_SETTINGS_COMMAND, ONION_SKIN_COMMAND } from "../../src/app/onion/onion.commands";
 import { activeEchoCover, onionCover } from "../../src/app/onion/onionCover";
 import { keepsPlaying } from "../../src/app/playback/playbackState";
 import { createPreferenceStore, preferences } from "../../src/app/preferences/preferences";
@@ -18,6 +24,7 @@ import {
 } from "../../src/app/state/sessions";
 import { echoPixels } from "../../src/app/tools/strokeEcho.overlay";
 import { connectViewport } from "../../src/app/viewport/viewportController";
+import { compositeFrame } from "../../src/core/composite";
 import { celKey, createDocument, sequentialIds } from "../../src/core/model";
 import type { DocSession, OnionSettings, PixelBuffer } from "../../src/core/model";
 import { frameKey } from "../../src/engine/viewport/types";
@@ -247,53 +254,188 @@ describe("onion settings and the toggle", () => {
         setOnionSettings({ before: 0 });
         expect(preferences.get("onion").before).toBe(2);
     });
+
+    it("Apply Onion Skin Settings applies the change handed to it, outside the menus and without a key", async () => {
+        const apply = command(ONION_SETTINGS_COMMAND);
+        expect(apply.menuPath).toBeNull();
+        expect(apply.shortcuts).toEqual([]);
+        expect(keepsPlaying(ONION_SETTINGS_COMMAND)).toBe(true);
+        sessionsStore.getState().open(createDocument({ name: "a", width: 4, height: 4 }));
+        // Nothing handed to it: disabled.
+        expect(apply.enabled()).toBe(false);
+        let enabled = false;
+        withOnionPatch({ before: 3, placement: "front" }, () => {
+            enabled = apply.enabled();
+            void apply.run();
+        });
+        expect(enabled).toBe(true);
+        expect(activeOnion()).toMatchObject({ before: 3, placement: "front" });
+        // Taken out again afterwards, also when the run throws.
+        expect(onionEdit.getState().patch).toBeNull();
+        expect(() =>
+            withOnionPatch({ before: 9 }, () => {
+                void apply.run();
+            }),
+        ).toThrow(RangeError);
+        expect(onionEdit.getState().patch).toBeNull();
+        expect(activeOnion()?.before).toBe(3);
+    });
+});
+
+describe("what readers of the composites get with onion skin on", () => {
+    it("the cache's composites have no ghost in them, also after tinted ghosts were read", () => {
+        const sessions = createSessionsStore();
+        const composites = createActiveComposites(sessions);
+        const viewport = new OnionViewport();
+        connectViewport(viewport, {
+            sessions,
+            preferences: createPreferenceStore(null),
+            composites,
+        });
+        const session = sprite(3, { before: 1, after: 1, opacity: 255, tint: true });
+        session.activeFrameId = "f2";
+        sessions.getState().open(session);
+        expect(viewport.ghosts.map((ghost) => ghost.key)).toEqual(["o-3:before", "f3:after"]);
+        // The viewport reads the tinted ghosts, twice, as two uploads would.
+        for (let round = 0; round < 2; round++) {
+            for (const ghost of viewport.ghosts) viewport.document?.pixels(ghost.key);
+        }
+        // Every frame's composite as the cache hands it out equals the composite of the same
+        // document with onion skin off.
+        const off = structuredClone(session.doc);
+        off.settings.onion.enabled = false;
+        const cache = composites.cacheOf(session)!;
+        for (const frame of session.doc.frames) {
+            expect([...cache.get(frame.id).data], frame.id).toEqual([
+                ...compositeFrame(off, frame.id).data,
+            ]);
+        }
+        expect([...cache.get("f2").data]).toEqual([20, 20, 20, 255, 0, 0, 0, 0]);
+    });
+
+    it("reuses one buffer per tinted ghost, rewritten with the frame's pixels at each read", () => {
+        const { sessions, viewport } = connect();
+        const session = sprite(2, { before: 1, after: 0, tint: true });
+        session.activeFrameId = "f2";
+        const document = sessions.getState().open(session);
+        const key = "o-3:before";
+        const first = viewport.document!.pixels(key)!;
+        expect([...first.data]).toEqual([133, 5, 5, 255, 0, 0, 0, 0]);
+        // The frame changes: the same buffer, with the new pixels, the transparent one cleared.
+        const transaction = document.history.begin({
+            layerId: session.activeLayerId,
+            frameId: "o-3",
+        });
+        transaction.image.data.set([0, 0, 0, 0, 0, 0, 0, 255]);
+        transaction.markDirty({ x: 0, y: 0, width: 2, height: 1 });
+        transaction.commit("Paint");
+        const second = viewport.document!.pixels(key)!;
+        expect(second.data).toBe(first.data);
+        expect([...second.data]).toEqual([0, 0, 0, 0, 128, 0, 0, 255]);
+        // A ghost no longer on screen lets its buffer go.
+        sessions.getState().updateDocSettings(document.id, (settings) => {
+            settings.onion.enabled = false;
+        });
+        sessions.getState().updateDocSettings(document.id, (settings) => {
+            settings.onion.enabled = true;
+        });
+        expect(viewport.document!.pixels(key)!.data).not.toBe(first.data);
+    });
 });
 
 describe("stroke echo: giving way to onion skins", () => {
     const checker = { a: 0x404040, b: 0x505050, size: 8 };
-    // Opaque, translucent, transparent, opaque.
+    // Opaque, translucent, transparent, translucent, transparent.
     const buffer: PixelBuffer = {
-        width: 4,
+        width: 5,
         height: 1,
-        data: Uint8ClampedArray.from([9, 9, 9, 255, 9, 9, 9, 128, 0, 0, 0, 0, 9, 9, 9, 255]),
+        data: Uint8ClampedArray.from([
+            9, 9, 9, 255, 9, 9, 9, 128, 0, 0, 0, 0, 9, 9, 9, 128, 0, 0, 0, 0,
+        ]),
     };
-    const rect = { x: 0, y: 0, width: 4, height: 1 };
+    const rect = { x: 0, y: 0, width: 5, height: 1 };
     const alphas = (data: Uint8ClampedArray) => [...data].filter((_, index) => index % 4 === 3);
+    const pixel = (rgba: readonly number[]) => rgba;
+    const CLEAR = [0, 0, 0, 0];
+    const INK = [200, 0, 0, 255];
 
-    function openWith(onion: Partial<OnionSettings>, count = 3) {
-        const session = sprite(count, onion, 4);
+    /**
+     * A 5×1 document of three frames, the second active: the ghost before it (frame 1) has
+     * content in pixels 1 and 2, the ghost after it (frame 3) in pixel 2, frame 2 none.
+     */
+    function openWith(onion: Partial<OnionSettings>) {
+        const session = sprite(3, onion, 5);
         session.activeFrameId = "f2";
+        const images = session.doc.images;
+        const fill = (imageId: string, pixels: (readonly number[])[]) =>
+            images.set(imageId, {
+                width: 5,
+                height: 1,
+                data: Uint8ClampedArray.from(pixels.flatMap(pixel)),
+            });
+        fill("image-0", [CLEAR, INK, INK, CLEAR, CLEAR]);
+        fill("image-1", [CLEAR, CLEAR, CLEAR, CLEAR, CLEAR]);
+        fill("image-2", [CLEAR, CLEAR, [0, 0, 200, 64], CLEAR, CLEAR]);
         return sessionsStore.getState().open(session);
     }
 
-    it("with ghosts behind draws only the opaque pixels, which hide them in NGNE too", () => {
+    it("covers the bounds of each ghost's content, not the whole canvas", () => {
         const document = openWith({ placement: "behind" });
-        const cover = onionCover(document, false);
-        expect(cover).toEqual({ behind: [{ x: 0, y: 0, width: 4, height: 1 }], front: [] });
+        expect(onionCover(document, false)).toEqual({
+            behind: [
+                { x: 1, y: 0, width: 2, height: 1 },
+                { x: 2, y: 0, width: 1, height: 1 },
+            ],
+            front: [],
+        });
+    });
+
+    it("with ghosts behind draws only the opaque pixels over their content, every pixel elsewhere", () => {
+        openWith({ placement: "behind" });
         expect(alphas(echoPixels(buffer, rect, checker, activeEchoCover()))).toEqual([
-            255, 0, 0, 255,
+            255, 0, 0, 255, 255,
         ]);
     });
 
-    it("with ghosts in front draws nothing", () => {
+    it("with ghosts in front draws nothing over their content, every pixel elsewhere", () => {
         openWith({ placement: "front" });
-        expect(alphas(echoPixels(buffer, rect, checker, activeEchoCover()))).toEqual([0, 0, 0, 0]);
+        expect(alphas(echoPixels(buffer, rect, checker, activeEchoCover()))).toEqual([
+            255, 0, 0, 255, 255,
+        ]);
+    });
+
+    it("follows a change of a ghost's frame, told by the composite cache", () => {
+        const document = openWith({ placement: "front" });
+        expect(alphas(echoPixels(buffer, rect, checker, activeEchoCover()))[4]).toBe(255);
+        const transaction = document.history.begin({
+            layerId: document.session.activeLayerId,
+            frameId: document.session.doc.frames[0]!.id,
+        });
+        transaction.image.data.set(INK, 4 * 4);
+        transaction.markDirty({ x: 4, y: 0, width: 1, height: 1 });
+        transaction.commit("Paint");
+        expect(onionCover(document, false).front[0]).toEqual({ x: 1, y: 0, width: 4, height: 1 });
+        expect(alphas(echoPixels(buffer, rect, checker, activeEchoCover()))).toEqual([
+            255, 0, 0, 0, 0,
+        ]);
     });
 
     it("draws every pixel while no ghost is on screen: onion off, no neighbour, or playing", () => {
         const off = openWith({ enabled: false });
         expect(onionCover(off, false)).toEqual({ behind: [], front: [] });
-        // Every pixel, the transparent one as the checkerboard.
+        // Every pixel, the transparent ones as the checkerboard.
         expect(alphas(echoPixels(buffer, rect, checker, activeEchoCover()))).toEqual([
-            255, 255, 255, 255,
+            255, 255, 255, 255, 255,
         ]);
-        // One frame: nothing around it.
-        const single = sprite(1);
-        expect(viewportGhosts(single)).toEqual([]);
-        // Playing hides the ghosts.
         sessionsStore.getState().close(off.id);
+        // One frame: nothing around it.
+        const single = sessionsStore.getState().open(sprite(1, { placement: "front" }, 5));
+        expect(viewportGhosts(single.session)).toEqual([]);
+        expect(onionCover(single, false)).toEqual({ behind: [], front: [] });
+        sessionsStore.getState().close(single.id);
+        // Playing hides the ghosts.
         const on = openWith({ placement: "front" });
         expect(onionCover(on, true)).toEqual({ behind: [], front: [] });
-        expect(onionCover(on, false).front).toHaveLength(1);
+        expect(onionCover(on, false).front).toHaveLength(2);
     });
 });

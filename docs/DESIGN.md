@@ -400,9 +400,9 @@ Onion skin (SE-025; SPEC §7.5):
   Both are disabled while no document is open.
 - The popover (§7) opens above the button: Before and After (0–3), Opacity (slider with
   its field, 0–255), Falloff (0–1, steps of 0.05), Placement (Behind / In front), then Tint and
-  Within tag as text toggles. A change applies at once to the active document, with no undo
-  step and no unsaved marker, so the popover has no Apply; it closes on Escape and an outside
-  press.
+  Within tag as text toggles. A change applies at once to the active document, through the
+  command Apply Onion Skin Settings, with no undo step and no unsaved marker, so the popover
+  has no Apply button; it closes on Escape and an outside press.
 
 Tag bar (SE-023):
 

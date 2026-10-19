@@ -1,3 +1,4 @@
+import { createStore } from "zustand/vanilla";
 import type { DocSession, OnionSettings } from "../../core/model";
 import { onionGhosts } from "../../core/onion";
 import { frameKey } from "../../engine/viewport/types";
@@ -7,6 +8,25 @@ import { activeDocument, sessionsStore } from "../state/sessions";
 // Onion skin in the app (SPEC §7.5, SE-025): the settings of the active document, changed by
 // plain setters (`DocSettings.onion`: saved with the document, no history entry, never dirty;
 // SPEC §5.2), and the ghosts the viewport is given for a session.
+
+/**
+ * The change the onion skin popover hands to Apply Onion Skin Settings (`onion.commands.ts`):
+ * `src/ui` changes a document only through registered commands (SPEC §5), fed through a store
+ * as the timeline's apply commands are (REVIEW F8). Null while no change is being applied.
+ */
+export const onionEdit = createStore<{ patch: Partial<OnionSettings> | null }>(() => ({
+    patch: null,
+}));
+
+/** Runs `run` with `patch` in `onionEdit`, and takes it out again afterwards whatever happened. */
+export function withOnionPatch(patch: Partial<OnionSettings>, run: () => void): void {
+    onionEdit.setState({ patch });
+    try {
+        run();
+    } finally {
+        onionEdit.setState({ patch: null });
+    }
+}
 
 /** The onion settings of the active document, or null while none is open. */
 export function activeOnion(): Readonly<OnionSettings> | null {

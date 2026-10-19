@@ -2,8 +2,8 @@ import { Blend, SlidersHorizontal } from "lucide-react";
 import { memo, useMemo, useSyncExternalStore } from "react";
 import { appCommands } from "../../app/commands/appCommands";
 import { formatChord } from "../../app/commands/chord";
-import { ONION_SKIN_COMMAND } from "../../app/onion/onion.commands";
-import { setOnionSettings } from "../../app/onion/onion";
+import { ONION_SETTINGS_COMMAND, ONION_SKIN_COMMAND } from "../../app/onion/onion.commands";
+import { withOnionPatch } from "../../app/onion/onion";
 import { activeDocument, sessionsStore } from "../../app/state/sessions";
 import type { OnionSettings } from "../../core/model";
 import { runCommand } from "../commands/runCommand";
@@ -18,8 +18,9 @@ import "../primitives/field.css";
 
 // The onion skin controls of the transport (DESIGN §5.6, §7; SE-025): the toggle, which runs
 // View → Show/Hide Onion Skin (F3), and the button of the settings popover beside it. The
-// settings are the active document's `DocSettings.onion`: a change applies at once, makes no
-// history entry and leaves the document clean (SPEC §5.2), so the popover has no Apply.
+// settings are the active document's `DocSettings.onion`: a change applies at once, through the
+// command Apply Onion Skin Settings, makes no history entry and leaves the document clean
+// (SPEC §5.2), so the popover has no Apply button.
 
 /** Arrow keys change the falloff, a fraction, by a twentieth (as the Preferences dialog). */
 const FALLOFF_STEP = 0.05;
@@ -47,7 +48,9 @@ function useToggleShortcut(): string | undefined {
 
 /** The fields of the popover (DESIGN §7): frames before and after, opacity, falloff, tint, placement, within tag. */
 function OnionFields({ onion }: { onion: OnionSettings }) {
-    const set = (patch: Partial<OnionSettings>) => setOnionSettings(patch);
+    // Through the registry (SPEC §5): Apply Onion Skin Settings, the change handed to it.
+    const set = (patch: Partial<OnionSettings>) =>
+        withOnionPatch(patch, () => void runCommand(ONION_SETTINGS_COMMAND));
     return (
         <div className="timeline-onion">
             <NumberField

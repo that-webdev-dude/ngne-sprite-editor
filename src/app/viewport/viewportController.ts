@@ -1,6 +1,6 @@
 import type { StoreApi } from "zustand/vanilla";
 import { frameIndex } from "../../core/model";
-import type { DocSession } from "../../core/model";
+import type { DocSession, PixelBuffer } from "../../core/model";
 import { tintOnion } from "../../core/onion";
 import { frameKey, parseFrameKey } from "../../engine/viewport/types";
 import type { ViewportChecker, ViewportPort, ViewportReference } from "../../engine/viewport/types";
@@ -102,6 +102,11 @@ export function connectViewport(
     let theme = DEFAULT_VIEWPORT_THEME;
     /** The session whose document the viewport shows. */
     let shown: DocSession | null = null;
+    /**
+     * The buffer each tinted onion skin is tinted into (SE-025 review F): its pixels are copied
+     * when the upload is built, so it is written again at the next one rather than allocated.
+     */
+    const tintBuffers = new Map<string, PixelBuffer>();
     let frameId: string | null = null;
     let view: ViewState | null = null;
 
@@ -117,6 +122,7 @@ export function connectViewport(
 
     const show = (document: OpenDocument | null) => {
         shown = document?.session ?? null;
+        tintBuffers.clear();
         // `setDocument` forgets the frame key as well: the new document's follows below.
         frameId = null;
         view = null;
@@ -139,9 +145,12 @@ export function connectViewport(
                 const cache = composites.cacheOf(session);
                 if (!cache || frameIndex(doc, id) === -1) return null;
                 if (variant === "plain") return cache.get(id);
-                // An onion skin with tint on (SE-025): a tinted copy, made on the CPU.
+                // An onion skin with tint on (SE-025): a tinted copy, made on the CPU into the
+                // buffer kept for its key, which the viewport copies in this task (review F).
                 if (variant === "before" || variant === "after") {
-                    return tintOnion(cache.get(id), variant);
+                    const tinted = tintOnion(cache.get(id), variant, tintBuffers.get(key));
+                    tintBuffers.set(key, tinted);
+                    return tinted;
                 }
                 return null;
             },
@@ -191,7 +200,12 @@ export function connectViewport(
      */
     const pushOnion = () => {
         if (!viewport.setOnion) return;
-        viewport.setOnion(shown ? viewportGhosts(shown) : []);
+        const ghosts = shown ? viewportGhosts(shown) : [];
+        // Only the tinted ghosts on screen keep a buffer.
+        for (const key of tintBuffers.keys()) {
+            if (!ghosts.some((ghost) => ghost.key === key)) tintBuffers.delete(key);
+        }
+        viewport.setOnion(ghosts);
     };
 
     const follow = () => {

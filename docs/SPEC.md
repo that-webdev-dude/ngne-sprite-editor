@@ -523,14 +523,20 @@ Onion skins (SE-025; §7.5):
   (`NgneViewport.setOnion`): a frame key each, its `alpha` and the placement. With tint off the
   key is the frame's `plain` one, the slot a switch to that frame draws; with tint on it is
   `frameId:before` or `frameId:after`, whose pixels the app makes when the upload starts: the
-  frame's composite from the cache, tinted on the CPU (`core/onion`). `invalidate` of a frame's
-  `plain` key covers its tinted variants.
+  frame's composite from the cache, tinted on the CPU (`core/onion`) into a buffer kept for each
+  tinted ghost on screen, which the upload copies (review F: a linked ghost uploaded at every
+  animation frame of a stroke allocates nothing). `invalidate` of a frame's `plain` key covers
+  its tinted variants.
 - The ghosts' keys are keys on screen, as the current frame's: a history step uploads them
   again in place, a newer upload waiting does not blank them, and a slot of one is never taken
   for another key. A ghost is drawn only from a slot that holds its key (`FrameSlots.holding`),
   at layer 3 or 5, so a ghost on its way is left out and no frame names a texture that is not
-  ready. Playing hides them and keeps their slots; once no ghost is tinted (tint or onion skin
-  off), the slots of tinted keys get the 1×1 image.
+  ready. With tint on and three frames each side, the current frame, six ghosts and the frame
+  drawn while the current one loads are eight keys for eight slots: a key on screen that found
+  no slot (every slot kept or being re-keyed, or its slot failed for good) is asked for again
+  when a frame slot's upload resolves and when a slot is taken out (review A). Playing hides
+  the ghosts and does not release their slots; once no ghost is tinted (tint or onion skin off),
+  the slots of tinted keys get the 1×1 image.
 
 Quad order (NGNE `layer` value): 0 workspace colour · 1 checkerboard · 2 references placed
 behind · 3 onion skins behind · 4 current frame · 5 onion skins in front · 6 references placed
@@ -685,11 +691,13 @@ composite:
 - It hides whatever NGNE draws over the composite's place: references and onion skins (quad
   layers 2, 3, 5, 6). How it gives way to references is recorded in §7.6 (SE-045). It gives
   way to onion skins the same way (SE-025, `app/onion/onionCover.ts`): while ghosts are on
-  screen (onion skin on, a neighbour in range, not playing) they cover the whole canvas; with
-  ghosts in front the echo draws nothing, with ghosts behind only the composite's opaque
-  pixels, which hide the ghosts in NGNE as well. It is not an echo that draws the ghosts too:
-  their pixels and NGNE's alpha blend would have to be reproduced on the overlay for one to
-  three frames.
+  screen (onion skin on, a neighbour in range, not playing) each covers the bounding rectangle
+  of its frame's pixels that are not transparent (review E), read from the composite cache when
+  the echo draws and kept until the cache reports a change of that frame; over the ghosts in
+  front the echo draws nothing, over ghosts behind only the composite's opaque pixels, which
+  hide the ghosts in NGNE as well, and away from the ghosts' content it draws every pixel. It is
+  not an echo that draws the ghosts too: their pixels and NGNE's alpha blend would have to be
+  reproduced on the overlay for one to three frames.
 - Development builds switch it with `window.__ngneTest.strokeEcho.enabled`; the benchmark
   measures both ways on one build (`PERF_ECHO=off`). With the echo, a sample's frame is the
   earlier of NGNE's submit and the end of the overlay draw that showed it.
@@ -1368,8 +1376,11 @@ Recorded by SE-025 (`core/onion`, `app/onion`; the display path is in §6.4):
 - The settings are the document's `DocSettings.onion`, changed by setters (`setOnionSettings`):
   no history entry, never dirty, saved with the document (§5.2), available while a stroke or a
   floating selection is open. View → Show/Hide Onion Skin and F3 (global) toggle `enabled`; the
-  title says what choosing it does (REVIEW E37). New Sprite takes the settings of the preference
-  store's onion defaults (Preferences, DESIGN §7).
+  title says what choosing it does (REVIEW E37). The settings popover runs Apply Onion Skin
+  Settings (`view.applyOnionSettings`, outside the menus, no key) with each change handed to it
+  through a store (`withOnionPatch`), as the timeline's apply commands are fed (REVIEW F8).
+  New Sprite takes the settings of the preference store's onion defaults (Preferences, DESIGN
+  §7).
 - Onion skins are hidden while playing; the toggle and the settings leave playback running.
 
 ### 7.6 Reference layers (C3)

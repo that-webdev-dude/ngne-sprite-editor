@@ -439,6 +439,21 @@ export class ViewportSlots {
         if (slot >= 0) this.#requestFrame(slot, key);
     }
 
+    /**
+     * Asks again for a key on screen that has no slot (SE-025 review A): with eight keys for
+     * eight slots, one can find every slot kept while others are being re-keyed, and an upload
+     * resolving frees one. It cannot spin: a key is asked for only while it has no slot, and
+     * a request that cannot be made publishes nothing.
+     */
+    #syncMissing(): void {
+        const { current } = this.#scene;
+        const keys = this.#ghosts().map((ghost) => ghost.key);
+        if (current !== null) keys.push(current);
+        if (keys.every((key) => this.frames.reservedFor(key) >= 0)) return;
+        this.#syncCurrent();
+        this.#syncOnion();
+    }
+
     #requestFrame(slot: number, key: string): void {
         const id = frameSlotId(slot);
         this.queue.request(id, () =>
@@ -507,7 +522,10 @@ export class ViewportSlots {
                 newerQueued: this.queue.pending(slot),
             });
             // A grid kept after playback stopped goes once a slot shows the frame instead.
-            if (!this.#scene.playing) this.#syncPlay();
+            if (!this.#scene.playing) {
+                this.#syncPlay();
+                this.#syncMissing();
+            }
         }
         this.#host.onChange();
     }
@@ -550,6 +568,8 @@ export class ViewportSlots {
         }
         this.frames.disable(index);
         this.#syncCurrent();
+        // An onion skin of the slot moves on as well (SE-025 review A).
+        this.#syncOnion();
         const { current, document: doc } = this.#scene;
         if (current !== null && doc && this.frames.reservedFor(current) < 0) this.#reportStuck();
     }

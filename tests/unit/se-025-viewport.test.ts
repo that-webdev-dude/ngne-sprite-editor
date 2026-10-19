@@ -16,10 +16,10 @@ import { bitmap, FakeRenderer, flush } from "./se-011-support";
 // keys on screen, so a history step uploads them again in place; they are hidden while
 // playing; with tint off they are the plain keys a frame switch draws. No NGNE and no DOM.
 
-/** A document of the frames `a` to `i`; each key's pixels are one colour, red = 10 × (index + 1). */
+/** A document of the frames `a` to `j`; each key's pixels are one colour, red = 10 × (index + 1). */
 function document(): ViewportDocument & { asked: string[] } {
     const asked: string[] = [];
-    const frames = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
+    const frames = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
     return {
         width: 4,
         height: 2,
@@ -40,7 +40,7 @@ function document(): ViewportDocument & { asked: string[] } {
 
 const plain = (frame: string) => frameKey(frame);
 
-function setup() {
+function setup(options: { onError?(error: unknown): void } = {}) {
     const renderer = new FakeRenderer();
     const scene: Scene = {
         document: null,
@@ -61,9 +61,11 @@ function setup() {
         },
         rendererFailed: () => false,
         onChange: () => {},
-        onError: (error) => {
-            throw error;
-        },
+        onError:
+            options.onError ??
+            ((error) => {
+                throw error;
+            }),
         onStuck: () => {},
         gate: () => undefined,
     });
@@ -261,5 +263,111 @@ describe("ViewportSlots: onion skins", () => {
         view.slots.documentChanged();
         expect(view.scene.onion).toEqual([]);
         expect(view.ghostQuads()).toEqual([]);
+    });
+});
+
+// From the SE-025 review (A): with tint on and three frames on each side, the current frame,
+// its six tinted ghosts and the frame drawn while the current one loads are eight keys for
+// eight slots. A quick run of frame changes left slots being re-keyed while they still showed
+// a key on screen, so a ghost found no slot, and nothing asked for it again.
+describe("ViewportSlots: every ghost after quick frame changes, tint on, 3/3", () => {
+    const FRAMES = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
+
+    /** The ghosts of the 1-based frame `number`, as the controller gives them, tint on. */
+    function ghostsOf(number: number): ViewportGhost[] {
+        const ghosts: ViewportGhost[] = [];
+        for (let step = 3; step >= 1; step--) {
+            const frame = FRAMES[number - 1 - step];
+            if (frame) ghosts.push(behind(frameKey(frame, "before"), 1));
+        }
+        for (let step = 3; step >= 1; step--) {
+            const frame = FRAMES[number - 1 + step];
+            if (frame) ghosts.push(behind(frameKey(frame, "after"), 1));
+        }
+        return ghosts;
+    }
+
+    /** Frame `number` made the active one as the controller does it, then one draw. */
+    function change(view: ReturnType<typeof setup>, number: number): void {
+        view.scene.current = plain(FRAMES[number - 1]!);
+        view.slots.sync();
+        view.scene.onion = ghostsOf(number);
+        view.slots.sync();
+        view.slots.quads();
+    }
+
+    /** Resolves the uploads in flight one batch at a time, with a draw after each, until none. */
+    async function landDrawing(view: ReturnType<typeof setup>): Promise<void> {
+        let settled = 0;
+        for (let round = 0; round < 50; round++) {
+            await flush();
+            const { calls } = view.renderer;
+            if (settled >= calls.length) return;
+            const now = calls.length;
+            while (settled < now) calls[settled++]?.resolve();
+            await flush();
+            view.slots.quads();
+        }
+    }
+
+    /** Frame 4 settled first, then each change of `sequence` while the uploads of the one before are in flight. */
+    async function run(sequence: readonly number[]) {
+        const view = setup();
+        change(view, 4);
+        await landDrawing(view);
+        expect(view.slots.drawnGhosts()).toHaveLength(6);
+        for (const number of sequence) {
+            change(view, number);
+            await view.start();
+        }
+        await landDrawing(view);
+        view.slots.quads();
+        return view;
+    }
+
+    for (const sequence of [
+        [5, 4],
+        [5, 6, 5, 4],
+        [5, 6, 7, 6, 5],
+        [3, 2, 3, 4, 5],
+    ]) {
+        it(`draws the current frame and all six ghosts after ${sequence.join(" > ")}`, async () => {
+            const view = await run(sequence);
+            const last = sequence.at(-1)!;
+            const frame = view.slots.quads().find((quad) => quad.layer === QUAD_LAYER.frame);
+            expect(frame?.texture).toBe(frameSlotId(view.holding(plain(FRAMES[last - 1]!))));
+            expect(view.slots.drawnGhosts().map((ghost) => ghost.key)).toEqual(
+                ghostsOf(last).map((ghost) => ghost.key),
+            );
+        });
+    }
+
+    it("moves a ghost to another slot when its slot failed for good", async () => {
+        const errors: unknown[] = [];
+        const view = setup({ onError: (error) => errors.push(error) });
+        change(view, 4);
+        await view.start();
+        // The upload of one ghost is rejected: its slot takes no more uploads.
+        const key = frameKey("b", "before");
+        const slot = view.slots.frames.reservedFor(key);
+        expect(slot).toBeGreaterThanOrEqual(0);
+        // Every other upload has resolved first, so no later upload asks for the ghost again.
+        for (const call of view.renderer.calls) {
+            if (call.id !== frameSlotId(slot)) call.resolve();
+        }
+        await flush();
+        view.slots.quads();
+        const before = view.renderer.calls.length;
+        view.renderer.inFlight(frameSlotId(slot)).reject(new Error("device says no"));
+        await flush();
+        expect(errors).toHaveLength(1);
+        expect(view.renderer.calls.length).toBeGreaterThan(before);
+        await landDrawing(view);
+        view.slots.quads();
+        expect(view.holding(key)).toBeGreaterThanOrEqual(0);
+        expect(view.holding(key)).not.toBe(slot);
+        expect(view.slots.drawnGhosts().map((ghost) => ghost.key)).toEqual(
+            ghostsOf(4).map((ghost) => ghost.key),
+        );
     });
 });
