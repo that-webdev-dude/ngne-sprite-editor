@@ -85,7 +85,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | **M5** | **[NGNE export](M5-ngne-export.md)**              |      |                                    |               |        |
 | SE-050 | Atlas packer                                      | M    | 005, 010                           | A2            | Done   |
 | SE-051 | NGNE bundle writers                               | L    | 003, 021, 050                      | —             | Done   |
-| SE-052 | Export dialog and delivery                        | L    | 006, 041, 051, 053                 | —             | Ready  |
+| SE-052 | Export dialog and delivery                        | L    | 006, 041, 051, 053                 | —             | In progress |
 | SE-053 | Export conformance against NGNE (gate G2)         | L    | 002, 051                           | G0            | Done   |
 | SE-054 | Preview panel (NGNE `BrowserGame`)                | L    | 002, 006, 007, 011, 051            | G0, G1        | Ready  |
 | **M6** | **[Palette and parity extras](M6-palette-and-parity.md)** | |                                   |               |        |
