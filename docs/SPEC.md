@@ -613,9 +613,11 @@ Recorded by SE-054:
   animation plays until another is chosen. Choosing an animation starts it at age 0.
 - The worker keeps the composites it was sent. A document shown is packed at once with every
   frame; after that, a change waits for 150 ms of quiet and sends the frames the composite
-  cache's notifications named (all of them for a structure change); tags, durations, the name,
-  the pivot and the export settings repack without pixels. The cache is read when the timer
-  fires, never inside a notification, and each composite is copied for the worker. A floating
+  cache's notifications named (all of them for a structure change that changes the frame list
+  or a frame's layer stack); tags, durations, the name, the pivot and the export settings
+  repack without pixels. The cache is read when the timer fires, never inside a notification,
+  in slices of at most 8 ms, one task each, each slice sent to the worker as it is read; a
+  document switch ends a pack in progress. Each composite is copied for the worker. A floating
   selection is not applied: its pixels are in the composite already. A stroke shows in the
   preview after its commit, the first history step it makes.
 - Too large: `PackError` `atlas-size` or `memory`, or an atlas over 64 MB, falls back to the
