@@ -2,10 +2,17 @@ import { afterEach, describe, expect, it } from "vitest";
 import { appCommands } from "../../src/app/commands/appCommands";
 import { buildMenu, menuCommands } from "../../src/app/commands/menuModel";
 import type { MenuNode } from "../../src/app/commands/menuModel";
-import { OPEN_RECENT_PATH, openRecentId } from "../../src/app/file/recent.commands";
-import { createRecentFiles, RECENT_FILES_LIMIT, recentFiles } from "../../src/app/file/recentFiles";
+import {
+    createRecentFiles,
+    indexedDbRecentFiles,
+    OPEN_RECENT_PATH,
+    openRecentId,
+    RECENT_FILES_LIMIT,
+    recentFiles,
+} from "../../src/app/file/recentFiles";
 import type { RecentFiles, RecentFileStorage } from "../../src/app/file/recentFiles";
 import { createFileWorkflows } from "../../src/app/file/workflows";
+import { projectFileHandleFrom } from "../../src/app/platform/projectFiles";
 import type { ProjectFileHandle } from "../../src/app/platform/projectFiles";
 import { activeDocument, sessionsStore } from "../../src/app/state/sessions";
 import { createDocument } from "../../src/core/model";
@@ -240,6 +247,7 @@ describe("the file workflows and the list", () => {
         expect(await test.workflows.openRecent(entry!)).toBe(false);
         expect(handle.readRequests).toBe(1);
         expect(test.sessions.getState().documents).toEqual([]);
+        await settle();
         expect(names(recent)).toEqual(["kept.ngsprite"]);
         expect(test.notices).toEqual([
             {
@@ -261,6 +269,7 @@ describe("the file workflows and the list", () => {
         await recent.add(gone);
         let [entry] = recent.store.getState().entries;
         expect(await test.workflows.openRecent(entry!)).toBe(false);
+        await settle();
         expect(names(recent)).toEqual([]);
         expect(test.notices.at(-1)?.message).toBe(
             "Could not open “gone.ngsprite”. The file no longer exists. It was removed from " +
@@ -280,6 +289,115 @@ describe("the file workflows and the list", () => {
             "Could not open “lapsed.ngsprite”. User activation is required.",
         );
         expect(test.sessions.getState().documents).toEqual([]);
+    });
+
+    it("a prompt dismissed without an answer keeps the entry and says so; a denial removes it", async () => {
+        const { test, recent } = withRecent();
+        const handle = diskHandle(test.disk, "hero.ngsprite");
+        let answer: "prompt" | "denied" = "prompt";
+        let asked = 0;
+        handle.requestReadPermission = async () => {
+            asked++;
+            return answer;
+        };
+        await recent.add(handle);
+        const [entry] = recent.store.getState().entries;
+
+        expect(await test.workflows.openRecent(entry!)).toBe(false);
+        await settle();
+        expect(names(recent)).toEqual(["hero.ngsprite"]);
+        expect(test.notices.at(-1)?.message).toBe(
+            "Could not open “hero.ngsprite”. Read permission was not given. The file stays in " +
+                "the recent files.",
+        );
+
+        answer = "denied";
+        expect(await test.workflows.openRecent(entry!)).toBe(false);
+        await settle();
+        expect(names(recent)).toEqual([]);
+        expect(asked).toBe(2);
+        expect(test.notices.at(-1)?.message).toBe(
+            "Could not open “hero.ngsprite”. No permission to read the file. It was removed " +
+                "from the recent files.",
+        );
+    });
+
+    it("Open Recent never waits for the list's storage: the operation ends, file commands come back", async () => {
+        const { test, recent } = withRecent();
+        const handle = diskHandle(test.disk, "gone.ngsprite");
+        handle.size = async () => {
+            throw new DOMException("No file", "NotFoundError");
+        };
+        await recent.add(handle);
+        const [entry] = recent.store.getState().entries;
+        // A storage whose removal never settles.
+        test.workflows = createFileWorkflows({
+            sessions: test.sessions,
+            platform: test.platform,
+            dialogs: test.dialogs,
+            notices: { info: () => {}, error: () => {} },
+            recent: { add: recent.add, remove: () => new Promise<void>(() => {}) },
+        });
+        expect(await test.workflows.openRecent(entry!)).toBe(false);
+        expect(test.workflows.busy).toBe(false);
+        expect(test.workflows.canAct()).toBe(true);
+    });
+});
+
+describe("the page's file handle", () => {
+    it("tells a dismissed prompt from a refusal, and asks only when the permission is not granted", async () => {
+        let state: PermissionState = "prompt";
+        let answer: PermissionState = "prompt";
+        let requests = 0;
+        const native = {
+            kind: "file",
+            name: "hero.ngsprite",
+            getFile: async () => new File([Uint8Array.of(1, 2)], "hero.ngsprite"),
+            createWritable: async () => ({ write: async () => {}, close: async () => {} }),
+            queryPermission: async () => state,
+            requestPermission: async () => {
+                requests++;
+                return answer;
+            },
+        };
+        const handle = projectFileHandleFrom(native)!;
+        expect(handle.stored).toBe(native);
+        expect(await handle.requestReadPermission!()).toBe("prompt");
+        expect(await handle.requestRead()).toBe(false);
+        answer = "denied";
+        expect(await handle.requestReadPermission!()).toBe("denied");
+        state = "granted";
+        expect(await handle.requestReadPermission!()).toBe("granted");
+        expect(requests).toBe(3);
+        expect(await handle.size!()).toBe(2);
+        expect(projectFileHandleFrom({ kind: "directory", name: "x" })).toBeNull();
+    });
+});
+
+describe("the list's IndexedDB", () => {
+    /** An `open` request that answers as `answer` says, or never. */
+    function factory(answer: "never" | "blocked") {
+        return {
+            open: () => {
+                const request = {} as IDBOpenDBRequest;
+                if (answer === "blocked") {
+                    setTimeout(() => request.onblocked?.call(request, {} as IDBVersionChangeEvent));
+                }
+                return request;
+            },
+        };
+    }
+
+    it("gives up an open that never answers or is blocked: the list works in memory", async () => {
+        for (const answer of ["never", "blocked"] as const) {
+            const storage = indexedDbRecentFiles({ factory: factory(answer), timeoutMs: 20 });
+            expect(await storage.load(), answer).toBeNull();
+            await storage.save([{ file: "a.ngsprite" }]);
+            const disk = new MemoryDisk();
+            const recent = recentOver(storage, disk);
+            await recent.add(diskHandle(disk, "a.ngsprite"));
+            expect(names(recent), answer).toEqual(["a.ngsprite"]);
+        }
     });
 });
 

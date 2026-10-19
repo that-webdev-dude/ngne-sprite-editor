@@ -859,18 +859,36 @@ describe("the file workflows while floating", () => {
         detach();
     });
 
-    it("New Sprite applies the float before its dialog, which has nothing to discard (SE-047)", async () => {
+    it("New Sprite applies the float as its new document opens; a cancelled dialog leaves it floating (SE-047)", async () => {
         const detach = spriteDialogs.attachHost();
         try {
-            cleanWithFloat();
-            const done = command("file.new").run();
-            const request = spriteDialogs.store.getState().request;
+            const floated = cleanWithFloat();
+            let done = command("file.new").run();
+            let request = spriteDialogs.store.getState().request;
             expect(request?.kind).toBe("new-sprite");
             expect(request?.kind === "new-sprite" ? request.discards : undefined).toBeNull();
-            expect(isFloating()).toBe(false);
-            expect(active().history.undoLabel).toBe("Move");
+            // Nothing applied while the dialog asks; cancelled, the float stays.
+            expect(isFloating()).toBe(true);
             if (request?.kind === "new-sprite") request.answer(null);
             await done;
+            expect(isFloating()).toBe(true);
+            expect(active().session).toBe(floated.session);
+
+            // Created: the float lands in its document, as one "Move" step, and the new
+            // document is the active one.
+            done = command("file.new").run();
+            request = spriteDialogs.store.getState().request;
+            if (request?.kind === "new-sprite") {
+                request.answer({ name: "next", width: 4, height: 4 });
+            }
+            await done;
+            expect(isFloating()).toBe(false);
+            expect(active().session.doc.name).toBe("next");
+            const left = sessionsStore
+                .getState()
+                .documents.find((entry) => entry.session === floated.session)!;
+            expect(left.history.undoLabel).toBe("Move");
+            expect(left.history.transaction).toBeNull();
         } finally {
             detach();
         }

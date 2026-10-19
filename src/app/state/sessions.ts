@@ -105,6 +105,12 @@ export interface SessionsState {
      */
     move(id: string, index: number): void;
     /**
+     * Gives the open document `id` the id `next` (a copy saved with Save As, SE-047 review):
+     * `session.doc.id` and the record's id change, the tab, history and state stay. Throws
+     * for an unknown id or when `next` is open already.
+     */
+    changeId(id: string, next: string): void;
+    /**
      * Records a state of the document as saved: by default the current one, which is then no
      * longer dirty. A save passes the state it wrote (`savedStateOf` when it made the bytes),
      * so a change made while the file was being written keeps the document dirty.
@@ -189,24 +195,24 @@ export function createSessionsStore(): StoreApi<SessionsState> {
                 throw new Error(`Document "${id}" is already open.`);
             }
         };
+        /** Tells the store of every step of `history`, the history of the document `id`. */
+        const subscribe = (id: string, session: DocSession, history: History) =>
+            // A throwing history subscriber would make `execute` throw after the change.
+            history.subscribe(() => {
+                try {
+                    change(id);
+                } catch (error) {
+                    console.error("A subscriber of the session store failed:", error);
+                }
+                // SPEC §5.1: invariants are asserted after every command in development
+                // builds. This throws on purpose, once the store is up to date, so the
+                // command that broke the document fails where it was run.
+                if (import.meta.env.DEV) assertInvariants(session);
+            });
         const create = (session: DocSession, options: OpenOptions): OpenDocument => {
             const id = session.doc.id;
             const history = new History(session, options.history);
-            // A throwing history subscriber would make `execute` throw after the change.
-            subscriptions.set(
-                id,
-                history.subscribe(() => {
-                    try {
-                        change(id);
-                    } catch (error) {
-                        console.error("A subscriber of the session store failed:", error);
-                    }
-                    // SPEC §5.1: invariants are asserted after every command in development
-                    // builds. This throws on purpose, once the store is up to date, so the
-                    // command that broke the document fails where it was run.
-                    if (import.meta.env.DEV) assertInvariants(session);
-                }),
-            );
+            subscriptions.set(id, subscribe(id, session, history));
             // Without a view of its own the document starts with the policy's first view.
             const first = options.view === undefined ? (policy?.first(session.doc) ?? null) : null;
             return {
@@ -313,6 +319,25 @@ export function createSessionsStore(): StoreApi<SessionsState> {
                 const at = Math.min(Math.max(0, Math.trunc(index)), rest.length);
                 if (get().documents[at] === target) return;
                 set({ documents: [...rest.slice(0, at), target, ...rest.slice(at)] });
+            },
+
+            changeId(id, next) {
+                const target = find(id);
+                if (next === id) return;
+                assertNotOpen(next, get().documents);
+                // The history's listener names the document by its id: it follows the new one.
+                forget(id);
+                target.session.doc.id = next;
+                subscriptions.set(next, subscribe(next, target.session, target.history));
+                const { activeId } = get();
+                set({
+                    documents: get().documents.map((entry) =>
+                        entry === target
+                            ? { ...entry, id: next, revision: entry.revision + 1 }
+                            : entry,
+                    ),
+                    activeId: activeId === id ? next : activeId,
+                });
             },
 
             markSaved(id, state) {

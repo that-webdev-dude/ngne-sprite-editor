@@ -18,6 +18,7 @@ import type { OpenDocument } from "../../src/app/state/sessions";
 import {
     activateDocument,
     followPaletteSwatch,
+    followReferenceImages,
     moveDocument,
     neighbourOf,
     tabsAvailable,
@@ -26,7 +27,19 @@ import { addFrameCommand } from "../../src/core/frames";
 import { createDocument } from "../../src/core/model";
 import { rectMask, selectCommand } from "../../src/core/selection";
 import { renameSpriteCommand } from "../../src/core/sprite";
-import { answerDiscard, chosen, harness, openNew, paint, waitForQuestion } from "./se-041-support";
+import { deserialize } from "../../src/core/project";
+import type { StoredExportFolder } from "../../src/app/export/exportFolders";
+import {
+    active as activeOf,
+    answerDiscard,
+    chosen,
+    errors,
+    harness,
+    openNew,
+    paint,
+    waitForQuestion,
+} from "./se-041-support";
+import type { FakeHandle, Harness } from "./se-041-support";
 
 // SE-047: document tabs on the stores. Each tab has its own session, history, view and
 // reference sources; only the active document keeps composites; leaving a document applies
@@ -273,10 +286,17 @@ describe("editor state kept per tab", () => {
 
     it("the palette's Original Order is the active tab's own", () => {
         const a = sessionsStore.getState().open(createDocument({ name: "a", width: 2, height: 2 }));
-        keepOrderBeforeSort(record(a.id));
+        keepOrderBeforeSort(record(a.id).session);
         const b = sessionsStore.getState().open(createDocument({ name: "b", width: 2, height: 2 }));
-        expect(originalOrderOf(record(b.id))).toBeNull();
-        expect(originalOrderOf(record(a.id))).toEqual(a.session.doc.palette.colors);
+        expect(originalOrderOf(record(b.id).session)).toBeNull();
+        expect(originalOrderOf(record(a.id).session)).toEqual(a.session.doc.palette.colors);
+        // Each switch shows the order of the tab that became active.
+        expect(activateDocument(a.id)).toBe(true);
+        expect(originalOrderOf(active().session)).toEqual(a.session.doc.palette.colors);
+        expect(activateDocument(b.id)).toBe(true);
+        expect(originalOrderOf(active().session)).toBeNull();
+        expect(activateDocument(a.id)).toBe(true);
+        expect(originalOrderOf(active().session)).toEqual(a.session.doc.palette.colors);
     });
 });
 
@@ -360,5 +380,140 @@ describe("opening a file that is open already", () => {
         expect(activeId).not.toBe(saved.id);
         expect(test.workflows.fileOf(activeId!)).toMatchObject({ name: "copy.ngsprite" });
         expect(test.workflows.fileOf(saved.id)).toMatchObject({ name: "hero.ngsprite" });
+    });
+
+    const sameByName = sameByNameHandle;
+
+    /** "hero" saved to hero.ngsprite, a copy of the file as copy.ngsprite (same id), opened. */
+    async function heroAndCopy(test: Harness) {
+        const hero = openNew(test, "hero");
+        paint(hero, 2);
+        test.platform.toSave.push(sameByName(test, "hero.ngsprite"));
+        expect(await test.workflows.save()).toBe(true);
+        const bytes = test.disk.files.get("hero.ngsprite")!;
+        test.disk.files.set("copy.ngsprite", bytes.slice());
+        test.platform.toOpen.push(
+            chosen("copy.ngsprite", bytes, sameByName(test, "copy.ngsprite")),
+        );
+        expect(await test.workflows.open()).toBe(true);
+        const copy = activeOf(test);
+        expect(copy.id).not.toBe(hero.id);
+        return { hero, copy, bytes };
+    }
+
+    it("finds the file among every open tab, whatever the id of its document", async () => {
+        const test = harness();
+        const { hero, copy, bytes } = await heroAndCopy(test);
+        test.sessions.getState().activate(hero.id);
+
+        // The copy again: the id in the file is the original's, the tab is the copy's.
+        test.platform.toOpen.push(
+            chosen("copy.ngsprite", bytes, sameByName(test, "copy.ngsprite")),
+        );
+        expect(await test.workflows.open()).toBe(true);
+        expect(test.sessions.getState().documents).toHaveLength(2);
+        expect(test.sessions.getState().activeId).toBe(copy.id);
+        expect(test.notices.at(-1)).toEqual({
+            kind: "info",
+            message: "copy.ngsprite is open already",
+        });
+    });
+
+    it("reopening the active tab's own file changes nothing and applies no floating selection", async () => {
+        const test = harness();
+        const hero = openNew(test, "hero");
+        test.platform.toSave.push(sameByName(test, "hero.ngsprite"));
+        expect(await test.workflows.save()).toBe(true);
+        const applied = test.floatingApplied;
+        const bytes = test.disk.files.get("hero.ngsprite")!;
+        test.platform.toOpen.push(
+            chosen("hero.ngsprite", bytes, sameByName(test, "hero.ngsprite")),
+        );
+        expect(await test.workflows.open()).toBe(true);
+        expect(test.floatingApplied).toBe(applied);
+        expect(test.sessions.getState().documents).toHaveLength(1);
+        expect(activeOf(test).session).toBe(hero.session);
+        expect(test.notices.at(-1)?.message).toBe("hero.ngsprite is open already");
+    });
+
+    it("Revert in a tab opened under a new id reads its file again and keeps the tab's id", async () => {
+        const test = harness();
+        const { hero, copy } = await heroAndCopy(test);
+        paint(activeOf(test), 7);
+        const reverting = test.workflows.revert();
+        await answerDiscard(test, true);
+        expect(await reverting).toBe(true);
+        const { documents } = test.sessions.getState();
+        expect(documents.map((entry) => entry.id)).toEqual([hero.id, copy.id]);
+        expect(activeOf(test).id).toBe(copy.id);
+        expect(activeOf(test).session).not.toBe(copy.session);
+        expect(isDirty(activeOf(test))).toBe(false);
+        expect(errors(test)).toEqual([]);
+    });
+});
+
+describe("Save As to another file", () => {
+    it("gives the document a new id, written into the new file; the original keeps its export folder", async () => {
+        const test = harness();
+        const hero = openNew(test, "hero");
+        paint(hero, 3);
+        test.platform.toSave.push(sameByNameHandle(test, "hero.ngsprite"));
+        expect(await test.workflows.save()).toBe(true);
+        // The export folder kept for the document (SE-052), by its id.
+        const folders = new Map<string, StoredExportFolder>();
+        folders.set(hero.id, { folder: "hero-folder", confirmed: true });
+
+        test.platform.toSave.push(sameByNameHandle(test, "copy.ngsprite"));
+        expect(await test.workflows.saveAs()).toBe(true);
+        const copy = activeOf(test);
+        expect(copy.session).toBe(hero.session);
+        expect(copy.id).not.toBe(hero.id);
+        expect(copy.session.doc.id).toBe(copy.id);
+        expect(test.sessions.getState().documents).toHaveLength(1);
+        expect(isDirty(copy)).toBe(false);
+        expect(test.workflows.fileOf(copy.id)).toMatchObject({ name: "copy.ngsprite" });
+        // Each file holds its own id; the copy finds no export folder of the original.
+        const copied = await deserialize(test.disk.files.get("copy.ngsprite")!);
+        const original = await deserialize(test.disk.files.get("hero.ngsprite")!);
+        expect(copied.doc.id).toBe(copy.id);
+        expect(original.doc.id).toBe(hero.id);
+        expect(folders.get(copy.id)).toBeUndefined();
+        expect(folders.get(original.doc.id)).toMatchObject({ folder: "hero-folder" });
+
+        // Save As onto the document's own file keeps the id.
+        test.platform.toSave.push(sameByNameHandle(test, "copy.ngsprite"));
+        expect(await test.workflows.saveAs()).toBe(true);
+        expect(activeOf(test).id).toBe(copy.id);
+    });
+});
+
+/** A disk handle that is the same file as every handle of its name, as Chrome's are. */
+function sameByNameHandle(test: Harness, name: string): FakeHandle {
+    const handle = test.disk.handle(name);
+    handle.isSame = async (other) => other.name === name;
+    return handle;
+}
+
+describe("decoded reference images", () => {
+    it("are let go when their document stops being the active one", () => {
+        const store = createSessionsStore();
+        const forgotten: Uint8Array[] = [];
+        const stop = followReferenceImages(store, { forget: (bytes) => forgotten.push(bytes) });
+        const source = Uint8Array.of(1, 2, 3);
+        const a = store.getState().open(createDocument({ name: "a", width: 2, height: 2 }), {
+            referenceSources: [["ref-a", source]],
+        });
+        expect(forgotten).toEqual([]);
+        const b = store.getState().open(createDocument({ name: "b", width: 2, height: 2 }));
+        expect(forgotten).toHaveLength(1);
+        expect(forgotten[0]).toBe(store.getState().documents[0]!.referenceSources.get("ref-a"));
+        // A change of the active document's own record lets nothing go.
+        store.getState().touch(b.id);
+        expect(forgotten).toHaveLength(1);
+        store.getState().activate(a.id);
+        expect(forgotten).toHaveLength(1);
+        store.getState().activate(b.id);
+        expect(forgotten).toHaveLength(2);
+        stop();
     });
 });

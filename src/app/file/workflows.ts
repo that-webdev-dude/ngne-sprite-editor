@@ -12,7 +12,12 @@ import type { ProjectContents } from "../../core/project";
 import { notices as appNotices } from "../notices/notices";
 import type { Notices } from "../notices/notices";
 import { browserProjectFiles } from "../platform/projectFiles";
-import type { ChosenFile, ProjectFileHandle, ProjectFilePlatform } from "../platform/projectFiles";
+import type {
+    ChosenFile,
+    PermissionAnswer,
+    ProjectFileHandle,
+    ProjectFilePlatform,
+} from "../platform/projectFiles";
 import {
     applyFloating as applyAppFloating,
     isFloating as isAppFloating,
@@ -257,6 +262,17 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
         }
     };
 
+    /** The open document whose file is the file of `handle` (`isSameEntry`), or null. */
+    const documentWithFile = async (handle: ProjectFileHandle): Promise<OpenDocument | null> => {
+        for (const document of sessions.getState().documents) {
+            const kept = files.get(document.id)?.handle ?? null;
+            if (kept && (kept === handle || ((await kept.isSame?.(handle)) ?? false))) {
+                return document;
+            }
+        }
+        return null;
+    };
+
     const openChosen = async (chosen: ChosenFile): Promise<boolean> => {
         const failed = (why: string) => {
             notices.error(`Could not open “${chosen.name}”. ${why}`);
@@ -274,13 +290,20 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
         if (!project) return false;
         const handle = await chosen.handle();
         const { doc, referenceSources } = project.contents;
-        // The same file opened again: the tab of its document becomes the active one.
-        const kept = files.get(doc.id)?.handle ?? null;
-        const again = handle !== null && kept !== null && ((await kept.isSame?.(handle)) ?? false);
+        // The same file opened again, whatever its document's id: that tab becomes the
+        // active one.
+        const same = handle ? await documentWithFile(handle) : null;
+        const active = activeDocument(sessions.getState());
+        const openAlready = () => {
+            remember(handle);
+            notices.info(`${chosen.name} is open already`);
+            return true;
+        };
+        // The active tab's own file: nothing changes, its floating selection stays.
+        if (same && same.session === active?.session) return openAlready();
         // The active document stops being the active one: its floating selection is applied
         // (SPEC §5.2), and nothing happens during its stroke. Nothing of it is lost, so
         // nothing is asked (SE-047).
-        const active = activeDocument(sessions.getState());
         if (active) {
             try {
                 applyFloating();
@@ -290,17 +313,15 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
             if (active.history.transaction) return failed(interruption(active));
         }
         const state = sessions.getState();
-        if (state.documents.some((entry) => entry.id === doc.id)) {
-            if (again && files.get(doc.id)?.handle === kept) {
-                state.activate(doc.id);
-                remember(handle);
-                notices.info(`${chosen.name} is open already`);
-                return true;
-            }
-            // Another file of the same document (a copy saved with Save As), or one opened
-            // without a handle: a document of its own, under a new id.
-            doc.id = randomId();
+        if (same) {
+            const found = state.documents.find((entry) => entry.session === same.session);
+            if (!found) return failed("The document was closed meanwhile.");
+            state.activate(found.id);
+            return openAlready();
         }
+        // Another file holding a document of an open id (a copy made without Save As, or one
+        // opened without a handle): a document of its own, under a new id.
+        if (state.documents.some((entry) => entry.id === doc.id)) doc.id = randomId();
         try {
             state.open(sessionOf(doc), { referenceSources });
         } catch (error) {
@@ -349,6 +370,17 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
         } catch (error) {
             return failed(target?.name ?? suggested, reason(error));
         }
+        // Save As to another file than the document's: the document becomes that file's,
+        // under a new id written into it, so the copy shares nothing kept by id (its export
+        // folder, SE-052) with the file it came from (SE-047 review).
+        // Without File System Access Save As downloads as Save does, and the id stays.
+        let nextId: string | null = null;
+        if (as && known && target) {
+            const own = known.handle;
+            const sameFile =
+                own !== null && (target === own || ((await own.isSame?.(target)) ?? false));
+            if (!sameFile) nextId = randomId();
+        }
         // A picker or a prompt may have been open for a while: the document is taken as it is
         // now, if it is still the active one and no stroke has begun.
         const current = stillActive(document);
@@ -358,7 +390,8 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
         const state = savedStateOf(current);
         let bytes: Uint8Array<ArrayBuffer>;
         try {
-            bytes = serialize(current.session.doc, current.referenceSources);
+            const { doc } = current.session;
+            bytes = serialize(nextId ? { ...doc, id: nextId } : doc, current.referenceSources);
         } catch (error) {
             return failed(target?.name ?? suggested, reason(error));
         }
@@ -386,9 +419,12 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
         const name = target?.name ?? suggested;
         const stillOpen = () =>
             sessions.getState().documents.find((entry) => entry.session === current.session);
-        if (stillOpen()) {
-            sessions.getState().markSaved(current.id, state);
-            setFile(current.id, { name, handle: target, bytes: target ? null : bytes });
+        const written = stillOpen();
+        if (written) {
+            if (nextId) sessions.getState().changeId(written.id, nextId);
+            const id = nextId ?? written.id;
+            sessions.getState().markSaved(id, state);
+            setFile(id, { name, handle: target, bytes: target ? null : bytes });
         }
         remember(target);
         notices.info(`Saved ${name}`);
@@ -528,8 +564,9 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
                     notices.error(`Could not open “${entry.name}”. ${why}`);
                     return false;
                 };
-                const forget = async (why: string) => {
-                    await recent.remove(entry.key).catch(() => {});
+                // The list changes in the background: storage never holds up the operation.
+                const forget = (why: string) => {
+                    void recent.remove(entry.key).catch(() => {});
                     return failed(`${why} It was removed from the recent files.`);
                 };
                 const active = activeDocument(sessions.getState());
@@ -537,14 +574,24 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
                 if (active?.history.transaction && !isFloating()) {
                     return failed(interruption(active));
                 }
-                // Asked once, within the gesture of the command; refused, the entry goes.
-                let granted: boolean;
+                // Asked once, within the gesture of the command. Refused ("denied"), the entry
+                // goes; a prompt dismissed without an answer keeps it.
+                let permission: PermissionAnswer;
                 try {
-                    granted = await handle.requestRead();
+                    permission = handle.requestReadPermission
+                        ? await handle.requestReadPermission()
+                        : (await handle.requestRead())
+                          ? "granted"
+                          : "denied";
                 } catch (error) {
                     return failed(reason(error));
                 }
-                if (!granted) return forget("No permission to read the file.");
+                if (permission === "denied") return forget("No permission to read the file.");
+                if (permission !== "granted") {
+                    return failed(
+                        "Read permission was not given. The file stays in the recent files.",
+                    );
+                }
                 let size: number;
                 try {
                     size = (await handle.size?.()) ?? 0;
@@ -598,6 +645,9 @@ export function createFileWorkflows(options: FileWorkflowOptions = {}): FileWork
                 const current = stillActive(document);
                 if (!current) return failed(interruption(document));
                 const { doc, referenceSources } = project.contents;
+                // The tab keeps its id, whatever the file holds (a file opened under a new id
+                // beside its original, SE-047 review).
+                doc.id = current.id;
                 try {
                     sessions.getState().replaceActive(sessionOf(doc), {
                         referenceSources,

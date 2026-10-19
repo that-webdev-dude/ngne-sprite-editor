@@ -203,14 +203,21 @@ test("tabs reorder by dragging and from the keyboard; the keyboard moves between
     await expect(tabOf(page, c)).toBeFocused();
     await expect(tabOf(page, c)).toHaveAttribute("tabindex", "0");
     await expect(tabOf(page, a)).toHaveAttribute("tabindex", "-1");
+    await expect(tabOf(page, c)).toHaveAttribute(
+        "aria-keyshortcuts",
+        "Delete Control+Shift+ArrowLeft Control+Shift+ArrowRight",
+    );
     await page.keyboard.press("ArrowRight");
     await expect(tabOf(page, a)).toBeFocused();
     // Moving the focus does not select.
     expect(await activeId(page)).toBe(c);
+    const unselected = (await boxOf(tabOf(page, a))).width;
     await page.keyboard.press("Enter");
     await expect(tabOf(page, a)).toHaveAttribute("aria-selected", "true");
     expect(await activeId(page)).toBe(a);
     await expect(tabOf(page, a)).toBeFocused();
+    // Selected, a tab keeps its width.
+    expect((await boxOf(tabOf(page, a))).width).toBe(unselected);
 
     // Ctrl+Shift+→ moves the focused tab one place, and it keeps the focus.
     await page.keyboard.press("Control+Shift+ArrowRight");
@@ -220,7 +227,8 @@ test("tabs reorder by dragging and from the keyboard; the keyboard moves between
     await expect.poll(() => documentIds(page)).toEqual([c, a, b]);
     await expect(tabOf(page, a)).toBeFocused();
 
-    // End, Home; Delete closes the focused tab (clean: no question).
+    // End, Home; Delete closes the focused tab (clean: no question), and the focus goes to
+    // the tab in its place.
     await page.keyboard.press("End");
     await expect(tabOf(page, b)).toBeFocused();
     await page.keyboard.press("Home");
@@ -229,6 +237,16 @@ test("tabs reorder by dragging and from the keyboard; the keyboard moves between
     await expect.poll(() => documentIds(page)).toEqual([a, b]);
     await expect(page.getByRole("dialog")).toHaveCount(0);
     expect(await activeId(page)).toBe(a);
+    await expect(tabOf(page, a)).toBeFocused();
+    // The active tab: its neighbour is selected and focused.
+    await page.keyboard.press("Delete");
+    await expect.poll(() => documentIds(page)).toEqual([b]);
+    expect(await activeId(page)).toBe(b);
+    await expect(tabOf(page, b)).toBeFocused();
+    // The last tab: the focus goes to the empty state's first action.
+    await page.keyboard.press("Delete");
+    await expect(emptyState(page)).toBeVisible();
+    await expect(emptyState(page).getByRole("button", { name: "New sprite" })).toBeFocused();
     expect(errors).toEqual([]);
 });
 
@@ -270,16 +288,51 @@ test("with 12 open tabs at 1280 px width every tab is reachable: the strip scrol
         await expect(menu.getByRole("menuitemradio")).toHaveCount(12);
         await menu.getByRole("menuitemradio", { name: `sprite ${index + 1}`, exact: true }).click();
         await expect(menu).toHaveCount(0);
+        // Radix gives the focus back to the trigger once the menu has gone.
+        await expect(overflowButton(page)).toBeFocused();
         await expect(tabOf(page, id)).toHaveAttribute("aria-selected", "true");
         expect(await liesWithin(tabOf(page, id), tabList(page))).toBe(true);
     }
 
     // From the keyboard too: End reaches the last tab and brings it into view.
     await tabOf(page, ids[0]!).focus();
+    await expect(tabOf(page, ids[0]!)).toBeFocused();
     await page.keyboard.press("End");
     await expect(tabOf(page, ids[11]!)).toBeFocused();
     expect(await liesWithin(tabOf(page, ids[11]!), tabList(page))).toBe(true);
     await page.keyboard.press("Enter");
     await expect(tabOf(page, ids[11]!)).toHaveAttribute("aria-selected", "true");
+    expect(errors).toEqual([]);
+});
+
+test("renamed tabs are measured again: longer names shrink the tabs to 96 px before the strip overflows", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await openEditor(page);
+    await settleSize(page);
+    const ids: string[] = [];
+    for (let index = 1; index <= 6; index++) ids.push(await openTab(page, `s${index}`));
+    // Short names: the six tabs fit at their own width.
+    await expect(tabs(page)).toHaveCount(6);
+    await expect(overflowButton(page)).toHaveCount(0);
+    // Longer names: six tabs of 200 px do not fit, so they shrink, and still fit.
+    for (const [index, id] of ids.entries()) {
+        await rename(page, id, `a much longer name of sprite ${index + 1}`, "Rename");
+    }
+    await expect(tabOf(page, ids[0]!)).toContainText("a much longer name of sprite 1");
+    const widths = await Promise.all(ids.map(async (id) => (await boxOf(tabOf(page, id))).width));
+    expect(Math.min(...widths)).toBeGreaterThanOrEqual(96);
+    expect(Math.max(...widths)).toBeLessThan(200);
+    const list = await tabList(page).evaluate((element) => ({
+        scroll: element.scrollWidth,
+        client: element.clientWidth,
+    }));
+    expect(list.scroll).toBeLessThanOrEqual(list.client + 1);
+    await expect(overflowButton(page)).toHaveCount(0);
+    // Twelve tabs do not fit even at 96 px: the overflow menu appears.
+    for (let index = 7; index <= 12; index++) ids.push(await openTab(page, `s${index}`));
+    await expect(overflowButton(page)).toBeVisible();
     expect(errors).toEqual([]);
 });

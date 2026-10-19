@@ -2,7 +2,7 @@ import { ChevronDown, X } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
-import { isDirty, useSessions } from "../../app/state/sessions";
+import { isDirty, sessionsStore, useSessions } from "../../app/state/sessions";
 import { activateDocument, closeDocument, moveDocument } from "../../app/tabs/tabs";
 import { Icon } from "../primitives/Icon";
 import "./tabs.css";
@@ -59,9 +59,12 @@ export function DocumentTabs() {
     const refocus = useRef<string | null>(null);
     const stop = useRef<(() => void) | null>(null);
     const order = tabs.map((tab) => tab.id).join("\n");
+    /** Everything that changes the width of a tab: a rename or the unsaved marker too. */
+    const widths = JSON.stringify(tabs);
     const stopId = tabs.some((tab) => tab.id === focusId) ? focusId : activeId;
 
-    // The overflow menu shows while the tabs, shrunk to their least width, do not fit.
+    // The overflow menu shows while the tabs, shrunk to their least width, do not fit. The
+    // strip and each tab are observed: a tab that grows (a longer name) is measured again.
     useLayoutEffect(() => {
         const element = list.current;
         if (!element) return;
@@ -69,8 +72,9 @@ export function DocumentTabs() {
         measure();
         const observer = new ResizeObserver(measure);
         observer.observe(element);
+        for (const tab of element.querySelectorAll("[data-document-tab]")) observer.observe(tab);
         return () => observer.disconnect();
-    }, [order]);
+    }, [widths]);
 
     // The active tab is always in view; so is a tab the keyboard moved.
     useLayoutEffect(() => {
@@ -99,6 +103,28 @@ export function DocumentTabs() {
         if (list.current) reveal(list.current, tab);
     };
 
+    /**
+     * Closes the focused tab (Delete). The focus goes to the tab now in its place, or the one
+     * before it; with no tab left, to the viewport (the empty state's first action).
+     */
+    const closeFocused = async (id: string) => {
+        const index = tabs.findIndex((tab) => tab.id === id);
+        if (!(await closeDocument(id))) return;
+        const { documents } = sessionsStore.getState();
+        const next = documents[index] ?? documents[index - 1] ?? null;
+        if (next) setFocusId(next.id);
+        // Once the strip has rendered without the closed tab.
+        requestAnimationFrame(() => {
+            const target = next
+                ? document.querySelector<HTMLElement>(tabSelector(next.id))
+                : document.querySelector<HTMLElement>(
+                      "[data-viewport-focus], [data-empty-state] button",
+                  );
+            target?.focus({ preventScroll: true });
+            if (next && target && list.current) reveal(list.current, target);
+        });
+    };
+
     const onKeyDown = (event: KeyboardEvent<HTMLElement>, id: string) => {
         const index = tabs.findIndex((tab) => tab.id === id);
         const at = (offset: number) => tabs[(index + offset + tabs.length) % tabs.length]!.id;
@@ -119,7 +145,7 @@ export function DocumentTabs() {
         else if (event.key === "Home") focusTab(tabs[0]!.id);
         else if (event.key === "End") focusTab(tabs[tabs.length - 1]!.id);
         else if (event.key === "Enter" || event.key === " ") activateDocument(id);
-        else if (event.key === "Delete") void closeDocument(id);
+        else if (event.key === "Delete") void closeFocused(id);
         else handled = false;
         // Taken here: the keymap leaves a key whose default was prevented alone.
         if (handled) event.preventDefault();
@@ -189,6 +215,7 @@ export function DocumentTabs() {
                             className="document-tab"
                             aria-selected={active}
                             tabIndex={tab.id === stopId ? 0 : -1}
+                            aria-keyshortcuts="Delete Control+Shift+ArrowLeft Control+Shift+ArrowRight"
                             data-document-tab={tab.id}
                             onPointerDown={(event) => onPointerDown(event, tab.id)}
                             onMouseDown={(event) => {

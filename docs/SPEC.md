@@ -301,7 +301,9 @@ document sees them where they are; `core/floating` holds the model and `app/sele
 Alt → eyedropper) leaves the float as it is. A float belongs to the Move tool: Paste and the
 arrows' lift select it. When its document stops being the active one the float is applied; when
 its document is closed it is applied first, and the question before unsaved changes are lost
-covers it (Close, Open, Revert and New Sprite apply it before they ask, §10). A transaction's
+covers it (Close and Revert apply it before they ask; Open, a drop, Open Recent and New
+Sprite, which ask nothing since documents have tabs, apply it as its document stops being the
+active one, §10). A transaction's
 `commit` may carry another change of the session that its owner made and that is already
 applied, such as the selection the float moved: it is recorded in the same entry, done after
 the pixels and undone before them, and alone when no pixel changed.
@@ -1377,6 +1379,8 @@ Focus rules that make `canvas` the normal state:
 - Activating a non-text control outside the timeline with the pointer (tool button, swatch,
   toggle, splitter) returns focus to the viewport afterwards. Keyboard activation leaves focus
   where it is.
+- A focused document tab takes ← → Home End, Enter, Space, Delete and Ctrl+Shift+← → (DESIGN
+  §2, §10).
 - Keys a focused control consumes natively (Enter, Space, arrows, Home, End, Tab, Escape, and
   letters for typeahead in a select) go to that control first; in the timeline a focused button
   takes Enter and Space, a focused cell leaves Enter to play/pause.
@@ -1796,8 +1800,12 @@ Export is accepted only when all three hold (SE-053):
     that is a handle: Save writes to it without asking, after asking the browser for write
     permission when it is not granted (a file opened through the open picker or a drop has
     read permission only). Save As always asks, and the chosen file becomes the document's;
-    a Save As whose write fails leaves the document its previous file. Without File System
-    Access, Save and Save As download `<file>.ngsprite`, and Open uses a file input.
+    a Save As whose write fails leaves the document its previous file. Save As to another
+    file than the document's own gives the document a new id, written into that file, so a
+    copy never shares what is kept by id (its export folder, §9.6) with its original after a
+    reload; Save As onto its own file keeps the id (SE-047 review). Without File System
+    Access, Save and Save As download `<file>.ngsprite`, keeping the id, and Open uses a file
+    input.
   - A picker or a permission prompt needs the user's gesture, which lapses a few seconds after
     the key or click (`navigator.userActivation.isActive`). When write permission is refused,
     or the document's file no longer exists (`NotFoundError` from the write: moved or
@@ -1818,10 +1826,13 @@ Export is accepted only when all three hold (SE-053):
     written bytes hold: a change made while the file is being written keeps the document
     dirty. Saving an unchanged document writes the same bytes again. When the float cannot be
     applied, Save stops with "Could not save …" (SE-032 review).
-  - Close and Revert apply a floating selection first too, Open (and a drop) once it has read
-    the file, so a file that cannot be opened changes nothing, and New Sprite before its
-    dialog; all are enabled while a selection floats, and the question before unsaved changes
-    are lost covers the float, which is a change of the document once applied (SE-032 review).
+  - Close and Revert apply a floating selection first too, and their question before unsaved
+    changes are lost covers the float, which is a change of the document once applied
+    (SE-032 review). Open, a drop and Open Recent apply it once the file has been read, so a
+    file that cannot be opened changes nothing, and only when the active document stops being
+    the active one (not for the active tab's own file); New Sprite applies it when its dialog
+    creates the document, so a cancelled dialog leaves it floating (SE-047 review). All are
+    enabled while a selection floats.
   - Open refuses a file larger than any project can be (the 2 GiB of content of FORMAT §1.8
     plus 1 KiB of zip framing for each of its 65 534 entries) before it reads it. Then it reads
     and checks the file before anything else: a file that cannot be opened is reported by an
@@ -1847,8 +1858,8 @@ Export is accepted only when all three hold (SE-053):
   - Results ("Saved hero.ngsprite", "Opened …", "Reverted to …") are info toasts; failures
     ("Could not open “x”. <reason>", "Could not save …") are error toasts, one per failed
     operation.
-  - The unsaved marker (an asterisk after the document's name, DESIGN §2) is shown while the
-    active document is dirty. While any open document is dirty, or a selection floats (its
+  - The unsaved marker (an asterisk after the document's name, DESIGN §2) is shown on the tab
+    of each dirty document. While any open document is dirty, or a selection floats (its
     pixels are not in the history yet, SE-032 review), the page asks the browser to confirm
     before it is left (`beforeunload`); with neither, no listener is registered.
 - Document tabs (SE-047; the strip is DESIGN §2):
@@ -1857,29 +1868,37 @@ Export is accepted only when all three hold (SE-053):
     reference sources in the session store; the palette's current swatch is remembered per
     document as well. Open, a drop, Open Recent and New Sprite add a tab after the others and
     make it the active one.
-  - A file whose document is open already, the same file of the disk (`isSameEntry` of the
-    two handles), selects that tab ("hero.ngsprite is open already"). Another file holding a
-    document of the same id (a copy made with Save As, or a file opened without a handle)
-    opens in a tab of its own under a new id.
+  - A file open already in any tab, the same file of the disk (`isSameEntry` of the two
+    handles) whatever the id of its document, selects that tab ("hero.ngsprite is open
+    already"). Another file holding a document of an open id (a copy made outside the editor,
+    or a file opened without a handle) opens in a tab of its own under a new id; Revert in
+    that tab keeps the tab's id.
+  - A document that stops being the active one lets its decoded reference images go; its
+    source bytes stay, and they are decoded again when it is active once more (§7.6).
   - Selecting another tab applies the floating selection of the document left first (§5.2)
     and stops playback (§7.5); nothing switches during a stroke or while a file operation
     runs. Next Document and Previous Document (View menu, no key: Ctrl+Tab and Ctrl+PageDown
     belong to the browser) go round the tabs.
   - Close closes the active tab; a tab's close control, a middle click on it, or Delete on a
     focused tab closes that tab without selecting it. Each asks once when its document has
-    unsaved changes; closing the last tab shows the empty state.
+    unsaved changes; closing the last tab shows the empty state. After Delete the focus goes
+    to the tab in the closed one's place (or the one before it), or with no tab left to the
+    empty state's first action.
 - Recent files (SE-047): up to 10 project files, opened or saved with File System Access,
   newest first; a file listed already moves up. They are kept as their handles in IndexedDB
   (database `ngne-sprite-editor-recent`), best effort as the export folders (§9.6), and shown
   on the empty state (DESIGN §6) and in File → Open Recent, which ends with Clear Recent
   Files. Without File System Access nothing is listed. Opening one asks the browser for read
-  permission once when it is not granted; refused, or the file gone (`NotFoundError`), the
-  entry is taken off the list and an error toast says so. A prompt the browser cannot show
-  (the user's gesture has lapsed) keeps the entry and reports the browser's message.
+  permission once when it is not granted; refused ("denied"), or the file gone
+  (`NotFoundError`), the entry is taken off the list and an error toast says so. A prompt
+  dismissed without an answer ("prompt") keeps the entry, and the toast says it stays; a
+  prompt the browser cannot show (the user's gesture has lapsed) keeps it too and reports the
+  browser's message. Opening IndexedDB gives up when another tab blocks it or after 3 s, and
+  the list changes in the background, so no file operation waits for storage.
 - Autosave: each dirty document is snapshotted to IndexedDB 2 s after its last change
   (`doc.json` plus raw image buffers keyed by image ID; only changed images are rewritten). On
-  launch, unsaved snapshots are offered for recovery. Closing a tab with unsaved changes
-  triggers the browser's unload confirmation.
+  launch, unsaved snapshots are offered for recovery. Closing the browser tab or window with
+  unsaved changes triggers the browser's unload confirmation.
 - Both formats (`.ngsprite` v1, `ngne-sprite-atlas` v1) may still change until release gate G3;
   from the v1.0.0 release any change needs a version bump and a migration.
 

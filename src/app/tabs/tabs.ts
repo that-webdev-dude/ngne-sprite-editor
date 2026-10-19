@@ -1,7 +1,10 @@
 import type { StoreApi } from "zustand/vanilla";
+import type { DocSession } from "../../core/model";
 import { fileWorkflows } from "../file/workflows";
 import { paletteStore } from "../palette/paletteState";
 import type { PaletteState } from "../palette/paletteState";
+import { referenceImages } from "../references/referenceImages";
+import type { ReferenceImages } from "../references/referenceImages";
 import { applyFloating, isFloating } from "../selection/floating";
 import { activeDocument, sessionsStore } from "../state/sessions";
 import type { SessionsState } from "../state/sessions";
@@ -80,20 +83,49 @@ export function followPaletteSwatch(
     sessions: StoreApi<SessionsState>,
     palette: StoreApi<PaletteState>,
 ): () => void {
-    const swatches = new Map<string, number>();
-    let shown = sessions.getState().activeId;
+    // By session: a document whose id changes (Save As) keeps its swatch.
+    const swatches = new Map<DocSession, number>();
+    const open = (state: SessionsState, session: DocSession) =>
+        state.documents.some((entry) => entry.session === session);
+    let shown = activeDocument(sessions.getState())?.session ?? null;
     return sessions.subscribe((state) => {
-        for (const id of [...swatches.keys()]) {
-            if (!state.documents.some((entry) => entry.id === id)) swatches.delete(id);
+        for (const session of [...swatches.keys()]) {
+            if (!open(state, session)) swatches.delete(session);
         }
-        if (state.activeId === shown) return;
-        if (shown !== null && state.documents.some((entry) => entry.id === shown)) {
-            swatches.set(shown, palette.getState().current);
-        }
-        shown = state.activeId;
+        const active = activeDocument(state)?.session ?? null;
+        if (active === shown) return;
+        if (shown !== null && open(state, shown)) swatches.set(shown, palette.getState().current);
+        shown = active;
         const current = (shown !== null ? swatches.get(shown) : undefined) ?? 0;
         palette.setState({ current, target: null });
     });
 }
 
+/**
+ * Lets the decoded reference images of a document go when it stops being the active one
+ * (SE-047 review), so decoded sources are not kept for every tab. Its source bytes stay in
+ * the store; they are decoded again when the document is active once more, and the viewport
+ * draws a reference only once it is decoded (SE-045). Returns the function that stops it.
+ */
+export function followReferenceImages(
+    sessions: StoreApi<SessionsState>,
+    images: Pick<ReferenceImages, "forget">,
+): () => void {
+    let shown = activeDocument(sessions.getState());
+    return sessions.subscribe((state) => {
+        const active = activeDocument(state);
+        if (active?.session === shown?.session) {
+            shown = active;
+            return;
+        }
+        if (shown) {
+            // The record as it was last seen: a source removed meanwhile went with its step.
+            const left = state.documents.find((entry) => entry.session === shown!.session);
+            for (const bytes of (left ?? shown).referenceSources.values()) images.forget(bytes);
+        }
+        shown = active;
+    });
+}
+
 followPaletteSwatch(sessionsStore, paletteStore);
+followReferenceImages(sessionsStore, referenceImages);

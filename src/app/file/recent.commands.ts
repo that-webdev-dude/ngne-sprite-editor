@@ -1,6 +1,6 @@
 import { appCommands } from "../commands/appCommands";
 import type { CommandSpec } from "../commands/types";
-import { recentFiles } from "./recentFiles";
+import { OPEN_RECENT_PATH, openRecentId, recentFiles } from "./recentFiles";
 import type { RecentEntry } from "./recentFiles";
 import { fileWorkflows } from "./workflows";
 
@@ -8,15 +8,8 @@ import { fileWorkflows } from "./workflows";
 // changes, and Clear Recent Files, which keeps the submenu there while the list is empty. The
 // submenu follows Open… (File menu order 110); the empty state lists the same commands.
 
-/** The menu path of the recent files. */
-export const OPEN_RECENT_PATH = ["File", "Open Recent"] as const;
 /** Order of the first file in the File menu, and so of the submenu; files follow it. */
 const FIRST_ORDER = 112;
-
-/** The id of the command that opens a recent entry. */
-export function openRecentId(entry: Pick<RecentEntry, "key">): string {
-    return `file.openRecent.${entry.key}`;
-}
 
 /** Whether a file can be opened now: no file operation runs and no stroke is under way. */
 const idle = () => fileWorkflows.canAct();

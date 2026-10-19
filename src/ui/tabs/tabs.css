@@ -60,10 +60,14 @@
     color: var(--text);
 }
 
+/*
+ * Selected: the active background, the primary text and an accent line along the bottom
+ * edge, drawn inside the tab; no change of weight, so a tab keeps its width when selected.
+ */
 .document-tab[aria-selected="true"] {
     background: var(--bg-active);
+    box-shadow: inset 0 -2px 0 var(--accent);
     color: var(--text);
-    font-weight: var(--font-weight-strong);
 }
 
 .document-tab__label {
@@ -103,9 +107,19 @@
     opacity: 1;
 }
 
+/* Hidden on a background tab that is not under the pointer: it takes no press then. */
+.document-tab:not([aria-selected="true"]):not(:hover) .document-tab__close {
+    pointer-events: none;
+}
+
 .document-tab__close:hover {
     background: var(--bg-active);
     color: var(--text);
+}
+
+/* On the selected tab, whose background is the active one already. */
+.document-tab[aria-selected="true"] .document-tab__close:hover {
+    background: var(--bg-raised);
 }
 
 .document-tabs__overflow {

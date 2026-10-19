@@ -15,6 +15,14 @@ import type { ProjectFileHandle } from "../platform/projectFiles";
  * list lives in memory for the session only, and nothing is reported.
  */
 
+/** The menu path of the recent files (File → Open Recent, `recent.commands.ts`). */
+export const OPEN_RECENT_PATH = ["File", "Open Recent"] as const;
+
+/** The id of the command that opens a recent entry. */
+export function openRecentId(entry: Pick<RecentEntry, "key">): string {
+    return `file.openRecent.${entry.key}`;
+}
+
 /** How many files the list keeps; an older one makes way for a newer one. */
 export const RECENT_FILES_LIMIT = 10;
 
@@ -73,14 +81,31 @@ function request<Result>(task: IDBRequest<Result>): Promise<Result> {
     });
 }
 
-/** The list in the page's IndexedDB; a storage that keeps nothing where there is none. */
-export function indexedDbRecentFiles(): RecentFileStorage {
+/** How long the list waits for IndexedDB to open, in milliseconds; then it keeps nothing. */
+export const RECENT_OPEN_TIMEOUT_MS = 3000;
+
+export interface IndexedDbRecentOptions {
+    /** The IndexedDB to use; the default is the page's (`indexedDB`). */
+    factory?: Pick<IDBFactory, "open">;
+    timeoutMs?: number;
+}
+
+/**
+ * The list in the page's IndexedDB; a storage that keeps nothing where there is none. An open
+ * that another tab blocks, or that does not answer within the timeout, gives up: the list is
+ * kept in memory for the session, and nothing waits for storage for ever.
+ */
+export function indexedDbRecentFiles(options: IndexedDbRecentOptions = {}): RecentFileStorage {
+    const timeoutMs = options.timeoutMs ?? RECENT_OPEN_TIMEOUT_MS;
     let opened: Promise<IDBDatabase | null> | null = null;
     const database = (): Promise<IDBDatabase | null> => {
         opened ??= (async () => {
-            if (typeof indexedDB === "undefined") return null;
+            const factory =
+                options.factory ?? (typeof indexedDB === "undefined" ? null : indexedDB);
+            if (!factory) return null;
+            let timer: ReturnType<typeof setTimeout> | undefined;
             try {
-                const opening = indexedDB.open(DATABASE, 1);
+                const opening = factory.open(DATABASE, 1);
                 opening.onupgradeneeded = () => {
                     if (!opening.result.objectStoreNames.contains(STORE)) {
                         opening.result.createObjectStore(STORE);
@@ -91,7 +116,12 @@ export function indexedDbRecentFiles(): RecentFileStorage {
                     opening.onerror = () => reject(opening.error ?? new Error("Not opened."));
                     // Another tab holds an older version open: no waiting for it.
                     opening.onblocked = () => reject(new Error("The database is blocked."));
-                });
+                    timer = setTimeout(() => {
+                        // An answer after the timeout is not used: the database is let go.
+                        opening.onsuccess = () => opening.result.close();
+                        reject(new Error("No answer."));
+                    }, timeoutMs);
+                }).finally(() => clearTimeout(timer));
                 // A newer version elsewhere: let it go, and open again next time.
                 db.onversionchange = () => {
                     db.close();

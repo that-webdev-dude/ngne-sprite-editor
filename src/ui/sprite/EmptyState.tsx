@@ -1,6 +1,5 @@
 import { useStore } from "zustand";
-import { openRecentId } from "../../app/file/recent.commands";
-import { recentFiles } from "../../app/file/recentFiles";
+import { openRecentId, recentFiles } from "../../app/file/recentFiles";
 import { runCommand } from "../commands/runCommand";
 import { Button } from "../primitives/Button";
 import "./sprite.css";

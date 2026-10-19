@@ -30,9 +30,6 @@ export const NEW_SPRITE_DEFAULTS: Readonly<NewSpriteValues> = {
  * to discard. The grid of a new document is the default grid of the preference store.
  */
 async function newSprite(): Promise<void> {
-    // The active document stops being the active one: its floating selection is applied
-    // first (SE-032).
-    applyFloating();
     const values = await spriteDialogs.newSprite({
         initial: { ...NEW_SPRITE_DEFAULTS },
         discards: null,
@@ -45,6 +42,9 @@ async function newSprite(): Promise<void> {
         height: values.height,
         grid: { width, height },
     });
+    // The active document stops being the active one: its floating selection is applied now,
+    // not before the dialog, so a cancelled dialog leaves it floating (SE-032, SE-047 review).
+    applyFloating();
     sessionsStore.getState().open(session);
 }
 

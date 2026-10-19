@@ -43,7 +43,15 @@ export interface ProjectFileHandle {
     isSame?(other: ProjectFileHandle): Promise<boolean>;
     /** The file's size in bytes, known before it is read; fails as `read` does. SE-047. */
     size?(): Promise<number>;
+    /**
+     * As `requestRead`, with the browser's answer: "granted"; "denied", refused; "prompt",
+     * a prompt dismissed without an answer (SE-047 review: Open Recent keeps the entry).
+     */
+    requestReadPermission?(): Promise<PermissionAnswer>;
 }
+
+/** What the browser answers a permission request with. */
+export type PermissionAnswer = "granted" | "denied" | "prompt";
 
 /** A file the user chose to open: from a picker, a file input or a drop. */
 export interface ChosenFile {
@@ -124,12 +132,20 @@ async function bytesOf(file: Blob): Promise<Uint8Array> {
     return new Uint8Array(await file.arrayBuffer());
 }
 
+/** The permission `native` has, asking the user when it is not granted. */
+async function answer(
+    native: NativeFileHandle,
+    descriptor: PermissionMode,
+): Promise<PermissionAnswer> {
+    // A browser without the permission methods grants what the handle was given for.
+    if (!native.queryPermission) return "granted";
+    if ((await native.queryPermission(descriptor)) === "granted") return "granted";
+    return (await native.requestPermission?.(descriptor)) ?? "granted";
+}
+
 /** Whether `native` has the permission, asking the user when it has not. */
 async function request(native: NativeFileHandle, descriptor: PermissionMode): Promise<boolean> {
-    // A browser without the permission methods grants what the handle was given for.
-    if (!native.queryPermission) return true;
-    if ((await native.queryPermission(descriptor)) === "granted") return true;
-    return (await native.requestPermission?.(descriptor)) === "granted";
+    return (await answer(native, descriptor)) === "granted";
 }
 
 function isFileHandle(value: unknown): value is NativeFileHandle {
@@ -158,6 +174,7 @@ function wrapHandle(native: NativeFileHandle): ProjectFileHandle {
         size: async () => (await native.getFile()).size,
         read: async () => bytesOf(await native.getFile()),
         requestRead: () => request(native, { mode: "read" }),
+        requestReadPermission: () => answer(native, { mode: "read" }),
         requestWrite: () => request(native, { mode: "readwrite" }),
         async write(bytes) {
             const writable = await native.createWritable();

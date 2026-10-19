@@ -177,11 +177,20 @@ describe("Save and Save As", () => {
         const test = harness();
         drawn(test);
         const first = await saveTo(test, "hero.ngsprite");
+        const original = active(test).id;
         const second = test.disk.handle("copy.ngsprite");
         test.platform.toSave.push(second);
         expect(await test.workflows.saveAs()).toBe(true);
         expect(test.platform.suggested).toEqual(["hero.ngsprite", "hero.ngsprite"]);
-        expect(second.writes).toEqual(first.writes);
+        // The copy is the document under a new id (SE-047 review); the original file is as it was.
+        expect(active(test).id).not.toBe(original);
+        expect(second.writes).toEqual([bytesNow(test)]);
+        expect(first.writes).toHaveLength(1);
+        // Apart from the id, the two files hold the same.
+        const { doc } = active(test).session;
+        expect(serialize({ ...doc, id: original }, active(test).referenceSources)).toEqual(
+            first.writes[0],
+        );
         expect(test.workflows.fileOf(active(test).id)?.handle).toBe(second);
         // Cancelled: nothing written, the file stays.
         paint(active(test), 5);
