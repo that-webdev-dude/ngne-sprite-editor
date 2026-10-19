@@ -1,0 +1,97 @@
+/* The preview panel (DESIGN §5.5; docs/design/mockup.html, `.preview`). */
+.preview-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+}
+
+/* The stage: the canvas centred, the background colour the game draws around it. */
+.preview-panel__stage {
+    display: grid;
+    position: relative;
+    place-items: center;
+    height: 132px;
+    overflow: hidden;
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius-control);
+}
+
+.preview-panel__game {
+    display: flex;
+    /* Wheel and clicks go to the stage, so the dock scrolls and no focus moves (SPEC §6.5). */
+    pointer-events: none;
+}
+
+.preview-panel__game.is-hidden {
+    display: none;
+}
+
+.ngne-preview__canvas {
+    display: block;
+    flex: none;
+    image-rendering: pixelated;
+    pointer-events: none;
+}
+
+.preview-panel__message {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    max-width: 100%;
+    margin: 0;
+    padding: var(--space-8) var(--space-12);
+    border-radius: var(--radius-control);
+    background: var(--bg-panel);
+    color: var(--text);
+    font-size: var(--font-size-label);
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.preview-panel__message strong {
+    font-weight: var(--font-weight-strong);
+}
+
+.preview-panel__message span {
+    color: var(--text-muted);
+}
+
+.preview-panel__controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-8);
+}
+
+.preview-panel__animation {
+    flex: 1;
+    min-width: 0;
+}
+
+.preview-panel__animation .ui-select {
+    width: 100%;
+}
+
+.preview-panel__speed {
+    flex: none;
+    width: 64px;
+}
+
+.preview-panel__speed .ui-select {
+    width: 100%;
+}
+
+.preview-panel__swatch {
+    width: 14px;
+    height: 14px;
+    border: var(--border-width) solid var(--border-strong);
+    border-radius: 3px;
+}
+
+.preview-panel__diagnostics {
+    margin: 0;
+    padding: 0;
+    color: var(--warn);
+    font-size: var(--font-size-label);
+    list-style: none;
+    overflow-wrap: anywhere;
+}

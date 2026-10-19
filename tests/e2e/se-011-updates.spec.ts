@@ -24,6 +24,7 @@ import {
     viewportHost,
 } from "./se-011-support";
 import type { FrameTimes } from "./se-011-support";
+import { collapsePreview } from "./se-054-support";
 
 // SE-011: the viewport follows the stores — history steps, the active frame, the active
 // session — and never draws a frame's key with another frame's texture.
@@ -125,6 +126,8 @@ test("switching between two frames that are both in the slot cache makes no text
 }) => {
     const errors = collectErrors(page);
     await openViewportEditor(page);
+    // SE-054: the preview panel's game has uploads of its own; these counts are the viewport's.
+    await collapsePreview(page);
     const view = { scale: 6, originX: 30, originY: 18 };
     const document = await openDocument(page, { width: 6, height: 4 }, view);
     const first = pattern(6, 4, 2);
@@ -367,6 +370,8 @@ test("the viewport follows the active session and gives its renderer up with the
 }) => {
     const errors = collectErrors(page);
     await openViewportEditor(page);
+    // SE-054: the preview panel's game has uploads of its own; these counts are the viewport's.
+    await collapsePreview(page);
     const viewA = { scale: 4, originX: 12, originY: 20 };
     const viewB = { scale: 2, originX: 100, originY: 60 };
     const a = await openDocument(page, { name: "a", width: 8, height: 8 }, viewA);

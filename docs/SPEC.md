@@ -576,6 +576,55 @@ Upload queue (one per renderer instance)
   serialized queue. The game is stopped while the panel is collapsed, the tab is hidden or no
   document is open. A failed game is disposed and rebuilt on a new canvas.
 
+Recorded by SE-054:
+
+- `engine/NgnePreview` holds the game; `app/preview` wires it (`previewController.ts`), packs in
+  a module worker (`previewPack.worker.ts`, one per mounted panel) and keeps the panel's
+  choices (`previewState.ts`: animation, play/pause, speed 0.25–4×, background; kept for the
+  page, not saved). Lifecycle calls of every preview of the page run in one chain. The dock
+  mounts a section's body only while it is expanded, so a collapse disposes the game (stopped
+  a fortiori) and an expand makes a new one; with no document open there is no game, as the
+  viewport has no renderer then. A game is made only to run, and is made again when the
+  document's size changes, its lifecycle or renderer failed, or its atlas upload failed for good
+  (a fresh renderer); after two failures in a row the next game waits 1 s.
+- The atlas is that of the whole export with the document's export settings, `frames` taken
+  as `"all"`, so every animation can be played. The animation select lists the export's
+  animation IDs and "All frames" (every frame in order at its duration, looping); the first
+  animation plays until another is chosen. Choosing an animation starts it at age 0.
+- The worker keeps the composites it was sent. A document shown is packed at once with every
+  frame; after that, a change waits for 150 ms of quiet and sends the frames the composite
+  cache's notifications named (all of them for a structure change); tags, durations, the name,
+  the pivot and the export settings repack without pixels. The cache is read when the timer
+  fires, never inside a notification, and each composite is copied for the worker. A floating
+  selection is not applied: its pixels are in the composite already. A stroke shows in the
+  preview after its commit, the first history step it makes.
+- Too large: `PackError` `atlas-size` or `memory`, or an atlas over 64 MB, falls back to the
+  selected tag's frames (`frames: { tagId }`); when that fails too, or "All frames" is
+  selected, the panel shows "Too large to preview" with the error's message. Any other
+  `ExportError` or `PackError` (`too-many-entries`, a document outside the format) shows
+  "Cannot preview" with its message. Neither is a diagnostic or a toast; the game is stopped
+  meanwhile.
+- The canvas is fitted to the panel's stage: the largest whole number `k` of device pixels per
+  texel at which the document fits, at least 1; a document larger than the stage at 1:1 is
+  shown at 1/n, where texels no longer map to whole device pixels. The stage behind the canvas
+  has the background colour, and the canvas's host has `pointer-events: none` too, so wheel and
+  clicks reach the dock.
+- Frames run on demand, through the game's `scheduler` option (`engine/preview/demandScheduler.ts`):
+  at the next animation frame after a change (an atlas published or set to none, the
+  animation, play/pause, speed, background), and at the tick the playing animation reaches its
+  next entry; a still image draws nothing. As the viewport does (§6.4), the renderer's status
+  and sprite counter are read once a second without drawing, and a renderer back to `ready`
+  or with its sprites zeroed draws again. A preview at the display's rate made the parallel
+  E2E suite time out (26 of 38 pointer and view tests at 8 workers, none without the
+  preview). The game's clock comes from the scheduler: a change of play/pause, speed or
+  animation first counts the time since the last frame at the old rate and has the clock skip
+  it, so paused time is not played; `maxTicks` covers the longest entry at 0.25×.
+- The render callback draws the background rect at layer 0 and, from the published atlas
+  only, the frame at layer 1; it never throws (a throw would fail the game). An atlas set to
+  none (another document) hides every atlas published before it. The diagnostics shown are
+  NGNE's other than `{ type: "overload" }` notices, and failed uploads, creates and starts,
+  each message once per mounted panel (the newest five).
+
 ### 6.6 Performance budgets
 
 Reference hardware: §3. Document 256×256, 8 layers.

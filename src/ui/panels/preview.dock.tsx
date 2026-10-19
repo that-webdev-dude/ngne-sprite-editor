@@ -1,11 +1,7 @@
 import type { DockPanel } from "../dock/registry";
-import "./panels.css";
+import { PreviewPanel } from "../preview/PreviewPanel";
 
-/** Empty until SE-054 adds the NGNE preview (DESIGN §5.5). */
-function PreviewPanel() {
-    return <div className="panel-placeholder panel-placeholder--preview" />;
-}
-
+/** The NGNE preview (DESIGN §5.5, SE-054): the engine playing the export's atlas. */
 export const dockPanel: DockPanel = {
     id: "preview",
     title: "Preview · NGNE",

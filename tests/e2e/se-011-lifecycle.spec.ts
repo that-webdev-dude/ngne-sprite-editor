@@ -20,6 +20,7 @@ import {
     viewportHost,
 } from "./se-011-support";
 import type { Checker } from "./se-011-support";
+import { collapsePreview } from "./se-054-support";
 
 // SE-011: the life of the renderer — sizing by replacement, drawing on demand, device loss,
 // a failed renderer — and the preferences and theme the viewport reads.
@@ -31,6 +32,9 @@ const IMAGE = pattern(SIZE.width, SIZE.height, 2);
 /** Opens the editor with the painted 5×3 test document on show. */
 async function openPainted(page: Page) {
     await openViewportEditor(page);
+    // SE-054: the preview panel's game has a device and uploads of its own; these counts are
+    // the viewport's.
+    await collapsePreview(page);
     const document = await openDocument(page, SIZE, VIEW);
     await paint(page, document.id, IMAGE);
     await settle(page);
@@ -108,6 +112,9 @@ test("closing a document while its first uploads are in flight leaves the page a
 }) => {
     const errors = collectErrors(page);
     await openViewportEditor(page);
+    // SE-054: the preview panel's game has a device and uploads of its own; these counts are
+    // the viewport's.
+    await collapsePreview(page);
     // Open a document and hold the uploads of its first renderer before they start.
     const id = await page.evaluate(async () => {
         const hooks = window.__ngneTest!;
@@ -210,6 +217,9 @@ test("the window shows the image the new renderer drew before the swap, and stil
 }) => {
     const errors = collectErrors(page);
     await openViewportEditor(page);
+    // SE-054: the preview panel's game has a device and uploads of its own; these counts are
+    // the viewport's.
+    await collapsePreview(page);
     // A screenshot shows everything stacked over the NGNE canvas as well. This test is about
     // the canvas alone, so the document is shown below the scale at which the pixel grid
     // appears (8×, DESIGN §6), with the grids off.
@@ -441,6 +451,9 @@ test("a replacement whose renderer fails is given up: the old canvas stays until
 test("a checkerboard upload that fails gets a fresh renderer, once", async ({ page }) => {
     const errors = collectErrors(page);
     await openViewportEditor(page);
+    // SE-054: the preview panel's game has a device and uploads of its own; these counts are
+    // the viewport's.
+    await collapsePreview(page);
     // Half transparent everywhere: the checkerboard shows through every texel.
     const size = 8;
     const view = { scale: 4, originX: 16, originY: 16 };

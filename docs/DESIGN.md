@@ -284,6 +284,16 @@ animation select, play/pause, speed. The header reads "Preview · NGNE" to signa
 engine drawing the export. A background chip cycles dark / light / mid grey. When the document is
 too large to preview, the canvas area shows that message instead.
 
+Recorded by SE-054: the stage is 132 px high with the panel's border and radius, and takes the
+background colour (dark #202020, light #E0E0E0, mid grey #808080) around the canvas. The row under
+it holds, in order: play/pause (icon button "Pause preview" / "Play preview"), the animation
+select (the export's animation IDs, then "All frames"; it fills the row), the speed select (64 px,
+0.25× to 4×) and the background chip (an icon button with a swatch, named "Preview background:
+<colour>"). In place of the canvas the stage shows "Too large to preview" or "Cannot preview" with
+the reason under it, on a panel-coloured box. NGNE diagnostics are listed under the row in the
+warning colour. With no document open the stage is empty and play/pause and the animation are
+disabled.
+
 ### 5.6 Timeline
 
 - Left column (200 px): per layer — visibility, lock, name (double-click renames), opacity on
