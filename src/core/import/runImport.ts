@@ -38,8 +38,11 @@ function assertOneOf(name: string, value: string, allowed: readonly string[]): v
     }
 }
 
-/** Checks everything that does not depend on the pixels; the steps check their own options. */
-function assertSettings(settings: ImportSettings): void {
+/**
+ * Checks everything that does not depend on the pixels; the steps check their own options.
+ * Throws `ImportError` ("settings") as `runImport` does. Exported for `importSteps`.
+ */
+export function assertImportSettings(settings: ImportSettings): void {
     const { size, colors } = settings;
     assertInteger("Target width", size.width, MIN_DOCUMENT_SIDE, MAX_DOCUMENT_SIDE);
     assertInteger("Target height", size.height, MIN_DOCUMENT_SIDE, MAX_DOCUMENT_SIDE);
@@ -72,6 +75,21 @@ function assertSource(source: ImportSource): void {
             "source-size",
             `"${source.name}" is ${width}x${height}; the limit is ` +
                 `${MAX_IMPORT_SOURCE_SIDE} px per side.`,
+        );
+    }
+}
+
+/**
+ * Throws the `pixel-data` error unless `count` frames of `width` × `height` stay within
+ * `MAX_IMPORT_PIXEL_BYTES`. Exported for `importSteps`.
+ */
+export function assertPixelData(count: number, width: number, height: number): void {
+    const bytes = count * width * height * 4;
+    if (bytes > MAX_IMPORT_PIXEL_BYTES) {
+        throw new ImportError(
+            "pixel-data",
+            `${count} frames of ${width}x${height} hold ${bytes} bytes of pixel data; ` +
+                `the limit is ${MAX_IMPORT_PIXEL_BYTES} bytes (256 MB).`,
         );
     }
 }
@@ -139,17 +157,10 @@ export function runImport(
     sources: readonly ImportSource[],
     settings: ImportSettings,
 ): ImportResult {
-    assertSettings(settings);
+    assertImportSettings(settings);
     const cells = importCells(sources, settings);
     const { width, height, fit } = settings.size;
-    const bytes = cells.length * width * height * 4;
-    if (bytes > MAX_IMPORT_PIXEL_BYTES) {
-        throw new ImportError(
-            "pixel-data",
-            `${cells.length} frames of ${width}x${height} hold ${bytes} bytes of pixel data; ` +
-                `the limit is ${MAX_IMPORT_PIXEL_BYTES} bytes (256 MB).`,
-        );
-    }
+    assertPixelData(cells.length, width, height);
 
     // The colour key comes before the resampling: a keyed pixel is transparent by then, so
     // its colour is not averaged into the pixels beside it. `resample` returns a new buffer,

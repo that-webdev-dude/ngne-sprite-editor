@@ -104,10 +104,10 @@ test("the empty state shows New sprite, centred in the workspace, while no docum
 }) => {
     await openEditor(page);
     const viewport = region(page, "viewport");
-    // New sprite and Open (SE-041), nothing else: Import PNG and recent files come with their
-    // tickets.
-    await expect(viewport.getByRole("button")).toHaveText(["New sprite", "Open"]);
-    await expect(viewport).toHaveText("New spriteOpen");
+    // New sprite, Open (SE-041) and Import PNG (SE-044), nothing else: recent files come with
+    // their ticket.
+    await expect(viewport.getByRole("button")).toHaveText(["New sprite", "Open", "Import PNG"]);
+    await expect(viewport).toHaveText("New spriteOpenImport PNG");
 
     // Centred in the workspace: the column of plain text buttons, New sprite first, each of the
     // usual size.

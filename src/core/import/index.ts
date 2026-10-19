@@ -24,3 +24,18 @@ export { IMPORTED_PALETTE_NAME, importCells, runImport } from "./runImport";
 export type { ImportResult } from "./runImport";
 export type { CellSettings, ColorSettings, ImportSettings, SizeSettings } from "./settings";
 export { DEFAULT_ALPHA_THRESHOLD, DEFAULT_COLOR_COUNT, smartDefaults } from "./smartDefaults";
+export {
+    IMPORT_LABEL,
+    ImportPlacementError,
+    importIntoDocumentCommand,
+    importedDocument,
+    paletteAfterImport,
+} from "./place";
+export type {
+    ImportDestination,
+    ImportIntoDocumentOptions,
+    ImportPaletteMode,
+    ImportedDocumentOptions,
+} from "./place";
+export { cachedCells, createImportCache, importSteps, runImportSteps } from "./staged";
+export type { ImportCache } from "./staged";

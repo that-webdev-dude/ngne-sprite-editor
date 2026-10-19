@@ -1597,6 +1597,36 @@ Rules:
 - Decoder (SE-005): `fast-png` 8.0.0 cannot read interlaced images below 8 bits per sample and
   returns a zero-padded buffer for image data cut short, so `decodePng` is the project's own
   decoder over `DecompressionStream` and returns a promise. `encodePng` uses `fast-png`.
+- The dialog (SE-044):
+  - Steps 6 and 7 follow the smart defaults for the current cells and size, with the threshold
+    and colour count of the preferences, until the user sets them. The stored dither
+    "ordered" is core's "bayer"; fit starts at contain.
+  - With a document open the target size starts at its size. The session remembers the
+    fields the user changed in the last import made, except the crop and "keep source as
+    reference"; a remembered size applies only while no document is open.
+  - The preview runs `importSteps` (`runImport` in stages that keep their results) in a
+    worker; a newer change cancels the computation at its next step, and Import uses the
+    newest answer.
+  - Files that cannot be decoded are named in the dialog and left out; "Choose files…"
+    replaces the sources.
+- Placing (SE-044):
+  - New document: named after the first file ("Pasted image" for a paste), frames of 100 ms,
+    the palette choice applied to the default palette, a "kept" reference already in it.
+  - New frames: at the end, in the active layer (the top pixel layer while a reference
+    layer is active), with the last frame's duration; tags are not extended, and the first
+    new frame becomes active.
+  - New layer: above the active layer, as New Layer adds it, with cels from the active frame
+    on; frames are added at the end where needed.
+  - Into a document the import is one undo step ("Import PNG"): a floating selection is
+    applied first, and a kept reference layer is part of the step.
+  - "Append" adds the imported colours the palette lacks, up to 256 colours.
+  - A kept reference holds the file itself for the whole image, otherwise a PNG of the
+    cropped region. With "cover" it overflows the canvas as the region does.
+- Drop and paste (SE-044):
+  - Files dropped without a project file among them go to the import when one is a PNG
+    (the others are named as unreadable); a single file shows the drop chooser.
+  - Ctrl+V with no document open is the command "Paste Image as New Sprite" (command
+    palette, no menu item); without an image on the clipboard an info toast says so.
 
 ## 9. NGNE asset export (C1)
 

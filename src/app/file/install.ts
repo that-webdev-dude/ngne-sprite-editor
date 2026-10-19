@@ -2,9 +2,12 @@ import type { StoreApi } from "zustand/vanilla";
 import { keyContextStore } from "../keymap/contextState";
 import type { KeyContextState } from "../keymap/contextState";
 import { OVERLAY_SELECTOR } from "../keymap/environment";
+import { importDropped, isImageDrop } from "../import/importWorkflow";
 import { carriesFiles, droppedFiles } from "../platform/projectFiles";
+import type { ChosenFile } from "../platform/projectFiles";
 import { isDirty, sessionsStore } from "../state/sessions";
 import type { SessionsState } from "../state/sessions";
+import { isProjectFileName } from "./fileName";
 import { fileWorkflows } from "./workflows";
 import type { FileWorkflows } from "./workflows";
 
@@ -28,6 +31,11 @@ export interface FileWorkflowInstall {
     workflows?: Pick<FileWorkflows, "busy" | "openFiles">;
     /** Whether a menu, dialog or popover is open; the default reads the page. */
     overlayOpen?(): boolean;
+    /**
+     * What a drop of image files without a project file is handed to, with the drop point
+     * (SE-044); the default is the app's Import PNG.
+     */
+    importImages?(files: readonly ChosenFile[], point: { x: number; y: number }): void;
 }
 
 /** The part of a drag event the drop reads. */
@@ -41,7 +49,8 @@ interface DragLike extends Event {
  * - While any open document is dirty, or a selection floats (its pixels are not in the
  *   document's history yet), a `beforeunload` listener asks the browser to confirm before the
  *   page is left (closing the tab, reloading). Without either, no listener is there.
- * - A drop of files on the window opens the first project file among them (`openFiles`).
+ * - A drop of files on the window opens the first project file among them (`openFiles`);
+ *   without one, PNG files among them go to Import PNG (SE-044).
  *   Every file drag has its default prevented, so a dropped file never replaces the app; a
  *   drop while a menu or dialog is open, or while a file operation runs, does nothing.
  *
@@ -54,6 +63,8 @@ export function installFileWorkflows(install: FileWorkflowInstall = {}): () => v
     const workflows = install.workflows ?? fileWorkflows;
     const overlayOpen =
         install.overlayOpen ?? (() => document.querySelector(OVERLAY_SELECTOR) !== null);
+    const importImages =
+        install.importImages ?? ((files, point) => void importDropped(files, point));
 
     const onBeforeUnload = (event: Event) => {
         event.preventDefault();
@@ -84,7 +95,14 @@ export function installFileWorkflows(install: FileWorkflowInstall = {}): () => v
         if (!carriesFiles(dataTransfer) || !dataTransfer) return;
         event.preventDefault();
         if (!accepts()) return;
-        void workflows.openFiles(droppedFiles(dataTransfer));
+        const files = droppedFiles(dataTransfer);
+        const names = files.map((file) => file.name);
+        if (!names.some(isProjectFileName) && isImageDrop(names)) {
+            const { clientX: x, clientY: y } = event as DragEvent;
+            importImages(files, { x: x ?? 0, y: y ?? 0 });
+            return;
+        }
+        void workflows.openFiles(files);
     };
     target.addEventListener("dragover", onDragOver);
     target.addEventListener("drop", onDrop);

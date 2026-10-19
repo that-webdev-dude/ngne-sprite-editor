@@ -8,7 +8,7 @@ import "./sprite.css";
  * What the workspace shows while no document is open (DESIGN §6): plain text buttons, centred,
  * no illustration. New sprite (SE-008), Open (SE-041) and, below them, the recent files
  * (SE-047), newest first, each opening its file through its File → Open Recent command;
- * nothing of the list shows while it is empty. Import PNG joins them in SE-044.
+ * nothing of the list shows while it is empty. Import PNG (SE-044) after Open.
  */
 export function EmptyState() {
     const entries = useStore(recentFiles.store, (state) => state.entries);
@@ -16,6 +16,7 @@ export function EmptyState() {
         <div className="empty-state" data-empty-state="">
             <Button onClick={() => runCommand("file.new")}>New sprite</Button>
             <Button onClick={() => runCommand("file.open")}>Open</Button>
+            <Button onClick={() => runCommand("file.importPng")}>Import PNG</Button>
             {entries.length > 0 ? (
                 <>
                     <p className="empty-state__recent-title" id="empty-state-recent">
