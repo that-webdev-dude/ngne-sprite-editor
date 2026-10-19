@@ -42,6 +42,76 @@ async function expectAccessible(page: Page, name: string, scope: string): Promis
     expect(own.contrastChecked, name).toBeGreaterThan(0);
 }
 
+/**
+ * `expectAccessible` for the open command palette, whose list scrolls: the row cut off at the
+ * list's visible edge is one the contrast rule cannot decide on, and which row that is depends
+ * on how many commands there are (SE-033 review). So a node left undecided must lie in an
+ * option partly outside the list's visible rectangle; each such option is then scrolled fully
+ * into view and judged on its own: no violation, nothing undecided, and every text of it —
+ * title, menu, shortcut, those it has — checked. An undecided node anywhere else fails.
+ */
+async function expectPaletteAccessible(page: Page, list: Locator): Promise<void> {
+    const name = "command palette";
+    const scope = ".command-palette";
+    await expect(page.locator(scope), name).toBeVisible();
+    const whole = await audit(page);
+    expect(whole.violations, name).toEqual([]);
+    const own = await audit(page, scope);
+    expect(own.violations, name).toEqual([]);
+    expect(own.contrastChecked, name).toBeGreaterThan(0);
+
+    const cut = new Set<string>();
+    for (const selector of own.contrastUndecided) {
+        const place = await page.locator(selector).evaluate((element) => {
+            const option = element.closest('[role="option"]');
+            const listbox = option?.closest('[role="listbox"]');
+            if (!(option instanceof HTMLElement) || !listbox) return null;
+            const row = option.getBoundingClientRect();
+            const view = listbox.getBoundingClientRect();
+            const visible = Math.min(row.bottom, view.bottom) - Math.max(row.top, view.top);
+            return {
+                command: option.dataset.command ?? "",
+                partlyOutside: visible > 0 && visible < row.height,
+            };
+        });
+        expect(place, `${name}: undecided ${selector} outside the list's options`).not.toBeNull();
+        expect(place!.partlyOutside, `${name}: undecided ${selector} in a whole row`).toBe(true);
+        cut.add(place!.command);
+    }
+    for (const command of cut) {
+        const option = list.locator(`[role="option"][data-command="${command}"]`);
+        await option.evaluate((element) => element.scrollIntoView({ block: "nearest" }));
+        // The scroll has settled: the same position in two animation frames in a row.
+        await expect
+            .poll(() =>
+                list.evaluate(
+                    (element) =>
+                        new Promise<boolean>((resolve) => {
+                            const before = element.scrollTop;
+                            requestAnimationFrame(() =>
+                                requestAnimationFrame(() => resolve(element.scrollTop === before)),
+                            );
+                        }),
+                ),
+            )
+            .toBe(true);
+        const inside = await option.evaluate((element) => {
+            const row = element.getBoundingClientRect();
+            const view = element.closest('[role="listbox"]')!.getBoundingClientRect();
+            return row.top >= view.top && row.bottom <= view.bottom;
+        });
+        expect(inside, `${command} in view`).toBe(true);
+        const texts = await option
+            .locator(".command-palette__title, .command-palette__group, .command-palette__shortcut")
+            .count();
+        const row = await audit(page, `.command-palette [data-command="${command}"]`);
+        expect(row.violations, command).toEqual([]);
+        expect(row.contrastUndecided, command).toEqual([]);
+        expect(row.contrastChecked, command).toBe(texts);
+        expect(texts, command).toBeGreaterThanOrEqual(1);
+    }
+}
+
 /** Enough commands with shortcuts to make the palette list and the shortcut sheet scroll. */
 function manyProbes() {
     const modifiers = ["Ctrl+Alt+Shift", "Alt+Shift", "Ctrl+Shift+Meta", "Alt+Meta"];
@@ -75,7 +145,7 @@ for (const theme of THEMES) {
         const list = palette(page).getByRole("listbox");
         expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
         expect(await palette(page).locator('[aria-disabled="true"]').count()).toBeGreaterThan(5);
-        await expectAccessible(page, "command palette", ".command-palette");
+        await expectPaletteAccessible(page, list);
         // The enabled rows were judged by the contrast rule, title, menu and shortcut.
         const row = await audit(page, '.command-palette [data-command="edit.undo"]');
         expect(row.violations).toEqual([]);
