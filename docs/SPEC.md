@@ -1008,8 +1008,9 @@ Move, floating selection and clipboard (SE-032):
   the echo of §6.6 for as long as it lasts, across any number of drags.
 - Move tool (V): with a selection a press anywhere on the canvas lifts the selected pixels and
   the drag moves them by whole pixels; they float on after the release. While pixels float, a
-  press on a pixel of the float's mask drags it again, and a press anywhere else applies it and
-  does nothing more. With no selection the drag moves the whole cel and is applied at the
+  press on a pixel of the float's mask drags it again, a press on a handle of its box or in the
+  ring just outside the box transforms it (SE-033, below), and a press anywhere else applies it
+  and does nothing more. With no selection the drag moves the whole cel and is applied at the
   release, one undo step per drag; an empty cel has nothing to move. Either button moves. It is
   refused on a locked, hidden or reference layer with the messages of §7.1 (SE-046 gives it
   reference layers), and works at every zoom step: it moves by whole texels. A pointer cancel
@@ -1052,6 +1053,49 @@ Move, floating selection and clipboard (SE-032):
   has no such preference. Copy and Cut need a selection or a float, Delete and Fill a
   selection or a float; Fill has no key. They write on the layers paint may go to; Copy reads
   any pixel layer.
+
+Transforms (SE-033):
+
+- A float holds its source (the pixels lifted or pasted) and a free transform: a box of whole
+  document pixels (X, Y of its top-left corner, W, H of 1 to 2048 px, or the source's larger
+  side when that is more) and an angle in whole degrees in (−180, 180], clockwise, about the
+  box's centre. What floats is the source scaled into the box and turned, by nearest-neighbour
+  sampling: a document pixel belongs to it when its centre, turned back about the centre, lies
+  inside the box, and takes the source pixel under that point (⌊u · source width / W⌋, likewise
+  for v) when that pixel is in the source's mask. It only holds colours of the source; an
+  untransformed float is its source as it is, and multiples of 90° are computed exactly. Each
+  change renders it anew from the source, so scaling up and back loses nothing. A move carries
+  the box along.
+- Flip Horizontal, Flip Vertical, Rotate 90° CW, Rotate 90° CCW and Rotate 180° (Edit menu; §7.8
+  gives them no key): while pixels float they act on the float; with a selection they lift
+  it into a float of the Move tool first and leave it floating, as Aseprite's Flip and Rotate
+  with a selection start its selection transformation (checked in its source: `FlipCommand`,
+  `RotateCommand`, `Editor::startSelectionTransformation`); with no selection they turn the
+  whole cel about the canvas's centre and apply it at once, one step named after the command,
+  clipped to the canvas (a quarter turn of a cel that is not square loses what leaves it); an
+  empty cel has nothing to turn. They permute the source exactly: a flip mirrors it and negates
+  the angle, a quarter turn turns it and swaps W and H about the box's centre, its corner moved
+  by half their difference truncated toward zero, so four turns give the float back. They are
+  enabled while pixels float and refused during a stroke and on the layers paint is refused on.
+- Free transform with the Move tool, while a selection floats: a press off the float's pixels
+  on one of the eight handles of its box (within 5 CSS px) scales it — the handle's sides go to
+  the pixel boundaries nearest the pointer along the box's own axes, the opposite sides stay,
+  no side shorter than 1 px; with Shift both sides scale by one factor, a corner by its larger
+  change, a side's middle by its own with the other side centred. A press outside the box
+  within 16 CSS px of it turns it about its centre by the angle the pointer swept, in whole
+  degrees, with Shift in multiples of 15°. Shift pressed or released during the drag takes
+  effect at once. A press on a pixel of the float still moves it, even under a handle, and a
+  press farther out applies it (SE-032). Escape or a pointer cancel during such a drag puts the
+  box, the angle and the step's label back as they were at its press. The handles and the ring
+  are not offered for a whole cel lifted with no selection, which is applied at its release.
+- The context bar's fields (DESIGN §5.2) set the same box and angle through a registered
+  command (Set Floating Selection Transform): a value typed there gives the same pixels as the
+  drag that gives that value.
+- The float stays one transaction: its transforms record nothing until it is applied, as one
+  step labelled Transform for a lifted float that was transformed (Move when it was only moved,
+  Paste for a pasted one); a cancel or undo restores the pixels from before the lift. Copy while
+  pixels float copies them as transformed. The cursor does not change over the handles (the
+  tool cursor depends on no pointer position).
 
 ### 7.3 Layers
 

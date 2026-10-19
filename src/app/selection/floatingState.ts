@@ -1,6 +1,7 @@
+import { createStore } from "zustand/vanilla";
 import type { StoreApi } from "zustand/vanilla";
 import { FloatingSelection } from "../../core/floating";
-import type { FloatingContent } from "../../core/floating";
+import type { FlipAxis, FloatingContent, FreeTransform } from "../../core/floating";
 import { AllocationError } from "../../core/history";
 import type { Command } from "../../core/history";
 import type { DocSession } from "../../core/model";
@@ -36,6 +37,26 @@ import { viewportLink } from "../viewport/viewportLink";
 // pointer sample. When the document stops being the active one the float is applied. Close,
 // Open, Revert and New Sprite apply it before they ask (SPEC §10); a document closed some
 // other way takes its float with it.
+//
+// Transforms (SE-033): flips, quarter turns and the free transform change the float in place,
+// inside the same transaction, so they stay one undo step with its lift, and a cancel takes
+// them back with it. A lifted float that was transformed is recorded as "Transform" (a pasted
+// one stays "Paste"). `shown` tells the context bar and the overlay where the float's box is.
+
+/** The label of the undo step of a lifted float that was transformed (SE-033). */
+export const TRANSFORM_LABEL = "Transform";
+
+/** What the interface shows of the float (SE-033): its box and angle, or null without one. */
+export interface FloatShown {
+    /** The session of the document that holds the float. */
+    readonly session: DocSession | null;
+    /** Its free transform; null without a float. */
+    readonly transform: FreeTransform | null;
+    /** The float's selection follows it (false for a whole cel lifted with no selection). */
+    readonly selects: boolean;
+}
+
+const NOTHING_SHOWN: FloatShown = { session: null, transform: null, selects: false };
 
 export interface FloatingSources extends LiveCompositeSources {
     sessions: StoreApi<SessionsState>;
@@ -86,6 +107,17 @@ export interface FloatingState {
     moveTo(x: number, y: number): void;
     /** Moves the float by `dx`, `dy` pixels; nothing without a float. */
     moveBy(dx: number, dy: number): void;
+    /**
+     * Sets the float's free transform (SE-033; `FloatingSelection.setTransform`); nothing
+     * without a float. Throws `RangeError` for a box it cannot take, the float unchanged.
+     */
+    setTransform(transform: FreeTransform): void;
+    /** Mirrors the float within its box (SE-033); nothing without a float. */
+    flip(axis: FlipAxis): void;
+    /** Turns the float by quarter turns clockwise about its box's centre (SE-033). */
+    rotate(turns: number): void;
+    /** The float's box as the interface shows it, and its changes (SE-033). */
+    readonly shown: StoreApi<FloatShown>;
     /** Applies the float (SPEC §5.2): one history step, or none when nothing changed. */
     apply(): LandOutcome;
     /**
@@ -113,6 +145,21 @@ export function createFloatingState(sources: FloatingSources): FloatingState {
     const onError =
         sources.onError ?? ((error: unknown) => console.error("Floating selection:", error));
     let current: Current | null = null;
+    const shown = createStore<FloatShown>(() => NOTHING_SHOWN);
+
+    /** Tells `shown` where the float of `now` is (or that there is none). */
+    const show = (now: Current | null) => {
+        shown.setState(
+            now
+                ? {
+                      session: now.session,
+                      transform: now.float.transform,
+                      selects: now.float.selects,
+                  }
+                : NOTHING_SHOWN,
+            true,
+        );
+    };
 
     /** Tells the session store that the session changed (its selection), if it is still open. */
     const touch = (session: DocSession) => {
@@ -128,6 +175,7 @@ export function createFloatingState(sources: FloatingSources): FloatingState {
         ended.cancelTouch?.();
         ended.cancelTouch = null;
         sources.context(false);
+        show(null);
         return ended;
     };
 
@@ -151,6 +199,7 @@ export function createFloatingState(sources: FloatingSources): FloatingState {
         }
         current = { session: document.session, float, live, cancelTouch: null };
         sources.context(true);
+        show(current);
         // What a paste wrote is on screen at once.
         const placed = float.placed;
         if (placed && transaction.dirty) live.dirty(placed);
@@ -160,11 +209,23 @@ export function createFloatingState(sources: FloatingSources): FloatingState {
         const now = current;
         if (!now) return;
         if (changed) now.live.dirty(changed);
+        show(now);
         if (!now.float.selects || now.cancelTouch) return;
         now.cancelTouch = sources.nextFrame(() => {
             now.cancelTouch = null;
             if (current === now) touch(now.session);
         });
+    };
+
+    /** Transforms the float with `change` (SE-033), shown as a move is; nothing without one. */
+    const transformed = (
+        change: (float: FloatingSelection) => ReturnType<FloatingSelection["moveTo"]>,
+    ) => {
+        const now = current;
+        if (!now) return;
+        const changed = change(now.float);
+        if (now.float.label === "Move") now.float.label = TRANSFORM_LABEL;
+        moved(changed);
     };
 
     /**
@@ -279,6 +340,16 @@ export function createFloatingState(sources: FloatingSources): FloatingState {
         moveBy(dx, dy) {
             if (current) moved(current.float.moveBy(dx, dy));
         },
+        setTransform(transform) {
+            transformed((float) => float.setTransform(transform));
+        },
+        flip(axis) {
+            transformed((float) => float.flip(axis));
+        },
+        rotate(turns) {
+            transformed((float) => float.rotate(turns));
+        },
+        shown,
         apply,
         discard: (label) => land((float) => float.discard(label), true),
         cancel,

@@ -1,0 +1,8 @@
+/* SE-033: the transform fields of a floating selection in the context bar (DESIGN §5.2). */
+.context-content,
+.transform-fields {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-12);
+    white-space: nowrap;
+}

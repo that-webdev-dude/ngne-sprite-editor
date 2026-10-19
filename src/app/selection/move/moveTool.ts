@@ -1,8 +1,10 @@
-import type { FloatingSelection } from "../../../core/floating";
+import type { FloatingSelection, FreeTransform } from "../../../core/floating";
 import { celAt } from "../../../core/model";
 import type { Point } from "../../view/coordinates";
 import type { ToolContext, ToolPointer, ToolSpec } from "../../tools/types";
 import type { FloatingState } from "../floatingState";
+import { hitBox, rotateBoxTo, scaleBox } from "../transform/handles";
+import type { HandleId } from "../transform/handles";
 import { floatRefusal } from "./floatTarget";
 
 // The Move tool (SPEC §7.1, §7.2; SE-032), in the rail's planned Move slot (V). A press lifts
@@ -12,6 +14,12 @@ import { floatRefusal } from "./floatTarget";
 // drag moves the whole cel, which is applied at the release: one undo step per drag. While
 // pixels float, a press on one of them drags them again, and a press anywhere else applies
 // them and does nothing more. Either button moves.
+//
+// Free transform (SE-033): while a selection floats, a press off its pixels on one of the
+// eight handles of its box scales it (Shift keeps the aspect ratio), and a press outside the
+// box, within reach of it, turns it about its centre (Shift snaps to 15°); a press farther out
+// applies it as before. Each drag sets the float's transform from where it began, so Escape
+// takes back exactly that drag.
 
 /** The id of the Move tool, which holds a floating selection (SPEC §5.2). */
 export const MOVE_TOOL_ID = "move";
@@ -19,10 +27,14 @@ export const MOVE_TOOL_ID = "move";
 /** The status-bar hint of the Move tool (DESIGN §5.7). */
 export const MOVE_HINT = "Drag to move · Arrows: nudge · Enter: apply · Escape: cancel";
 
-/** One drag of the Move tool. */
-interface Drag {
-    /** The float the drag moves. */
+interface DragBase {
+    /** The float the drag acts on. */
     readonly float: FloatingSelection;
+}
+
+/** A drag that moves the float. */
+interface MoveDrag extends DragBase {
+    readonly kind: "move";
     /** The pixel pressed. */
     readonly start: Point;
     /** The float's top-left pixel at the press. */
@@ -33,13 +45,34 @@ interface Drag {
     readonly applyAtRelease: boolean;
 }
 
+/** A drag that scales the float by a handle, or turns it (SE-033). */
+interface TransformDrag extends DragBase {
+    readonly kind: "scale" | "rotate";
+    readonly handle: HandleId | null;
+    /** The document position pressed, with its fraction. */
+    readonly start: Point;
+    /** The float's transform and label at the press: a cancel puts them back. */
+    readonly origin: FreeTransform;
+    readonly label: string;
+    /** The last pointer of the drag, for a Shift pressed or released while it lasts. */
+    last: ToolPointer;
+}
+
+type Drag = MoveDrag | TransformDrag;
+
 export interface MoveToolSources {
-    floating: Pick<FloatingState, "float" | "floats" | "lift" | "moveTo" | "apply" | "cancel">;
+    floating: Pick<
+        FloatingState,
+        "float" | "floats" | "lift" | "moveTo" | "setTransform" | "apply" | "cancel"
+    >;
+    /** Device pixels per CSS pixel, for the size of the handles; the default is 1. */
+    ratio?(): number;
 }
 
 /** The Move tool on `sources`. */
 export function createMoveTool(sources: MoveToolSources): ToolSpec {
     const { floating } = sources;
+    const ratio = sources.ratio ?? (() => 1);
     const drags = new WeakMap<ToolContext, Drag>();
 
     /** The drag of `context`, while its float is still the one floating. */
@@ -51,10 +84,41 @@ export function createMoveTool(sources: MoveToolSources): ToolSpec {
     const follow = (context: ToolContext, pointer: ToolPointer) => {
         const drag = dragOf(context);
         if (!drag) return;
-        floating.moveTo(
-            drag.origin.x + pointer.pixel.x - drag.start.x,
-            drag.origin.y + pointer.pixel.y - drag.start.y,
+        if (drag.kind === "move") {
+            floating.moveTo(
+                drag.origin.x + pointer.pixel.x - drag.start.x,
+                drag.origin.y + pointer.pixel.y - drag.start.y,
+            );
+            return;
+        }
+        drag.last = pointer;
+        const shift = pointer.modifiers.shift;
+        floating.setTransform(
+            drag.kind === "scale" && drag.handle
+                ? scaleBox(drag.origin, drag.handle, pointer.position, shift)
+                : rotateBoxTo(drag.origin, drag.start, pointer.position, shift),
         );
+    };
+
+    /**
+     * A press on the float's box off its pixels (SE-033): a handle scales it, the ring outside
+     * the box turns it. Returns whether a drag began.
+     */
+    const pressBox = (context: ToolContext, pointer: ToolPointer, float: FloatingSelection) => {
+        if (!float.selects) return false;
+        const transform = float.transform;
+        const hit = hitBox(transform, pointer.position, context.document.view.scale, ratio());
+        if (hit.kind !== "handle" && hit.kind !== "rotate") return false;
+        drags.set(context, {
+            kind: hit.kind === "handle" ? "scale" : "rotate",
+            handle: hit.kind === "handle" ? hit.handle : null,
+            float,
+            start: { x: pointer.position.x, y: pointer.position.y },
+            origin: transform,
+            label: float.label,
+            last: pointer,
+        });
+        return true;
     };
 
     return {
@@ -63,18 +127,20 @@ export function createMoveTool(sources: MoveToolSources): ToolSpec {
         hint: MOVE_HINT,
         cursor: "move",
         // Only where the pointer is matters: each sample would rewrite the float's two
-        // rectangles and make a new selection.
+        // rectangles and make a new selection (a transform also renders the float anew).
         latestSample: true,
         onDown(context, pointer) {
             const start = { x: pointer.pixel.x, y: pointer.pixel.y };
             const floated = floating.floats(context.document) ? floating.float : null;
             if (floated) {
-                // A press outside the float applies it (SPEC §7.2), and that is all it does.
                 if (!floated.contains(start.x, start.y)) {
+                    if (pressBox(context, pointer, floated)) return;
+                    // A press outside the float applies it (SPEC §7.2), and that is all it does.
                     floating.apply();
                     return;
                 }
                 drags.set(context, {
+                    kind: "move",
                     float: floated,
                     start,
                     origin: { x: floated.x, y: floated.y },
@@ -96,6 +162,7 @@ export function createMoveTool(sources: MoveToolSources): ToolSpec {
             }
             const float = floating.lift(context.document, { whole });
             drags.set(context, {
+                kind: "move",
                 float,
                 start,
                 origin: { x: float.x, y: float.y },
@@ -108,7 +175,14 @@ export function createMoveTool(sources: MoveToolSources): ToolSpec {
             follow(context, pointer);
             const drag = dragOf(context);
             drags.delete(context);
-            if (drag?.applyAtRelease) floating.apply();
+            if (drag?.kind === "move" && drag.applyAtRelease) floating.apply();
+        },
+        onKey(context, key) {
+            // Shift held or released during a scale or a turn takes effect where the pointer is.
+            const drag = dragOf(context);
+            if (!drag || drag.kind === "move" || key.key !== "Shift") return false;
+            follow(context, { ...drag.last, modifiers: key.modifiers });
+            return true;
         },
         onCancel(context) {
             const drag = dragOf(context);
@@ -118,7 +192,10 @@ export function createMoveTool(sources: MoveToolSources): ToolSpec {
             // (`floatingState.ts`), so there is nothing to take back here.
             if (!drag) return;
             // Escape, a pointer cancel, a lost capture: what the drag did is taken back.
-            if (drag.lifted) floating.cancel();
+            if (drag.kind !== "move") {
+                floating.setTransform(drag.origin);
+                drag.float.label = drag.label;
+            } else if (drag.lifted) floating.cancel();
             else floating.moveTo(drag.origin.x, drag.origin.y);
         },
     };

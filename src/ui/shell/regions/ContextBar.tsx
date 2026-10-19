@@ -1,4 +1,6 @@
+import { useSyncExternalStore } from "react";
 import type { ToolOptionSpec, ToolOptionValue } from "../../../app/tools/types";
+import { shownContextBarContent, subscribeContextBarContent } from "../../tools/contextBarRegistry";
 import { NumberField } from "../../primitives/NumberField";
 import { SegmentedControl } from "../../primitives/SegmentedControl";
 import { Select } from "../../primitives/Select";
@@ -75,10 +77,12 @@ function OptionControl({ option, value, onChange }: OptionControlProps) {
 /**
  * Context bar content (DESIGN §5.2): the active tool's name and its options, in the order the
  * tool lists them, rendered from its option schema (SE-014). Empty while no registered tool is
- * active.
+ * active. While registered content is shown (`contextBarRegistry.ts`; SE-033: the transform
+ * fields of a floating selection), it takes the options' place.
  */
 export function ContextBar() {
     const tools = useToolState();
+    const content = useSyncExternalStore(subscribeContextBarContent, shownContextBarContent);
     const tool = tools.active();
     if (!tool) return null;
     const values = tools.options(tool);
@@ -87,14 +91,21 @@ export function ContextBar() {
             <span className="context-tool" data-context-tool={tool.id}>
                 {tool.label}
             </span>
-            {tool.options.map((option) => (
-                <OptionControl
-                    key={`${tool.id}:${option.key}`}
-                    option={option}
-                    value={values[option.key] ?? option.default}
-                    onChange={(value) => tools.setOption(tool, option.key, value)}
-                />
-            ))}
+            {content ? (
+                <span className="context-content" data-context-content={content.id}>
+                    <content.Body />
+                </span>
+            ) : null}
+            {content
+                ? null
+                : tool.options.map((option) => (
+                      <OptionControl
+                          key={`${tool.id}:${option.key}`}
+                          option={option}
+                          value={values[option.key] ?? option.default}
+                          onChange={(value) => tools.setOption(tool, option.key, value)}
+                      />
+                  ))}
         </>
     );
 }

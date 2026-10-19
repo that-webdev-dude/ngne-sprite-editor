@@ -3,6 +3,14 @@ import type { Command, History, Transaction } from "../history";
 import { celAt } from "../model";
 import type { BitMask, DocSession, IdGenerator, PixelBuffer, Rect, Selection } from "../model";
 import { createMask, fullMask, maskHas, selectionOf, selectionsEqual } from "../selection";
+import {
+    flipContent,
+    normalizeAngle,
+    renderTransform,
+    rotateBox,
+    rotateContent,
+} from "./transform";
+import type { FlipAxis, FreeTransform } from "./transform";
 
 // The floating selection of SPEC §5.2 and §7.2 (SE-032): pixels lifted out of a cel (a move)
 // or brought in (a paste), held over the cel until they are applied or cancelled. It lives
@@ -19,6 +27,11 @@ import { createMask, fullMask, maskHas, selectionOf, selectionsEqual } from "../
 //     cancel: it is aborted, pixels and selection as they were before the float;
 //     discard (Delete, Cut): the content is dropped, the base committed, nothing selected
 //
+//   transform (SE-033): the content is the source (the pixels lifted or pasted) placed by a
+//     free transform — a box of whole pixels turned about its centre (`transform.ts`) — and
+//     rendered from the source anew at each change, so scaling up and back loses nothing;
+//     flips and quarter turns permute the source itself, exactly
+//
 // The image the transaction holds is the cel's own, so every reader of the document (the
 // compositor, the live composite of SE-014, the eyedropper) sees the float where it is. The
 // content is never clipped while it floats: moved off the canvas and back, it is whole again.
@@ -31,6 +44,12 @@ export interface FloatingContent {
     /** Set where a pixel belongs to the float. */
     readonly mask: BitMask;
 }
+
+/**
+ * The largest side of a free transform's box: 2048 px, or the source's larger side when that
+ * is more (a pasted image), so a typed size cannot ask for an image of any size.
+ */
+export const MAX_TRANSFORM_SIDE = 2048;
 
 /** The cel a float is over: the cel of a pixel layer at a frame. */
 export interface FloatTarget {
@@ -175,10 +194,11 @@ function selectionCommand(
  * Made by `lift` or `paste`; ends with `apply` or `cancel`, after which every call throws.
  */
 export class FloatingSelection {
-    /** The label of the undo step it becomes: "Move", "Paste". */
-    readonly label: string;
-    /** The floating pixels; never clipped while they float. */
-    readonly content: FloatingContent;
+    /**
+     * The label of the undo step it becomes: "Move", "Paste"; its owner may change it while
+     * the float is open ("Transform" once it was transformed, SE-033).
+     */
+    label: string;
     /**
      * Whether the session's selection is the float's: it follows the float, and applying moves
      * it for good. False for the whole cel lifted without a selection.
@@ -191,6 +211,13 @@ export class FloatingSelection {
     readonly #base: PixelBuffer;
     /** The session's selection before the float. */
     readonly #before: Selection | null;
+    /** The pixels lifted or pasted, flipped and turned by quarter turns (SE-033). */
+    #source: FloatingContent;
+    /** The source placed by the free transform: what floats; never clipped while it floats. */
+    #content: FloatingContent;
+    /** The free transform's box and angle (SE-033); the source's size and 0° when untransformed. */
+    #transform: FreeTransform;
+    /** The document position of the content's top-left pixel. */
     #x: number;
     #y: number;
     /** Where the content is written now: its rectangle on the canvas, or null when off it. */
@@ -211,7 +238,15 @@ export class FloatingSelection {
         this.#session = init.session;
         this.transaction = init.transaction;
         this.label = init.label;
-        this.content = init.content;
+        this.#source = init.content;
+        this.#content = init.content;
+        this.#transform = {
+            x: init.x,
+            y: init.y,
+            width: init.content.pixels.width,
+            height: init.content.pixels.height,
+            angle: 0,
+        };
         this.selects = init.selects;
         this.#base = init.base;
         this.#before = init.session.selection;
@@ -314,6 +349,25 @@ export class FloatingSelection {
         return this.#open;
     }
 
+    /** The floating pixels, as the free transform places them; never clipped while they float. */
+    get content(): FloatingContent {
+        return this.#content;
+    }
+
+    /** The pixels lifted or pasted, flipped and turned by quarter turns, before the free transform. */
+    get source(): FloatingContent {
+        return this.#source;
+    }
+
+    /**
+     * The free transform (SE-033): the box of whole document pixels the source is scaled into
+     * and the angle it is turned by about the box's centre. The source's own rectangle and 0°
+     * while the float is only moved.
+     */
+    get transform(): FreeTransform {
+        return { ...this.#transform };
+    }
+
     /** The document position of the content's top-left pixel. */
     get x(): number {
         return this.#x;
@@ -348,6 +402,9 @@ export class FloatingSelection {
         this.#assertOpen("moveTo");
         assertWhole("FloatingSelection.moveTo", x, y);
         if (x === this.#x && y === this.#y) return null;
+        // The box moves with the content: the rendering does not change.
+        this.#transform.x += x - this.#x;
+        this.#transform.y += y - this.#y;
         this.#x = x;
         this.#y = y;
         const changed = this.#render();
@@ -358,6 +415,66 @@ export class FloatingSelection {
     /** Moves the content by `dx`, `dy` pixels: `moveTo` from where it is. */
     moveBy(dx: number, dy: number): Rect | null {
         return this.moveTo(this.#x + dx, this.#y + dy);
+    }
+
+    /**
+     * Sets the free transform (SE-033): the source is scaled into the box `x`, `y`, `width`,
+     * `height` (whole numbers, sides 1 to `MAX_TRANSFORM_SIDE` or the source's larger side)
+     * and turned by `angle` degrees (clockwise) about the box's centre, nearest-neighbour. The
+     * content is rendered anew from the source, so a transform undone by another loses
+     * nothing. Returns the rectangle of the image rewritten, as `moveTo` does.
+     */
+    setTransform(transform: FreeTransform): Rect | null {
+        this.#assertOpen("setTransform");
+        const { x, y, width, height } = transform;
+        assertWhole("FloatingSelection.setTransform", x, y, width, height);
+        const { pixels } = this.#source;
+        const limit = Math.max(MAX_TRANSFORM_SIDE, pixels.width, pixels.height);
+        if (width < 1 || height < 1 || width > limit || height > limit) {
+            throw new RangeError(
+                `FloatingSelection.setTransform: a box of ${width}×${height} is outside 1..${limit}.`,
+            );
+        }
+        const next = { x, y, width, height, angle: normalizeAngle(transform.angle) };
+        const now = this.#transform;
+        if (
+            next.x === now.x &&
+            next.y === now.y &&
+            next.width === now.width &&
+            next.height === now.height &&
+            next.angle === now.angle
+        ) {
+            return null;
+        }
+        return this.#place(this.#source, next);
+    }
+
+    /**
+     * Mirrors the float across `axis` within its box (SE-033): the source is flipped, an exact
+     * permutation, and the angle negated, so what floats is mirrored in place.
+     */
+    flip(axis: FlipAxis): Rect | null {
+        this.#assertOpen("flip");
+        const now = this.#transform;
+        return this.#place(flipContent(this.#source, axis), {
+            ...now,
+            angle: normalizeAngle(-now.angle),
+        });
+    }
+
+    /**
+     * Turns the float by `turns` quarter turns clockwise (negative: counter-clockwise) about
+     * its box's centre (SE-033): the source is turned, an exact permutation, and the box's
+     * sides swap for an odd number (`rotateBox`); the angle is kept.
+     */
+    rotate(turns: number): Rect | null {
+        this.#assertOpen("rotate");
+        assertWhole("FloatingSelection.rotate", turns);
+        const now = this.#transform;
+        return this.#place(rotateContent(this.#source, turns), {
+            ...rotateBox(now, turns),
+            angle: now.angle,
+        });
     }
 
     /**
@@ -431,6 +548,19 @@ export class FloatingSelection {
             const start = (y * width + rect.x) * 4;
             image.data.set(base.subarray(start, start + rect.width * 4), start);
         }
+    }
+
+    /** Makes `source` placed by `transform` the float's content, written and followed. */
+    #place(source: FloatingContent, transform: FreeTransform): Rect | null {
+        const rendered = renderTransform(source, transform);
+        this.#source = source;
+        this.#transform = transform;
+        this.#content = rendered.content;
+        this.#x = rendered.x;
+        this.#y = rendered.y;
+        const changed = this.#render();
+        this.#follow();
+        return changed;
     }
 
     #assertOpen(call: string): void {

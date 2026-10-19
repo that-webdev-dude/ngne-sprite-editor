@@ -185,6 +185,17 @@ add/subtract/intersect toggles: one
 segmented control, Mode, of Replace, Add, Subtract and Intersect (SE-031); Shift, Alt and
 Shift+Alt at the press stand in for it for one gesture.
 With a floating selection it switches to transform fields (X, Y, W, H, angle) and Apply / Cancel.
+SE-033: after the tool's name, number fields X, Y, W, H (px) and Angle (°, −180 to 180) of the
+float's box, then Apply (primary) and Cancel, in place of the tool's options; shown while a
+selection floats in the active document (not for a whole cel lifted by a Move drag, which is
+applied at its release). A value is set on Enter, on leaving the field, or by a press anywhere
+outside it (before that press acts); while a drag transforms the float the fields follow it.
+The bar's content comes from a registry (`*.contextbar.tsx`), so later tickets add theirs
+without editing the bar. On the overlay (draw layer 700, over the ants and the pending shape,
+under the brush cursor) the float's box is a 1 device px white line on a 3 px black one, turned
+as the float is, with eight 7 CSS px handles (white squares with a black border) on its corners
+and the middles of its sides; the box and handles are drawn by one function that a reference
+layer's box (SE-046) can share.
 
 ### 5.3 Colour
 
