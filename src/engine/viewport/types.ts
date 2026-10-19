@@ -3,7 +3,10 @@ import type { PixelBuffer } from "../../core/model";
 // What the viewport is told to show (SPEC §6.4). Types and the key helpers only, with no DOM
 // and no NGNE in them: `app` describes a document to the viewport with these.
 
-/** The variants of a frame in the slot cache; the onion variants arrive with SE-025. */
+/**
+ * The variants of a frame in the slot cache: its composite, or the composite tinted for an
+ * onion skin before or after the current frame (SE-025).
+ */
 export type FrameVariant = "plain" | "before" | "after";
 
 /** The key of a frame in the slot cache: `frameId:variant` (SPEC §6.4). */
@@ -62,6 +65,19 @@ export interface ViewportReference {
     readonly placement: "behind" | "front";
 }
 
+/**
+ * An onion skin as the viewport draws it (SPEC §6.4, §7.5, SE-025): the frame key whose pixels
+ * it shows (`frameId:plain`, or `before` / `after` when tinted), drawn from the frame cache
+ * with `alpha` at layer 3 (behind) or 5 (in front). Its key is a key on screen: a change of its
+ * pixels is uploaded into its slot in place, as the current frame's is.
+ */
+export interface ViewportGhost {
+    readonly key: string;
+    /** 0 to 1. */
+    readonly alpha: number;
+    readonly placement: "behind" | "front";
+}
+
 /** View state of SPEC §6.4, in device pixels. */
 export interface ViewportView {
     /** Device pixels per document pixel. */
@@ -95,7 +111,10 @@ export interface ViewportPort {
     setDocument(document: ViewportDocument | null): void;
     /** The key of the frame to draw, or null for the checkerboard alone. */
     setCurrent(key: string | null): void;
-    /** The pixels behind these keys changed; "all" also covers the document's size. */
+    /**
+     * The pixels behind these keys changed; "all" also covers the document's size. A frame's
+     * plain key covers its tinted variants as well (SE-025): they are made from its pixels.
+     */
     invalidate(keys: readonly string[] | "all"): void;
     setView(view: ViewportView): void;
     setChecker(checker: ViewportChecker): void;
@@ -113,4 +132,9 @@ export interface ViewportPort {
      * so a port without references (a test's) need not have it.
      */
     setReferences?(references: readonly ViewportReference[]): void;
+    /**
+     * The onion skins of the shown document around its current frame, in draw order (SE-025);
+     * empty for none. Optional, so a port without onion skin (a test's) need not have it.
+     */
+    setOnion?(ghosts: readonly ViewportGhost[]): void;
 }

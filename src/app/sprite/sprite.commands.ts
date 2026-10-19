@@ -27,7 +27,8 @@ export const NEW_SPRITE_DEFAULTS: Readonly<NewSpriteValues> = {
 /**
  * New Sprite (SE-008): asks for name and size, then opens the new document in a tab of its
  * own, the active one (SE-047). The open documents stay as they are, so the dialog has nothing
- * to discard. The grid of a new document is the default grid of the preference store.
+ * to discard. The grid and the onion skin settings of a new document are the defaults of the
+ * preference store.
  */
 async function newSprite(): Promise<void> {
     const values = await spriteDialogs.newSprite({
@@ -42,6 +43,8 @@ async function newSprite(): Promise<void> {
         height: values.height,
         grid: { width, height },
     });
+    // Its onion skin settings are the preference store's defaults too (SE-025).
+    session.doc.settings.onion = { ...preferences.get("onion") };
     // The active document stops being the active one: its floating selection is applied now,
     // not before the dialog, so a cancelled dialog leaves it floating (SE-032, SE-047 review).
     applyFloating();

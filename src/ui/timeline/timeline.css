@@ -297,3 +297,16 @@
 .timeline-properties__fit {
     justify-self: stretch;
 }
+
+/* The onion skin settings popover (SE-025): before and after side by side, then the rest. */
+.timeline-onion {
+    display: grid;
+    grid-template-columns: repeat(2, max-content);
+    gap: var(--space-8) var(--space-12);
+    align-items: center;
+    width: 248px;
+}
+
+.timeline-onion__wide {
+    grid-column: 1 / -1;
+}

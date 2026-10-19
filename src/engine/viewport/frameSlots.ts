@@ -16,6 +16,11 @@ export interface SlotImage {
 export interface PublishContext {
     /** The key the viewport wants to draw. */
     current: string | null;
+    /**
+     * Other keys on screen, drawn beside the current one: the onion skins (SE-025). Each is
+     * treated as the current key is.
+     */
+    onScreen?: readonly string[];
     /** A newer upload of the same slot is already waiting. */
     newerQueued: boolean;
 }
@@ -126,8 +131,8 @@ export class FrameSlots {
      * An upload into `slot` resolved: `image` is what its texture holds now, null for the 1×1
      * placeholder. The slot shows the image when it is still reserved for that key and the
      * image is not already out of date. An image is out of date when a newer upload of the
-     * slot is waiting; it is shown all the same when it is the current frame, which may lag
-     * its own pixels by an upload but not disappear.
+     * slot is waiting; it is shown all the same when it is the current frame or another key
+     * on screen, which may lag its own pixels by an upload but not disappear.
      */
     publish(slot: number, image: SlotImage | null, context: PublishContext): void {
         const state = this.#slots[slot];
@@ -135,7 +140,9 @@ export class FrameSlots {
         const wanted =
             image !== null &&
             state.reserved === image.key &&
-            (!context.newerQueued || image.key === context.current);
+            (!context.newerQueued ||
+                image.key === context.current ||
+                (context.onScreen?.includes(image.key) ?? false));
         state.shown = wanted ? image : null;
     }
 

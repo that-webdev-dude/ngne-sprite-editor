@@ -12,6 +12,7 @@ import type {
     DeviceSize,
     ViewportChecker,
     ViewportDocument,
+    ViewportGhost,
     ViewportPort,
     ViewportReference,
     ViewportView,
@@ -23,6 +24,7 @@ export type {
     FrameVariant,
     ViewportChecker,
     ViewportDocument,
+    ViewportGhost,
     ViewportPort,
     ViewportReference,
     ViewportView,
@@ -82,6 +84,11 @@ export interface ViewportProbe {
     /** Display sources of references the viewport keeps (SE-045): one per decoded image shown. */
     readonly referenceSources: number;
     /**
+     * The onion skins the last frame drawn on the renderer on screen had (SE-025), in draw
+     * order: the frame key, the opacity and the NGNE layer of each.
+     */
+    readonly onion: readonly { key: string; alpha: number; layer: number }[];
+    /**
      * Draws the scene again and reads the canvas back in the same task (SPEC §6.7), at
      * backing resolution. The draw is not counted in `submittedFrames`. Null while there is
      * no renderer, or it is not ready.
@@ -111,8 +118,8 @@ let liveRenderers = 0;
 
 /**
  * The editing viewport (SPEC §6.4): one `WebGPURenderer` on its own canvas inside `host`,
- * drawing the workspace colour, the checkerboard and the current frame of a document, on
- * demand.
+ * drawing the workspace colour, the checkerboard, the reference layers, the onion skins and the
+ * current frame of a document, on demand.
  *
  * - The canvas backing size is the host's size in device pixels. A new size replaces the
  *   renderer after `RESIZE_QUIET_MS` of quiet: a new instance is created on a new canvas,
@@ -253,6 +260,25 @@ export class NgneViewport implements ViewportPort {
     setBackground(colour: number): void {
         if (colour === this.#scene.background) return;
         this.#scene.background = colour;
+        this.#markDirty();
+    }
+
+    setOnion(ghosts: readonly ViewportGhost[]): void {
+        const now = this.#scene.onion ?? [];
+        const same =
+            ghosts.length === now.length &&
+            ghosts.every((ghost, index) => {
+                const before = now[index];
+                return (
+                    before !== undefined &&
+                    ghost.key === before.key &&
+                    ghost.alpha === before.alpha &&
+                    ghost.placement === before.placement
+                );
+            });
+        if (same) return;
+        this.#scene.onion = ghosts.map((ghost) => ({ ...ghost }));
+        for (const instance of this.#instances()) instance.slots.sync();
         this.#markDirty();
     }
 
@@ -601,6 +627,9 @@ export class NgneViewport implements ViewportPort {
                 slots: read(() => this.#live?.slots.shownKeys() ?? []),
                 references: read(() => this.#live?.slots.references.shown() ?? []),
                 referenceSources: read(() => this.#referenceSources.size),
+                onion: read(() =>
+                    (this.#live?.slots.drawnGhosts() ?? []).map((ghost) => ({ ...ghost })),
+                ),
                 playGrid: read(() => {
                     const grid = this.#live?.slots.playGrid();
                     if (!grid) return null;

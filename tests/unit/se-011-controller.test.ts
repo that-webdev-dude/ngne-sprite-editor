@@ -241,7 +241,8 @@ describe("connectViewport: history → composite cache → viewport", () => {
         document.history.execute(deleteFramesCommand(session.doc, ["second"]));
         expect(viewport.take()).toEqual([`current ${frameKey(first)}`, "invalidate all"]);
         expect(viewport.document?.pixels("second:plain")).toBeNull();
-        expect(viewport.document?.pixels(frameKey(first, "before"))).toBeNull();
+        // SE-025 gave "before" and "after" their tinted pixels (se-025-controller).
+        expect(viewport.document?.pixels(`${first}:sideways`)).toBeNull();
     });
 
     it("passes on pixels written outside a command when they are reported to the cache", () => {

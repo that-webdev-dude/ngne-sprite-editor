@@ -390,6 +390,20 @@ Playback (SE-024; SPEC §7.5):
   Aseprite's play button menu; the speed in use is the disabled item. The transport has no room
   for a speed control in 200 px.
 
+Onion skin (SE-025; SPEC §7.5):
+
+- After Last Frame the transport holds the onion skin toggle (a 24 px toggle, `aria-pressed`,
+  named "Onion skin", F3 in its tooltip), which runs View → Show/Hide Onion Skin, and beside it
+  a 24 px button "Onion skin settings" that opens the popover; one control could not both
+  toggle and open a popover from the keyboard. Seven buttons with 2 px gaps take 180 px of the
+  183 px inside the 200 px column, so the toggle stays in the transport as §5.6 places it.
+  Both are disabled while no document is open.
+- The popover (§7) opens above the button: Before and After (0–3), Opacity (slider with
+  its field, 0–255), Falloff (0–1, steps of 0.05), Placement (Behind / In front), then Tint and
+  Within tag as text toggles. A change applies at once to the active document, with no undo
+  step and no unsaved marker, so the popover has no Apply; it closes on Escape and an outside
+  press.
+
 Tag bar (SE-023):
 
 - Each tag is a span over its frames, 1 px in from the edges of their columns, 16 px tall in an
@@ -474,7 +488,7 @@ transient tool feedback in `--warn`.
 | Tag             | Dialog   | Name, colour, range, direction, repeat. Colour: a hex field (3, 4, 6 or 8 digits, as the colour panel's), a sample of the span and eight preset colours; range: From and To, frame numbers; direction: Forward, Reverse, Ping-pong; repeat 0–255, 0 repeating without end. Titled "New tag" (Create) or "Tag properties" (OK, and Delete for the tag shown; when several tags are at the active frame a Tag select comes first, and choosing a tag shows its values, dropping changes made for the one before). An empty name, a colour that is not one and a From after To are named in a message line under the form (the name and colour fields marked invalid), and the dialog cannot be confirmed until they are fixed (SE-023) |
 | Layer properties | Popover | Name, opacity, blend mode; for reference layers: X, Y, scale, placement         |
 | Cel properties  | Popover  | Cel opacity; linked state with Unlink                                           |
-| Onion skin      | Popover  | Frames before/after, opacity, falloff, tint, placement, within tag              |
+| Onion skin      | Popover  | Frames before/after, opacity, falloff, tint, placement, within tag. SE-025: opened by the settings button beside the transport's toggle (§5.6); a change applies at once |
 | Replace colour  | Dialog   | From, to, tolerance, scope (selection, cel, frame, sprite). SE-066: From and To are hex fields (3, 4, 6 or 8 digits, as the colour panel's) beside a sample of the colour over the checkerboard, opening with the foreground and the background; Tolerance a number field 0–255; Scope a segmented control Selection / Cel / Frame / Sprite, Selection offered only with a selection and chosen then, otherwise the scope answered last (Cel at first); the tolerance answered last is kept too. A field that holds no colour is named in a message line with the forms it takes ("From is not a colour: use 3, 4, 6 or 8 hex digits.") and Replace is disabled until it is fixed. Cancel / Replace (primary) |
 | Recovery        | Dialog on launch | Recoverable documents with name, time, thumbnail; Recover / Discard     |
 | Preferences     | Dialog   | Theme, checkerboard, grid, onion skin defaults, import defaults, autosave. A change applies at once; actions are Restore defaults and Close |

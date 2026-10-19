@@ -1,8 +1,10 @@
 import type { StoreApi } from "zustand/vanilla";
 import { frameIndex } from "../../core/model";
 import type { DocSession } from "../../core/model";
+import { tintOnion } from "../../core/onion";
 import { frameKey, parseFrameKey } from "../../engine/viewport/types";
 import type { ViewportChecker, ViewportPort, ViewportReference } from "../../engine/viewport/types";
+import { viewportGhosts } from "../onion/onion";
 import { playbackStore } from "../playback/playbackState";
 import type { PlaybackState } from "../playback/playbackState";
 import { preferences as appPreferences } from "../preferences/preferences";
@@ -135,8 +137,13 @@ export function connectViewport(
                 const { frameId: id, variant } = parseFrameKey(key);
                 // Null once the document is no longer the active one: it has no composites.
                 const cache = composites.cacheOf(session);
-                if (!cache || variant !== "plain" || frameIndex(doc, id) === -1) return null;
-                return cache.get(id);
+                if (!cache || frameIndex(doc, id) === -1) return null;
+                if (variant === "plain") return cache.get(id);
+                // An onion skin with tint on (SE-025): a tinted copy, made on the CPU.
+                if (variant === "before" || variant === "after") {
+                    return tintOnion(cache.get(id), variant);
+                }
+                return null;
             },
             ...(version && { version: () => version() }),
         });
@@ -178,6 +185,15 @@ export function connectViewport(
         viewport.setReferences(references);
     };
 
+    /**
+     * The onion skins around the shown document's active frame (SE-025), told after its frame
+     * key. The viewport compares them with what it has and hides them while playing.
+     */
+    const pushOnion = () => {
+        if (!viewport.setOnion) return;
+        viewport.setOnion(shown ? viewportGhosts(shown) : []);
+    };
+
     const follow = () => {
         const document = activeDocument(sessions.getState());
         // The session object, not the id: the same file opened again is another session.
@@ -187,6 +203,7 @@ export function connectViewport(
         }
         if (!document) {
             pushReferences();
+            pushOnion();
             return;
         }
         const active = document.session.activeFrameId;
@@ -199,6 +216,7 @@ export function connectViewport(
             viewport.setView(view);
         }
         pushReferences();
+        pushOnion();
     };
 
     viewport.setBackground(theme.workspace);
@@ -211,6 +229,7 @@ export function connectViewport(
         if (key === "checkerboard") pushChecker();
     });
     // The cache has dropped what a history step (or a write reported to it) touched.
+    // A frame's plain key stands for its tinted variants too (`ViewportPort.invalidate`).
     const stopComposites = composites.subscribe((touched, session) => {
         if (session !== shown) return;
         viewport.invalidate(touched.structure ? "all" : touched.frameIds.map((id) => frameKey(id)));

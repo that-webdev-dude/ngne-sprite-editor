@@ -22,12 +22,13 @@ import { runCommand } from "../commands/runCommand";
 import { Icon } from "../primitives/Icon";
 import { IconButton } from "../primitives/IconButton";
 import { NumberField } from "../primitives/NumberField";
+import { OnionSkinControls } from "./OnionSkin";
 import { TIMELINE_FIELD_ATTRIBUTE } from "./timelineDom";
 
 /**
  * The transport buttons of DESIGN §5.6, left to right, each the registry's command: shown
- * disabled while the command is disabled or not implemented yet. The onion-skin toggle follows
- * the last of them (SE-025).
+ * disabled while the command is disabled or not implemented yet. The onion skin toggle and its
+ * settings button follow the last of them (SE-025, `OnionSkinControls`).
  */
 const TRANSPORT: readonly (readonly [id: string, icon: LucideIcon])[] = [
     [TIMELINE_COMMANDS.firstFrame, ChevronFirst],
@@ -99,6 +100,7 @@ export const Transport = memo(function Transport() {
                     icon={id === PLAY_PAUSE_COMMAND && playing ? Pause : icon}
                 />
             ))}
+            <OnionSkinControls />
         </div>
     );
 });

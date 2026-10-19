@@ -9,7 +9,14 @@ import type { Quad } from "./geometry";
 import { blitCell, cellUv, createGridImage, playGridLayout } from "./playGrid";
 import type { PlayGridLayout } from "./playGrid";
 import { ReferenceSlots, referenceSlotIndex } from "./referenceSlots";
-import type { ViewportChecker, ViewportDocument, ViewportReference, ViewportView } from "./types";
+import { frameKey, parseFrameKey } from "./types";
+import type {
+    ViewportChecker,
+    ViewportDocument,
+    ViewportGhost,
+    ViewportReference,
+    ViewportView,
+} from "./types";
 
 // The texture slots of one renderer of the viewport (SPEC §6.4) and what goes into them: the
 // upload queue, the frame cache and the checkerboard. It decides what to upload for a scene
@@ -54,6 +61,18 @@ export interface Scene {
      * for none.
      */
     references?: readonly ViewportReference[];
+    /**
+     * The onion skins around the current frame, in draw order (SE-025); absent or empty for
+     * none. They are not drawn while playing (SPEC §7.5).
+     */
+    onion?: readonly ViewportGhost[];
+}
+
+/** An onion skin drawn by the quads made last: its key, opacity and NGNE layer (SE-025). */
+export interface DrawnGhost {
+    key: string;
+    alpha: number;
+    layer: number;
 }
 
 /**
@@ -65,8 +84,9 @@ export function replaceSceneDocument(scene: Scene, document: ViewportDocument | 
     scene.document = document;
     scene.epoch++;
     scene.current = null;
-    // The references went with the document as well (SE-045).
+    // The references went with the document as well (SE-045), and so did the onion skins.
     scene.references = [];
+    scene.onion = [];
 }
 
 /** What an upload put into a slot. */
@@ -150,6 +170,8 @@ export class ViewportSlots {
     #displayed: string | null = null;
     /** The frame image of the quads made last; null when they had none. */
     #drawn: SlotImage | null = null;
+    /** The onion skins of the quads made last (SE-025). */
+    #drawnGhosts: DrawnGhost[] = [];
     #stuck = false;
     /**
      * Spec of the `ed:play` grid last asked for: null while the slot holds none and none is
@@ -201,6 +223,11 @@ export class ViewportSlots {
         return this.#drawn;
     }
 
+    /** The onion skins the quads made last draw, in draw order (SE-025). */
+    drawnGhosts(): readonly DrawnGhost[] {
+        return this.#drawnGhosts;
+    }
+
     /** The key each frame slot shows, for tests. */
     shownKeys(): (string | null)[] {
         return Array.from(
@@ -214,6 +241,7 @@ export class ViewportSlots {
         this.#syncChecker();
         this.#syncPlay();
         this.#syncCurrent();
+        this.#syncOnion();
         this.references.sync();
     }
 
@@ -243,17 +271,34 @@ export class ViewportSlots {
     }
 
     /**
-     * The pixels behind `keys` changed. The current frame is uploaded again into its slot,
-     * which shows the previous pixels until then; every other key is given up and its slot
-     * replaced by the placeholder, to be uploaded when it is needed again.
+     * The pixels behind `keys` changed. The keys on screen — the current frame and the onion
+     * skins (SE-025) — are uploaded again into their slots, which show the previous pixels
+     * until then; every other key is given up and its slot replaced by the placeholder, to be
+     * uploaded when it is needed again.
      */
     invalidate(keys: readonly string[] | "all"): void {
-        const hit = keys === "all" ? () => true : (key: string) => keys.includes(key);
+        // A frame's plain key stands for its tinted variants, made from the same pixels.
+        const hit =
+            keys === "all"
+                ? () => true
+                : (key: string) =>
+                      keys.includes(key) || keys.includes(frameKey(parseFrameKey(key).frameId));
         const { current } = this.#scene;
+        // The onion skins are keys on screen as well (SE-025): uploaded again in place, or the
+        // ghosts would blank at every edit.
+        const ghosts = this.#ghosts().map((ghost) => ghost.key);
         // "all" includes the document's size, which the checker image follows.
         if (keys === "all") this.#syncChecker();
         this.#invalidatePlay(hit);
-        this.#blank(this.frames.release((key) => key !== current && hit(key)));
+        this.#blank(
+            this.frames.release((key) => key !== current && !ghosts.includes(key) && hit(key)),
+        );
+        for (const key of ghosts) {
+            if (!hit(key)) continue;
+            const slot = this.frames.reservedFor(key);
+            if (slot >= 0) this.#requestFrame(slot, key);
+            else this.#load(key);
+        }
         if (current === null || !hit(current)) return;
         const slot = this.frames.reservedFor(current);
         if (slot >= 0) this.#requestFrame(slot, current);
@@ -275,6 +320,7 @@ export class ViewportSlots {
     quads(): Quad[] {
         const scene = this.#scene;
         this.#drawn = null;
+        this.#drawnGhosts = [];
         if (!scene.document) return [];
         const quads: Quad[] = [];
         const checker = this.queue.published(CHECKER_SLOT);
@@ -282,6 +328,7 @@ export class ViewportSlots {
             quads.push(imageQuad(CHECKER_SLOT, QUAD_LAYER.checker, scene.view, checker));
         }
         quads.push(...this.references.quads());
+        quads.push(...this.#ghostQuads());
         const cell = this.#playCell();
         if (cell) {
             const { layout, index, image } = cell;
@@ -382,9 +429,13 @@ export class ViewportSlots {
         else this.#load(current);
     }
 
-    /** Reserves a slot for `key` and uploads its image. */
+    /**
+     * Reserves a slot for `key` and uploads its image. A slot of a key on screen (the current
+     * frame, the one drawn while it loads, an onion skin) is not taken.
+     */
     #load(key: string): void {
-        const slot = this.frames.reserve(key, [this.#scene.current, this.#displayed]);
+        const ghosts = this.#ghosts().map((ghost) => ghost.key);
+        const slot = this.frames.reserve(key, [this.#scene.current, this.#displayed, ...ghosts]);
         if (slot >= 0) this.#requestFrame(slot, key);
     }
 
@@ -452,6 +503,7 @@ export class ViewportSlots {
             }
             this.frames.publish(index, image, {
                 current: this.#scene.current,
+                onScreen: this.#ghosts().map((ghost) => ghost.key),
                 newerQueued: this.queue.pending(slot),
             });
             // A grid kept after playback stopped goes once a slot shows the frame instead.
@@ -513,6 +565,55 @@ export class ViewportSlots {
         const index = frameSlotIndex(slot);
         if (index >= 0) this.frames.unreserve(index);
         else this.#checker = undefined;
+    }
+
+    // --- Onion skin (SE-025) -------------------------------------------------------------
+
+    /** The onion skins on screen: none without a document or while playing (SPEC §7.5). */
+    #ghosts(): readonly ViewportGhost[] {
+        const { document: doc, playing, onion } = this.#scene;
+        return doc && !playing && onion ? onion : [];
+    }
+
+    /**
+     * Asks for the onion skins' keys, which stay in the frame cache as any key does. While no
+     * ghost is tinted, the tinted variants are of no use: their slots get the placeholder
+     * (SPEC §6.4, slots that become unused). Playing only hides the ghosts.
+     */
+    #syncOnion(): void {
+        const { document: doc, onion = [] } = this.#scene;
+        if (!doc) return;
+        const tinted = (key: string) => {
+            const { variant } = parseFrameKey(key);
+            return variant === "before" || variant === "after";
+        };
+        if (!onion.some((ghost) => tinted(ghost.key))) this.#blank(this.frames.release(tinted));
+        for (const { key } of this.#ghosts()) {
+            if (this.frames.reservedFor(key) >= 0) this.frames.use(key);
+            else this.#load(key);
+        }
+    }
+
+    /**
+     * The quads of the onion skins whose slot holds their key (never one being re-keyed), at
+     * layer 3 or 5 with their opacity (SPEC §6.4, quad order). A ghost whose key is still on
+     * its way is left out until its upload resolves.
+     */
+    #ghostQuads(): Quad[] {
+        const quads: Quad[] = [];
+        for (const ghost of this.#ghosts()) {
+            const slot = this.frames.holding(ghost.key);
+            const image = this.frames.shown(slot);
+            if (!image) continue;
+            const layer =
+                ghost.placement === "front" ? QUAD_LAYER.onionFront : QUAD_LAYER.onionBehind;
+            quads.push({
+                ...imageQuad(frameSlotId(slot), layer, this.#scene.view, image),
+                alpha: ghost.alpha,
+            });
+            this.#drawnGhosts.push({ key: ghost.key, alpha: ghost.alpha, layer });
+        }
+        return quads;
     }
 
     // --- Editor playback (SE-024) --------------------------------------------------------

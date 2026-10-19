@@ -2,7 +2,7 @@ import type { PixelBuffer, Rect } from "../../core/model";
 import type { ViewportChecker } from "../../engine/viewport/types";
 import type {} from "../../import-meta";
 import type { OverlayLayer } from "../overlay/types";
-import { activeReferenceCover } from "../references/referenceCover";
+import { activeEchoCover } from "../onion/onionCover";
 import { viewportLink } from "../viewport/viewportLink";
 import { strokeEcho } from "./strokeEcho";
 import type { StrokeEcho } from "./strokeEcho";
@@ -214,5 +214,6 @@ export function createStrokeEchoLayer(
 }
 
 export const overlayLayers: OverlayLayer[] = [
-    createStrokeEchoLayer(strokeEcho, () => viewportLink.checker, activeReferenceCover).layer,
+    // It gives way to the references and the onion skins of the active document (SE-045, SE-025).
+    createStrokeEchoLayer(strokeEcho, () => viewportLink.checker, activeEchoCover).layer,
 ];
