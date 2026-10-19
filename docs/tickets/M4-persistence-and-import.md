@@ -168,7 +168,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-006, SE-021, SE-041, SE-043, SE-045                   |
 | Blocks       | SE-070                                                   |
 | Blocked until | —                                                       |
@@ -267,7 +267,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-032, SE-045                                           |
 | Blocks       | —                                                        |
 | Blocked until | —                                                       |

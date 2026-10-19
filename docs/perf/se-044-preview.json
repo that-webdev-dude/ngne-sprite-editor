@@ -1,0 +1,75 @@
+{
+    "id": "se-044-preview",
+    "ticket": "SE-044",
+    "measurement": "Import PNG dialog on a 1024×1024 source, the dialog's defaults: target 32×32 contain, area average, smart alpha and colours (threshold 128, reduce to 16): time from the input event of a setting change (dither, count, fit, alpha, size, crop, cells) to the result pane drawn with the preview's answer, Chrome, preview computed in a worker.",
+    "statistic": "largest of 48 changes",
+    "budgetMs": 300,
+    "resultMs": 182.80000001192093,
+    "details": {
+        "all": {
+            "count": 48,
+            "medianMs": 42.4,
+            "p95Ms": 151,
+            "maxMs": 182.8
+        },
+        "byKind": {
+            "dither": {
+                "count": 9,
+                "medianMs": 65.8,
+                "p95Ms": 80.8,
+                "maxMs": 80.8
+            },
+            "count": {
+                "count": 6,
+                "medianMs": 30.9,
+                "p95Ms": 72.2,
+                "maxMs": 72.2
+            },
+            "fit": {
+                "count": 6,
+                "medianMs": 38.4,
+                "p95Ms": 90.6,
+                "maxMs": 90.6
+            },
+            "alpha": {
+                "count": 6,
+                "medianMs": 37.6,
+                "p95Ms": 76.2,
+                "maxMs": 76.2
+            },
+            "size": {
+                "count": 6,
+                "medianMs": 33.7,
+                "p95Ms": 76.2,
+                "maxMs": 76.2
+            },
+            "crop": {
+                "count": 9,
+                "medianMs": 62.3,
+                "p95Ms": 78.3,
+                "maxMs": 78.3
+            },
+            "cells": {
+                "count": 6,
+                "medianMs": 100.3,
+                "p95Ms": 182.8,
+                "maxMs": 182.8
+            }
+        },
+        "firstPreviewAfterOpenMs": 529,
+        "source": "1024×1024 PNG, smooth colour with an x XOR y blue channel (about 220 000 colours)",
+        "target": "the dialog's defaults: target 32×32 contain, area average, smart alpha and colours (threshold 128, reduce to 16)",
+        "sample": "input event timeStamp to the second animation frame after the preview store's answer",
+        "window": "1600×1000 CSS px",
+        "chrome": "155.0.8059.82, new headless, --force-color-profile=srgb --force-device-scale-factor=1"
+    },
+    "pass": true,
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-10-19T19:19:31.468Z"
+}

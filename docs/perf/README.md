@@ -20,6 +20,8 @@ Node benchmarks: `PERF_RECORD=1 npx vitest run --config vitest.perf.config.ts te
 | `se-031-wand-pan-rtx-4060`  | SE-031 | The same on RTX 4060 | none | 3.9 ms | as above | 2026-10-17 |
 | `se-024-playback-intel-uhd` | SE-024 | Editor playback from the `ed:play` grid, 64 frames of 256² (8 layers), 100 ms each, 1×, two passes, Chrome on Intel UHD | 0 skipped | 0 of 128 | entries skipped (a count, `unit: count`) | 2026-10-19 |
 | `se-024-playback-rtx-4060` | SE-024 | The same on RTX 4060 | 0 skipped | 0 of 129 | as above | 2026-10-19 |
+| `se-044-preview`         | SE-044 | Import PNG dialog on a 1024×1024 source at the dialog's defaults (target 32×32 contain, smart alpha and colours): setting change (dither, count, fit, alpha, size, crop, cells) to the result pane drawn with the worker's answer, Chrome | 300 ms | 182.8 ms | largest of 48 changes | 2026-10-19 |
+| `se-044-preview-1024-target` | SE-044 | The same source to a 1024×1024 target, contain, Reduce to 256 colours; changes of dither, count, fit and crop | 300 ms | 543.4 ms (over) | largest of 30 changes | 2026-10-19 |
 
 `se-043-import` was measured again on 2026-10-13 after the colour key moved before the resample
 (first record, 2026-10-12: 56.9 ms).
@@ -40,6 +42,13 @@ frame showed while they were active; `resultMs` holds that count (`unit: count`)
 of 0. A frame counts as shown when it was submitted to NGNE (`onDrawn`), not when it was
 presented. First frame after an entry: median 13.4 / 12.3 ms, p95 26.3 / 30.9 ms (Intel UHD /
 RTX 4060). Unrecorded runs right after: 0 of 128 skipped on both GPUs (REVIEW.md F48).
+
+`se-044-preview` is the acceptance item of SE-044 (a 1024×1024 source). `se-044-preview-1024-target`
+answers REVIEW.md D14 (`runImport` to a 1024² target with 256 colours): it misses 300 ms, its
+slowest changes being Floyd–Steinberg dither over a million pixels (median of all changes
+194 ms). Both run in Chrome without `PERF_GPU`: the preview is CPU work in a worker.
+Two unrecorded runs just before the record gave 532.6 and 528.4 ms for the 1024² target and,
+in the second, 244.9 ms for the defaults (REVIEW.md F73).
 
 Browser benchmark: `PERF_RECORD=1 PERF_GPU=<intel-uhd|rtx-4060> npx vitest run --config
 vitest.perf.config.ts tests/perf/se-015-stroke-latency.perf.ts`; `PERF_ECHO=off` measures

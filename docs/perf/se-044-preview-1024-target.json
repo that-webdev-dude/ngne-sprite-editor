@@ -1,0 +1,57 @@
+{
+    "id": "se-044-preview-1024-target",
+    "ticket": "SE-044",
+    "measurement": "Import PNG dialog on a 1024×1024 source, target 1024×1024 contain, area average, Reduce to 256 colours: time from the input event of a setting change (dither, count, fit, crop) to the result pane drawn with the preview's answer, Chrome, preview computed in a worker.",
+    "statistic": "largest of 30 changes",
+    "budgetMs": 300,
+    "resultMs": 543.4000000357628,
+    "details": {
+        "all": {
+            "count": 30,
+            "medianMs": 194.2,
+            "p95Ms": 534.9,
+            "maxMs": 543.4
+        },
+        "byKind": {
+            "dither": {
+                "count": 9,
+                "medianMs": 213.6,
+                "p95Ms": 543.4,
+                "maxMs": 543.4
+            },
+            "count": {
+                "count": 6,
+                "medianMs": 188.8,
+                "p95Ms": 217.9,
+                "maxMs": 217.9
+            },
+            "fit": {
+                "count": 6,
+                "medianMs": 193,
+                "p95Ms": 194.7,
+                "maxMs": 194.7
+            },
+            "crop": {
+                "count": 9,
+                "medianMs": 200,
+                "p95Ms": 271.1,
+                "maxMs": 271.1
+            }
+        },
+        "firstPreviewAfterOpenMs": 515,
+        "source": "1024×1024 PNG, smooth colour with an x XOR y blue channel (about 220 000 colours)",
+        "target": "target 1024×1024 contain, area average, Reduce to 256 colours",
+        "sample": "input event timeStamp to the second animation frame after the preview store's answer",
+        "window": "1600×1000 CSS px",
+        "chrome": "155.0.8059.82, new headless, --force-color-profile=srgb --force-device-scale-factor=1"
+    },
+    "pass": false,
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-10-19T19:19:49.599Z"
+}

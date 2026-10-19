@@ -186,7 +186,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-024                                                   |
 | Blocks       | SE-070                                                   |
 | Blocked until | —                                                       |
