@@ -1,0 +1,59 @@
+/* The recovery dialog (SE-042, DESIGN §7): one row per document. */
+.recovery__list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    margin: var(--space-12) 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.recovery__entry {
+    display: flex;
+    align-items: center;
+    gap: var(--space-12);
+}
+
+/* The thumbnail over the transparency checkerboard, centred in a 48 px box. */
+.recovery__thumbnail {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border: var(--border-width) solid var(--border-strong);
+}
+
+.recovery__thumbnail canvas {
+    display: block;
+    image-rendering: pixelated;
+    background: repeating-conic-gradient(var(--check-a) 0 25%, var(--check-b) 0 50%) 0 0 /
+        var(--space-8) var(--space-8);
+}
+
+.recovery__text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.recovery__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.recovery__time,
+.recovery__question {
+    color: var(--text-muted);
+}
+
+.recovery__actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-8);
+}
