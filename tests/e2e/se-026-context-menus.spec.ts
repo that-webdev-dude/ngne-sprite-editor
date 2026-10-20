@@ -315,7 +315,9 @@ test("a right press opens the menu of the item it was pressed on wherever it is 
     await closeMenu(page, menu);
     await expect.poll(() => selectedCells(page)).toEqual(["Layer 1/2"]);
 
-    // Pressed in the timeline, released over the viewport: no menu.
+    // Pressed in the timeline, released over the viewport. On Windows the context menu
+    // arrives at the release, over the viewport: no menu. Elsewhere Chrome sends it at the
+    // press, in the timeline: the pressed cel's menu, and only that one.
     const canvas = await boxOf(region(page, "viewport"));
     await page.mouse.move(from.x, from.y);
     await page.mouse.down({ button: "right" });
@@ -324,7 +326,15 @@ test("a right press opens the menu of the item it was pressed on wherever it is 
     });
     await page.mouse.up({ button: "right" });
     await settleTimers(page);
-    await expect(page.getByRole("menu")).toHaveCount(0);
+    if (process.platform === "win32") {
+        await expect(page.getByRole("menu")).toHaveCount(0);
+    } else {
+        menu = contextMenu(page, "Cel");
+        await menuFocused(menu);
+        await expect(page.getByRole("menu")).toHaveCount(1);
+        await closeMenu(page, menu);
+        await expect.poll(() => selectedCells(page)).toEqual(["Layer 1/2"]);
+    }
 
     // From the keyboard: the focused cell's menu.
     await cell(page, "Layer 1", 1).click();
