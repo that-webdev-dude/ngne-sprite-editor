@@ -90,7 +90,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-054 | Preview panel (NGNE `BrowserGame`)                | L    | 002, 006, 007, 011, 051            | G0, G1        | Done   |
 | **M6** | **[Palette and parity extras](M6-palette-and-parity.md)** | |                                   |               |        |
 | SE-060 | Palette panel                                     | M    | 016, 043                           | —             | Done   |
-| SE-061 | Blend modes and cel opacity                       | M    | 010, 022                           | —             | In progress  |
+| SE-061 | Blend modes and cel opacity                       | M    | 010, 022                           | —             | Done   |
 | SE-062 | Symmetry and tiled mode                           | M    | 011, 015, 017                      | —             | Done   |
 | SE-063 | GIF export                                        | M    | 043, 052                           | —             | Done   |
 | SE-064 | Preferences dialog, command palette and shortcut sheet | M | 007                              | —             | Done   |
