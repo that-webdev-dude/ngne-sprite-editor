@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 // Declares `window.__ngneTest`, the development-only test hook of the app.
 import type {} from "../../src/app/testing/testHooks";
 import { region } from "./se-006-support";
@@ -30,9 +30,25 @@ export const cell = (page: Page, layer: string, frame: number) =>
     layerRow(page, layer).locator(`[role="gridcell"][aria-colindex="${frame + 1}"]`);
 /** A frame number of the header; from 1. */
 export const frameHeader = (page: Page, frame: number) =>
-    grid(page)
-        .locator(".timeline__frame")
-        .nth(frame - 1);
+    // By its column (the layer column is the first): the grid renders only the frame numbers in
+    // view (SE-026).
+    grid(page).locator(`.timeline__frame[aria-colindex="${frame + 1}"]`);
+
+/**
+ * The frame number of `frame`, scrolled into view first when the grid does not render it (it
+ * renders only those in view, SE-026), as a locator's click scrolls its element into view.
+ */
+export async function shownFrameHeader(page: Page, frame: number): Promise<Locator> {
+    const header = frameHeader(page, frame);
+    if ((await header.count()) === 0) {
+        await scroller(page).evaluate((element, frame) => {
+            const corner = element.querySelector<HTMLElement>(".timeline__corner");
+            const cells = element.clientWidth - (corner?.offsetWidth ?? 0);
+            element.scrollLeft = Math.max(0, (frame - 1) * 24 - cells / 2);
+        }, frame);
+    }
+    return header;
+}
 /** The grid's active cell: its one tab stop. */
 export const activeCell = (page: Page) => grid(page).locator('[role="gridcell"][tabindex="0"]');
 export const durationField = (page: Page) =>
@@ -109,8 +125,13 @@ export function selectedCells(page: Page): Promise<string[]> {
 /** The selected frame numbers of the header. */
 export function selectedFrames(page: Page): Promise<number[]> {
     return grid(page).evaluate((element) =>
+        // By its column: the grid renders only the frame numbers in view (SE-026).
         [...element.querySelectorAll(".timeline__frame")]
-            .map((frame, index) => (frame.getAttribute("aria-selected") === "true" ? index + 1 : 0))
+            .map((frame) =>
+                frame.getAttribute("aria-selected") === "true"
+                    ? Number(frame.getAttribute("aria-colindex")) - 1
+                    : 0,
+            )
             .filter((index) => index > 0),
     );
 }

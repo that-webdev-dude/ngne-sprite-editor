@@ -30,6 +30,11 @@ const MENU_NAMES: Record<TimelineMenu, string> = {
     [TIMELINE_MENUS.tag]: "Tag",
 };
 
+/** Whether the element is a text field (or inside one), which keeps the browser's menu. */
+function isTextField(element: Element | null): boolean {
+    return element?.closest("input, textarea, [contenteditable]") != null;
+}
+
 /** What the element (or one of its ancestors in the timeline) is a context target of. */
 export function contextTargetOf(element: Element | null): ContextTarget | null {
     if (!element) return null;
@@ -93,23 +98,31 @@ export interface TimelineContextMenuProps {
 
 export function TimelineContextMenu({ children, panel, focusActive }: TimelineContextMenuProps) {
     const [menu, setMenu] = useState<TimelineMenu | null>(null);
-    /** The target of the right press being handled, until its `contextmenu` arrives. */
-    const pressed = useRef<ContextTarget | null>(null);
+    /**
+     * The right press being handled, until its `contextmenu` arrives: whether it was in the
+     * panel, and what it was on there. Null without one (a menu asked for from the keyboard).
+     */
+    const pressed = useRef<{ inside: boolean; target: ContextTarget | null } | null>(null);
 
     useEffect(() => {
         const onPress = (event: PointerEvent) => {
+            if (event.button !== 2) {
+                pressed.current = null;
+                return;
+            }
             const element = panel.current;
-            const inside =
-                element !== null && event.target instanceof Node && element.contains(event.target);
-            pressed.current =
-                event.button === 2 && inside && event.target instanceof Element
-                    ? contextTargetOf(event.target)
-                    : null;
+            const target = event.target instanceof Element ? event.target : null;
+            const inside = element !== null && target !== null && element.contains(target);
+            pressed.current = {
+                inside,
+                // A text field keeps the browser's own menu (SE-026 review K).
+                target: inside && !isTextField(target) ? contextTargetOf(target) : null,
+            };
         };
         // The menu of a right press released outside the timeline (Windows) is not opened
         // there: the press was in the timeline.
         const onMenu = (event: MouseEvent) => {
-            if (!pressed.current) return;
+            if (!pressed.current?.inside) return;
             const element = panel.current;
             if (element && event.target instanceof Node && element.contains(event.target)) return;
             pressed.current = null;
@@ -131,11 +144,25 @@ export function TimelineContextMenu({ children, panel, focusActive }: TimelineCo
         };
     }, [panel]);
 
-    const onContextMenu = (event: ReactMouseEvent) => {
-        const target =
-            pressed.current ??
-            contextTargetOf(event.target instanceof Element ? event.target : null);
+    // In a text field of the panel (a rename, the duration) the browser's menu opens, not the
+    // timeline's: the event goes no further (SE-026 review K).
+    const onContextMenuCapture = (event: ReactMouseEvent) => {
+        if (!isTextField(event.target instanceof Element ? event.target : null)) return;
         pressed.current = null;
+        event.stopPropagation();
+    };
+
+    const onContextMenu = (event: ReactMouseEvent) => {
+        const press = pressed.current;
+        pressed.current = null;
+        // Taken already: a right-button stroke's menu, cancelled wherever it arrives (SE-014).
+        // Nothing is selected then (SE-026 review A).
+        if (event.defaultPrevented || event.nativeEvent.defaultPrevented) return;
+        // A right press: what it was pressed on in the panel (nothing when it began outside);
+        // from the keyboard: the focused element.
+        const target = press
+            ? press.target
+            : contextTargetOf(event.target instanceof Element ? event.target : null);
         // Nothing to open a menu on, or nothing can be done now (a stroke): neither this menu
         // nor the browser's.
         if (!target || !openContextTarget(target)) {
@@ -151,7 +178,11 @@ export function TimelineContextMenu({ children, panel, focusActive }: TimelineCo
                 if (!open) closeContextTarget();
             }}
         >
-            <RadixContextMenu.Trigger asChild onContextMenu={onContextMenu}>
+            <RadixContextMenu.Trigger
+                asChild
+                onContextMenu={onContextMenu}
+                onContextMenuCapture={onContextMenuCapture}
+            >
                 {children}
             </RadixContextMenu.Trigger>
             <RadixContextMenu.Portal>

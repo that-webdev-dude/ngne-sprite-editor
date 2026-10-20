@@ -149,8 +149,11 @@ describe("cel commands", () => {
             },
         );
         expect(command(IDS.unlinkCels).enabled()).toBe(false);
+        expect(command(IDS.linkCels).enabled()).toBe(true);
         void command(IDS.linkCels).run();
         expect(grid()).toEqual([". . .", "2-1 2-1 2-1", ". 1-2 1-3"]);
+        // Linked already: Link would change nothing (review I).
+        expect(command(IDS.linkCels).enabled()).toBe(false);
         expect(command(IDS.unlinkCels).enabled()).toBe(true);
         void command(IDS.unlinkCels).run();
         const { doc } = document.session;
@@ -308,6 +311,18 @@ describe("Merge Down, Flatten and Reverse Frames", () => {
         expect(document.history.undoCount).toBe(3);
     });
 
+    it("Flatten is disabled when it would change nothing", () => {
+        const document = sessionsStore
+            .getState()
+            .open(createDocument({ name: "flat", width: 2, height: 2 }));
+        expect(command(IDS.flatten).enabled()).toBe(false);
+        void command(IDS.flatten).run();
+        expect(document.history.undoCount).toBe(0);
+        // A layer opacity below 255 is something to bake.
+        document.session.doc.layers[0]!.opacity = 128;
+        expect(command(IDS.flatten).enabled()).toBe(true);
+    });
+
     it("Merge Down and Flatten are disabled while a layer they would write into is locked", () => {
         const document = openGrid();
         clickTimeline({ kind: "layers", layerId: "l2" }, NONE);
@@ -329,24 +344,78 @@ describe("Merge Down, Flatten and Reverse Frames", () => {
 });
 
 describe("context targets", () => {
-    it("a right-click outside the selection selects its item; inside it keeps the selection", () => {
+    it("a right-click outside the selection selects its item; inside it keeps the selection and makes the item active", () => {
         openGrid();
         clickTimeline({ kind: "frames", frameId: "f1" }, NONE);
         clickTimeline({ kind: "frames", frameId: "f2" }, { shift: true, toggle: false });
-        const frames = timelineStore.getState().selection;
-        // A cel of a selected frame keeps the frame selection.
+        const kept = (at: { layerId: string; frameId: string }) => ({
+            kind: "frames",
+            frameIds: ["f1", "f2"],
+            anchor: "f1",
+            at,
+        });
+        // A cel of a selected frame keeps the frame selection, and becomes the active cel.
         expect(openContextTarget({ kind: "cel", cel: { layerId: "l2", frameId: "f2" } })).toBe(
             true,
         );
-        expect(timelineStore.getState().selection).toBe(frames);
+        expect(timelineStore.getState().selection).toMatchObject(
+            kept({ layerId: "l2", frameId: "f2" }),
+        );
+        expect([active().session.activeLayerId, active().session.activeFrameId]).toEqual([
+            "l2",
+            "f2",
+        ]);
         expect(openContextTarget({ kind: "frame", frameId: "f1" })).toBe(true);
-        expect(timelineStore.getState().selection).toBe(frames);
+        expect(timelineStore.getState().selection).toMatchObject(
+            kept({ layerId: "l2", frameId: "f1" }),
+        );
+        expect(active().session.activeFrameId).toBe("f1");
         // Another frame is selected alone.
         expect(openContextTarget({ kind: "frame", frameId: "f3" })).toBe(true);
         const selection = timelineStore.getState().selection;
         expect(selection?.kind === "frames" && selection.frameIds).toEqual(["f3"]);
         expect(openContextTarget({ kind: "layer", layerId: "l3" })).toBe(true);
         expect(active().session.activeLayerId).toBe("l3");
+    });
+
+    it("the commands that act on one layer act on the layer right-clicked inside a layer selection", () => {
+        const document = openGrid();
+        clickTimeline({ kind: "layers", layerId: "l2" }, NONE);
+        clickTimeline({ kind: "layers", layerId: "l3" }, { shift: false, toggle: true });
+        expect(active().session.activeLayerId).toBe("l3");
+        expect(openContextTarget({ kind: "layer", layerId: "l2" })).toBe(true);
+        const selection = timelineStore.getState().selection;
+        expect(selection?.kind === "layers" && selection.layerIds).toEqual(["l2", "l3"]);
+
+        void command(TIMELINE_COMMANDS.renameLayer).run();
+        expect(timelineStore.getState().rename?.layerId).toBe("l2");
+        void command(TIMELINE_COMMANDS.layerProperties).run();
+        expect(timelineStore.getState().properties?.layerId).toBe("l2");
+        timelineStore.setState({ properties: null });
+
+        void command(TIMELINE_COMMANDS.duplicateLayer).run();
+        const names = () => active().session.doc.layers.map((layer) => layer.name);
+        expect(names()).toEqual(["Layer 1", "Layer 2", "Layer 2 Copy", "Layer 3"]);
+        document.history.undo();
+
+        // Merge Down merges the layer right-clicked into the one below it.
+        clickTimeline({ kind: "layers", layerId: "l2" }, NONE);
+        clickTimeline({ kind: "layers", layerId: "l3" }, { shift: false, toggle: true });
+        expect(openContextTarget({ kind: "layer", layerId: "l2" })).toBe(true);
+        void command(IDS.mergeDown).run();
+        expect(active().session.doc.layers.map((layer) => layer.id)).toEqual(["l1", "l3"]);
+    });
+
+    it("New Frame inserts after the frame right-clicked inside a frame selection", () => {
+        openGrid();
+        clickTimeline({ kind: "frames", frameId: "f1" }, NONE);
+        clickTimeline({ kind: "frames", frameId: "f3" }, { shift: true, toggle: false });
+        expect(active().session.activeFrameId).toBe("f3");
+        expect(openContextTarget({ kind: "frame", frameId: "f1" })).toBe(true);
+        void command(TIMELINE_COMMANDS.newFrame).run();
+        const frames = active().session.doc.frames.map((frame) => frame.id);
+        expect(frames).toHaveLength(4);
+        expect([frames[0], frames[2], frames[3]]).toEqual(["f1", "f2", "f3"]);
     });
 
     it("a tag's menu acts on that tag until it closes", () => {

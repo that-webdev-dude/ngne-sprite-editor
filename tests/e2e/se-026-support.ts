@@ -43,7 +43,9 @@ export async function openCels(
         state.touch(document.id);
     }, filled);
     await expect(grid(page).getByRole("rowheader")).toHaveCount(layers);
-    await expect(frameHeader(page, frames)).toBeAttached();
+    // The frame numbers are virtualized: the grid's column count tells the frames drawn.
+    await expect(grid(page)).toHaveAttribute("aria-colcount", String(frames + 1));
+    await expect(frameHeader(page, 1)).toBeAttached();
 }
 
 /**

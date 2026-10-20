@@ -1,17 +1,20 @@
+import { stopPlaybackForEdit } from "../playback/playbackState";
 import { effectiveSelection, isCelSelected } from "./selection";
-import type { CelRef } from "./selection";
+import type { CelRef, TimelineSelection } from "./selection";
 import { tagStore } from "./tagState";
 import { clickTimeline } from "./timelineClicks";
-import { availableDocument } from "./timelineDocument";
+import { activateCel, availableDocument } from "./timelineDocument";
 import { TIMELINE_MENUS } from "./timelineEditIds";
 import type { TimelineMenu } from "./timelineEditIds";
-import { timelineStore } from "./timelineState";
+import { setSelection, timelineStore } from "./timelineState";
 
 // What a right-click in the timeline opens its context menu on (SE-026; DESIGN §4): a cel, a
 // frame of the header, a layer row or a tag span. The commands of the menu act on the timeline's
 // selection and the active cel, as from the menu bar: a right-click on an item outside the
-// selection selects it first (as a click does), one inside keeps the selection. A tag's commands
-// act on the tag right-clicked while its menu is open (`tagStore.target`).
+// selection selects it first (as a click does); one inside keeps the selection and makes the item
+// right-clicked the active one (SE-026 review B), so the commands that act on one layer or frame
+// (Rename Layer, Layer Properties…, Duplicate Layer, Merge Down, New Frame) act on it. A tag's
+// commands act on the tag right-clicked while its menu is open (`tagStore.target`).
 
 export type ContextTarget =
     | { readonly kind: "cel"; readonly cel: CelRef }
@@ -20,6 +23,18 @@ export type ContextTarget =
     | { readonly kind: "tag"; readonly tagId: string };
 
 const NO_MODIFIERS = { shift: false, toggle: false };
+
+/**
+ * Makes `target` the active cel (or layer, or frame) and keeps `selection`, made at the cel that
+ * is active afterwards. Returns false when nothing could be switched (a stroke).
+ */
+function activateKeeping(selection: TimelineSelection, target: Partial<CelRef>): boolean {
+    stopPlaybackForEdit();
+    const at = activateCel(target);
+    if (!at) return false;
+    setSelection({ ...selection, at });
+    return true;
+}
 
 /** The context menu of a target. */
 export function menuOf(target: ContextTarget): TimelineMenu {
@@ -44,17 +59,19 @@ export function openContextTarget(target: ContextTarget): boolean {
     switch (target.kind) {
         case "cel": {
             const { layerId, frameId } = target.cel;
-            if (isCelSelected(selection, layerId, frameId)) return true;
+            if (selection && isCelSelected(selection, layerId, frameId)) {
+                return activateKeeping(selection, target.cel);
+            }
             return clickTimeline({ kind: "cels", cel: target.cel }, NO_MODIFIERS);
         }
         case "frame":
             if (selection?.kind === "frames" && selection.frameIds.includes(target.frameId)) {
-                return true;
+                return activateKeeping(selection, { frameId: target.frameId });
             }
             return clickTimeline({ kind: "frames", frameId: target.frameId }, NO_MODIFIERS);
         case "layer":
             if (selection?.kind === "layers" && selection.layerIds.includes(target.layerId)) {
-                return true;
+                return activateKeeping(selection, { layerId: target.layerId });
             }
             return clickTimeline({ kind: "layers", layerId: target.layerId }, NO_MODIFIERS);
         case "tag":

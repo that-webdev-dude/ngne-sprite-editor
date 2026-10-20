@@ -7,6 +7,7 @@ import { TIMELINE_COMMANDS } from "../../app/timeline/timelineCommandIds";
 import { useTimelineState } from "../../app/timeline/timelineState";
 import { runCommand } from "../commands/runCommand";
 import { useGridWindow } from "./gridWindow";
+import { FrameHeaders } from "./FrameHeaders";
 import { finishProperties, LayerProperties } from "./LayerProperties";
 import { LayerRow, ReferenceRow } from "./LayerRow";
 import { TagBar } from "./TagBar";
@@ -219,27 +220,14 @@ export function TimelinePanel() {
                             aria-rowindex={1}
                         >
                             <TimelineCorner />
-                            {model.frames.map((frame, index) => (
-                                <div
-                                    key={frame.id}
-                                    className="timeline__frame"
-                                    role="columnheader"
-                                    aria-colindex={index + 2}
-                                    aria-selected={
-                                        current?.kind === "frames" &&
-                                        current.frameIds.includes(frame.id)
-                                    }
-                                    data-frame={frame.id}
-                                    data-active-frame={index === activeFrameIndex || undefined}
-                                    // The press selects; the focus goes to the active cell.
-                                    onMouseDown={(event) => event.preventDefault()}
-                                    onPointerDown={(event) =>
-                                        onPress(event, { kind: "frames", frameId: frame.id })
-                                    }
-                                >
-                                    {index + 1}
-                                </div>
-                            ))}
+                            <FrameHeaders
+                                frameIds={frameIds}
+                                selection={current}
+                                activeFrameIndex={activeFrameIndex}
+                                focusIndex={liveFrameIndex}
+                                windowStore={windowStore}
+                                onPress={onPress}
+                            />
                         </div>
                         {model.layers.map((layer, row) => (
                             <LayerRow

@@ -14,6 +14,7 @@ import {
     propertiesPopover,
     runCommands,
     scroller,
+    shownFrameHeader,
     timeline,
 } from "./se-022-support";
 import { errorToast } from "./se-041-support";
@@ -326,7 +327,7 @@ test("the active frame's column of a reference row stays in view: after ↓ into
         state.touch(document.id);
     });
     await addReference(page, { kind: "flat", width: 4, height: 4, rgba: RED });
-    await expect(frameHeader(page, 60)).toBeAttached();
+    await expect(await shownFrameHeader(page, 60)).toBeAttached();
     await expect(activeCell(page)).toHaveAttribute("data-frame", /./);
     await activeCell(page).click();
     await expect(activeCell(page)).toBeFocused();

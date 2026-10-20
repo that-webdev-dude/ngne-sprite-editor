@@ -216,9 +216,10 @@ export function mergeDownCommand(
 /**
  * Whether flatten would leave the document as it is: it has one pixel layer, which is
  * visible with opacity 255 and blend mode normal, and every cel of it has opacity 255. There
- * is then no layer to merge and nothing to bake.
+ * is then no layer to merge and nothing to bake, and `flattenCommand` returns null. Cheap: the
+ * timeline enables Flatten by it (SE-026).
  */
-function isFlat(doc: SpriteDoc): boolean {
+export function isFlat(doc: SpriteDoc): boolean {
     const [only, ...others] = pixelLayers(doc);
     return (
         others.length === 0 &&

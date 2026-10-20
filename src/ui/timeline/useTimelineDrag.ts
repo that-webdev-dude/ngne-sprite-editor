@@ -13,7 +13,7 @@ import type { DropArgument } from "../../app/timeline/timelineDrop";
 import { TIMELINE_EDIT_COMMANDS } from "../../app/timeline/timelineEditIds";
 import { timelineStore } from "../../app/timeline/timelineState";
 import { runCommand } from "../commands/runCommand";
-import { CELL_WIDTH, modifiersOf, STICKY_TOP } from "./timelineDom";
+import { CELL_WIDTH, columnZeroOf, modifiersOf, STICKY_TOP } from "./timelineDom";
 
 // Drags in the timeline grid (SE-026; DESIGN §5.6): a frame number or a layer row dragged
 // reorders the frames or layers selected, a cel dragged moves the cels selected and a Ctrl-drag
@@ -116,10 +116,6 @@ function referenceRowsOf(grid: HTMLElement): HTMLElement[] {
     return [...grid.querySelectorAll<HTMLElement>('[role="row"][data-reference-layer]')];
 }
 
-function frameHeadersOf(grid: HTMLElement): HTMLElement[] {
-    return [...grid.querySelectorAll<HTMLElement>(".timeline__frame")];
-}
-
 /** The row (of `rows`, top first) at client `y`, the nearest one above or below the rows. */
 function rowAt(rows: readonly HTMLElement[], y: number): number {
     for (let index = 0; index < rows.length; index++) {
@@ -212,13 +208,15 @@ function createTimelineDrag(
         if (!element || !document || document.id !== current.documentId) return null;
         const box = element.getBoundingClientRect();
         const { doc } = document.session;
-        const headers = frameHeadersOf(element);
-        const firstHeader = headers[0]?.getBoundingClientRect();
-        if (!firstHeader) return null;
+        // Column i starts at column 0's left + i cells: the frame numbers are virtualized.
+        const columnZero = columnZeroOf(element);
+        const headerRow = element.querySelector(".timeline__row--header")?.getBoundingClientRect();
+        if (columnZero === null || !headerRow) return null;
+        const frameCount = doc.frames.length;
         const { documentId } = current;
         if (drag.kind === "frames") {
-            const gap = clamp(Math.round((x - firstHeader.left) / CELL_WIDTH), 0, headers.length);
-            const top = firstHeader.top - box.top;
+            const gap = clamp(Math.round((x - columnZero) / CELL_WIDTH), 0, frameCount);
+            const top = headerRow.top - box.top;
             const drop: DropArgument = {
                 kind: "frames",
                 documentId,
@@ -227,7 +225,7 @@ function createTimelineDrag(
             };
             const shown: DropIndicator = {
                 kind: "frames",
-                left: firstHeader.left + gap * CELL_WIDTH - box.left - 1,
+                left: columnZero + gap * CELL_WIDTH - box.left - 1,
                 top,
                 width: 2,
                 height: box.height - top,
@@ -263,11 +261,7 @@ function createTimelineDrag(
         }
         const rows = pixelRowsOf(element);
         if (rows.length === 0) return null;
-        const column = clamp(
-            Math.floor((x - firstHeader.left) / CELL_WIDTH),
-            0,
-            headers.length - 1,
-        );
+        const column = clamp(Math.floor((x - columnZero) / CELL_WIDTH), 0, frameCount - 1);
         const offset = clampCelOffset(doc, drag.cels, {
             layers: drag.row - rowAt(rows, y),
             frames: column - drag.column,
@@ -280,9 +274,9 @@ function createTimelineDrag(
         );
         const top = rows[Math.min(...rowsOf) - offset.layers]?.getBoundingClientRect();
         const bottom = rows[Math.max(...rowsOf) - offset.layers]?.getBoundingClientRect();
-        const left = headers[Math.min(...columnsOf) + offset.frames]?.getBoundingClientRect();
-        const right = headers[Math.max(...columnsOf) + offset.frames]?.getBoundingClientRect();
-        if (!top || !bottom || !left || !right) return null;
+        const left = columnZero + (Math.min(...columnsOf) + offset.frames) * CELL_WIDTH;
+        const right = columnZero + (Math.max(...columnsOf) + offset.frames + 1) * CELL_WIDTH;
+        if (!top || !bottom) return null;
         const refused = landsOnLocked(doc, drag.cels, offset);
         const still = offset.layers === 0 && offset.frames === 0;
         const drop: DropArgument | null =
@@ -291,9 +285,9 @@ function createTimelineDrag(
                 : { kind: "cels", documentId, cels: drag.cels, offset, anchor: drag.anchor };
         const shown: DropIndicator = {
             kind: "cels",
-            left: left.left - box.left,
+            left: left - box.left,
             top: top.top - box.top,
-            width: right.right - left.left,
+            width: right - left,
             height: bottom.bottom - top.top,
             copy,
             refused,
@@ -332,7 +326,11 @@ function createTimelineDrag(
             return;
         }
         const { drop } = current;
-        if (!drop) return;
+        // Refused, dropped where it began, or nothing to drop: the focus goes back all the same.
+        if (!drop) {
+            focusActive();
+            return;
+        }
         const id =
             drop.kind === "frames"
                 ? TIMELINE_EDIT_COMMANDS.moveFrames
@@ -452,6 +450,7 @@ function createTimelineDrag(
                 key.preventDefault();
                 key.stopPropagation();
                 end();
+                focusActive();
                 return;
             }
             if (key.key === "Control" || key.key === "Meta") {

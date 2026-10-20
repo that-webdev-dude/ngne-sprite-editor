@@ -339,3 +339,60 @@ test("a right press opens the menu of the item it was pressed on wherever it is 
     await expect(activeCell(page)).toBeFocused();
     expect(errors).toEqual([]);
 });
+
+test("a right press begun outside the timeline and released over a cel changes neither the active cel nor the selection, and opens no menu", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openCels(page, 2, 3, ["Layer 1/1"]);
+    await cell(page, "Layer 1", 2).click();
+    await expect.poll(() => selectedCells(page)).toEqual(["Layer 1/2"]);
+    const before = await documentState(page);
+    const over = await centreOf(cell(page, "Layer 2", 3));
+
+    // From the viewport (a right-button stroke there, whose menu is cancelled) and from the
+    // status bar: on Windows the context menu arrives at the release, over the cel.
+    for (const from of ["viewport", "status-bar"] as const) {
+        const box = await boxOf(region(page, from));
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down({ button: "right" });
+        await page.mouse.move(over.x, over.y, { steps: 4 });
+        await page.mouse.up({ button: "right" });
+        await settleTimers(page);
+        await expect(page.getByRole("menu"), from).toHaveCount(0);
+        const state = await documentState(page);
+        expect([state.activeLayer, state.activeFrame], from).toEqual([
+            before.activeLayer,
+            before.activeFrame,
+        ]);
+        await expect.poll(() => selectedCells(page), from).toEqual(["Layer 1/2"]);
+    }
+    expect(errors).toEqual([]);
+});
+
+test("a right-click in the rename field opens neither the Layer menu nor commits the rename", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openCels(page, 2, 2);
+    await layerHeader(page, "Layer 2").locator(".timeline__name").dblclick();
+    const field = timeline(page).getByRole("textbox", { name: "Layer name" });
+    await expect(field).toBeFocused();
+    await page.keyboard.insertText("Renamed");
+    const before = await documentState(page);
+
+    await field.click({ button: "right" });
+    await settleTimers(page);
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(field).toBeFocused();
+    await expect(field).toHaveValue("Renamed");
+    const state = await documentState(page);
+    expect(state.layers.map((layer) => layer.name)).toEqual(["Layer 1", "Layer 2"]);
+    expect(state.undoCount).toBe(before.undoCount);
+    // The field still applies with Enter.
+    await page.keyboard.press("Enter");
+    await expect
+        .poll(async () => (await documentState(page)).layers.map((layer) => layer.name))
+        .toEqual(["Layer 1", "Renamed"]);
+    expect(errors).toEqual([]);
+});

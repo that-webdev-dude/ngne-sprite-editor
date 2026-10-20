@@ -222,6 +222,29 @@ export function selectedLayerIds(doc: SpriteDoc, selection: TimelineSelection | 
     return doc.layers.filter((layer) => chosen.has(layer.id)).map((layer) => layer.id);
 }
 
+/**
+ * The keys of a selection's items, made once per selection object (SE-026 review J): the
+ * grid asks for each cell it renders.
+ */
+const selectedKeys = new WeakMap<TimelineSelection, ReadonlySet<string>>();
+
+const celKeyOf = (layerId: string, frameId: string) => `${layerId}\n${frameId}`;
+
+function keysOf(selection: TimelineSelection): ReadonlySet<string> {
+    let keys = selectedKeys.get(selection);
+    if (!keys) {
+        keys = new Set(
+            selection.kind === "cels"
+                ? selection.cels.map((cel) => celKeyOf(cel.layerId, cel.frameId))
+                : selection.kind === "frames"
+                  ? selection.frameIds
+                  : selection.layerIds,
+        );
+        selectedKeys.set(selection, keys);
+    }
+    return keys;
+}
+
 /** Whether the cell of `layerId` at `frameId` is in the selection, by any kind. */
 export function isCelSelected(
     selection: TimelineSelection | null,
@@ -229,13 +252,14 @@ export function isCelSelected(
     frameId: string,
 ): boolean {
     if (!selection) return false;
+    const keys = keysOf(selection);
     switch (selection.kind) {
         case "cels":
-            return selection.cels.some((cel) => cel.layerId === layerId && cel.frameId === frameId);
+            return keys.has(celKeyOf(layerId, frameId));
         case "frames":
-            return selection.frameIds.includes(frameId);
+            return keys.has(frameId);
         case "layers":
-            return selection.layerIds.includes(layerId);
+            return keys.has(layerId);
     }
 }
 

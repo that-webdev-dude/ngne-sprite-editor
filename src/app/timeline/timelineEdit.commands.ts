@@ -1,12 +1,12 @@
 import { moveFramesCommand, reverseFramesCommand } from "../../core/frames";
-import { flattenCommand, mergeDownCommand, mergeDownTarget } from "../../core/layers";
+import { flattenCommand, isFlat, mergeDownCommand, mergeDownTarget } from "../../core/layers";
 import type { SpriteDoc } from "../../core/model";
 import type { CommandSpec } from "../commands/types";
 import type { OpenDocument } from "../state/sessions";
 import {
     anyFilled,
     anyLinked,
-    celRows,
+    wouldLink,
     clearCels,
     dropCels,
     dropLayers,
@@ -94,18 +94,6 @@ function dropCelsRun(copy: boolean): void {
     setSelection({ documentId: document.id, at, kind: "cels", cels, anchor: at });
 }
 
-function hasLinkableRow(document: OpenDocument, cels: readonly CelRef[]): boolean {
-    const { doc } = document.session;
-    return celRows(doc, cels).some(
-        (row) =>
-            row.frameIds.length > 1 &&
-            anyFilled(
-                doc,
-                row.frameIds.map((frameId) => ({ layerId: row.layerId, frameId })),
-            ),
-    );
-}
-
 /** The selected frames Reverse Frames reverses, or the active frame alone. */
 function reversedFrames(document: OpenDocument): string[] {
     return targetFrameIds(document.session, selectionOf(document));
@@ -121,9 +109,12 @@ function canMergeDown(doc: SpriteDoc, layerId: string): boolean {
     return !!source && !!target && !source.locked && !target.locked;
 }
 
-/** Flatten writes into every pixel layer: refused while one of them is locked. */
+/**
+ * Flatten writes into every pixel layer: refused while one of them is locked, and disabled when
+ * it would change nothing (`isFlat`).
+ */
 function canFlatten(doc: SpriteDoc): boolean {
-    return doc.layers.every((layer) => layer.kind !== "pixel" || !layer.locked);
+    return !isFlat(doc) && doc.layers.every((layer) => layer.kind !== "pixel" || !layer.locked);
 }
 
 export const commands: CommandSpec[] = [
@@ -133,7 +124,7 @@ export const commands: CommandSpec[] = [
         contextMenus: [{ menu: MENUS.cel, order: 100 }],
         enabled: () => {
             const found = targets();
-            return !!found && hasLinkableRow(found.document, found.cels);
+            return !!found && wouldLink(found.document.session.doc, found.cels);
         },
         run: () =>
             void executeOnActive((document) =>

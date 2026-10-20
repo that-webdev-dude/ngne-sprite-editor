@@ -70,7 +70,7 @@ export {
     nextLayerName,
     normalizeLayerName,
 } from "./lookup";
-export { flattenCommand, mergeDownCommand } from "./merge";
+export { flattenCommand, isFlat, mergeDownCommand } from "./merge";
 export {
     renameLayerCommand,
     setLayerBlendModeCommand,

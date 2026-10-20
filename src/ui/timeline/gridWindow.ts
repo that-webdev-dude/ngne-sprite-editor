@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import type { RefObject } from "react";
-import { CELL_WIDTH, STICKY_TOP } from "./timelineDom";
+import { CELL_WIDTH, columnZeroOf, STICKY_TOP } from "./timelineDom";
 
-// Virtualized rendering of the timeline grid (SE-026): of the cels' cells only those in view,
-// with a margin around them, are in the DOM. A row header per layer and a frame number per frame
-// stay rendered — they are what the pointer and the keyboard reach a row or a column by — so a
-// document of L layers and F frames puts L + F headers in the DOM, plus the cells of the window,
-// instead of L × F cells.
+// Virtualized rendering of the timeline grid (SE-026): of the cels' cells and the frame numbers
+// only those in view, with a margin around them, are in the DOM, and the active cel's. A row
+// header per layer stays rendered (a document has few layers, at most 1024, and the headers hold
+// the controls the keyboard and the pointer reach a layer by), so a document of L layers puts L
+// row headers in the DOM plus the cells and frame numbers of the window, instead of L × F cells
+// and F numbers.
 
 /** A run of rows or columns, both ends included; `last` may lie past the grid's end. */
 export interface IndexRange {
@@ -43,9 +44,9 @@ function sameRange(a: IndexRange, b: IndexRange): boolean {
  */
 export function gridWindowOf(scroller: HTMLElement, grid: HTMLElement): GridWindow | null {
     const row = grid.querySelector<HTMLElement>('[role="row"][data-layer]');
-    const frame = grid.querySelector<HTMLElement>(".timeline__frame");
     const header = row?.querySelector<HTMLElement>('[role="rowheader"]');
-    if (!row || !frame || !header) return null;
+    const columnZero = columnZeroOf(grid);
+    if (!row || !header || columnZero === null) return null;
     const box = scroller.getBoundingClientRect();
     const innerLeft = box.left + scroller.clientLeft;
     const innerTop = box.top + scroller.clientTop;
@@ -58,9 +59,8 @@ export function gridWindowOf(scroller: HTMLElement, grid: HTMLElement): GridWind
     const left = header.getBoundingClientRect().right;
     const rowBox = row.getBoundingClientRect();
     const rowHeight = rowBox.height > 0 ? rowBox.height : 28;
-    // Column i lies at the first frame number's left + i cells, row i at the first row's top +
-    // i rows, wherever they are scrolled to (the headers are always laid out).
-    const columnZero = frame.getBoundingClientRect().left;
+    // Column i lies at column 0's left + i cells, row i at the first row's top + i rows,
+    // wherever they are scrolled to (the row headers are always laid out).
     const width = Math.max(0, right - left);
     const marginX = width * OVERSCAN.columns;
     const marginY = Math.max(0, bottom - top) * OVERSCAN.rows;

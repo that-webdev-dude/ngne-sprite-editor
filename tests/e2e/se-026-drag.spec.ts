@@ -229,3 +229,32 @@ test("a drag held at the edge of the grid scrolls it: a frame dragged past the f
     expect((await documentState(page)).undoCount).toBe(start.undoCount + 1);
     expect(errors).toEqual([]);
 });
+
+test("after a drag that drops nothing (refused, or cancelled with Escape) the focus goes back to the active cell", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await openCels(page, 2, 4, ["Layer 1/1", "Layer 1/2"]);
+    await layerHeader(page, "Layer 2").getByRole("button", { name: "Locked" }).click();
+    await expect.poll(async () => (await documentState(page)).layers[1]?.locked).toBe(true);
+    await cell(page, "Layer 1", 1).click();
+    await cell(page, "Layer 1", 2).click({ modifiers: ["Shift"] });
+    await expectFocusOn(page, "Layer 1", 2);
+
+    // Pressed on Layer 1/1 (selected, not active: the press focuses it), dropped onto the
+    // locked layer: refused.
+    await dragFrom(page, cell(page, "Layer 1", 1), await centreOf(cell(page, "Layer 2", 1)));
+    await expect(dropIndicator(page)).toHaveAttribute("data-refused", "true");
+    await page.mouse.up();
+    await expectFocusOn(page, "Layer 1", 2);
+
+    // The same, cancelled with Escape.
+    await dragFrom(page, cell(page, "Layer 1", 1), await centreOf(cell(page, "Layer 1", 3)));
+    await expect(dropIndicator(page)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dropIndicator(page)).toHaveCount(0);
+    await expectFocusOn(page, "Layer 1", 2);
+    await page.mouse.up();
+    expect(await celGrid(page)).toEqual([". . . .", "1/1 1/2 . ."]);
+    expect(errors).toEqual([]);
+});

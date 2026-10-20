@@ -13,9 +13,11 @@ import {
     linkCels,
     targetCels,
     unlinkCels,
+    wouldLink,
 } from "../../src/app/timeline/celTargets";
 import type { CelRef, TimelineSelection } from "../../src/app/timeline/selection";
-import { celAt } from "../../src/core/model";
+import { flattenCommand, isFlat } from "../../src/core/layers";
+import { celAt, createDocument } from "../../src/core/model";
 import type { SpriteDoc } from "../../src/core/model";
 import { expectSymmetric, fixture, FRAMES, L1, L2, L3, REF, snapshot } from "./se-021-support";
 
@@ -142,6 +144,30 @@ describe("editable cels and the cel commands (SE-021 review: locked layers)", ()
         expect(anyFilled(doc, [at(L1, F4), at(L1, F5)])).toBe(true);
         expect(anyLinked(doc, [at(L1, F3), at(L1, F5)])).toBe(false);
         expect(anyLinked(doc, [at(L2, F4)])).toBe(true);
+    });
+
+    it("tells whether Link would change the cels (review I)", () => {
+        const { doc } = fixture();
+        // L1 f1–f2 share image a already; f3 holds b.
+        expect(wouldLink(doc, [at(L1, F1), at(L1, F2)])).toBe(false);
+        expect(wouldLink(doc, [at(L1, F1), at(L1, F2), at(L1, F3)])).toBe(true);
+        // Empty cells before the first filled one stay empty: nothing to link.
+        expect(wouldLink(doc, [at(L3, F1), at(L3, F5)])).toBe(false);
+        // e at f3 has opacity 128, at f4 255: linking makes them equal.
+        expect(wouldLink(doc, [at(L2, F3), at(L2, F4)])).toBe(true);
+        expect(wouldLink(doc, [at(L1, F5)])).toBe(false);
+        // Agrees with the command.
+        const { session } = fixture();
+        expect(linkCels(session, [at(L1, F1), at(L1, F2)])).toBeNull();
+    });
+
+    it("isFlat (core/layers) tells when Flatten would change nothing", () => {
+        const { session } = fixture();
+        expect(isFlat(session.doc)).toBe(false);
+        expect(flattenCommand(session)).not.toBeNull();
+        const flat = createDocument({ name: "flat", width: 2, height: 2 });
+        expect(isFlat(flat.doc)).toBe(true);
+        expect(flattenCommand(flat)).toBeNull();
     });
 
     it("groups cels by layer from the bottom, frames in order", () => {

@@ -17,6 +17,19 @@ export const CELL_WIDTH = 24;
 /** The parts that stick to the top of the scroller while the grid scrolls under them. */
 export const STICKY_TOP = ".timeline__bar, .timeline__row--header";
 
+/**
+ * The client x of the left edge of frame column 0, wherever the grid is scrolled: the header
+ * row's left (it scrolls across with the grid) plus the layer column's width. Column i starts
+ * `i × CELL_WIDTH` further right; the frame numbers are virtualized (SE-026), so no number is
+ * needed for it. Null while the header row is not laid out.
+ */
+export function columnZeroOf(grid: HTMLElement): number | null {
+    const row = grid.querySelector<HTMLElement>(".timeline__row--header");
+    const corner = row?.querySelector<HTMLElement>(".timeline__corner");
+    if (!row || !corner) return null;
+    return row.getBoundingClientRect().left + corner.offsetWidth;
+}
+
 /** Shift extends to a range; Ctrl (Cmd on a Mac) adds or removes one. */
 export function modifiersOf(event: {
     shiftKey: boolean;

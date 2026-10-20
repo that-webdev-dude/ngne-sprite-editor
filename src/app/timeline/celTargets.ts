@@ -152,6 +152,22 @@ export function unlinkCels(session: DocSession, cels: readonly CelRef[]): Comman
     );
 }
 
+/**
+ * Whether Link would change one of `cels` (SPEC §7.4, `linkCelsCommand`): in some layer, a cel
+ * after the first filled one does not share its image and opacity yet.
+ */
+export function wouldLink(doc: SpriteDoc, cels: readonly CelRef[]): boolean {
+    return celRows(doc, cels).some((row) => {
+        let base: { imageId: string; opacity: number } | undefined;
+        for (const frameId of row.frameIds) {
+            const cel = celAt(doc, row.layerId, frameId);
+            if (!base) base = cel;
+            else if (cel?.imageId !== base.imageId || cel.opacity !== base.opacity) return true;
+        }
+        return false;
+    });
+}
+
 /** Whether one of `cels` holds an image. */
 export function anyFilled(doc: SpriteDoc, cels: readonly CelRef[]): boolean {
     return cels.some((cel) => celAt(doc, cel.layerId, cel.frameId) !== undefined);

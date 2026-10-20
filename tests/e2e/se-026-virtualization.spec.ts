@@ -12,17 +12,21 @@ import {
 import { openCels } from "./se-026-support";
 
 // SE-026: virtualized rendering of the timeline grid — with 200 frames × 30 layers, at most the
-// cells in view plus one screen of overscan are in the DOM, every cell in view is there, and the
-// keyboard and the scroll bars still reach every cell. (The scroll frame rate is measured by
+// cells and frame numbers in view plus one screen of overscan are in the DOM, every cell and
+// number in view is there, each cell under its number, and the keyboard and the scroll bars still
+// reach every cell. The row headers all stay rendered. (The scroll frame rate is measured by
 // tests/perf/se-026-timeline-scroll.perf.ts.)
 
 const LAYERS = 30;
 const FRAMES = 200;
 
 /**
- * The cels' cells in the DOM, and those in view: the frame columns and the layer rows that
- * show between the layer column, the parts that stick to the top and the scroller's edges
- * (cut ones count), as the headers lie — every row and frame header is rendered.
+ * The cels' cells and frame numbers in the DOM, and those in view: the frame columns and the
+ * layer rows that show between the layer column, the parts that stick to the top and the
+ * scroller's edges (cut ones count). Columns are found by geometry: column i starts i × 24 px
+ * right of the header row's left plus the layer column; rows by their headers, which are all
+ * rendered. `missing` lists cells and numbers in view that are not rendered, and cells that do
+ * not lie under their frame number.
  */
 function census(page: Page) {
     return scroller(page).evaluate((panel) => {
@@ -37,24 +41,45 @@ function census(page: Page) {
         );
         const right = box.left + panel.clientLeft + panel.clientWidth;
         const bottom = box.top + panel.clientTop + panel.clientHeight;
-        const columns = [...panel.querySelectorAll(".timeline__frame")]
-            .map((header, index) => ({ index, box: header.getBoundingClientRect() }))
-            .filter(({ box }) => box.right > left && box.left < right)
-            .map(({ index }) => index);
+        const headerRow = panel.querySelector(".timeline__row--header")!;
+        const corner = headerRow.querySelector<HTMLElement>(".timeline__corner")!;
+        const columnZero = headerRow.getBoundingClientRect().left + corner.offsetWidth;
+        const frames =
+            Number(panel.querySelector('[role="grid"]')!.getAttribute("aria-colcount")) - 1;
+        const columns: number[] = [];
+        for (let index = 0; index < frames; index++) {
+            const start = columnZero + index * 24;
+            if (start + 24 > left && start < right) columns.push(index);
+        }
+        const headerOf = (column: number) =>
+            headerRow.querySelector(`.timeline__frame[aria-colindex="${column + 2}"]`);
         const rows = [...panel.querySelectorAll('[role="row"][data-layer]')]
             .map((row) => ({ row: row as HTMLElement, box: row.getBoundingClientRect() }))
             .filter(({ box }) => box.bottom > top && box.top < bottom);
-        // Every cell in view is rendered.
+        // Every cell and frame number in view is rendered, each cell under its number.
         const missing: string[] = [];
+        for (const column of columns) {
+            if (!headerOf(column)) missing.push(`number ${column + 1}`);
+        }
         for (const { row } of rows) {
             for (const column of columns) {
                 const found = row.querySelector(`[role="gridcell"][aria-colindex="${column + 2}"]`);
+                const header = headerOf(column);
                 if (!found) missing.push(`${row.dataset.layer}/${column + 1}`);
+                else if (
+                    header &&
+                    Math.abs(
+                        found.getBoundingClientRect().left - header.getBoundingClientRect().left,
+                    ) > 0.5
+                ) {
+                    missing.push(`${row.dataset.layer}/${column + 1} not under its number`);
+                }
             }
         }
         return {
             rendered: panel.querySelectorAll('[role="gridcell"]').length,
             inView: columns.length * rows.length,
+            headers: panel.querySelectorAll(".timeline__frame").length,
             columns: columns.length,
             rows: rows.length,
             missing,
@@ -62,7 +87,7 @@ function census(page: Page) {
     });
 }
 
-/** Scrolls the panel and waits until two equal size reads and the frames that draw it pass. */
+/** Scrolls the panel and waits for the two animation frames that draw it. */
 async function scrollTo(page: Page, left: number, top: number): Promise<void> {
     await scroller(page).evaluate(
         (element, { left, top }) => {
@@ -105,10 +130,14 @@ test("with 200 frames × 30 layers, at most the cells in view plus one screen of
         );
         expect(counted.rendered).toBeGreaterThanOrEqual(counted.inView);
         expect(counted.rendered).toBeLessThan(LAYERS * FRAMES);
+        // The frame numbers likewise: those in view twice over, plus the active cel's.
+        expect(counted.headers, JSON.stringify(counted)).toBeLessThanOrEqual(
+            2 * counted.columns + 1,
+        );
+        expect(counted.headers).toBeGreaterThanOrEqual(counted.columns);
     }
-    // Every row header and frame number stays rendered.
+    // Every row header stays rendered.
     await expect(grid(page).getByRole("rowheader")).toHaveCount(LAYERS);
-    await expect(grid(page).locator(".timeline__frame")).toHaveCount(FRAMES);
     expect(errors).toEqual([]);
 });
 

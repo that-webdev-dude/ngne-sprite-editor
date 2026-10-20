@@ -30,8 +30,15 @@ import { record } from "./record";
 // that are not counted. Each step is set in an animation frame callback; the frame rate is the
 // number of frames over the time between the first and the last callback. Before the scroll the
 // page idles for `IDLE` frames, whose rate shows the display's refresh rate under the same
-// conditions (a slow machine phase shows there too: compare `idleFps` across runs). The number of
-// cels' cells in the DOM is sampled every 10 frames.
+// conditions. The number of cels' cells in the DOM is sampled every 10 frames.
+//
+// Validity: the run throws unless the panel overflows on both axes (else nothing scrolls) and
+// unless the grid's window really moved during the scroll: `framesScrolled` counts the frames
+// at which the first frame number rendered (other than the active frame's, always rendered)
+// changed, and must be at least `STEPS / 10`. `framesScrolled` and `idleFps` are the validity
+// pair: a run whose `idleFps` is far from the display's rate (about 144 on the reference
+// machine) or whose `framesScrolled` is far below that of other runs was taken in a slow
+// machine phase or did not scroll the window, and is not a measurement.
 //
 // Budget (SE-026 acceptance): an average of at least 50 fps, i.e. an average frame interval of at
 // most 20 ms; `resultMs` is that average interval. The orchestrator records it with
@@ -143,7 +150,7 @@ async function openDocument(page: Page): Promise<void> {
             const grid = document.querySelector('[role="grid"][aria-label="Cels"]');
             return (
                 grid?.querySelectorAll('[role="rowheader"]').length === layers &&
-                grid.querySelectorAll(".timeline__frame").length === frames
+                grid.getAttribute("aria-colcount") === String(frames + 1)
             );
         },
         { layers: LAYERS, frames: FRAMES },
@@ -152,6 +159,7 @@ async function openDocument(page: Page): Promise<void> {
 }
 
 interface ScrollRun {
+    framesScrolled: number;
     idleIntervals: number[];
     intervals: number[];
     cells: number[];
@@ -175,6 +183,13 @@ function scroll(page: Page): Promise<ScrollRun> {
             let dy = stepY;
             const times: number[] = [];
             const cells: number[] = [];
+            /** The first frame number rendered besides the active frame's: the window's start. */
+            const windowStart = () =>
+                panel
+                    .querySelector(".timeline__frame:not([data-active-frame])")
+                    ?.getAttribute("aria-colindex") ?? null;
+            let start = windowStart();
+            let framesScrolled = 0;
             for (let index = 0; index < warmUp + steps; index++) {
                 const time = await frame();
                 const maxLeft = panel.scrollWidth - panel.clientWidth;
@@ -185,6 +200,9 @@ function scroll(page: Page): Promise<ScrollRun> {
                 panel.scrollTop += dy;
                 if (index < warmUp) continue;
                 times.push(time);
+                const now = windowStart();
+                if (now !== start) framesScrolled++;
+                start = now;
                 if (index % 10 === 0) {
                     cells.push(panel.querySelectorAll('[role="gridcell"]').length);
                 }
@@ -195,6 +213,7 @@ function scroll(page: Page): Promise<ScrollRun> {
                 idleIntervals: intervalsOf(idleTimes),
                 intervals: intervalsOf(times),
                 cells,
+                framesScrolled,
                 panel: {
                     width: panel.clientWidth,
                     height: panel.clientHeight,
@@ -280,6 +299,20 @@ it.skipIf(!gpu)(
             await sleep(1000);
             const run = await scroll(page);
             if (pageErrors.length > 0) throw new Error(`se-026: page errors: ${pageErrors[0]}`);
+            const { panel } = run;
+            if (panel.scrollWidth <= panel.width || panel.scrollHeight <= panel.height) {
+                throw new Error(
+                    `se-026: the timeline panel (${panel.width}×${panel.height}, content ` +
+                        `${panel.scrollWidth}×${panel.scrollHeight}) does not overflow on both ` +
+                        "axes: nothing to scroll. Nothing was measured.",
+                );
+            }
+            if (run.framesScrolled < STEPS / 10) {
+                throw new Error(
+                    `se-026: the grid's window moved at ${run.framesScrolled} of ${STEPS} frames ` +
+                        `(at least ${STEPS / 10} expected). Nothing was measured.`,
+                );
+            }
             const sorted = [...run.intervals].sort((a, b) => a - b);
             const averageMs = mean(run.intervals);
             const idleMs = mean(run.idleIntervals);
@@ -296,7 +329,8 @@ it.skipIf(!gpu)(
                 details: {
                     fps: round(1000 / averageMs),
                     budget: "at least 50 fps on average (SE-026 acceptance): 20 ms",
-                    framesScrolled: run.intervals.length,
+                    frames: run.intervals.length,
+                    framesScrolled: run.framesScrolled,
                     p95IntervalMs: round(percentile(sorted, 0.95)),
                     maxIntervalMs: round(sorted.at(-1) ?? Number.NaN),
                     idleFps: round(1000 / idleMs),

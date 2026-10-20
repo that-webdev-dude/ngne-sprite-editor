@@ -17,6 +17,7 @@ import {
     runCommands,
     scroller,
     selectedFrames,
+    shownFrameHeader,
     timeline,
     viewport,
 } from "./se-022-support";
@@ -715,7 +716,7 @@ test("closing the Tag dialog opened by a double-click leaves the timeline where 
     await openTags(page, 80);
     await addTags(page, [{ name: "far", from: 70, to: 75 }]);
     // Frame 1 active, the timeline scrolled to its end: the active cell is out of view.
-    await frameHeader(page, 1).click();
+    await (await shownFrameHeader(page, 1)).click();
     await expect.poll(async () => (await documentState(page)).activeFrame).toBe(1);
     await panelDrawn(page);
     const panel = scroller(page);
