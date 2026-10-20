@@ -66,7 +66,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-023 | Tags UI                                           | M    | 021, 022                           | —             | Done   |
 | SE-024 | Editor playback                                   | M    | 011, 022, 023                      | —             | Done   |
 | SE-025 | Onion skin                                        | M    | 024                                | —             | Done   |
-| SE-026 | Timeline editing interactions                     | M    | 022, 023                           | —             | Ready  |
+| SE-026 | Timeline editing interactions                     | M    | 022, 023                           | —             | In progress  |
 | **M3** | **[Selection and transform](M3-selection-and-transform.md)** | |                                |               |        |
 | SE-030 | Selection model and marching ants                 | M    | 004, 013, 014                      | —             | Done   |
 | SE-031 | Selection tools                                   | M    | 014, 017, 030                      | —             | Done   |
@@ -76,7 +76,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | **M4** | **[Persistence and import](M4-persistence-and-import.md)** | |                                  |               |        |
 | SE-040 | Project file format (`.ngsprite`)                 | M    | 003, 005, 010                      | —             | Done   |
 | SE-041 | File workflows                                    | L    | 007, 008, 040                      | G1            | Done   |
-| SE-042 | Autosave and crash recovery                       | M    | 041                                | —             | Ready  |
+| SE-042 | Autosave and crash recovery                       | M    | 041                                | —             | In progress  |
 | SE-043 | Import pipeline core and preset palettes          | L    | 003, 005                           | A3            | Done   |
 | SE-044 | Import PNG dialog                                 | L    | 006, 021, 041, 043, 045            | —             | Done   |
 | SE-045 | Reference layers                                  | L    | 011, 022, 040                      | —             | Done   |
@@ -91,7 +91,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | **M6** | **[Palette and parity extras](M6-palette-and-parity.md)** | |                                   |               |        |
 | SE-060 | Palette panel                                     | M    | 016, 043                           | —             | Done   |
 | SE-061 | Blend modes and cel opacity                       | M    | 010, 022                           | —             | Ready  |
-| SE-062 | Symmetry and tiled mode                           | M    | 011, 015, 017                      | —             | Ready  |
+| SE-062 | Symmetry and tiled mode                           | M    | 011, 015, 017                      | —             | In progress  |
 | SE-063 | GIF export                                        | M    | 043, 052                           | —             | Done   |
 | SE-064 | Preferences dialog, command palette and shortcut sheet | M | 007                              | —             | Done   |
 | SE-065 | Tools II: curve, contour, polygon, spray          | M    | 017                                | —             | Done   |
