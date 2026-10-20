@@ -185,7 +185,9 @@ Rules of a leg, beside those of Orchestration:
 - One read-only review per ticket before Done, in place of one per wave: a leg merges one or
   two tickets at a time.
 - Before a ticket is Done the orchestrator runs `npm run check` and the full E2E suite with
-  `CI=1` (SwiftShader, one worker) in the main checkout.
+  `CI=1 E2E_WORKERS=4` (SwiftShader, headless; four workers, then the `@alone` tests one at a
+  time) in the main checkout. GitHub CI keeps one worker per job and splits the suite into
+  four shards and an `@alone` job (`.github/workflows/ci.yml`).
 - Measurements ([Measurements](#measurements)) are taken by the orchestrator alone, after the
   ticket is merged and with no agent running.
 - At most two agents at a time.

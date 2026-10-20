@@ -48,8 +48,11 @@ export default defineConfig({
     forbidOnly: ci,
     retries: 0,
     // CI shows every worker's Chrome window on one X display. Two instances take the pointer
-    // grab and the hover from each other, which ends drags and closes menus mid-test.
-    workers: ci ? 1 : undefined,
+    // grab and the hover from each other, which ends drags and closes menus mid-test, so CI
+    // runs one worker per job and splits the suite across jobs with --shard instead.
+    // E2E_WORKERS overrides the count for a local headless run with CI=1, which has no
+    // shared display.
+    workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : ci ? 1 : undefined,
     // A cold dev server and the CI runner (software WebGPU, few cores) are several times
     // slower than a warm local run; the limits leave room for both.
     timeout: ci ? 120_000 : 30_000,
@@ -58,11 +61,12 @@ export default defineConfig({
     // A test that counts animation frames has @alone in its title and runs after every other
     // test has finished: beside the other workers its frames come late and the count is
     // wrong. "alone" is the teardown of a project without tests, so it runs once "parallel"
-    // is through, whether that passed or not, and one worker at a time.
+    // is through, whether that passed or not, and one worker at a time: `fullyParallel: false`
+    // only keeps a file's tests in order, `workers: 1` keeps two files from running at once.
     projects: [
         { name: "first", testMatch: /^$/, teardown: "alone" },
         { name: "parallel", grepInvert: /@alone/, dependencies: ["first"] },
-        { name: "alone", grep: /@alone/, fullyParallel: false },
+        { name: "alone", grep: /@alone/, fullyParallel: false, workers: 1 },
     ],
     use: {
         baseURL: `http://127.0.0.1:${port}`,
