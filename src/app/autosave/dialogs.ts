@@ -23,9 +23,9 @@ export interface RecoveryRequest {
     kind: "recovery";
     /** Newest first. */
     entries: readonly RecoveryEntry[];
-    /** Opens the snapshot's document; resolves false when it could not (reported by toast). */
+    /** Opens the snapshot's document; resolves true when its row goes (`Recovery.recover`). */
     recover(key: string): Promise<boolean>;
-    /** Removes the snapshot permanently; resolves false when it could not (reported by toast). */
+    /** Removes the snapshot permanently; resolves true when its row goes (`Recovery.discard`). */
     discard(key: string): Promise<boolean>;
     /** Closes the dialog. */
     answer(values: null): void;
@@ -41,6 +41,8 @@ export interface RecoveryDialogs {
      * be shown (another dialog is open, or no host).
      */
     show(options: Pick<RecoveryRequest, "entries" | "recover" | "discard">): Promise<void> | null;
+    /** Resolves once no dialog is open (at once when none is). */
+    free(): Promise<void>;
 }
 
 function isRecoveryRequest(request: DialogRequestBase): request is RecoveryRequest {
@@ -65,6 +67,16 @@ export function createRecoveryDialogs(
                     answer: () => answer(null),
                 }))
                 .then(() => {});
+        },
+        free() {
+            if (!requests.store.getState().request) return Promise.resolve();
+            return new Promise((resolve) => {
+                const stop = requests.store.subscribe(({ request }) => {
+                    if (request) return;
+                    stop();
+                    resolve();
+                });
+            });
         },
     };
 }

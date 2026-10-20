@@ -25,8 +25,14 @@ import type { PerfEntry } from "./record";
 // windows is attributed to autosave; nothing else runs on the page meanwhile (the viewport draws
 // on demand, the benchmark waits). The result is the longest such task, 0 when there is none.
 // The budget is 50 ms: any long task attributed to autosave is over it.
+//
+// Positive control (SE-042 review C): before the document is opened, the benchmark checks that
+// Chrome reports `longtask` entries and runs a deliberate busy task of `CONTROL_TASK_MS`, outside
+// any autosave window; unless the observer reports it as a long task, nothing is measured.
 
 const SIDE = 256;
+/** The deliberate long task of the positive control. */
+const CONTROL_TASK_MS = 80;
 const FRAMES = 16;
 /** Single-cel edits after the first snapshot. */
 const EDITS = 24;
@@ -174,6 +180,41 @@ it(`SE-042: long tasks attributed to autosave, ${FRAMES} frames of ${SIDE}×${SI
             () => performance.getEntriesByName("ngne-autosave:recovery-checked").length > 0,
         );
 
+        // Positive control: the page reports long tasks, and a deliberate one is seen.
+        const supported = await page.evaluate(() =>
+            PerformanceObserver.supportedEntryTypes.includes("longtask"),
+        );
+        if (!supported) throw new Error("se-042: this Chrome does not report long tasks");
+        // A task of the page's own (a timer): what the DevTools protocol evaluates is not one.
+        const control = await page.evaluate(
+            (ms) =>
+                new Promise<{ start: number; end: number }>((resolve) => {
+                    setTimeout(() => {
+                        const start = performance.now();
+                        while (performance.now() - start < ms) {
+                            // Busy on purpose.
+                        }
+                        resolve({ start, end: performance.now() });
+                    }, 0);
+                }),
+            CONTROL_TASK_MS,
+        );
+        await sleep(500);
+        const controlSeen = await page.evaluate(
+            ({ start, end }) =>
+                (window.__se042LongTasks ?? []).filter(
+                    (task) =>
+                        task.startTime <= start + 1 && task.startTime + task.duration >= end - 1,
+                ),
+            control,
+        );
+        if (controlSeen.length === 0) {
+            throw new Error(
+                `se-042: the deliberate ${CONTROL_TASK_MS} ms task was not observed as a long task; nothing was measured`,
+            );
+        }
+        const controlMs = Math.max(...controlSeen.map((task) => task.duration));
+
         await openBenchmarkDocument(page);
         await sleep(500);
         await paintCel(page, 0);
@@ -210,6 +251,7 @@ it(`SE-042: long tasks attributed to autosave, ${FRAMES} frames of ${SIDE}×${SI
             budgetMs: BUDGET_MS,
             resultMs: round(Math.max(0, ...attributed.map((task) => task.duration))),
             details: {
+                controlLongTaskMs: round(controlMs),
                 snapshots: windows.length,
                 attributedLongTasks: attributed.map((task) => round(task.duration)),
                 longTasksOnThePage: longTasks.length,

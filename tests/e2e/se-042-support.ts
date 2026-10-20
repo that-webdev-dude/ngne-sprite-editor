@@ -140,6 +140,21 @@ export async function recoveryOffered(page: Page): Promise<number> {
     });
 }
 
+/**
+ * Waits, from `page`, until the lock the editor page `owner` held while it was open
+ * (`ngne-sprite-editor-page:<owner>`, `recovery.ts`) is released: the page is gone for Web Locks.
+ */
+export async function waitForLockReleased(page: Page, owner: string): Promise<void> {
+    await expect
+        .poll(() =>
+            page.evaluate(async (name) => {
+                const { held = [] } = await navigator.locks.query();
+                return held.some((lock) => lock.name === name);
+            }, `ngne-sprite-editor-page:${owner}`),
+        )
+        .toBe(false);
+}
+
 /** Leaves the page whatever the unload guard asks (`beforeunload`), from now on. */
 export function acceptUnload(page: Page): void {
     page.on("dialog", (dialog) => {

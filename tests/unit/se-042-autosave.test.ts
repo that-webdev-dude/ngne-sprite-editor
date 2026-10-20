@@ -4,13 +4,16 @@ import {
     AUTOSAVE_DELAY_MS,
     AUTOSAVE_QUOTA_MESSAGE,
     createAutosave,
+    documentThumbnail,
 } from "../../src/app/autosave/autosave";
 import type { Autosave } from "../../src/app/autosave/autosave";
 import { createRecoveryDialogs } from "../../src/app/autosave/dialogs";
+import { createDialogRequests } from "../../src/app/dialogs/dialogRequests";
 import type { RecoveryRequest } from "../../src/app/autosave/dialogs";
 import {
     RECOVERY_CHECKED_MARK,
     createRecovery,
+    elsewhereMessage,
     offerRecovery,
 } from "../../src/app/autosave/recovery";
 import type { Recovery } from "../../src/app/autosave/recovery";
@@ -18,14 +21,17 @@ import type {
     SnapshotRecord,
     SnapshotStorage,
     SnapshotWrite,
-    StoredSnapshot,
+    TakeResult,
 } from "../../src/app/autosave/snapshotStorage";
 import { createPreferenceStore } from "../../src/app/preferences/preferences";
 import type { PreferenceStore } from "../../src/app/preferences/preferences";
+import { createFloatingState } from "../../src/app/selection/floatingState";
+import type { FloatingState } from "../../src/app/selection/floatingState";
 import { createActiveComposites } from "../../src/app/state/composites";
 import { activeDocument, createSessionsStore, isDirty } from "../../src/app/state/sessions";
 import type { OpenDocument, SessionsState } from "../../src/app/state/sessions";
 import { compositeFrame } from "../../src/core/composite";
+import { contentOfImage } from "../../src/core/floating";
 import { celKey, createDocument, sequentialIds } from "../../src/core/model";
 import type { DocSession, PixelBuffer } from "../../src/core/model";
 import { encodePng } from "../../src/core/png";
@@ -47,13 +53,12 @@ class MemorySnapshots implements SnapshotStorage {
     /** Every source put, as `key/sourceId`. */
     readonly sourcePuts: string[] = [];
     readonly removals: string[] = [];
-    readonly claims: { key: string; owner: string }[] = [];
     /** The next write fails with it. */
     fail: Error | null = null;
     /** Runs before each image is put (after `shouldAbort` was asked for the one before). */
     beforePut: (() => void) | null = null;
 
-    async write(write: SnapshotWrite): Promise<"written" | "aborted"> {
+    async write(write: SnapshotWrite): Promise<"written" | "aborted" | "taken"> {
         await Promise.resolve();
         if (this.fail) {
             const failure = this.fail;
@@ -61,6 +66,8 @@ class MemorySnapshots implements SnapshotStorage {
             throw failure;
         }
         const { key } = write.record;
+        const stored = this.records.get(key);
+        if (stored && stored.owner !== write.record.owner) return "taken";
         const images = new Map(write.replace ? [] : (this.images.get(key) ?? []));
         const sources = new Map(write.replace ? [] : (this.sources.get(key) ?? []));
         for (const id of write.deleteImages) images.delete(id);
@@ -95,9 +102,14 @@ class MemorySnapshots implements SnapshotStorage {
         return [...this.records.values()].sort((a, b) => b.savedAt - a.savedAt);
     }
 
-    async read(key: string): Promise<StoredSnapshot | null> {
-        const record = this.records.get(key);
-        if (!record) return null;
+    /** Reads and takes in one step, as one IndexedDB transaction does. */
+    async take(key: string, expectedOwner: string, owner: string): Promise<TakeResult> {
+        await Promise.resolve();
+        const stored = this.records.get(key);
+        if (!stored) return "gone";
+        if (stored.owner !== expectedOwner) return "taken";
+        const record = { ...stored, owner };
+        this.records.set(key, record);
         const images = new Map(
             [...(this.images.get(key) ?? [])].map(([id, image]) => [
                 id,
@@ -111,10 +123,12 @@ class MemorySnapshots implements SnapshotStorage {
         };
     }
 
-    async claim(key: string, owner: string): Promise<void> {
-        this.claims.push({ key, owner });
-        const record = this.records.get(key);
-        if (record) this.records.set(key, { ...record, owner });
+    async discard(key: string, expectedOwner: string): Promise<"removed" | "taken" | "gone"> {
+        await Promise.resolve();
+        const stored = this.records.get(key);
+        if (stored && stored.owner !== expectedOwner) return "taken";
+        await this.remove(key);
+        return stored ? "removed" : "gone";
     }
 
     /** The only snapshot; fails unless there is exactly one. */
@@ -130,35 +144,42 @@ interface Setup {
     preferences: PreferenceStore;
     errors: string[];
     infos: string[];
-    floating: { value: boolean };
-    composites: ReturnType<typeof createActiveComposites> | undefined;
+    /** The app's floating selection on these stores (SE-032), shown through the live composite. */
+    floating: FloatingState;
     autosave: Autosave;
 }
 
-function setup(
-    options: { storage?: MemorySnapshots; composites?: boolean; owner?: string } = {},
-): Setup {
+function setup(options: { storage?: MemorySnapshots; owner?: string } = {}): Setup {
     const sessions = createSessionsStore();
     const storage = options.storage ?? new MemorySnapshots();
     const preferences = createPreferenceStore(null);
     const errors: string[] = [];
     const infos: string[] = [];
-    const floating = { value: false };
     let time = 1_000;
     let keys = 0;
-    const composites = options.composites ? createActiveComposites(sessions) : undefined;
+    const composites = createActiveComposites(sessions);
+    const floating = createFloatingState({
+        sessions,
+        composites,
+        viewport: { invalidate: () => {} },
+        nextFrame(callback) {
+            const timer = setTimeout(callback, 16);
+            return () => clearTimeout(timer);
+        },
+        context: () => {},
+    });
     const autosave = createAutosave({
         sessions,
         storage,
         preferences,
         notices: { error: (message) => void errors.push(message) },
         composites,
-        isFloating: () => floating.value,
+        floats: floating.shown,
         owner: options.owner ?? "page-a",
         now: () => ++time,
         newKey: () => `key-${++keys}`,
     });
-    return { sessions, storage, preferences, errors, infos, floating, composites, autosave };
+    return { sessions, storage, preferences, errors, infos, floating, autosave };
 }
 
 /** A document of `frames` frames, each with a cel of noise on its one layer. */
@@ -199,6 +220,12 @@ function current(test: Setup): OpenDocument {
 }
 
 /** Lets the delay pass and every storage operation it started finish. */
+/**
+ * The delay plus the animation frame (16 ms here) in which a float tells the store where its
+ * selection went, which is a change too.
+ */
+const FLOAT_SETTLE_MS = AUTOSAVE_DELAY_MS + 100;
+
 async function elapse(test: Setup, ms = AUTOSAVE_DELAY_MS): Promise<void> {
     await vi.advanceTimersByTimeAsync(ms);
     await test.autosave.idle();
@@ -207,6 +234,16 @@ async function elapse(test: Setup, ms = AUTOSAVE_DELAY_MS): Promise<void> {
 function composites(document: OpenDocument): Uint8ClampedArray[] {
     const { doc } = document.session;
     return doc.frames.map((frame) => compositeFrame(doc, frame.id).data);
+}
+
+/** The RGBA bytes of `image` inside a rectangle, row by row. */
+function regionOf(image: PixelBuffer, x: number, y: number, width: number, height: number) {
+    const bytes: number[] = [];
+    for (let row = y; row < y + height; row++) {
+        const at = (row * image.width + x) * 4;
+        bytes.push(...image.data.subarray(at, at + width * 4));
+    }
+    return bytes;
 }
 
 function png(width: number, height: number): Uint8Array {
@@ -275,8 +312,8 @@ describe("autosave: when a snapshot is written", () => {
         expect(test.storage.only().docJson).toMatchObject({ exportSettings: { padding: 3 } });
     });
 
-    it("waits for a stroke's transaction, but not for a floating selection's", async () => {
-        const test = setup({ composites: true });
+    it("waits for a stroke's transaction", async () => {
+        const test = setup();
         const document = test.sessions.getState().open(framesDocument("hero", 1));
         const frameId = document.session.doc.frames[0]!.id;
         paintAt(document, frameId, 1);
@@ -286,28 +323,57 @@ describe("autosave: when a snapshot is written", () => {
         stroke.abort();
         await elapse(test);
         expect(test.storage.records.size).toBe(1);
-
-        // A float: its pixels are in the cel's image, and the snapshot holds them.
-        const float = document.history.begin({ layerId: document.session.activeLayerId, frameId });
-        test.floating.value = true;
-        float.image.data.set(noise(4, 3, 77));
-        float.markDirty({ x: 0, y: 0, width: 4, height: 3 });
-        // The app reports a transaction's pixels to the active composites.
-        test.composites!.invalidate({
-            frameIds: [frameId],
-            layerIds: [document.session.activeLayerId],
-            structure: false,
-        });
-        await elapse(test);
-        const record = test.storage.only();
-        const imageId = document.session.doc.cels.get(
-            celKey(document.session.activeLayerId, frameId),
-        )!.imageId;
-        expect(test.storage.images.get(record.key)!.get(imageId)!.data).toEqual(noise(4, 3, 77));
-        float.abort();
     });
 
-    it("honours the autosave preference: nothing while it is off, a snapshot once it is on again", async () => {
+    it("snapshots a floating selection where it floats, on a clean document too, without waiting for it to land", async () => {
+        const test = setup();
+        test.sessions.getState().open(framesDocument("hero", 1, 8, 6));
+        const document = current(test);
+        const { session } = document;
+        const imageOf = () =>
+            session.doc.images.get(
+                session.doc.cels.get(celKey(session.activeLayerId, session.activeFrameId))!.imageId,
+            )!;
+        const stored = () =>
+            test.storage.images
+                .get(test.storage.only().key)!
+                .get(
+                    session.doc.cels.get(celKey(session.activeLayerId, session.activeFrameId))!
+                        .imageId,
+                )!;
+        const pasted: PixelBuffer = { width: 2, height: 2, data: noise(2, 2, 500) };
+
+        // A paste floats: nothing is in the history, the document is clean, and it is kept.
+        test.floating.paste(document, contentOfImage(pasted), 1, 1);
+        await elapse(test, FLOAT_SETTLE_MS);
+        expect(isDirty(current(test))).toBe(false);
+        expect(stored().data).toEqual(imageOf().data);
+        expect(regionOf(stored(), 1, 1, 2, 2)).toEqual(Array.from(pasted.data));
+
+        // Moved: no history step, no composite refused; written again where it is now.
+        test.floating.moveTo(5, 3);
+        await elapse(test, FLOAT_SETTLE_MS);
+        expect(stored().data).toEqual(imageOf().data);
+        expect(regionOf(stored(), 5, 3, 2, 2)).toEqual(Array.from(pasted.data));
+
+        // Cancelled: the document is its file again, and the snapshot goes.
+        test.floating.cancel();
+        await elapse(test, FLOAT_SETTLE_MS);
+        expect(test.storage.records.size).toBe(0);
+
+        // A whole cel lifted and moved tells the store nothing (no selection follows it): the
+        // float itself reports the move.
+        test.floating.lift(current(test), { whole: true });
+        test.floating.moveBy(1, 0);
+        await elapse(test, FLOAT_SETTLE_MS);
+        expect(stored().data).toEqual(imageOf().data);
+        test.floating.apply();
+        await elapse(test, FLOAT_SETTLE_MS);
+        expect(isDirty(current(test))).toBe(true);
+        expect(stored().data).toEqual(imageOf().data);
+    });
+
+    it("honours the autosave preference: nothing while it is off, a snapshot once it is on again; turning it off removes this page's snapshots", async () => {
         const test = setup();
         test.preferences.set("autosave", { enabled: false });
         const document = test.sessions.getState().open(framesDocument("hero", 1));
@@ -317,6 +383,15 @@ describe("autosave: when a snapshot is written", () => {
         test.preferences.set("autosave", { enabled: true });
         await elapse(test);
         expect(test.storage.records.size).toBe(1);
+        test.preferences.set("autosave", { enabled: false });
+        await test.autosave.idle();
+        expect(test.storage.records.size).toBe(0);
+        expect(test.storage.images.size).toBe(0);
+        // On again: written in full.
+        test.preferences.set("autosave", { enabled: true });
+        await elapse(test);
+        expect(test.storage.only().imageIds).toHaveLength(1);
+        expect(test.storage.images.get(test.storage.only().key)!.size).toBe(1);
     });
 });
 
@@ -428,6 +503,101 @@ describe("autosave: what a snapshot writes", () => {
                 document.session.doc.images.get(id)!.data,
             );
         }
+    });
+});
+
+describe("autosave: races and large documents", () => {
+    it("gives a write up when a stroke begins during it (its pixels reach no one yet), and writes once the stroke is over", async () => {
+        const test = setup();
+        const document = test.sessions.getState().open(framesDocument("hero", 3));
+        const frames = document.session.doc.frames;
+        paintAt(document, frames[0]!.id, 1);
+        await elapse(test);
+        const before = structuredClone(test.storage.only());
+
+        paintAt(document, frames[1]!.id, 2);
+        paintAt(document, frames[2]!.id, 3);
+        let stroke: ReturnType<typeof document.history.begin> | null = null;
+        test.storage.beforePut = () => {
+            stroke ??= document.history.begin({
+                layerId: document.session.activeLayerId,
+                frameId: frames[0]!.id,
+            });
+        };
+        await elapse(test);
+        expect(stroke).not.toBeNull();
+        expect(test.storage.only()).toEqual(before);
+        test.storage.beforePut = null;
+        // Still in the stroke: it waits.
+        await elapse(test, 2 * AUTOSAVE_DELAY_MS);
+        expect(test.storage.only()).toEqual(before);
+        stroke!.abort();
+        await elapse(test);
+        const key = test.storage.only().key;
+        for (const frame of frames) {
+            const id = document.session.doc.cels.get(
+                celKey(document.session.activeLayerId, frame.id),
+            )!.imageId;
+            expect(test.storage.images.get(key)!.get(id)!.data).toEqual(
+                document.session.doc.images.get(id)!.data,
+            );
+        }
+    });
+
+    it("leaves a snapshot another page took to it, and writes its document in full under a new key", async () => {
+        const test = setup();
+        const document = test.sessions.getState().open(framesDocument("hero", 2));
+        const frames = document.session.doc.frames;
+        paintAt(document, frames[0]!.id, 1);
+        await elapse(test);
+        const first = test.storage.only();
+        // Another page recovered it (its owner changed in the storage).
+        const taken = { ...first, owner: "page-x" };
+        test.storage.records.set(first.key, taken);
+        test.storage.imagePuts.length = 0;
+        paintAt(document, frames[1]!.id, 2);
+        await elapse(test);
+        await elapse(test);
+        expect(test.storage.records.get(first.key)).toEqual(taken);
+        const mine = [...test.storage.records.values()].filter((each) => each.owner === "page-a");
+        expect(mine).toHaveLength(1);
+        expect(mine[0]!.key).not.toBe(first.key);
+        expect(test.storage.imagePuts.sort()).toEqual(
+            [...document.session.doc.images.keys()].map((id) => `${mine[0]!.key}/${id}`).sort(),
+        );
+    });
+
+    it("takes the thumbnail of a large document from its first frame's cels, with projectThumbnail's pixels", async () => {
+        const session = createDocument(
+            { name: "big", width: 300, height: 200 },
+            sequentialIds("b-"),
+        );
+        const { doc } = session;
+        const frameId = doc.frames[0]!.id;
+        const bottom = doc.layers[0]!;
+        doc.layers.push({
+            id: "top",
+            name: "Top",
+            kind: "pixel",
+            visible: true,
+            locked: false,
+            opacity: 128,
+            blend: "normal",
+        });
+        doc.images.set("bottom-image", { width: 300, height: 200, data: noise(300, 200, 7) });
+        const half = noise(300, 200, 8);
+        for (let at = 3; at < half.length; at += 8) half[at] = 90;
+        doc.images.set("top-image", { width: 300, height: 200, data: half });
+        doc.cels.set(celKey(bottom.id, frameId), { imageId: "bottom-image", opacity: 200 });
+        doc.cels.set(celKey("top", frameId), { imageId: "top-image", opacity: 255 });
+        expect(documentThumbnail(doc)).toEqual(projectThumbnail(doc));
+
+        const test = setup();
+        const document = test.sessions.getState().open(session);
+        session.activeLayerId = "top";
+        paintAt(document, frameId, 9);
+        await elapse(test);
+        expect(test.storage.only().thumbnail).toEqual(projectThumbnail(doc));
     });
 });
 
@@ -560,7 +730,7 @@ describe("recovery", () => {
         return { expected, document };
     }
 
-    function recoveryOf(test: Setup, open: Set<string> = new Set()): Recovery {
+    function recoveryOf(test: Setup, open: Set<string> = new Set(), owner = "page-b"): Recovery {
         return createRecovery({
             storage: test.storage,
             sessions: test.sessions,
@@ -569,10 +739,73 @@ describe("recovery", () => {
                 info: (message) => void test.infos.push(message),
                 error: (message) => void test.errors.push(message),
             },
-            owner: "page-b",
+            owner,
             openOwners: async () => open,
         });
     }
+
+    it("two pages offering one snapshot: the second to Recover or Discard is told it is open in another tab, and changes nothing", async () => {
+        const storage = new MemorySnapshots();
+        await crashedPage(storage);
+        const b = setup({ storage, owner: "page-b" });
+        const c = setup({ storage, owner: "page-c" });
+        const recoveryB = recoveryOf(b, new Set(), "page-b");
+        // Page c checked the open pages before b took the snapshot.
+        const recoveryC = recoveryOf(c, new Set(), "page-c");
+        const [offeredB] = await recoveryB.offered();
+        const [offeredC] = await recoveryC.offered();
+        expect(offeredC!.key).toBe(offeredB!.key);
+
+        expect(await recoveryB.recover(offeredB!.key)).toBe(true);
+        expect(b.sessions.getState().documents).toHaveLength(1);
+        await b.autosave.idle();
+        const taken = structuredClone(storage.only());
+        expect(taken.owner).toBe("page-b");
+
+        // Its row goes, with a toast; nothing opens and the snapshot stays b's.
+        expect(await recoveryC.recover(offeredC!.key)).toBe(true);
+        expect(c.sessions.getState().documents).toEqual([]);
+        expect(c.errors).toEqual([elsewhereMessage("hero")]);
+        expect(await recoveryC.discard(offeredC!.key)).toBe(true);
+        expect(c.errors).toEqual([elsewhereMessage("hero"), elsewhereMessage("hero")]);
+        expect(storage.only()).toEqual(taken);
+        expect(storage.images.get(taken.key)!.size).toBe(3);
+    });
+
+    it("refuses Recover and Discard of a snapshot whose owner is open now", async () => {
+        const storage = new MemorySnapshots();
+        await crashedPage(storage);
+        const test = setup({ storage, owner: "page-b" });
+        const open = new Set<string>();
+        const recovery = recoveryOf(test, open);
+        const [record] = await recovery.offered();
+        // The page that wrote it is open after all (it was slow to take its lock).
+        open.add("page-gone");
+        expect(await recovery.recover(record!.key)).toBe(true);
+        expect(await recovery.discard(record!.key)).toBe(true);
+        expect(test.sessions.getState().documents).toEqual([]);
+        expect(test.errors).toEqual([elsewhereMessage("hero"), elsewhereMessage("hero")]);
+        expect(storage.only().owner).toBe("page-gone");
+    });
+
+    it("refuses a snapshot without a reference source a layer names, as a project file is refused", async () => {
+        const storage = new MemorySnapshots();
+        await crashedPage(storage);
+        const [record] = await storage.list();
+        storage.sources.get(record!.key)!.clear();
+        const test = setup({ storage, owner: "page-b" });
+        const recovery = recoveryOf(test);
+        await recovery.offered();
+        expect(await recovery.recover(record!.key)).toBe(false);
+        expect(test.sessions.getState().documents).toEqual([]);
+        expect(test.errors).toEqual([
+            "Could not recover “hero”. A reference layer names the source “src-1”, and the " +
+                "snapshot does not hold it.",
+        ]);
+        // Its row stays; Discard removes it (the snapshot is this page's now).
+        expect(await recovery.discard(record!.key)).toBe(true);
+        expect(storage.records.size).toBe(0);
+    });
 
     it("offers the snapshots of pages that are gone, and opens one byte-identical, dirty, with an empty history", async () => {
         const storage = new MemorySnapshots();
@@ -617,7 +850,7 @@ describe("recovery", () => {
         const test = setup({ storage, owner: "page-b" });
         const recovery = recoveryOf(test);
         const [record] = await recovery.offered();
-        expect(await recovery.discard(record!.key, record!.name)).toBe(true);
+        expect(await recovery.discard(record!.key)).toBe(true);
         expect(storage.records.size).toBe(0);
         expect(storage.images.size).toBe(0);
         expect(storage.sources.size).toBe(0);
@@ -631,7 +864,9 @@ describe("recovery", () => {
         // An image is missing.
         storage.images.get(record!.key)!.clear();
         const test = setup({ storage, owner: "page-b" });
-        expect(await recoveryOf(test).recover(record!.key)).toBe(false);
+        const recovery = recoveryOf(test);
+        await recovery.offered();
+        expect(await recovery.recover(record!.key)).toBe(false);
         expect(test.sessions.getState().documents).toEqual([]);
         expect(test.errors).toHaveLength(1);
         expect(test.errors[0]).toMatch(/^Could not recover “hero”\. /);
@@ -644,8 +879,9 @@ describe("recovery", () => {
         test.sessions.getState().open(framesDocument("hero", 1));
         const openId = test.sessions.getState().documents[0]!.id;
         expect(openId).toBe(document.id);
-        const [record] = await recoveryOf(test).offered();
-        expect(await recoveryOf(test).recover(record!.key)).toBe(true);
+        const recovery = recoveryOf(test);
+        const [record] = await recovery.offered();
+        expect(await recovery.recover(record!.key)).toBe(true);
         const ids = test.sessions.getState().documents.map((entry) => entry.id);
         expect(ids).toHaveLength(2);
         expect(new Set(ids).size).toBe(2);
@@ -697,6 +933,34 @@ describe("recovery", () => {
         expect(shown).toHaveLength(1);
         const last = performance.getEntriesByName(RECOVERY_CHECKED_MARK).at(-1) as PerformanceMark;
         expect(last.detail).toEqual({ offered: 0 });
+    });
+
+    it("on launch with another dialog open, offers the snapshots once that dialog closes", async () => {
+        const storage = new MemorySnapshots();
+        await crashedPage(storage);
+        vi.useRealTimers();
+        const test = setup({ storage, owner: "page-b" });
+        const requests = createDialogRequests();
+        requests.attachHost();
+        const dialogs = createRecoveryDialogs(requests);
+        let closeOther: (() => void) | null = null;
+        void requests.open((answer) => {
+            closeOther = () => answer(null);
+            return { kind: "other", answer };
+        });
+        let offered: number | null = null;
+        const check = offerRecovery(recoveryOf(test), dialogs, () => false).then((count) => {
+            offered = count;
+        });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(offered).toBeNull();
+        expect(dialogs.store.getState().request).toBeNull();
+        closeOther!();
+        await check;
+        expect(offered).toBe(1);
+        expect(dialogs.store.getState().request?.entries.map((entry) => entry.name)).toEqual([
+            "hero",
+        ]);
     });
 });
 

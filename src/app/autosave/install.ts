@@ -1,6 +1,6 @@
 import { notices } from "../notices/notices";
 import { preferences } from "../preferences/preferences";
-import { isFloating } from "../selection/floating";
+import { floatingState } from "../selection/floatingState";
 import { activeComposites } from "../state/composites";
 import { sessionsStore } from "../state/sessions";
 import { createAutosave } from "./autosave";
@@ -31,7 +31,7 @@ export function installAutosave(): () => void {
         preferences,
         notices,
         composites: activeComposites,
-        isFloating: () => isFloating(),
+        floats: floatingState.shown,
         owner,
     });
     let stopped = false;

@@ -12,6 +12,11 @@ import type { PixelBuffer } from "../../core/model";
 // one per task (each put in the success callback of the one before), so no task of autosave
 // clones more than one image: a large document does not block the page for the time of all of
 // its images (SE-042: no long task attributed to autosave).
+//
+// A snapshot names its owner, the page that wrote it or recovered it. Several pages may share
+// the database (two tabs restored after a crash both offer recovery): a write leaves a snapshot
+// of another owner alone, and recovering or discarding a snapshot checks, in the same
+// transaction, that its owner is still the one the page saw (SE-042 review B).
 
 /** The key of a snapshot: one per open document, kept while it is open (`autosave.ts`). */
 export type SnapshotKey = string;
@@ -24,8 +29,8 @@ export interface SnapshotRecord {
     /** When the snapshot was written, in milliseconds since the epoch. */
     readonly savedAt: number;
     /**
-     * The page that wrote it (`recovery.ts`): a snapshot of a page that is still open is not
-     * offered for recovery by another page.
+     * The page that wrote it or recovered it (`recovery.ts`): a snapshot of a page that is still
+     * open is not offered for recovery by another page.
      */
     readonly owner: string;
     /** The schema version of `docJson` (`PROJECT_VERSION` when written). */
@@ -70,21 +75,35 @@ export interface StoredSnapshot {
     readonly sources: ReadonlyMap<string, Uint8Array>;
 }
 
+/**
+ * What `take` found: the snapshot, now the taking page's; "taken" when its owner is no longer
+ * the one expected (another page recovered it); "gone" when it is no longer stored.
+ */
+export type TakeResult = StoredSnapshot | "taken" | "gone";
+
 export interface SnapshotStorage {
     /**
-     * Writes a snapshot. Resolves "aborted" when `shouldAbort` gave it up, "written" once the
-     * transaction committed; rejects with the transaction's error (a `QuotaExceededError` when
-     * storage is full), leaving the snapshot before it.
+     * Writes a snapshot. Resolves "written" once the transaction committed; "aborted" when
+     * `shouldAbort` gave it up; "taken" when the stored snapshot of the key names another owner
+     * than the record written (another page recovered it): nothing is written then. Rejects
+     * with the transaction's error (a `QuotaExceededError` when storage is full), leaving the
+     * snapshot before it.
      */
-    write(write: SnapshotWrite): Promise<"written" | "aborted">;
+    write(write: SnapshotWrite): Promise<"written" | "aborted" | "taken">;
     /** Removes every record of a snapshot. */
     remove(key: SnapshotKey): Promise<void>;
     /** Every snapshot's record, newest first. */
     list(): Promise<SnapshotRecord[]>;
-    /** A snapshot with its images and sources, or null when there is none. */
-    read(key: SnapshotKey): Promise<StoredSnapshot | null>;
-    /** Gives the snapshot another owner (a page that recovered it). */
-    claim(key: SnapshotKey, owner: string): Promise<void>;
+    /**
+     * Reads a snapshot and makes it `owner`'s, in one transaction, if its stored owner is still
+     * `expectedOwner`: two pages cannot both recover it.
+     */
+    take(key: SnapshotKey, expectedOwner: string, owner: string): Promise<TakeResult>;
+    /**
+     * Removes a snapshot, in one transaction, if its stored owner is still `expectedOwner`: a
+     * snapshot another page recovered meanwhile is not removed.
+     */
+    discard(key: SnapshotKey, expectedOwner: string): Promise<"removed" | "taken" | "gone">;
 }
 
 export const AUTOSAVE_DATABASE = "ngne-sprite-editor-autosave";
@@ -124,6 +143,13 @@ function done(transaction: IDBTransaction): Promise<void> {
     });
 }
 
+/** Deletes every record of the snapshot `key` within `transaction`. */
+function removeAll(transaction: IDBTransaction, key: SnapshotKey): void {
+    transaction.objectStore(SNAPSHOT_STORE).delete(key);
+    transaction.objectStore(IMAGE_STORE).delete(rangeOf(key));
+    transaction.objectStore(SOURCE_STORE).delete(rangeOf(key));
+}
+
 /** The data of a buffer as a value of its own: a view into a larger buffer is copied. */
 function ownData(data: Uint8ClampedArray): Uint8ClampedArray {
     return data.byteOffset === 0 && data.byteLength === data.buffer.byteLength
@@ -143,6 +169,12 @@ function imageFrom(value: unknown): PixelBuffer | null {
     return data instanceof Uint8ClampedArray ? { width, height, data } : null;
 }
 
+/** The second part of a key `[snapshot key, id]`, or null. */
+function idOf(key: IDBValidKey): string | null {
+    const id = Array.isArray(key) ? key[1] : undefined;
+    return typeof id === "string" ? id : null;
+}
+
 export interface IndexedDbSnapshotOptions {
     /** The IndexedDB to use; the default is the page's (`indexedDB`). */
     factory?: Pick<IDBFactory, "open">;
@@ -152,7 +184,9 @@ export interface IndexedDbSnapshotOptions {
 /**
  * The snapshots in the page's IndexedDB, or null where there is none (Node). An open that
  * another tab blocks, or that does not answer within the timeout, fails the operation that
- * asked; the next one tries again.
+ * asked, and a connection that opens after that is closed at once; the next operation tries
+ * again. A connection the browser closes, or that a newer version elsewhere asks to close, is
+ * let go, and the next operation opens another.
  */
 export function indexedDbSnapshots(options: IndexedDbSnapshotOptions = {}): SnapshotStorage | null {
     const factory = options.factory ?? (typeof indexedDB === "undefined" ? null : indexedDB);
@@ -160,36 +194,48 @@ export function indexedDbSnapshots(options: IndexedDbSnapshotOptions = {}): Snap
     const timeoutMs = options.timeoutMs ?? AUTOSAVE_OPEN_TIMEOUT_MS;
     let opened: Promise<IDBDatabase> | null = null;
 
-    const database = (): Promise<IDBDatabase> => {
-        opened ??= (async () => {
-            let timer: ReturnType<typeof setTimeout> | undefined;
-            const opening = factory.open(AUTOSAVE_DATABASE, 1);
-            opening.onupgradeneeded = () => {
-                const db = opening.result;
-                for (const name of STORES) {
-                    if (!db.objectStoreNames.contains(name)) db.createObjectStore(name);
-                }
+    const openDatabase = async (): Promise<IDBDatabase> => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const open = factory.open(AUTOSAVE_DATABASE, 1);
+        open.onupgradeneeded = () => {
+            const db = open.result;
+            for (const name of STORES) {
+                if (!db.objectStoreNames.contains(name)) db.createObjectStore(name);
+            }
+        };
+        return new Promise<IDBDatabase>((resolve, reject) => {
+            /** Given up: a connection that opens later is closed at once. */
+            const giveUp = (error: Error) => {
+                open.onsuccess = () => open.result.close();
+                reject(error);
             };
-            const db = await new Promise<IDBDatabase>((resolve, reject) => {
-                opening.onsuccess = () => resolve(opening.result);
-                opening.onerror = () => reject(opening.error ?? new Error("Not opened."));
-                opening.onblocked = () => reject(new Error("The database is blocked."));
-                timer = setTimeout(() => {
-                    opening.onsuccess = () => opening.result.close();
-                    reject(new Error("IndexedDB did not answer."));
-                }, timeoutMs);
-            }).finally(() => clearTimeout(timer));
+            open.onsuccess = () => resolve(open.result);
+            open.onerror = () => reject(open.error ?? new Error("Not opened."));
+            open.onblocked = () => giveUp(new Error("The database is blocked."));
+            timer = setTimeout(() => giveUp(new Error("IndexedDB did not answer.")), timeoutMs);
+        }).finally(() => clearTimeout(timer));
+    };
+
+    const database = (): Promise<IDBDatabase> => {
+        if (opened) return opened;
+        const opening = openDatabase().then((db) => {
+            /** The connection is no longer usable: the next operation opens another. */
+            const forget = () => {
+                if (opened === opening) opened = null;
+            };
             db.onversionchange = () => {
                 db.close();
-                opened = null;
+                forget();
             };
+            db.onclose = forget;
             return db;
-        })();
-        // A failed open is tried again by the next operation.
-        opened.catch(() => {
-            opened = null;
         });
-        return opened;
+        opened = opening;
+        // A failed open is tried again by the next operation.
+        opening.catch(() => {
+            if (opened === opening) opened = null;
+        });
+        return opening;
     };
 
     return {
@@ -200,44 +246,53 @@ export function indexedDbSnapshots(options: IndexedDbSnapshotOptions = {}): Snap
             const snapshots = transaction.objectStore(SNAPSHOT_STORE);
             const images = transaction.objectStore(IMAGE_STORE);
             const sources = transaction.objectStore(SOURCE_STORE);
-            const { key } = write.record;
-            let aborted = false;
-            /** An error thrown by a put itself (a value that cannot be cloned). */
+            const { key, owner } = write.record;
+            let outcome: "aborted" | "taken" | null = null;
+            /** An error thrown by a request itself (a value that cannot be cloned). */
             let failure: unknown = null;
-            const abort = () => {
-                aborted = true;
+            const abort = (why: "aborted" | "taken") => {
+                outcome = why;
                 transaction.abort();
             };
-            if (write.replace) {
-                images.delete(rangeOf(key));
-                sources.delete(rangeOf(key));
-            }
-            for (const id of write.deleteImages) images.delete([key, id]);
-            for (const id of write.deleteSources) sources.delete([key, id]);
-            for (const [id, bytes] of write.putSources) sources.put(bytes, [key, id]);
-            // One image per task: each is put once the one before was stored.
-            const pending = [...write.putImages];
-            const next = () => {
+            const guarded = (step: () => void) => () => {
                 try {
-                    if (write.shouldAbort()) return abort();
-                    const entry = pending.shift();
-                    if (!entry) {
-                        snapshots.put(write.record, key);
-                        return;
-                    }
-                    const [id, image] = entry;
-                    images.put(storedImage(image), [key, id]).onsuccess = next;
+                    step();
                 } catch (error) {
                     failure = error;
                     transaction.abort();
                 }
             };
-            next();
+            // One image per task: each is put once the one before was stored.
+            const pending = [...write.putImages];
+            const next = guarded(() => {
+                if (write.shouldAbort()) return abort("aborted");
+                const entry = pending.shift();
+                if (!entry) {
+                    snapshots.put(write.record, key);
+                    return;
+                }
+                const [id, image] = entry;
+                images.put(storedImage(image), [key, id]).onsuccess = next;
+            });
+            // Only a snapshot of this owner is written over: one another page took is left.
+            const check = snapshots.get(key);
+            check.onsuccess = guarded(() => {
+                const stored = check.result as SnapshotRecord | undefined;
+                if (stored && stored.owner !== owner) return abort("taken");
+                if (write.replace) {
+                    images.delete(rangeOf(key));
+                    sources.delete(rangeOf(key));
+                }
+                for (const id of write.deleteImages) images.delete([key, id]);
+                for (const id of write.deleteSources) sources.delete([key, id]);
+                for (const [id, bytes] of write.putSources) sources.put(bytes, [key, id]);
+                next();
+            });
             try {
                 await finished;
             } catch (error) {
                 if (failure !== null) throw failure;
-                if (aborted) return "aborted";
+                if (outcome !== null) return outcome;
                 throw error;
             }
             return "written";
@@ -247,9 +302,7 @@ export function indexedDbSnapshots(options: IndexedDbSnapshotOptions = {}): Snap
             const db = await database();
             const transaction = db.transaction(STORES, "readwrite");
             const finished = done(transaction);
-            transaction.objectStore(SNAPSHOT_STORE).delete(key);
-            transaction.objectStore(IMAGE_STORE).delete(rangeOf(key));
-            transaction.objectStore(SOURCE_STORE).delete(rangeOf(key));
+            removeAll(transaction, key);
             await finished;
         },
 
@@ -261,42 +314,68 @@ export function indexedDbSnapshots(options: IndexedDbSnapshotOptions = {}): Snap
             return (all as SnapshotRecord[]).sort((a, b) => b.savedAt - a.savedAt);
         },
 
-        async read(key) {
+        async take(key, expectedOwner, owner) {
             const db = await database();
-            const transaction = db.transaction(STORES, "readonly");
-            const record = (await request(transaction.objectStore(SNAPSHOT_STORE).get(key))) as
-                SnapshotRecord | undefined;
-            if (!record) return null;
-            const range = rangeOf(key);
-            const [imageKeys, imageValues, sourceKeys, sourceValues] = await Promise.all([
-                request(transaction.objectStore(IMAGE_STORE).getAllKeys(range)),
-                request(transaction.objectStore(IMAGE_STORE).getAll(range)),
-                request(transaction.objectStore(SOURCE_STORE).getAllKeys(range)),
-                request(transaction.objectStore(SOURCE_STORE).getAll(range)),
-            ]);
-            const images = new Map<string, PixelBuffer>();
-            imageKeys.forEach((stored, index) => {
-                const image = imageFrom(imageValues[index]);
-                const id = (stored as [string, string])[1];
-                if (image && typeof id === "string") images.set(id, image);
-            });
-            const sources = new Map<string, Uint8Array>();
-            sourceKeys.forEach((stored, index) => {
-                const bytes: unknown = sourceValues[index];
-                const id = (stored as [string, string])[1];
-                if (bytes instanceof Uint8Array && typeof id === "string") sources.set(id, bytes);
-            });
-            return { record, images, sources };
+            const transaction = db.transaction(STORES, "readwrite");
+            const finished = done(transaction);
+            const snapshots = transaction.objectStore(SNAPSHOT_STORE);
+            let result: TakeResult = "gone";
+            const check = snapshots.get(key);
+            check.onsuccess = () => {
+                const stored = check.result as SnapshotRecord | undefined;
+                if (!stored) return;
+                if (stored.owner !== expectedOwner) {
+                    result = "taken";
+                    return;
+                }
+                const record: SnapshotRecord = { ...stored, owner };
+                snapshots.put(record, key);
+                const range = rangeOf(key);
+                const imageStore = transaction.objectStore(IMAGE_STORE);
+                const sourceStore = transaction.objectStore(SOURCE_STORE);
+                const imageKeys = imageStore.getAllKeys(range);
+                const imageValues = imageStore.getAll(range);
+                const sourceKeys = sourceStore.getAllKeys(range);
+                const sourceValues = sourceStore.getAll(range);
+                // The requests of a transaction answer in order: the last one answers last.
+                sourceValues.onsuccess = () => {
+                    const images = new Map<string, PixelBuffer>();
+                    imageKeys.result.forEach((stored, index) => {
+                        const image = imageFrom(imageValues.result[index]);
+                        const id = idOf(stored);
+                        if (image && id !== null) images.set(id, image);
+                    });
+                    const sources = new Map<string, Uint8Array>();
+                    sourceKeys.result.forEach((stored, index) => {
+                        const bytes: unknown = sourceValues.result[index];
+                        const id = idOf(stored);
+                        if (bytes instanceof Uint8Array && id !== null) sources.set(id, bytes);
+                    });
+                    result = { record, images, sources };
+                };
+            };
+            await finished;
+            return result;
         },
 
-        async claim(key, owner) {
+        async discard(key, expectedOwner) {
             const db = await database();
-            const transaction = db.transaction(SNAPSHOT_STORE, "readwrite");
+            const transaction = db.transaction(STORES, "readwrite");
             const finished = done(transaction);
-            const store = transaction.objectStore(SNAPSHOT_STORE);
-            const record = (await request(store.get(key))) as SnapshotRecord | undefined;
-            if (record) store.put({ ...record, owner }, key);
+            let result: "removed" | "taken" | "gone" = "gone";
+            const check = transaction.objectStore(SNAPSHOT_STORE).get(key);
+            check.onsuccess = () => {
+                const stored = check.result as SnapshotRecord | undefined;
+                if (stored && stored.owner !== expectedOwner) {
+                    result = "taken";
+                    return;
+                }
+                // Without a record, records of the key may still be left: they go too.
+                removeAll(transaction, key);
+                if (stored) result = "removed";
+            };
             await finished;
+            return result;
         },
     };
 }

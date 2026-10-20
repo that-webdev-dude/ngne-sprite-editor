@@ -37,19 +37,40 @@ function Thumbnail({ image, name }: { image: PixelBuffer; name: string }) {
     );
 }
 
+/** Asks a row to take the focus: its first action (Recover, or Cancel while it asks). */
+interface FocusRequest {
+    readonly key: string;
+    /** Tells two requests for the same row apart. */
+    readonly serial: number;
+}
+
 function Row({
     entry,
     request,
     busy,
+    focus,
     onWork,
 }: {
     entry: RecoveryEntry;
     request: RecoveryRequest;
     busy: boolean;
+    focus: FocusRequest | null;
     /** Runs `task` with the rows disabled; when it succeeds, the row goes. */
     onWork(task: () => Promise<boolean>): void;
 }) {
     const [confirming, setConfirming] = useState(false);
+    const first = useRef<HTMLButtonElement>(null);
+    const asked = useRef(false);
+    // The question's Cancel takes the focus when the row asks, Recover when it stops asking.
+    useEffect(() => {
+        if (!asked.current && !confirming) return;
+        asked.current = true;
+        first.current?.focus();
+    }, [confirming]);
+    // Asked for by the dialog (after a row went, or when an action failed); once enabled.
+    useEffect(() => {
+        if (focus?.key === entry.key && !busy) first.current?.focus();
+    }, [focus, entry.key, busy]);
     const time = new Date(entry.savedAt);
     return (
         <li className="recovery__entry" data-recovery-entry={entry.name}>
@@ -64,7 +85,7 @@ function Row({
                 {confirming ? (
                     <>
                         <span className="recovery__question">Discard permanently?</span>
-                        <Button disabled={busy} onClick={() => setConfirming(false)}>
+                        <Button ref={first} disabled={busy} onClick={() => setConfirming(false)}>
                             Cancel
                         </Button>
                         <Button
@@ -78,6 +99,7 @@ function Row({
                 ) : (
                     <>
                         <Button
+                            ref={first}
                             variant="primary"
                             disabled={busy}
                             onClick={() => onWork(() => request.recover(entry.key))}
@@ -97,21 +119,40 @@ function Row({
 /**
  * The recovery dialog (DESIGN §7): the documents left with unsaved changes, newest first, each
  * with its name, the time of its snapshot and a thumbnail, and Recover / Discard. Discard is
- * confirmed once in its row, since undo cannot bring a snapshot back. A row goes once its
- * action succeeds; the dialog closes with the last one. Close and Escape keep the snapshots
- * left for the next launch.
+ * confirmed once in its row, since undo cannot bring a snapshot back; the question's Cancel
+ * takes the focus. A row goes once its action succeeds (or another tab has its snapshot), the
+ * focus going to the next row's Recover, or to Close when no row follows; the dialog closes
+ * with the last row. Close and Escape keep the snapshots left for the next launch.
  */
 export function RecoveryDialog({ request }: { request: RecoveryRequest }) {
     const [entries, setEntries] = useState(request.entries);
     const [busy, setBusy] = useState(false);
+    const [focus, setFocus] = useState<FocusRequest | null>(null);
+    const [focusClose, setFocusClose] = useState(0);
+    const close = useRef<HTMLButtonElement>(null);
+    const serial = useRef(0);
+    useEffect(() => {
+        if (focusClose > 0) close.current?.focus();
+    }, [focusClose]);
     const work = (key: string, task: () => Promise<boolean>) => {
         setBusy(true);
         void task().then((done) => {
             setBusy(false);
-            if (!done) return;
+            const index = entries.findIndex((entry) => entry.key === key);
+            if (!done) {
+                // Its action was disabled while it ran: the row takes the focus back.
+                setFocus({ key, serial: ++serial.current });
+                return;
+            }
             const rest = entries.filter((entry) => entry.key !== key);
             setEntries(rest);
-            if (rest.length === 0) request.answer(null);
+            if (rest.length === 0) {
+                request.answer(null);
+                return;
+            }
+            const next = rest[index];
+            if (next) setFocus({ key: next.key, serial: ++serial.current });
+            else setFocusClose((count) => count + 1);
         });
     };
     return (
@@ -121,7 +162,11 @@ export function RecoveryDialog({ request }: { request: RecoveryRequest }) {
                 if (!open) request.answer(null);
             }}
             title="Recover unsaved work?"
-            actions={<Button onClick={() => request.answer(null)}>Close</Button>}
+            actions={
+                <Button ref={close} onClick={() => request.answer(null)}>
+                    Close
+                </Button>
+            }
         >
             <p>
                 {entries.length === 1 ? "This document" : "These documents"} had unsaved changes
@@ -134,6 +179,7 @@ export function RecoveryDialog({ request }: { request: RecoveryRequest }) {
                         entry={entry}
                         request={request}
                         busy={busy}
+                        focus={focus}
                         onWork={(task) => work(entry.key, task)}
                     />
                 ))}
