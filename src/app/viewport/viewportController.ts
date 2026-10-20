@@ -221,6 +221,11 @@ export function connectViewport(
         viewport.setOnion(ghosts);
     };
 
+    /** Tiled mode of the shown document (SE-062); the viewport compares it with its own. */
+    const pushTiled = () => {
+        viewport.setTiled?.(shown ? shown.doc.settings.tiled : "none");
+    };
+
     const follow = () => {
         const document = activeDocument(sessions.getState());
         // The session object, not the id: the same file opened again is another session.
@@ -231,6 +236,7 @@ export function connectViewport(
         if (!document) {
             pushReferences();
             pushOnion();
+            pushTiled();
             return;
         }
         const active = document.session.activeFrameId;
@@ -244,6 +250,7 @@ export function connectViewport(
         }
         pushReferences();
         pushOnion();
+        pushTiled();
     };
 
     viewport.setBackground(theme.workspace);

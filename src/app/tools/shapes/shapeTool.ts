@@ -1,7 +1,8 @@
 import { clonePixelBuffer } from "../../../core/pixels";
-import { paintInk, ShapeStroke } from "../../../core/raster";
+import { ShapeStroke } from "../../../core/raster";
 import type { PixelPoint, Shape, ShapeKind } from "../../../core/raster";
-import { brushOf, inkOf, opacityOf, paintCursor } from "../brush/brushOptions";
+import { paintCursor } from "../brush/brushOptions";
+import { paintStrokeOptions } from "../brush/strokeOptions";
 import type {
     ToggleToolOption,
     ToolContext,
@@ -20,8 +21,9 @@ import type {
 // step, or none when it changes nothing; Escape takes it back.
 //
 // The brush (size and shape of `brushOptions.ts`) is stamped along the outline; a filled
-// rectangle or ellipse also covers every pixel inside it. Modifiers, as the pointer or the
-// keyboard reports them at each draw:
+// rectangle or ellipse also covers every pixel inside it, mirrored and wrapped with the
+// document's symmetry and tiled mode at the press (SE-062, `paintStrokeOptions`). Modifiers,
+// as the pointer or the keyboard reports them at each draw:
 //
 //   Shift   line: the end snaps to the nearest 45° step; rectangle and ellipse: a square
 //           or a circle, as large as the larger side of the drag
@@ -140,10 +142,7 @@ export function shapeTool(spec: ShapeToolSpec): ToolSpec {
             // The image as the stroke found it: the inks read it, and each draw puts back
             // from it what the previous one covered.
             const original = clonePixelBuffer(paint.image);
-            const stroke = new ShapeStroke(paint.image, original, {
-                brush: brushOf(values),
-                ink: paintInk(inkOf(values), context.colour, opacityOf(values)),
-            });
+            const stroke = new ShapeStroke(paint.image, original, paintStrokeOptions(context));
             const start = { x: pointer.pixel.x, y: pointer.pixel.y };
             const drag: Drag = {
                 stroke,

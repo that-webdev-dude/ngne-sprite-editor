@@ -1,8 +1,9 @@
 import { compositeFrame } from "../../../core/composite";
 import type { PixelBuffer } from "../../../core/model";
-import { FLOOD_MAX_TOLERANCE, floodMask, paintInk, paintMask } from "../../../core/raster";
+import { FLOOD_MAX_TOLERANCE, paintInk, paintMask, symmetricFloodMask } from "../../../core/raster";
 import type { ActiveComposites } from "../../state/composites";
 import { INK, inkOf, OPACITY, opacityOf } from "../brush/brushOptions";
+import { strokeSymmetryOf } from "../brush/strokeOptions";
 import type {
     ChoiceToolOption,
     NumberToolOption,
@@ -19,6 +20,11 @@ import type {
 // contiguous or not; with a selection it stays inside it, and the transaction's clip keeps
 // every other pixel. A fill is one undo step; a fill that changes nothing records nothing.
 // The drag that follows the press does nothing more.
+//
+// With symmetry (SE-062) the press's pixel and its mirror images are seeds: every seed's area
+// is found before any pixel is painted, and their union is painted once, so a later seed does
+// not read what an earlier one wrote. In tiled mode a press on a copy of the canvas fills from
+// the pixel it shows; the area itself does not wrap around the edges.
 //
 // It paints, so it is refused below 1× like the brush tools. It has no brush: its cursor is a
 // crosshair, whose centre names the pixel the fill starts from.
@@ -84,12 +90,18 @@ export function createBucket(sources: BucketSources): ToolSpec {
         cursor: "crosshair",
         onDown(context: ToolContext, pointer: ToolPointer) {
             const { paint, options: values } = context;
-            if (!paint || !pointer.inside) return;
-            const mask = floodMask(sampled(context, paint.image, paint.frameId), pointer.pixel, {
-                tolerance: toleranceOf(values),
-                contiguous: values[CONTIGUOUS.key] !== false,
-                within: context.session.selection?.mask ?? null,
-            });
+            if (!paint) return;
+            // Off the canvas no seed is named, unless tiled mode wraps the press onto it.
+            const mask = symmetricFloodMask(
+                sampled(context, paint.image, paint.frameId),
+                pointer.pixel,
+                {
+                    tolerance: toleranceOf(values),
+                    contiguous: values[CONTIGUOUS.key] !== false,
+                    within: context.session.selection?.mask ?? null,
+                },
+                strokeSymmetryOf(context),
+            );
             const ink = paintInk(inkOf(values), context.colour, opacityOf(values));
             // Each pixel is inked from its own value before it is written: no copy is needed.
             const changed = paintMask(paint.image, paint.image, mask, ink);

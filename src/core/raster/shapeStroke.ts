@@ -4,6 +4,8 @@ import { Changes } from "./changes";
 import type { Ink } from "./ink";
 import { copyShape, forEachFilledRun, forEachOutlinePixel, sameShape } from "./shape";
 import type { PathShape, Shape } from "./shape";
+import { forEachSymmetricRun, symmetricRows } from "./symmetry";
+import type { StrokeSymmetry } from "./symmetry";
 
 // Rubber-band shapes (SPEC §7.1, SE-017): the stroke of a shape tool. Each pointer sample
 // draws the whole shape again in place of the one drawn before, into the image of the stroke's
@@ -17,10 +19,17 @@ import type { PathShape, Shape } from "./shape";
 // never builds up and a pixel covered twice is written once. It returns the rectangle of the
 // pixels whose bytes changed (null when none did): the previous shape's pixels that were put
 // back are in it, so the caller reports them dirty and the live composite clears them.
+//
+// Symmetry and tiled mode (SE-062) go into the mark pass: every run of pixels the outline's
+// stamps and the filled inside mark is mirrored about the axes and wrapped around the canvas's
+// edges (`symmetry.ts`) before it is marked, so the copies are put back and inked with the
+// shape, each covered pixel once.
 
 export interface ShapeStrokeOptions {
     brush: Brush;
     ink: Ink;
+    /** Mirrors and wraps every pixel marked (SE-062, `strokeSymmetry`); none when absent. */
+    symmetry?: StrokeSymmetry | null;
 }
 
 export class ShapeStroke {
@@ -28,6 +37,7 @@ export class ShapeStroke {
     readonly #original: Uint8ClampedArray;
     readonly #brush: Brush;
     readonly #ink: Ink;
+    readonly #symmetry: StrokeSymmetry | null;
     /**
      * For each pixel of the image, the generation of the draw that covered it last; the
      * pixels the current draw covers carry `#generation`. Made at the first draw.
@@ -53,6 +63,7 @@ export class ShapeStroke {
         this.#original = original.data;
         this.#brush = options.brush;
         this.#ink = options.ink;
+        this.#symmetry = options.symmetry ?? null;
     }
 
     /** The shape drawn last; null before the first draw. */
@@ -73,17 +84,18 @@ export class ShapeStroke {
         let minY = height;
         let maxX = -1;
         let maxY = -1;
-        const mark = (y: number, from: number, to: number) => {
-            if (y < 0 || y >= height) return;
-            const start = from < 0 ? 0 : from;
-            const end = to > width ? width : to;
-            if (start >= end) return;
+        /** Marks a run inside the image. */
+        const markRun = (y: number, start: number, end: number) => {
             marks.fill(generation, y * width + start, y * width + end);
             if (start < minX) minX = start;
             if (end - 1 > maxX) maxX = end - 1;
             if (y < minY) minY = y;
             if (y > maxY) maxY = y;
         };
+        // A run and its copies (SE-062), clipped or wrapped to the image.
+        const symmetry = this.#symmetry;
+        const mark = (y: number, from: number, to: number) =>
+            forEachSymmetricRun(symmetry, width, height, y, from, to, markRun);
         const brush = this.#brush;
         const { origin, size, starts, ends } = brush;
         forEachOutlinePixel(shape, (x, y) => {
@@ -92,7 +104,8 @@ export class ShapeStroke {
             for (let row = 0; row < size; row++)
                 mark(top + row, left + starts[row], left + ends[row]);
         });
-        forEachFilledRun(shape, mark, 0, height - 1);
+        const rows = symmetricRows(symmetry, height);
+        forEachFilledRun(shape, mark, rows.first, rows.last);
 
         const changes = new Changes();
         const previous = this.#covered;

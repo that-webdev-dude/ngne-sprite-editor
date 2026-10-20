@@ -4,6 +4,7 @@ import { FreehandStroke, StraightStroke } from "../../../core/raster";
 import type { Ink, PixelPoint } from "../../../core/raster";
 import type { ToolContext, ToolOptionSpec, ToolPointer, ToolSpec } from "../types";
 import { brushOf, paintCursor, PIXEL_PERFECT } from "./brushOptions";
+import { strokeSymmetryOf } from "./strokeOptions";
 
 // Freehand paint tools (SPEC §7.1, SE-015): the pencil and the eraser. A stroke stamps the
 // tool's brush along the pointer's path (`core/raster` joins the samples with lines) with the
@@ -17,7 +18,9 @@ import { brushOf, paintCursor, PIXEL_PERFECT } from "./brushOptions";
 // that differ from the stroke's start, so a stroke that changes nothing records nothing. The
 // end of a stroke becomes the anchor of the next Shift-click once the stroke is kept
 // (`onCommit`: committed, or changed nothing); a cancelled or taken-back stroke leaves the
-// anchor where it was.
+// anchor where it was. The anchor is kept per document session (`lastEnds`). Symmetry and
+// tiled mode (SE-062) are the document's at the press, passed to the stroke's `Stamper`: the
+// path, the pixel-perfect filter and the anchor stay the pointer's own.
 
 /** What a freehand tool's module declares. */
 export interface FreehandToolSpec {
@@ -64,6 +67,7 @@ export function freehandTool(spec: FreehandToolSpec): ToolSpec {
                 brush: brushOf(values),
                 ink: spec.ink(context),
                 pixelPerfect: values[PIXEL_PERFECT.key] === true,
+                symmetry: strokeSymmetryOf(context),
             };
             // The image as the stroke found it, which the inks read.
             const original = clonePixelBuffer(paint.image);

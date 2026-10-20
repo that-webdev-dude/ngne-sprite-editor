@@ -83,7 +83,10 @@ export function attachToolPointer(
     };
 
     const updateCursor = () => {
-        const tool = toolPipeline.strokeTool ?? toolState.active();
+        // Over chrome a press grabs (SE-062: an axis's handle), its cursor shows.
+        const grab =
+            pointer && !toolPipeline.stroking ? toolPipeline.grabAt(pointer.x, pointer.y) : null;
+        const tool = toolPipeline.strokeTool ?? grab ?? toolState.active();
         const spec = tool?.cursor;
         const next =
             typeof spec === "function"

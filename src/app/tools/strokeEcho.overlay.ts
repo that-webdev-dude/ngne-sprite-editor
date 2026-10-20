@@ -1,8 +1,10 @@
 import type { PixelBuffer, Rect } from "../../core/model";
+import type { TiledMode } from "../../engine/viewport/geometry";
 import type { ViewportChecker } from "../../engine/viewport/types";
 import type {} from "../../import-meta";
 import type { OverlayLayer } from "../overlay/types";
 import { activeEchoCover } from "../onion/onionCover";
+import { activeDocument, sessionsStore } from "../state/sessions";
 import { viewportLink } from "../viewport/viewportLink";
 import { strokeEcho } from "./strokeEcho";
 import type { StrokeEcho } from "./strokeEcho";
@@ -15,6 +17,11 @@ import type { StrokeEcho } from "./strokeEcho";
 // stroke is echoed. Nothing is drawn either while NGNE shows another frame than the stroke's,
 // or below 1×, where NGNE's nearest minification picks which texel a device pixel shows
 // (SPEC §6.4) and the echo could not show the same one; a stroke goes on through a zoom.
+//
+// In tiled mode NGNE draws the stroke's frame again around the document (SE-062), from the
+// same slot: the echo draws each region in every copy as well, or the copies would lag the
+// stroke by an upload. The copies have no references or onion skins, so there the echo
+// gives way to nothing.
 
 /** Order in the overlay's stack: below the outline (100), the grids and the brush cursor. */
 export const STROKE_ECHO_ORDER = 50;
@@ -34,6 +41,27 @@ export interface EchoCover {
 
 /** No reference on the canvas. */
 export const NO_COVER: EchoCover = { behind: [], front: [] };
+
+/**
+ * The offsets of the copies tiled mode draws around the document, in document pixels, the
+ * document's own (0, 0) left out (SE-062; `tiledCopies` of the viewport's geometry).
+ */
+export function tiledOffsets(
+    tiled: TiledMode,
+    width: number,
+    height: number,
+): { x: number; y: number }[] {
+    if (tiled === "none") return [];
+    const across = tiled === "x" || tiled === "both" ? [-1, 0, 1] : [0];
+    const down = tiled === "y" || tiled === "both" ? [-1, 0, 1] : [0];
+    const offsets: { x: number; y: number }[] = [];
+    for (const row of down) {
+        for (const column of across) {
+            if (row !== 0 || column !== 0) offsets.push({ x: column * width, y: row * height });
+        }
+    }
+    return offsets;
+}
 
 /** The texels a rectangle of document pixels touches, as whole-texel edges. */
 function texelSpan(rect: Readonly<Rect>) {
@@ -125,13 +153,15 @@ export interface StrokeEchoLayer {
 /**
  * The draw layer of `echo`, drawing over the checkerboard `checker()` names (the one the
  * viewport draws; the dark theme's while there is none), and giving way to the references
- * `cover()` names (SE-045; none when absent). The probe goes on the page with the overlay in
- * development builds.
+ * `cover()` names (SE-045; none when absent), and drawing each region again in the copies of
+ * the tiled mode `tiled()` names (SE-062; none when absent). The probe goes on the page with
+ * the overlay in development builds.
  */
 export function createStrokeEchoLayer(
     echo: StrokeEcho,
     checker: () => ViewportChecker | null,
     cover: () => EchoCover = () => NO_COVER,
+    tiled: () => TiledMode = () => "none",
 ): StrokeEchoLayer {
     /** Where a region is put before it is scaled onto the overlay; let go when the echo ends. */
     let scratch: OffscreenCanvas | null = null;
@@ -166,7 +196,25 @@ export function createStrokeEchoLayer(
             if (rects.length === 0) return;
             const colours = checker() ?? DEFAULT_CHECKER;
             const references = cover();
+            const covered = references.front.length > 0 || references.behind.length > 0;
+            const { docWidth, docHeight } = mapping.frame;
+            const copies = tiledOffsets(tiled(), docWidth, docHeight);
             context.imageSmoothingEnabled = false;
+            /** Draws the scratch's region at the document rectangle `rect` moved by `dx`, `dy`. */
+            const place = (image: OffscreenCanvas, rect: Rect, dx: number, dy: number) => {
+                const start = mapping.docToDevice(rect.x + dx, rect.y + dy);
+                const end = mapping.docToDevice(
+                    rect.x + dx + rect.width,
+                    rect.y + dy + rect.height,
+                );
+                const x = Math.round(start.x);
+                const y = Math.round(start.y);
+                const w = Math.round(end.x) - x;
+                const h = Math.round(end.y) - y;
+                if (w > 0 && h > 0) {
+                    context.drawImage(image, 0, 0, rect.width, rect.height, x, y, w, h);
+                }
+            };
             for (const rect of rects) {
                 const { width, height } = rect;
                 if (!scratch || scratch.width < width || scratch.height < height) {
@@ -186,13 +234,17 @@ export function createStrokeEchoLayer(
                     0,
                     0,
                 );
-                const start = mapping.docToDevice(rect.x, rect.y);
-                const end = mapping.docToDevice(rect.x + width, rect.y + height);
-                const x = Math.round(start.x);
-                const y = Math.round(start.y);
-                const w = Math.round(end.x) - x;
-                const h = Math.round(end.y) - y;
-                if (w > 0 && h > 0) context.drawImage(scratch, 0, 0, width, height, x, y, w, h);
+                place(scratch, rect, 0, 0);
+                if (copies.length === 0) continue;
+                // The copies show the frame alone: drawn again without the cover.
+                if (covered) {
+                    source.putImageData(
+                        new ImageData(echoPixels(target.buffer, rect, colours), width, height),
+                        0,
+                        0,
+                    );
+                }
+                for (const offset of copies) place(scratch, rect, offset.x, offset.y);
             }
             probe.onDraw?.(rects, target.buffer);
         },
@@ -215,5 +267,11 @@ export function createStrokeEchoLayer(
 
 export const overlayLayers: OverlayLayer[] = [
     // It gives way to the references and the onion skins of the active document (SE-045, SE-025).
-    createStrokeEchoLayer(strokeEcho, () => viewportLink.checker, activeEchoCover).layer,
+    // In tiled mode it draws the copies of the active document's frame too (SE-062).
+    createStrokeEchoLayer(
+        strokeEcho,
+        () => viewportLink.checker,
+        activeEchoCover,
+        () => activeDocument(sessionsStore.getState())?.session.doc.settings.tiled ?? "none",
+    ).layer,
 ];

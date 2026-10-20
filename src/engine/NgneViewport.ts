@@ -119,7 +119,8 @@ let liveRenderers = 0;
 /**
  * The editing viewport (SPEC §6.4): one `WebGPURenderer` on its own canvas inside `host`,
  * drawing the workspace colour, the checkerboard, the reference layers, the onion skins and the
- * current frame of a document, on demand.
+ * current frame of a document, on demand; in tiled mode the checkerboard and the frame again
+ * around it (SE-062).
  *
  * - The canvas backing size is the host's size in device pixels. A new size replaces the
  *   renderer after `RESIZE_QUIET_MS` of quiet: a new instance is created on a new canvas,
@@ -279,6 +280,12 @@ export class NgneViewport implements ViewportPort {
         if (same) return;
         this.#scene.onion = ghosts.map((ghost) => ({ ...ghost }));
         for (const instance of this.#instances()) instance.slots.sync();
+        this.#markDirty();
+    }
+
+    setTiled(tiled: "none" | "x" | "y" | "both"): void {
+        if (tiled === (this.#scene.tiled ?? "none")) return;
+        this.#scene.tiled = tiled;
         this.#markDirty();
     }
 

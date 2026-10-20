@@ -4,8 +4,8 @@ import type { TextureTarget, Upload } from "../UploadQueue";
 import { checkerPixels, checkerSpec } from "./checker";
 import { FrameSlots } from "./frameSlots";
 import type { SlotImage } from "./frameSlots";
-import { imageQuad, QUAD_LAYER } from "./geometry";
-import type { Quad } from "./geometry";
+import { imageQuad, QUAD_LAYER, tiledCopies } from "./geometry";
+import type { Quad, TiledMode } from "./geometry";
 import { blitCell, cellUv, createGridImage, playGridLayout } from "./playGrid";
 import type { PlayGridLayout } from "./playGrid";
 import { ReferenceSlots, referenceSlotIndex } from "./referenceSlots";
@@ -66,6 +66,11 @@ export interface Scene {
      * none. They are not drawn while playing (SPEC §7.5).
      */
     onion?: readonly ViewportGhost[];
+    /**
+     * Tiled mode (SE-062): the checkerboard and the frame drawn are repeated around the
+     * document on these axes; absent for "none".
+     */
+    tiled?: TiledMode;
 }
 
 /** An onion skin drawn by the quads made last: its key, opacity and NGNE layer (SE-025). */
@@ -87,6 +92,8 @@ export function replaceSceneDocument(scene: Scene, document: ViewportDocument | 
     // The references went with the document as well (SE-045), and so did the onion skins.
     scene.references = [];
     scene.onion = [];
+    // And its tiled mode (SE-062): the app tells the new document's.
+    scene.tiled = "none";
 }
 
 /** What an upload put into a slot. */
@@ -323,26 +330,32 @@ export class ViewportSlots {
         this.#drawnGhosts = [];
         if (!scene.document) return [];
         const quads: Quad[] = [];
+        // Tiled mode (SE-062) repeats the checkerboard and the frame, never the references or
+        // the onion skins, which belong to the document in the middle.
+        const tiled = scene.tiled ?? "none";
         const checker = this.queue.published(CHECKER_SLOT);
         if (checker && checker.key !== null && checker.epoch === scene.epoch) {
-            quads.push(imageQuad(CHECKER_SLOT, QUAD_LAYER.checker, scene.view, checker));
+            const quad = imageQuad(CHECKER_SLOT, QUAD_LAYER.checker, scene.view, checker);
+            quads.push(quad, ...tiledCopies(quad, tiled));
         }
         quads.push(...this.references.quads());
         quads.push(...this.#ghostQuads());
         const cell = this.#playCell();
         if (cell) {
             const { layout, index, image } = cell;
-            quads.push({
+            const quad: Quad = {
                 ...imageQuad(PLAY_SLOT, QUAD_LAYER.frame, scene.view, image),
                 ...cellUv(layout, index),
-            });
+            };
+            quads.push(quad, ...tiledCopies(quad, tiled));
             this.#drawn = image;
             return quads;
         }
         const slot = this.#displaySlot();
         const image = this.frames.shown(slot);
         if (image) {
-            quads.push(imageQuad(frameSlotId(slot), QUAD_LAYER.frame, scene.view, image));
+            const quad = imageQuad(frameSlotId(slot), QUAD_LAYER.frame, scene.view, image);
+            quads.push(quad, ...tiledCopies(quad, tiled));
             this.#drawn = image;
         }
         return quads;

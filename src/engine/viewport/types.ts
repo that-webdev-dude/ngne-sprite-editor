@@ -137,4 +137,11 @@ export interface ViewportPort {
      * empty for none. Optional, so a port without onion skin (a test's) need not have it.
      */
     setOnion?(ghosts: readonly ViewportGhost[]): void;
+    /**
+     * Tiled mode of the document on show (SE-062, `DocSettings.tiled`): the checkerboard and
+     * the current frame are drawn again around the document on these axes, 3 × 3 for both.
+     * Forgotten with the document (`setDocument`). Optional, so a port without tiled mode (a
+     * test's) need not have it.
+     */
+    setTiled?(tiled: "none" | "x" | "y" | "both"): void;
 }

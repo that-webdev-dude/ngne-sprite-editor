@@ -4,6 +4,7 @@ import { activeComposites } from "../state/composites";
 import { editorStore } from "../state/editor";
 import { sessionsStore } from "../state/sessions";
 import { statusStore } from "../state/status";
+import { grabAxis } from "../symmetry/axisDrag";
 import type { ViewMapping } from "../view/coordinates";
 import { viewportLink } from "../viewport/viewportLink";
 import { toolState } from "./activeTool";
@@ -46,6 +47,8 @@ export const toolPipeline: ToolPipeline = createToolPipeline({
     beforeStroke(tool) {
         if (!VIEW_TOOLS.has(tool.id)) stopPlaybackForEdit();
     },
+    // A press on a symmetry axis's handle drags the axis, whatever the tool (SE-062).
+    grab: grabAxis,
 });
 
 /**

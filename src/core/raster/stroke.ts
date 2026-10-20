@@ -6,6 +6,8 @@ import { forEachLinePixel } from "./line";
 import type { PixelPoint } from "./line";
 import { PixelPerfectFilter } from "./pixelPerfect";
 import { forEachPolygonRun } from "./polygon";
+import { forEachSymmetricRun, symmetricRows } from "./symmetry";
+import type { RunVisitor, StrokeSymmetry } from "./symmetry";
 
 // Brush strokes (SPEC §7.1, SE-015): a path of pixels drawn with a brush and an ink into an
 // image. The pointer gives a stroke one sample at a time; between two samples the path follows
@@ -20,12 +22,20 @@ import { forEachPolygonRun } from "./polygon";
 //
 // Every call returns the rectangle of the pixels whose bytes it changed (null when none did):
 // what the caller reports to its transaction, so a stroke that changes nothing records nothing.
+//
+// Symmetry and tiled mode (SE-062) are the Stamper's: every pixel it writes or puts back — a
+// brush stamp, a filled run, a rectangle restored — is mirrored about the axes and wrapped
+// around the canvas's edges (`symmetry.ts`). The paths above it stay the pointer's own: the
+// pixel-perfect filter works on the path before it is mirrored, and a straight stroke takes
+// back its line with every copy of it.
 
 export interface BrushStrokeOptions {
     brush: Brush;
     ink: Ink;
     /** Removes the corner pixels of L-shaped turns (`pixelPerfect.ts`); freehand strokes only. */
     pixelPerfect?: boolean;
+    /** Mirrors and wraps every pixel written (SE-062, `strokeSymmetry`); none when absent. */
+    symmetry?: StrokeSymmetry | null;
 }
 
 /**
@@ -39,6 +49,16 @@ export class Stamper {
     readonly #ink: Ink;
     /** How many stamps of the path cover each pixel; kept only where stamps are taken back. */
     readonly #coverage: Uint32Array | null;
+    readonly #symmetry: StrokeSymmetry | null;
+    /** What the run visitor calls for each pixel while runs are mapped with symmetry. */
+    #visit: ((index: number, px: number, py: number) => void) | null = null;
+    /** Calls `#visit` for each pixel of a run; made once, so mapping runs allocates nothing. */
+    readonly #visitRun: RunVisitor = (y, from, to) => {
+        const visit = this.#visit;
+        if (!visit) return;
+        const row = y * this.#image.width;
+        for (let px = from; px < to; px++) visit(row + px, px, y);
+    };
 
     constructor(image: PixelBuffer, original: PixelBuffer, options: BrushStrokeOptions) {
         if (
@@ -56,14 +76,54 @@ export class Stamper {
         this.#brush = options.brush;
         this.#ink = options.ink;
         this.#coverage = options.pixelPerfect ? new Uint32Array(image.width * image.height) : null;
+        this.#symmetry = options.symmetry ?? null;
     }
 
-    /** Calls `visit` with each pixel of the brush placed at `x, y` that lies in the image. */
+    /** Calls `visit` with each pixel of the run `[from, to)` of row `y` and of its copies. */
+    #forEachRun(
+        y: number,
+        from: number,
+        to: number,
+        visit: (index: number, px: number, py: number) => void,
+    ): void {
+        const { width, height } = this.#image;
+        this.#visit = visit;
+        try {
+            forEachSymmetricRun(this.#symmetry, width, height, y, from, to, this.#visitRun);
+        } finally {
+            this.#visit = null;
+        }
+    }
+
+    /**
+     * Calls `visit` with each pixel of the brush placed at `x, y` that lies in the image, and
+     * with each pixel of its mirror images and wrapped copies (SE-062).
+     */
     #forEach(x: number, y: number, visit: (index: number, px: number, py: number) => void) {
         const { width, height } = this.#image;
         const brush = this.#brush;
         const left = x + brush.origin;
         const top = y + brush.origin;
+        const symmetry = this.#symmetry;
+        if (symmetry) {
+            this.#visit = visit;
+            try {
+                for (let row = 0; row < brush.size; row++) {
+                    forEachSymmetricRun(
+                        symmetry,
+                        width,
+                        height,
+                        top + row,
+                        left + brush.starts[row],
+                        left + brush.ends[row],
+                        this.#visitRun,
+                    );
+                }
+            } finally {
+                this.#visit = null;
+            }
+            return;
+        }
         for (let row = 0; row < brush.size; row++) {
             const py = top + row;
             if (py < 0 || py >= height) continue;
@@ -90,9 +150,15 @@ export class Stamper {
      */
     inkRun(y: number, from: number, to: number, changes: Changes): void {
         const { width, height, data } = this.#image;
-        if (y < 0 || y >= height) return;
         const original = this.#original;
         const ink = this.#ink;
+        if (this.#symmetry) {
+            this.#forEachRun(y, from, to, (index, px, py) => {
+                if (ink.apply(data, original, index * 4)) changes.add(px, py);
+            });
+            return;
+        }
+        if (y < 0 || y >= height) return;
         const end = Math.min(width, to);
         for (let px = Math.max(0, from); px < end; px++) {
             if (ink.apply(data, original, (y * width + px) * 4)) changes.add(px, y);
@@ -102,15 +168,12 @@ export class Stamper {
     /**
      * Inks the inside of the polygon through `points` without the brush (the pixels whose
      * centres lie inside it by the even-odd rule, `polygon.ts`): the contour's fill (SE-065).
-     * Only the image's rows are looked at.
+     * Only the rows that reach the image are looked at: its own, and with symmetry or tiled
+     * mode those whose copies land on it (SE-062).
      */
     inkPolygon(points: readonly PixelPoint[], changes: Changes): void {
-        forEachPolygonRun(
-            points,
-            (y, x, end) => this.inkRun(y, x, end, changes),
-            0,
-            this.#image.height - 1,
-        );
+        const { first, last } = symmetricRows(this.#symmetry, this.#image.height);
+        forEachPolygonRun(points, (y, x, end) => this.inkRun(y, x, end, changes), first, last);
     }
 
     /** Takes back a stamp: a pixel no other stamp covers gets its original value back. */
@@ -123,9 +186,20 @@ export class Stamper {
         });
     }
 
-    /** Gives every pixel of `rect` (clipped to the image) its original value back. */
+    /**
+     * Gives every pixel of `rect` (clipped to the image) its original value back, and every
+     * pixel of its mirror images and wrapped copies (SE-062).
+     */
     restoreRect(rect: Rect, changes: Changes): void {
         const { width, height } = this.#image;
+        if (this.#symmetry) {
+            for (let py = rect.y; py < rect.y + rect.height; py++) {
+                this.#forEachRun(py, rect.x, rect.x + rect.width, (index, px, ry) => {
+                    if (this.#restore(index)) changes.add(px, ry);
+                });
+            }
+            return;
+        }
         const fromX = Math.max(0, rect.x);
         const toX = Math.min(width, rect.x + rect.width);
         const fromY = Math.max(0, rect.y);

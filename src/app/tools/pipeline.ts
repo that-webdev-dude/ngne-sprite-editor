@@ -38,6 +38,10 @@ import type { Tool, ToolButton, ToolContext, ToolModifiers, ToolPointer } from "
 //
 // Between its presses every press over the viewport is the gesture's, and the moves with no
 // button held reach its tool; `sources.gesture` is told when one opens and when it ends.
+//
+// Chrome the overlay draws may take a left press before the active tool (`sources.grab`,
+// SE-062: the handles of the symmetry axes): the press is then a stroke of the tool the grab
+// names, captured, cancelled and ended as any other.
 
 /** `PointerEvent.button` values. */
 const LEFT = 0;
@@ -101,6 +105,12 @@ export interface PipelineSources extends LiveCompositeSources {
      * the app stops editor playback there, so the stroke acts on the frame on screen (SE-024).
      */
     beforeStroke?(tool: Tool): void;
+    /**
+     * Chrome over the viewport that a left press grabs before the active tool (SE-062: the
+     * handle of a symmetry axis): the tool that takes the press there, for that one stroke,
+     * or null. The grab neither paints nor stops editor playback. None when absent.
+     */
+    grab?(pointer: ToolPointer, document: OpenDocument, mapping: ViewMapping): Tool | null;
 }
 
 export interface ToolPipeline {
@@ -141,6 +151,12 @@ export interface ToolPipeline {
     closeGesture(): boolean;
     /** A key went down or up; returns true when the stroke's tool used it. */
     key(input: KeyInput): boolean;
+    /**
+     * The tool a left press at this client position would grab before the active tool
+     * (`PipelineSources.grab`), so the cursor can show it; null for none, and while a stroke
+     * is in progress.
+     */
+    grabAt(clientX: number, clientY: number): Tool | null;
     /** Stops following the stores; a stroke in progress is cancelled. */
     dispose(): void;
 }
@@ -366,6 +382,15 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
         return stroke === current;
     };
 
+    /** What a press of `button` at `input` grabs before the active tool (SE-062); null for none. */
+    const grabAt = (input: PointerInput, button: ToolButton): Tool | null => {
+        if (!sources.grab) return null;
+        const document = activeDocument(sessions.getState());
+        const mapping = sources.mapping();
+        if (!document || !mapping) return null;
+        return sources.grab(toolPointer(input, mapping, button), document, mapping);
+    };
+
     return {
         get stroking() {
             return stroke !== null;
@@ -394,8 +419,9 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
             if (!button) return false;
             // A new press over the canvas takes the place of the last refusal's message.
             clearFeedback();
-            const tool = sources.tools.active();
-            if (tool) sources.beforeStroke?.(tool);
+            const grabbed = button === "primary" ? grabAt(input, button) : null;
+            const tool = grabbed ?? sources.tools.active();
+            if (tool && !grabbed) sources.beforeStroke?.(tool);
             const document = activeDocument(sessions.getState());
             const mapping = sources.mapping();
             if (!tool || !document || !mapping) return false;
@@ -547,6 +573,23 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
                 }),
             );
             return used === true;
+        },
+
+        grabAt(clientX, clientY) {
+            if (stroke) return null;
+            const input: PointerInput = {
+                pointerId: -1,
+                button: LEFT,
+                buttons: 0,
+                clientX,
+                clientY,
+                shiftKey: false,
+                ctrlKey: false,
+                altKey: false,
+                metaKey: false,
+                timeStamp: 0,
+            };
+            return grabAt(input, "primary");
         },
 
         dispose() {
