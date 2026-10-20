@@ -227,7 +227,8 @@ test("a draw asked for while the device is being recovered waits, keeps its dirt
         window.__se011.loseDevice();
     });
     await expect.poll(async () => (await counters(page)).status).toBe("recovering");
-    expect(await page.evaluate(() => window.__se011.creatingDevices())).toBe(1);
+    // NGNE asks for an adapter before the device: the request is counted once it gets there.
+    await expect.poll(() => page.evaluate(() => window.__se011.creatingDevices())).toBe(1);
     const before = await counters(page);
 
     // A draw is asked for. `render()` would be a silent no-op: nothing is submitted, and the
