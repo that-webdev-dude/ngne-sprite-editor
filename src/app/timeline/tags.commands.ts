@@ -7,6 +7,7 @@ import type { CommandSpec } from "../commands/types";
 import type { OpenDocument } from "../state/sessions";
 import { effectiveSelection, targetFrameIds } from "./selection";
 import { TAG_COMMANDS as IDS } from "./tagCommandIds";
+import { TIMELINE_MENUS } from "./timelineEditIds";
 import { NEW_TAG_NAME, newTagColour, tagDialogs, tagRangeLabel } from "./tagDialogs";
 import type { TagChoice, TagValues } from "./tagDialogs";
 import { tagStore } from "./tagState";
@@ -179,12 +180,18 @@ export const commands: CommandSpec[] = [
     {
         id: IDS.newTag,
         title: "New Tag…",
+        // From the selected frames: in the frame header's menu and the tag bar's (SE-026).
+        contextMenus: [
+            { menu: TIMELINE_MENUS.frame, order: 300 },
+            { menu: TIMELINE_MENUS.tag, order: 100 },
+        ],
         enabled: () => availableDocument() !== null,
         run: newTag,
     },
     {
         id: IDS.tagProperties,
         title: "Tag Properties…",
+        contextMenus: [{ menu: TIMELINE_MENUS.tag, order: 200 }],
         menuPath: ["Frame"],
         menuOrder: 410,
         enabled: () => subject() !== null,
@@ -193,6 +200,7 @@ export const commands: CommandSpec[] = [
     {
         id: IDS.deleteTag,
         title: "Delete Tag",
+        contextMenus: [{ menu: TIMELINE_MENUS.tag, order: 210 }],
         menuPath: ["Frame"],
         menuOrder: 420,
         enabled: () => subject() !== null,

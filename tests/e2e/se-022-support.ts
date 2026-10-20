@@ -22,11 +22,12 @@ export const layerRow = (page: Page, name: string) =>
         .getByRole("row")
         // The inner locator is relative to the row.
         .filter({ has: page.getByRole("rowheader", { name, exact: true }) });
-/** The cell of a layer at a frame; frames count from 1, as the header shows them. */
+/**
+ * The cell of a layer at a frame; frames count from 1, as the header shows them. By its column
+ * (the layer column is the first), as the grid renders only the cells in view (SE-026).
+ */
 export const cell = (page: Page, layer: string, frame: number) =>
-    layerRow(page, layer)
-        .getByRole("gridcell")
-        .nth(frame - 1);
+    layerRow(page, layer).locator(`[role="gridcell"][aria-colindex="${frame + 1}"]`);
 /** A frame number of the header; from 1. */
 export const frameHeader = (page: Page, frame: number) =>
     grid(page)
@@ -98,8 +99,8 @@ export function selectedCells(page: Page): Promise<string[]> {
             .map((selected) => {
                 const row = selected.closest('[role="row"]');
                 const name = row?.querySelector('[role="rowheader"]')?.getAttribute("aria-label");
-                const cells = [...(row?.querySelectorAll('[role="gridcell"]') ?? [])];
-                return `${name}/${cells.indexOf(selected) + 1}`;
+                // By its column: the grid renders only the cells in view (SE-026).
+                return `${name}/${Number(selected.getAttribute("aria-colindex")) - 1}`;
             })
             .sort(),
     );

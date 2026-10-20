@@ -656,8 +656,8 @@ async function watchFocusAndScroll(page: Page): Promise<
             const target = event.target as HTMLElement;
             const row = target.closest('[role="row"]');
             const name = row?.querySelector('[role="rowheader"]')?.getAttribute("aria-label");
-            const cells = [...(row?.querySelectorAll('[role="gridcell"]') ?? [])];
-            log.focused.push(`${name}/${cells.indexOf(target) + 1}`);
+            // By its column: the grid renders only the cells in view (SE-026).
+            log.focused.push(`${name}/${Number(target.getAttribute("aria-colindex")) - 1}`);
         });
         element.addEventListener("scroll", () =>
             log.scrolls.push({ left: element.scrollLeft, top: element.scrollTop }),

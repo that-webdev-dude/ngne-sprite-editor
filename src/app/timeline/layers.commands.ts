@@ -21,6 +21,7 @@ import type { OpenDocument } from "../state/sessions";
 import { sourcesFreedBy, withReferenceSources } from "../references/referenceSources";
 import { effectiveSelection, rowOrder, targetLayerIds } from "./selection";
 import { TIMELINE_COMMANDS as IDS } from "./timelineCommandIds";
+import { TIMELINE_MENUS } from "./timelineEditIds";
 import {
     activateCel,
     availableDocument,
@@ -251,12 +252,14 @@ export const commands: CommandSpec[] = [
         id: IDS.newLayer,
         title: "New Layer",
         shortcut: "Shift+N",
+        contextMenus: [{ menu: TIMELINE_MENUS.layer, order: 100 }],
         enabled: hasDocument,
         run: () => void executeOnActive(({ session }) => addLayerCommand(session)),
     },
     {
         id: IDS.duplicateLayer,
         title: "Duplicate Layer",
+        contextMenus: [{ menu: TIMELINE_MENUS.layer, order: 110 }],
         enabled: () => {
             const document = availableDocument();
             return (
@@ -271,6 +274,7 @@ export const commands: CommandSpec[] = [
     {
         id: IDS.deleteLayer,
         title: "Delete Layer",
+        contextMenus: [{ menu: TIMELINE_MENUS.layer, order: 120 }],
         enabled: () => {
             const document = availableDocument();
             return !!document && deletableLayers(document) !== null;
@@ -280,6 +284,7 @@ export const commands: CommandSpec[] = [
     {
         id: IDS.layerProperties,
         title: "Layer Properties…",
+        contextMenus: [{ menu: TIMELINE_MENUS.layer, order: 310 }],
         enabled: () => subjectLayer() !== null,
         run: openProperties,
     },
@@ -295,6 +300,7 @@ export const commands: CommandSpec[] = [
     {
         id: IDS.renameLayer,
         title: "Rename Layer",
+        contextMenus: [{ menu: TIMELINE_MENUS.layer, order: 300 }],
         enabled: () => subjectLayer() !== null,
         run: startRename,
     },

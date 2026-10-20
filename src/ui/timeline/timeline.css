@@ -310,3 +310,45 @@
 .timeline-onion__wide {
     grid-column: 1 / -1;
 }
+
+/*
+ * SE-026. The grid is the box of the drop indicator. Of the cels' cells only the window's are
+ * rendered: a gap of their width stands for the others, so each cell lies at its column.
+ */
+.timeline__grid {
+    position: relative;
+}
+
+.timeline__gap {
+    flex: none;
+}
+
+/* Where a drag drops: a line between columns or rows, or the rectangle the cels take. */
+.timeline__drop {
+    position: absolute;
+    z-index: 3;
+    background: var(--accent);
+    pointer-events: none;
+}
+
+.timeline__drop[data-drop="cels"] {
+    border: 2px solid var(--accent);
+    border-radius: var(--radius-surface);
+    background: transparent;
+}
+
+.timeline__drop[data-drop="cels"][data-copy] {
+    border-style: dashed;
+}
+
+.timeline__drop[data-refused] {
+    border-color: var(--danger);
+}
+
+.timeline[data-dragging] {
+    cursor: grabbing;
+}
+
+.timeline[data-drag-copy] {
+    cursor: copy;
+}

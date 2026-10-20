@@ -11,6 +11,7 @@ import type { OpenDocument } from "../state/sessions";
 import { durationFrameIds } from "./frameDuration";
 import { effectiveSelection, targetFrameIds } from "./selection";
 import { TIMELINE_COMMANDS as IDS } from "./timelineCommandIds";
+import { TIMELINE_MENUS } from "./timelineEditIds";
 import { activateCel, availableDocument, executeOnActive } from "./timelineDocument";
 import { timelineStore } from "./timelineState";
 
@@ -82,6 +83,7 @@ export const commands: CommandSpec[] = [
         id: IDS.newFrame,
         title: "New Frame",
         shortcut: "Alt+N",
+        contextMenus: [{ menu: TIMELINE_MENUS.frame, order: 100 }],
         enabled: hasDocument,
         run: () =>
             void executeOnActive(({ session }) =>
@@ -92,6 +94,7 @@ export const commands: CommandSpec[] = [
         id: IDS.newEmptyFrame,
         title: "New Empty Frame",
         shortcut: "Alt+B",
+        contextMenus: [{ menu: TIMELINE_MENUS.frame, order: 110 }],
         enabled: hasDocument,
         run: () =>
             void executeOnActive(({ session }) =>
@@ -101,6 +104,7 @@ export const commands: CommandSpec[] = [
     {
         id: IDS.deleteFrame,
         title: "Delete Frame",
+        contextMenus: [{ menu: TIMELINE_MENUS.frame, order: 120 }],
         enabled: () => {
             const document = availableDocument();
             return !!document && targetFrames(document).length < document.session.doc.frames.length;

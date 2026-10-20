@@ -1,16 +1,18 @@
 import { Eye, EyeOff, Lock, LockOpen } from "lucide-react";
-import { memo } from "react";
-import type { MouseEvent, PointerEvent as ReactPointerEvent } from "react";
+import { memo, useSyncExternalStore } from "react";
+import type { MouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { MAX_NAME_LENGTH } from "../../core/model";
 import { isCelSelected } from "../../app/timeline/selection";
-import type { TimelineSelection } from "../../app/timeline/selection";
+import type { ClickTarget, TimelineSelection } from "../../app/timeline/selection";
 import { clickTimeline } from "../../app/timeline/timelineClicks";
 import { TIMELINE_COMMANDS } from "../../app/timeline/timelineCommandIds";
-import type { TimelineLayer, TimelineReference } from "../../app/timeline/timelineModel";
+import type { CelState, TimelineLayer, TimelineReference } from "../../app/timeline/timelineModel";
 import { cancelRename, setRenameText, withArguments } from "../../app/timeline/timelineState";
 import { runCommand } from "../commands/runCommand";
 import { Icon } from "../primitives/Icon";
 import { Toggle } from "../primitives/Toggle";
+import { renderedColumns, windowColumns } from "./gridWindow";
+import type { GridWindowStore } from "./gridWindow";
 import { CELL_ATTRIBUTE, CELL_WIDTH, modifiersOf, TIMELINE_FIELD_ATTRIBUTE } from "./timelineDom";
 
 export interface LayerRowProps {
@@ -33,8 +35,18 @@ export interface LayerRowProps {
     selection: TimelineSelection | null;
     /** The text of the in-place rename of this layer, or null. */
     renaming: string | null;
-    /** A press on the row header selected the layer: the focus goes to the active cell. */
-    onHeaderPress(): void;
+    /** The row among the pixel layers' rows, 0 at the top. */
+    row: number;
+    /**
+     * The grid's window (SE-026): the cells of the frame columns it holds are rendered while the
+     * row is in it; otherwise only the active cell, if it is this row's.
+     */
+    windowStore: GridWindowStore;
+    /**
+     * A press on a cel or on the row header (not on its controls): selects, and may begin a
+     * drag (`useTimelineDrag`).
+     */
+    onPress(event: ReactPointerEvent, target: ClickTarget): void;
     /** The in-place rename ended from the keyboard: the focus goes to the active cell. */
     onRenameEnd(): void;
 }
@@ -138,6 +150,123 @@ function HeaderControls({
     );
 }
 
+interface CellProps {
+    layerId: string;
+    frameId: string;
+    index: number;
+    state: CelState;
+    selected: boolean;
+    active: boolean;
+    activeFrame: boolean;
+    linkNext: boolean;
+    onPress(event: ReactPointerEvent, target: ClickTarget): void;
+}
+
+/** A cel's cell; drawn again only when what it shows changes. */
+const Cell = memo(function Cell({
+    layerId,
+    frameId,
+    index,
+    state,
+    selected,
+    active,
+    activeFrame,
+    linkNext,
+    onPress,
+}: CellProps) {
+    return (
+        <div
+            className="timeline__cell"
+            role="gridcell"
+            aria-selected={selected}
+            aria-label={`Frame ${index + 1}, ${state}`}
+            aria-colindex={index + 2}
+            tabIndex={active ? 0 : -1}
+            {...{ [CELL_ATTRIBUTE]: "" }}
+            // F6 enters the timeline at its active cell.
+            data-region-focus={active ? "" : undefined}
+            data-frame={frameId}
+            data-cel={state}
+            data-active-frame={activeFrame || undefined}
+            data-active-cel={active || undefined}
+            data-link-next={linkNext || undefined}
+            onPointerDown={(event) => onPress(event, { kind: "cels", cel: { layerId, frameId } })}
+        >
+            <span className="timeline__dot" />
+        </div>
+    );
+});
+
+interface RowCellsProps {
+    layerId: string;
+    cels: readonly CelState[];
+    linkedToNext: readonly boolean[];
+    frameIds: readonly string[];
+    activeFrameIndex: number;
+    focusIndex: number;
+    selection: TimelineSelection | null;
+    row: number;
+    windowStore: GridWindowStore;
+    onPress(event: ReactPointerEvent, target: ClickTarget): void;
+}
+
+/**
+ * The cels' cells of a row (SE-026): those of the grid's window and the active cell, with gaps
+ * of their width between them, so each cell lies at its column. It follows the window itself,
+ * so a scroll draws again only the rows whose cells change, not the panel.
+ */
+function RowCells({
+    layerId,
+    cels,
+    linkedToNext,
+    frameIds,
+    activeFrameIndex,
+    focusIndex,
+    selection,
+    row,
+    windowStore,
+    onPress,
+}: RowCellsProps) {
+    const columns = useSyncExternalStore(windowStore.subscribe, () =>
+        windowColumns(windowStore.current(), row),
+    );
+    const nodes: ReactNode[] = [];
+    let next = 0;
+    const gap = (to: number) => {
+        if (to > next) {
+            nodes.push(
+                <div
+                    key={`gap-${next}`}
+                    className="timeline__gap"
+                    aria-hidden="true"
+                    style={{ width: (to - next) * CELL_WIDTH }}
+                />,
+            );
+        }
+    };
+    for (const index of renderedColumns(frameIds.length, columns, focusIndex)) {
+        const frameId = frameIds[index]!;
+        gap(index);
+        next = index + 1;
+        nodes.push(
+            <Cell
+                key={frameId}
+                layerId={layerId}
+                frameId={frameId}
+                index={index}
+                state={cels[index] ?? "empty"}
+                selected={isCelSelected(selection, layerId, frameId)}
+                active={index === focusIndex}
+                activeFrame={index === activeFrameIndex}
+                linkNext={linkedToNext[index] ?? false}
+                onPress={onPress}
+            />,
+        );
+    }
+    gap(frameIds.length);
+    return nodes;
+}
+
 /** One layer of the timeline: its header in the layer column, then a cell per frame. */
 function LayerRowView({
     layer,
@@ -148,7 +277,9 @@ function LayerRowView({
     focusIndex,
     selection,
     renaming,
-    onHeaderPress,
+    row,
+    windowStore,
+    onPress,
     onRenameEnd,
 }: LayerRowProps) {
     const selected = selection?.kind === "layers" && selection.layerIds.includes(layer.id);
@@ -158,8 +289,7 @@ function LayerRowView({
 
     const onHeaderPointerDown = (event: ReactPointerEvent) => {
         if (event.button !== 0 || onControl(event)) return;
-        clickTimeline({ kind: "layers", layerId: layer.id }, modifiersOf(event));
-        onHeaderPress();
+        onPress(event, { kind: "layers", layerId: layer.id });
     };
     // The press selects; the focus goes to the active cell, not to the body.
     const onHeaderMouseDown = (event: MouseEvent) => {
@@ -188,41 +318,23 @@ function LayerRowView({
         <div
             className="timeline__row"
             role="row"
+            aria-rowindex={row + 2}
             data-layer={layer.id}
             data-active-layer={tinted || undefined}
         >
             {header}
-            {frameIds.map((frameId, index) => {
-                const state = layer.cels[index] ?? "empty";
-                const isActive = index === focusIndex;
-                return (
-                    <div
-                        key={frameId}
-                        className="timeline__cell"
-                        role="gridcell"
-                        aria-selected={isCelSelected(selection, layer.id, frameId)}
-                        aria-label={`Frame ${index + 1}, ${state}`}
-                        tabIndex={isActive ? 0 : -1}
-                        {...{ [CELL_ATTRIBUTE]: "" }}
-                        // F6 enters the timeline at its active cell.
-                        data-region-focus={isActive ? "" : undefined}
-                        data-frame={frameId}
-                        data-cel={state}
-                        data-active-frame={index === activeFrameIndex || undefined}
-                        data-active-cel={isActive || undefined}
-                        data-link-next={layer.linkedToNext[index] || undefined}
-                        onPointerDown={(event) => {
-                            if (event.button !== 0) return;
-                            clickTimeline(
-                                { kind: "cels", cel: { layerId: layer.id, frameId } },
-                                modifiersOf(event),
-                            );
-                        }}
-                    >
-                        <span className="timeline__dot" />
-                    </div>
-                );
-            })}
+            <RowCells
+                layerId={layer.id}
+                cels={layer.cels}
+                linkedToNext={layer.linkedToNext}
+                frameIds={frameIds}
+                activeFrameIndex={activeFrameIndex}
+                focusIndex={focusIndex}
+                selection={selection}
+                row={row}
+                windowStore={windowStore}
+                onPress={onPress}
+            />
         </div>
     );
 }
@@ -239,7 +351,9 @@ export const LayerRow = memo(
         before.focusIndex === after.focusIndex &&
         before.selection === after.selection &&
         before.renaming === after.renaming &&
-        before.onHeaderPress === after.onHeaderPress &&
+        before.row === after.row &&
+        before.windowStore === after.windowStore &&
+        before.onPress === after.onPress &&
         before.onRenameEnd === after.onRenameEnd,
 );
 
@@ -260,7 +374,10 @@ export interface ReferenceRowProps {
     frameId: string;
     selection: TimelineSelection | null;
     renaming: string | null;
-    onHeaderPress(): void;
+    /** The row's index in the grid for assistive technology (`aria-rowindex`, from 1). */
+    rowIndex: number;
+    /** A press on the header (not on its controls): selects, and may begin a drag. */
+    onPress(event: ReactPointerEvent, target: ClickTarget): void;
     onRenameEnd(): void;
 }
 
@@ -280,15 +397,15 @@ function ReferenceRowView({
     frameId,
     selection,
     renaming,
-    onHeaderPress,
+    rowIndex,
+    onPress,
     onRenameEnd,
 }: ReferenceRowProps) {
     const selected = selection?.kind === "layers" && selection.layerIds.includes(layer.id);
     const tabIndex = focusRow ? 0 : -1;
     const press = (event: ReactPointerEvent) => {
         if (event.button !== 0 || onControl(event)) return;
-        clickTimeline({ kind: "layers", layerId: layer.id }, modifiersOf(event));
-        onHeaderPress();
+        onPress(event, { kind: "layers", layerId: layer.id });
     };
     const keepFocus = (event: MouseEvent) => {
         if (!onControl(event)) event.preventDefault();
@@ -298,6 +415,7 @@ function ReferenceRowView({
         <div
             className="timeline__row timeline__row--reference"
             role="row"
+            aria-rowindex={rowIndex}
             data-layer={layer.id}
             data-reference-layer=""
             data-active-layer={tinted || undefined}
@@ -324,6 +442,7 @@ function ReferenceRowView({
                 aria-selected={selected}
                 aria-label={`Reference layer, ${placement.toLowerCase()}`}
                 aria-colspan={frameCount}
+                aria-colindex={2}
                 style={{ width: Math.max(1, frameCount) * CELL_WIDTH }}
                 tabIndex={tabIndex}
                 {...{ [CELL_ATTRIBUTE]: "" }}
@@ -355,6 +474,7 @@ export const ReferenceRow = memo(
         before.frameId === after.frameId &&
         before.selection === after.selection &&
         before.renaming === after.renaming &&
-        before.onHeaderPress === after.onHeaderPress &&
+        before.rowIndex === after.rowIndex &&
+        before.onPress === after.onPress &&
         before.onRenameEnd === after.onRenameEnd,
 );

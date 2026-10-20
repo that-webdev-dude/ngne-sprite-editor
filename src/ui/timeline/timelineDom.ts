@@ -15,7 +15,7 @@ export const TIMELINE_FIELD_ATTRIBUTE = "data-timeline-field";
 export const CELL_WIDTH = 24;
 
 /** The parts that stick to the top of the scroller while the grid scrolls under them. */
-const STICKY_TOP = ".timeline__bar, .timeline__row--header";
+export const STICKY_TOP = ".timeline__bar, .timeline__row--header";
 
 /** Shift extends to a range; Ctrl (Cmd on a Mac) adds or removes one. */
 export function modifiersOf(event: {
