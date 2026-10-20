@@ -151,6 +151,40 @@ export async function recordPreview(page: Page, continuous = false): Promise<voi
     }, continuous);
 }
 
+/**
+ * While `recordPreview` goes on, waits until it has recorded a frame of the newest atlas.
+ * `readPreview` cannot do this: it takes the frame hook from the recorder, so a frame drawn
+ * after the atlas is published but before the hook changes hands would be missed.
+ */
+export function recordedNewest(page: Page): Promise<void> {
+    return page.evaluate(
+        () =>
+            new Promise<void>((resolve, reject) => {
+                const probe = window.__ngneTest?.preview;
+                const frames = (window as unknown as { __se054Frames?: RecordedFrame[] })
+                    .__se054Frames;
+                if (!probe || !frames) {
+                    reject(new Error("se-054: not recording"));
+                    return;
+                }
+                const atLeast = probe.serial;
+                const started = performance.now();
+                const check = () => {
+                    if (frames.some((frame) => frame.drawn && frame.drawn.serial >= atLeast)) {
+                        resolve();
+                    } else if (performance.now() - started > 15_000) {
+                        reject(new Error(`se-054: no recorded frame of serial ${atLeast}`));
+                    } else {
+                        // Frames run on demand: ask for one at each animation frame.
+                        probe.wake();
+                        requestAnimationFrame(check);
+                    }
+                };
+                check();
+            }),
+    );
+}
+
 /** Stops `recordPreview` and returns what it recorded. */
 export function recordedPreview(page: Page): Promise<RecordedFrame[]> {
     return page.evaluate(() => {

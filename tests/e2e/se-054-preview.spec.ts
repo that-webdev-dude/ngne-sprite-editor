@@ -31,6 +31,7 @@ import {
     previewStage,
     previewToggle,
     readPreview,
+    recordedNewest,
     recordedPreview,
     recordPreview,
     runPreviewFrames,
@@ -140,8 +141,8 @@ test("drawing a pencil stroke updates the preview within 500 ms @alone", async (
     const after = await celBytes(page, document.id);
     if (!after) throw new Error("no cel");
     await previewSettled(page);
-    // A few more frames after the update.
-    await readPreview(page);
+    // Until the recording holds a frame of the new atlas.
+    await recordedNewest(page);
     const frames = await recordedPreview(page);
     const up = await page.evaluate(() => (window as unknown as { __se054Up: number }).__se054Up);
     const first = frames.find((frame) => showsImage(frame, [composite(after)]) === 0);
@@ -199,7 +200,7 @@ test("during a repack that changes the atlas layout, every frame shows the old o
         (window as unknown as { __se054Open: () => void }).__se054Open();
     });
     await previewSettled(page);
-    await readPreview(page);
+    await recordedNewest(page);
     const frames = await recordedPreview(page);
 
     const shown = frames.map((frame) => showsImage(frame, images));
