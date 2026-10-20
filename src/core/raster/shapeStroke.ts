@@ -1,6 +1,7 @@
 import type { PixelBuffer, Rect } from "../model";
 import type { Brush } from "./brush";
 import { Changes } from "./changes";
+import type { DirtyRect } from "./changes";
 import type { Ink } from "./ink";
 import { copyShape, forEachFilledRun, forEachOutlinePixel, sameShape } from "./shape";
 import type { PathShape, Shape } from "./shape";
@@ -72,7 +73,7 @@ export class ShapeStroke {
     }
 
     /** Draws `shape` in place of the shape drawn before. */
-    draw(shape: Shape | PathShape): Rect | null {
+    draw(shape: Shape | PathShape): DirtyRect | null {
         if (this.#shape && sameShape(this.#shape, shape)) return null;
         const { width, height, data } = this.#image;
         const original = this.#original;
@@ -107,7 +108,7 @@ export class ShapeStroke {
         const rows = symmetricRows(symmetry, height);
         forEachFilledRun(shape, mark, rows.first, rows.last);
 
-        const changes = new Changes();
+        const changes = new Changes(this.#symmetry !== null);
         const previous = this.#covered;
         if (previous) {
             for (let y = previous.y; y < previous.y + previous.height; y++) {

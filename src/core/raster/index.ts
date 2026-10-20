@@ -12,6 +12,8 @@ export {
     createBrush,
 } from "./brush";
 export type { Brush, BrushShape } from "./brush";
+export { MAX_PARTS } from "./changes";
+export type { DirtyRect } from "./changes";
 export { ContourStroke } from "./contour";
 export type { ContourStrokeOptions } from "./contour";
 export {

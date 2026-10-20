@@ -111,29 +111,35 @@ export function echoPixels(
     const { size } = checker;
     const front = cover.front.map(texelSpan);
     const behind = cover.behind.map(texelSpan);
+    const covered = front.length > 0 || behind.length > 0;
     const inside = (spans: typeof front, x: number, y: number) =>
         spans.some((span) => x >= span.left && x < span.right && y >= span.top && y < span.bottom);
+    // The two checkerboard colours, by channel. Written as a plain loop with nothing made per
+    // pixel: a symmetric stroke's echo can cover most of the canvas (SE-062 review round 2).
+    const ar = (checker.a >>> 16) & 255;
+    const ag = (checker.a >>> 8) & 255;
+    const ab = checker.a & 255;
+    const br = (checker.b >>> 16) & 255;
+    const bg = (checker.b >>> 8) & 255;
+    const bb = checker.b & 255;
+    const data = buffer.data;
+    const right = rect.x + rect.width;
     let at = 0;
     for (let y = rect.y; y < rect.y + rect.height; y++) {
-        for (let x = rect.x; x < rect.x + rect.width; x++) {
-            const from = (y * buffer.width + x) * 4;
-            const alpha = buffer.data[from + 3] ?? 0;
-            if (inside(front, x, y) || (alpha < 255 && inside(behind, x, y))) {
-                // Left transparent: NGNE's reference shows through the overlay.
-                at += 4;
+        const row = Math.floor(y / size);
+        let from = (y * buffer.width + rect.x) * 4;
+        for (let x = rect.x; x < right; x++, from += 4, at += 4) {
+            const alpha = data[from + 3]!;
+            // Left transparent: NGNE's reference shows through the overlay.
+            if (covered && (inside(front, x, y) || (alpha < 255 && inside(behind, x, y)))) {
                 continue;
             }
-            const under =
-                (Math.floor(x / size) + Math.floor(y / size)) % 2 === 0 ? checker.a : checker.b;
-            const backdrop = [(under >>> 16) & 255, (under >>> 8) & 255, under & 255];
-            for (let channel = 0; channel < 3; channel++) {
-                const colour = buffer.data[from + channel] ?? 0;
-                out[at + channel] = Math.round(
-                    (colour * alpha + (backdrop[channel] ?? 0) * (255 - alpha)) / 255,
-                );
-            }
+            const first = (Math.floor(x / size) + row) % 2 === 0;
+            const rest = 255 - alpha;
+            out[at] = Math.round((data[from]! * alpha + (first ? ar : br) * rest) / 255);
+            out[at + 1] = Math.round((data[from + 1]! * alpha + (first ? ag : bg) * rest) / 255);
+            out[at + 2] = Math.round((data[from + 2]! * alpha + (first ? ab : bb) * rest) / 255);
             out[at + 3] = 255;
-            at += 4;
         }
     }
     return out;
@@ -177,7 +183,7 @@ export function createStrokeEchoLayer(
     const layer: OverlayLayer = {
         id: "stroke-echo",
         order: STROKE_ECHO_ORDER,
-        draw({ context, document, mapping }) {
+        draw({ context, document, mapping, size }) {
             const target = echo.target;
             if (!echo.enabled || !target) {
                 scratch = null;
@@ -206,7 +212,9 @@ export function createStrokeEchoLayer(
                 const y = Math.round(start.y);
                 const w = Math.round(end.x) - x;
                 const h = Math.round(end.y) - y;
-                if (w > 0 && h > 0) {
+                // A copy wholly off the canvas is not drawn (SE-062 review round 2).
+                const onCanvas = x < size.width && y < size.height && x + w > 0 && y + h > 0;
+                if (w > 0 && h > 0 && onCanvas) {
                     context.drawImage(image, 0, 0, rect.width, rect.height, x, y, w, h);
                 }
             };

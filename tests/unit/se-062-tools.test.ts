@@ -12,6 +12,8 @@ import { createMoveTool, MOVE_TOOL_ID } from "../../src/app/selection/move/moveT
 import { handTool } from "../../src/app/tools/hand/hand.tools";
 import { zoomTool } from "../../src/app/tools/zoom/zoom.tools";
 import { createBucket } from "../../src/app/tools/bucket/bucket";
+import { startLiveComposite } from "../../src/app/tools/liveComposite";
+import { compositeFrame } from "../../src/core/composite";
 import { tiledOutlineRects } from "../../src/app/overlay/outline.overlay";
 import { rectMask, selectionOf } from "../../src/core/selection";
 import { canvasSizeCommand, rotateCanvasCommand, spriteSizeCommand } from "../../src/core/sprite";
@@ -874,6 +876,74 @@ describe("axes follow the canvas size (review B)", () => {
         stop();
         document.history.redo();
         expect(axesNow()).toEqual({ axisX: 4, axisY: 12 });
+    });
+});
+
+describe("the live composite of a symmetric stroke (review round 2)", () => {
+    it("composites rectangles written apart each alone, at most four, and joins those that touch", () => {
+        const session = blank(40, 30);
+        const image = createPixelBuffer(40, 30, 0);
+        const composited: string[] = [];
+        let frame: (() => void) | null = null;
+        const live = startLiveComposite(
+            session,
+            {
+                layerId: session.activeLayerId,
+                frameId: session.activeFrameId,
+                imageId: "live",
+                image,
+            },
+            {
+                composites: { cacheOf: () => null, invalidate: () => {} },
+                viewport: { invalidate: () => {} },
+                nextFrame: (callback) => {
+                    frame = callback;
+                    return () => {
+                        frame = null;
+                    };
+                },
+                echo: {
+                    start: () => {},
+                    changed: () => {},
+                    composited: (rect) =>
+                        void composited.push(`${rect.x},${rect.y} ${rect.width}x${rect.height}`),
+                    release: () => {},
+                    clear: () => {},
+                },
+            },
+        );
+        const paint = (x: number, y: number) => {
+            image.data.set([255, 0, 0, 255], (y * 40 + x) * 4);
+            live.dirty({ x, y, width: 1, height: 1 });
+        };
+        // The first change of an animation frame is shown at once.
+        paint(0, 0);
+        expect(composited).toEqual(["0,0 1x1"]);
+        composited.length = 0;
+        // A dab and its three mirror images, and the next dab beside the first.
+        paint(2, 2);
+        paint(37, 2);
+        paint(2, 27);
+        paint(37, 27);
+        paint(3, 2);
+        const next = frame as (() => void) | null;
+        next?.();
+        expect(composited).toEqual(["2,2 2x1", "37,2 1x1", "2,27 1x1", "37,27 1x1"]);
+        composited.length = 0;
+        // A fifth part apart from the four joins the one it grows least.
+        paint(0, 0);
+        paint(39, 0);
+        paint(0, 29);
+        paint(39, 29);
+        paint(20, 15);
+        (frame as (() => void) | null)?.();
+        expect(composited).toHaveLength(4);
+        // Whatever the parts, the buffer is the frame composited with the image.
+        live.flush();
+        const expected = compositeFrame(session.doc, session.activeFrameId, {
+            overrides: [{ layerId: session.activeLayerId, image }],
+        });
+        expect(Array.from(live.buffer.data)).toEqual(Array.from(expected.data));
     });
 });
 

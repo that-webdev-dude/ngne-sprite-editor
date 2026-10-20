@@ -1,5 +1,5 @@
-import type { PixelBuffer, Rect } from "../model";
-import { Changes } from "./changes";
+import type { PixelBuffer } from "../model";
+import type { DirtyRect } from "./changes";
 import { forEachLinePixel } from "./line";
 import type { PixelPoint } from "./line";
 import { Stamper } from "./stroke";
@@ -40,11 +40,11 @@ export class ContourStroke {
      * The press, then each sample: the path goes on to `pixel` along a line, unless `pixel` is
      * its last point already. Returns the rectangle of the pixels whose bytes changed.
      */
-    to(pixel: PixelPoint): Rect | null {
+    to(pixel: PixelPoint): DirtyRect | null {
         if (this.#closed) throw new Error("This contour is closed.");
         const last = this.#points[this.#points.length - 1];
         if (last && last.x === pixel.x && last.y === pixel.y) return null;
-        const changes = new Changes();
+        const changes = this.#stamper.newChanges();
         if (!last) {
             this.#stamper.stamp(pixel.x, pixel.y, changes);
         } else {
@@ -66,12 +66,12 @@ export class ContourStroke {
      * The release: the line back to the first point, and the inside filled. A path of fewer
      * than 3 points encloses nothing and stays as it is.
      */
-    close(): Rect | null {
+    close(): DirtyRect | null {
         if (this.#closed) return null;
         this.#closed = true;
         const points = this.#points;
         if (points.length < 3) return null;
-        const changes = new Changes();
+        const changes = this.#stamper.newChanges();
         const first = points[0];
         const last = points[points.length - 1];
         forEachLinePixel(last.x, last.y, first.x, first.y, (x, y) => {

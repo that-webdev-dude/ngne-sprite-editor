@@ -28,6 +28,12 @@ import type { StrokeEcho } from "./strokeEcho";
 // The overlay stroke echo (SE-015, `strokeEcho.ts`) is told of every rectangle composited
 // into the live buffer, and may composite what is pending before the overlay draws; what it
 // composited is still shown to the viewport in the next animation frame.
+//
+// What is pending is kept as up to `MAX_PENDING` rectangles (SE-062): a dirty rectangle that
+// overlaps or nearly touches one joins it, as the samples of a stroke do, and one apart from
+// all of them starts another, so the copies a symmetric or tiled stroke writes near the four
+// corners are composited each alone rather than as the canvas between them. Beyond that many,
+// a rectangle joins the one it grows least.
 
 export interface LiveCompositeSources {
     composites: Pick<ActiveComposites, "cacheOf" | "invalidate">;
@@ -60,6 +66,11 @@ export interface LiveComposite {
     aborted(): void;
 }
 
+/** At most this many rectangles are pending at once. */
+const MAX_PENDING = 4;
+/** A dirty rectangle this close to a pending one (in either direction) joins it. */
+const JOIN_GAP = 8;
+
 function union(a: Rect | null, b: Rect): Rect {
     if (!a) return { ...b };
     const x = Math.min(a.x, b.x);
@@ -67,6 +78,42 @@ function union(a: Rect | null, b: Rect): Rect {
     const right = Math.max(a.x + a.width, b.x + b.width);
     const bottom = Math.max(a.y + a.height, b.y + b.height);
     return { x, y, width: right - x, height: bottom - y };
+}
+
+/** Whether `a` and `b` overlap or lie within `JOIN_GAP` of each other. */
+function near(a: Rect, b: Rect): boolean {
+    return (
+        a.x < b.x + b.width + JOIN_GAP &&
+        b.x < a.x + a.width + JOIN_GAP &&
+        a.y < b.y + b.height + JOIN_GAP &&
+        b.y < a.y + a.height + JOIN_GAP
+    );
+}
+
+/** Adds `rect` to the pending rectangles `pending` (see the module's comment). */
+function addPending(pending: Rect[], rect: Rect): void {
+    for (let index = 0; index < pending.length; index++) {
+        if (near(pending[index]!, rect)) {
+            pending[index] = union(pending[index]!, rect);
+            return;
+        }
+    }
+    if (pending.length < MAX_PENDING) {
+        pending.push({ ...rect });
+        return;
+    }
+    let best = 0;
+    let bestGrowth = Infinity;
+    for (let index = 0; index < pending.length; index++) {
+        const now = pending[index]!;
+        const joined = union(now, rect);
+        const growth = joined.width * joined.height - now.width * now.height;
+        if (growth < bestGrowth) {
+            best = index;
+            bestGrowth = growth;
+        }
+    }
+    pending[best] = union(pending[best]!, rect);
 }
 
 /** The part of `rect` inside the document, or null. */
@@ -105,8 +152,8 @@ export function startLiveComposite(
     const others = otherFramesShowing(doc, imageId, frameId);
     const buffer = compositeFrame(doc, frameId, { overrides });
     let adopted = sources.composites.cacheOf(session)?.adopt(frameId, buffer) ?? false;
-    /** Written and not composited yet. */
-    let pending: Rect | null = null;
+    /** Written and not composited yet: at most `MAX_PENDING` rectangles. */
+    const pending: Rect[] = [];
     /** Composited (for the echo, which draws from the buffer) and not shown to the viewport. */
     let unshown = false;
     /** Whether the viewport was told in the current animation frame. */
@@ -115,10 +162,12 @@ export function startLiveComposite(
     const { echo } = sources;
 
     const compositePending = () => {
-        if (!pending) return;
-        compositeFrame(doc, frameId, { rect: pending, into: buffer, overrides });
-        echo?.composited(pending);
-        pending = null;
+        if (pending.length === 0) return;
+        for (const rect of pending) {
+            compositeFrame(doc, frameId, { rect, into: buffer, overrides });
+            echo?.composited(rect);
+        }
+        pending.length = 0;
         unshown = true;
     };
     echo?.start({ session, frameId, buffer, prepare: compositePending });
@@ -160,7 +209,7 @@ export function startLiveComposite(
     const onFrame = () => {
         cancelFrame = null;
         shownThisFrame = false;
-        if (pending || unshown) show();
+        if (pending.length > 0 || unshown) show();
     };
 
     const stop = () => {
@@ -176,7 +225,7 @@ export function startLiveComposite(
         dirty(rect) {
             const area = clip(rect, doc);
             if (!area) return;
-            pending = union(pending, area);
+            addPending(pending, area);
             echo?.changed();
             if (!shownThisFrame) show();
         },
@@ -198,7 +247,7 @@ export function startLiveComposite(
         },
         aborted() {
             stop();
-            pending = null;
+            pending.length = 0;
             unshown = false;
             adopted = false;
             echo?.clear();

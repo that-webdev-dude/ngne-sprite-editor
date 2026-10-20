@@ -1,6 +1,6 @@
-import type { PixelBuffer, Rect } from "../model";
+import type { PixelBuffer } from "../model";
 import type { Brush } from "./brush";
-import { Changes } from "./changes";
+import type { Changes, DirtyRect } from "./changes";
 import { forEachLinePixel } from "./line";
 import type { PixelPoint } from "./line";
 import { Stamper } from "./stroke";
@@ -107,20 +107,20 @@ export class SprayStroke {
     }
 
     /** The press: density % of the disk's area in dots around `pixel`. */
-    start(pixel: PixelPoint): Rect | null {
+    start(pixel: PixelPoint): DirtyRect | null {
         if (this.#last) return this.to(pixel);
-        const changes = new Changes();
+        const changes = this.#stamper.newChanges();
         this.#last = { x: pixel.x, y: pixel.y };
         this.#spray(pixel, sprayDiskArea(this.#radius), changes);
         return changes.rect();
     }
 
     /** The next sample: the path goes on to `pixel`, each pixel of it spraying anew. */
-    to(pixel: PixelPoint): Rect | null {
+    to(pixel: PixelPoint): DirtyRect | null {
         const from = this.#last;
         if (!from) return this.start(pixel);
         if (from.x === pixel.x && from.y === pixel.y) return null;
-        const changes = new Changes();
+        const changes = this.#stamper.newChanges();
         const width = 2 * this.#radius + 1;
         let skip = true;
         forEachLinePixel(from.x, from.y, pixel.x, pixel.y, (x, y) => {

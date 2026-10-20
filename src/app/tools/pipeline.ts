@@ -1,6 +1,7 @@
 import type { StoreApi } from "zustand/vanilla";
 import type { Transaction } from "../../core/history";
 import type { Rect } from "../../core/model";
+import type { DirtyRect } from "../../core/raster";
 import type { EditorState } from "../state/editor";
 import { activeDocument } from "../state/sessions";
 import type { OpenDocument, SessionsState } from "../state/sessions";
@@ -472,6 +473,12 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
             // is composited and echoed (the opaque echo would hide onion skins and references
             // over pixels that did not change).
             const shownBounds = opened ? (document.session.selection?.bounds ?? null) : null;
+            /** Reports `rect` to the transaction and, the part inside the shown bounds, to the display. */
+            const mark = (into: Transaction, rect: Rect) => {
+                into.markDirty(rect);
+                const shown = shownBounds ? intersection(rect, shownBounds) : rect;
+                if (shown) display?.dirty(shown);
+            };
             /** The stroke this context is of, once it is made. */
             let own: Stroke | null = null;
             const context: ToolContext = {
@@ -485,11 +492,16 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
                     layerId: opened.layerId,
                     frameId: opened.frameId,
                     image: opened.image,
-                    markDirty(rect) {
+                    markDirty(rect: DirtyRect) {
                         if (!opened.open) return;
-                        opened.markDirty(rect);
-                        const shown = shownBounds ? intersection(rect, shownBounds) : rect;
-                        if (shown) display?.dirty(shown);
+                        const { parts } = rect;
+                        if (!parts) {
+                            mark(opened, rect);
+                            return;
+                        }
+                        // Written apart (symmetry, tiled mode; SE-062): each part alone, so
+                        // the pixels between them are neither clipped nor composited again.
+                        for (const part of parts) mark(opened, part);
                     },
                 },
                 feedback: showFeedback,

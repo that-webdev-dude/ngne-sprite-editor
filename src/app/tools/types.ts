@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { History } from "../../core/history";
-import type { DocSession, PixelBuffer, Rect } from "../../core/model";
+import type { DocSession, PixelBuffer } from "../../core/model";
+import type { DirtyRect } from "../../core/raster";
 import type { OpenDocument } from "../state/sessions";
 import type { Point } from "../view/coordinates";
 
@@ -75,9 +76,10 @@ export interface PaintStroke {
     /**
      * Reports pixels written inside `rect` (integers; clipped to the canvas): they become part
      * of the undo step and appear in the viewport, composited and uploaded at most once per
-     * animation frame. A write that is not reported is neither.
+     * animation frame. A write that is not reported is neither. A rectangle from a symmetric
+     * or tiled stroke (`DirtyRect.parts`, SE-062) is reported part by part.
      */
-    markDirty(rect: Rect): void;
+    markDirty(rect: DirtyRect): void;
 }
 
 /** What a tool works with during one stroke, from its pointer down to its end. */

@@ -16,12 +16,26 @@ export const SYMMETRY_AXES_ORDER = 400;
 const DARK = "rgb(0 0 0)";
 const LIGHT = "rgb(255 255 255)";
 
-function fill(context: CanvasRenderingContext2D, rects: readonly DeviceRect[], style: string) {
-    if (rects.length === 0) return;
+/** Fills the parts of `rects` on a canvas of `size`; nothing outside it is drawn. */
+function fill(
+    context: CanvasRenderingContext2D,
+    rects: readonly DeviceRect[],
+    style: string,
+    size: { width: number; height: number },
+) {
     context.fillStyle = style;
     context.beginPath();
-    for (const rect of rects) context.rect(rect.x, rect.y, rect.width, rect.height);
-    context.fill();
+    let any = false;
+    for (const rect of rects) {
+        const x = Math.max(0, rect.x);
+        const y = Math.max(0, rect.y);
+        const right = Math.min(size.width, rect.x + rect.width);
+        const bottom = Math.min(size.height, rect.y + rect.height);
+        if (right <= x || bottom <= y) continue;
+        context.rect(x, y, right - x, bottom - y);
+        any = true;
+    }
+    if (any) context.fill();
 }
 
 /** The active document's symmetry as a key: what the layer draws from besides the view. */
@@ -49,16 +63,19 @@ export const overlayLayers: OverlayLayer[] = [
                         : { x: rect.x, y: rect.y - 1, width: rect.width, height: 3 },
                 ),
                 DARK,
+                size,
             );
             fill(
                 context,
                 lines.map((line) => line.rect),
                 LIGHT,
+                size,
             );
             fill(
                 context,
                 handles.map((handle) => handle.rect),
                 DARK,
+                size,
             );
             fill(
                 context,
@@ -69,6 +86,7 @@ export const overlayLayers: OverlayLayer[] = [
                     height: rect.height - 2,
                 })),
                 LIGHT,
+                size,
             );
         },
         watch(redraw) {

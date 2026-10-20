@@ -1,6 +1,7 @@
 import type { PixelBuffer, Rect } from "../model";
 import type { Brush } from "./brush";
 import { Changes } from "./changes";
+import type { DirtyRect } from "./changes";
 import type { Ink } from "./ink";
 import { forEachLinePixel } from "./line";
 import type { PixelPoint } from "./line";
@@ -77,6 +78,15 @@ export class Stamper {
         this.#ink = options.ink;
         this.#coverage = options.pixelPerfect ? new Uint32Array(image.width * image.height) : null;
         this.#symmetry = options.symmetry ?? null;
+    }
+
+    /**
+     * A `Changes` for one call of a stroke that writes through this stamper: with symmetry or
+     * tiled mode one that keeps the parts written apart (`DirtyRect.parts`), otherwise the
+     * plain bounding rectangle.
+     */
+    newChanges(): Changes {
+        return new Changes(this.#symmetry !== null);
     }
 
     /** Calls `visit` with each pixel of the run `[from, to)` of row `y` and of its copies. */
@@ -249,19 +259,19 @@ export class FreehandStroke {
     }
 
     /** The first sample: the brush is stamped at `pixel`. */
-    start(pixel: PixelPoint): Rect | null {
+    start(pixel: PixelPoint): DirtyRect | null {
         if (this.#last) return this.to(pixel);
-        const changes = new Changes();
+        const changes = this.#stamper.newChanges();
         this.#add({ x: pixel.x, y: pixel.y }, changes);
         return changes.rect();
     }
 
     /** The next sample: the path goes on to `pixel` along a line. */
-    to(pixel: PixelPoint): Rect | null {
+    to(pixel: PixelPoint): DirtyRect | null {
         const from = this.#last;
         if (!from) return this.start(pixel);
         if (from.x === pixel.x && from.y === pixel.y) return null;
-        const changes = new Changes();
+        const changes = this.#stamper.newChanges();
         let first = true;
         forEachLinePixel(from.x, from.y, pixel.x, pixel.y, (x, y) => {
             // The line's first pixel is the path's last, stamped already.
@@ -312,10 +322,10 @@ export class StraightStroke {
     }
 
     /** Draws the line from the anchor to `pixel`, in place of the one drawn before. */
-    to(pixel: PixelPoint): Rect | null {
+    to(pixel: PixelPoint): DirtyRect | null {
         const last = this.#last;
         if (last && last.x === pixel.x && last.y === pixel.y) return null;
-        const changes = new Changes();
+        const changes = this.#stamper.newChanges();
         if (this.#covered) this.#stamper.restoreRect(this.#covered, changes);
         const { x: ax, y: ay } = this.#anchor;
         const brush = this.#brush;

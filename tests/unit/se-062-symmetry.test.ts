@@ -347,14 +347,104 @@ describe("freehand strokes with symmetry (Stamper)", () => {
         }
     });
 
-    it("reports one rectangle covering the stroke and its mirror image", () => {
+    it("reports the rectangle covering the stroke and its mirror image, each copy as a part", () => {
         const [image, original] = canvas(WIDTH, HEIGHT);
         const stroke = new FreehandStroke(image, original, {
             brush: createBrush("square", 1),
             ink: paintInk("simple", BLACK, 255),
             symmetry: sym({ mirrorX: true, axisX: WIDTH }),
         });
-        expect(stroke.start(p(2, 3))).toEqual({ x: 2, y: 3, width: 12, height: 1 });
+        expect(stroke.start(p(2, 3))).toEqual({
+            x: 2,
+            y: 3,
+            width: 12,
+            height: 1,
+            parts: [
+                { x: 2, y: 3, width: 1, height: 1 },
+                { x: 13, y: 3, width: 1, height: 1 },
+            ],
+        });
+        // Copies that touch are one part: no `parts`, the bounds alone.
+        const [near, nearOriginal] = canvas(WIDTH, HEIGHT);
+        const close = new FreehandStroke(near, nearOriginal, {
+            brush: createBrush("square", 1),
+            ink: paintInk("simple", BLACK, 255),
+            symmetry: sym({ mirrorX: true, axisX: WIDTH }),
+        });
+        expect(close.start(p(7, 3))).toEqual({ x: 7, y: 3, width: 2, height: 1 });
+        // Without symmetry the rectangle carries no parts.
+        const [plain, plainOriginal] = canvas(WIDTH, HEIGHT);
+        const alone = new FreehandStroke(plain, plainOriginal, {
+            brush: createBrush("square", 1),
+            ink: paintInk("simple", BLACK, 255),
+        });
+        expect(alone.start(p(2, 3))).toEqual({ x: 2, y: 3, width: 1, height: 1 });
+    });
+
+    it("a stroke with symmetry both and tiled both reports its four copies as parts, each pixel in one", () => {
+        fc.assert(
+            fc.property(
+                fc.array(
+                    fc.record({
+                        x: fc.integer({ min: -3, max: 18 }),
+                        y: fc.integer({ min: -3, max: 14 }),
+                    }),
+                    { minLength: 1, maxLength: 6 },
+                ),
+                brushes,
+                (path, brush) => {
+                    const [image, original] = canvas(WIDTH, HEIGHT);
+                    const stroke = new FreehandStroke(image, original, {
+                        brush,
+                        ink: paintInk("simple", BLACK, 255),
+                        symmetry: sym({
+                            mirrorX: true,
+                            mirrorY: true,
+                            axisX: WIDTH,
+                            axisY: HEIGHT,
+                            wrapX: true,
+                            wrapY: true,
+                        }),
+                    });
+                    const [first, ...rest] = path;
+                    const reports = [
+                        stroke.start(first!),
+                        ...rest.map((point) => stroke.to(point)),
+                    ];
+                    // Every pixel painted lies in a part of a report (or its bounds without parts),
+                    // and the parts lie within the bounds; at most four of them.
+                    const covered = (x: number, y: number) =>
+                        reports.some((report) =>
+                            (report?.parts ?? (report ? [report] : [])).some(
+                                (rect) =>
+                                    x >= rect.x &&
+                                    x < rect.x + rect.width &&
+                                    y >= rect.y &&
+                                    y < rect.y + rect.height,
+                            ),
+                        );
+                    for (const key of painted(image)) {
+                        const [x, y] = key.split(",").map(Number);
+                        expect(covered(x!, y!), key).toBe(true);
+                    }
+                    for (const report of reports) {
+                        if (!report?.parts) continue;
+                        expect(report.parts.length).toBeLessThanOrEqual(4);
+                        expect(report.parts.length).toBeGreaterThan(1);
+                        for (const part of report.parts) {
+                            expect(part.x).toBeGreaterThanOrEqual(report.x);
+                            expect(part.y).toBeGreaterThanOrEqual(report.y);
+                            expect(part.x + part.width).toBeLessThanOrEqual(
+                                report.x + report.width,
+                            );
+                            expect(part.y + part.height).toBeLessThanOrEqual(
+                                report.y + report.height,
+                            );
+                        }
+                    }
+                },
+            ),
+        );
     });
 
     it("in tiled mode a stroke crossing the right edge continues from the left edge", () => {

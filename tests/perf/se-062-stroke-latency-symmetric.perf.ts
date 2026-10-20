@@ -123,6 +123,23 @@ const gpuId = process.env.PERF_GPU ?? "";
 const gpu = GPUS[gpuId];
 /** The overlay stroke echo: on unless `PERF_ECHO=off`. */
 const echo = process.env.PERF_ECHO !== "off";
+/**
+ * For profiling only (SE-062 review round 2): `PERF_SYMMETRY` and `PERF_TILED` replace the
+ * official "both" / "both" with another mode ("none", "x", "y"); the record's id then names
+ * them, so such a run is never taken for the official one. `PERF_PROFILE=1` takes a CPU
+ * profile of the page during the continuous stroke and prints its heaviest functions.
+ */
+const MODES = ["none", "x", "y", "both"] as const;
+type Mode = (typeof MODES)[number];
+const modeOf = (value: string | undefined): Mode =>
+    (MODES as readonly string[]).includes(value ?? "") ? (value as Mode) : "both";
+const symmetryMode = modeOf(process.env.PERF_SYMMETRY);
+const tiledMode = modeOf(process.env.PERF_TILED);
+const variant =
+    symmetryMode === "both" && tiledMode === "both"
+        ? ""
+        : `-symmetry-${symmetryMode}-tiled-${tiledMode}`;
+const profiling = process.env.PERF_PROFILE === "1";
 
 interface Texel {
     x: number;
@@ -601,7 +618,7 @@ async function strokeAlong(
 /** Opens the benchmark document: 256 × 256, 8 layers with half-transparent content, at 8×. */
 async function openBenchmarkDocument(page: Page): Promise<void> {
     await page.evaluate(
-        async ({ side, layers, scale }) => {
+        async ({ side, layers, scale, symmetryMode, tiledMode }) => {
             const path = "/src/core/model/index.ts";
             // Not `import()` itself: Vitest rewrites it in this file, and the function runs in
             // the page.
@@ -647,15 +664,47 @@ async function openBenchmarkDocument(page: Page): Promise<void> {
             session.activeFrameId = frameId;
             doc.settings.pixelGrid = true;
             // SE-062: mirrored on both centre lines and wrapped on both axes.
-            doc.settings.symmetry = { mode: "both", axisX: side, axisY: side };
-            doc.settings.tiled = "both";
+            doc.settings.symmetry = { mode: symmetryMode, axisX: side, axisY: side };
+            doc.settings.tiled = tiledMode;
             window.__ngneTest!.sessions.getState().open(session, {
                 view: { scale, originX: 16, originY: 16 },
             });
             window.__ngneTest!.assertInvariants();
         },
-        { side: SIDE, layers: LAYERS, scale: SCALE },
+        { side: SIDE, layers: LAYERS, scale: SCALE, symmetryMode, tiledMode },
     );
+}
+
+/** The heaviest functions by self time of a CPU profile, as lines to print. */
+function heaviest(profile: {
+    nodes: {
+        id: number;
+        callFrame: { functionName: string; url: string; lineNumber: number };
+    }[];
+    samples?: number[];
+    timeDeltas?: number[];
+}): string[] {
+    const byNode = new Map(profile.nodes.map((node) => [node.id, node]));
+    const self = new Map<string, number>();
+    const samples = profile.samples ?? [];
+    const deltas = profile.timeDeltas ?? [];
+    let total = 0;
+    for (let index = 0; index < samples.length; index++) {
+        const node = byNode.get(samples[index]!);
+        const ms = (deltas[index] ?? 0) / 1000;
+        total += ms;
+        if (!node) continue;
+        const { functionName, url, lineNumber } = node.callFrame;
+        const key = `${functionName || "(anonymous)"} ${url.split("/").slice(-2).join("/")}:${lineNumber + 1}`;
+        self.set(key, (self.get(key) ?? 0) + ms);
+    }
+    return [
+        `total ${Math.round(total)} ms`,
+        ...[...self.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 30)
+            .map(([key, ms]) => `${ms.toFixed(1).padStart(8)} ms  ${key}`),
+    ];
 }
 
 it.skipIf(!gpu)(
@@ -740,26 +789,33 @@ it.skipIf(!gpu)(
                 probe.enabled = on;
                 probe.onDraw = (rects, buffer) => {
                     const bench = window.__se062bench!;
-                    const index = bench.pathIndex;
-                    if (!index) return;
+                    const path = bench.path;
+                    if (!bench.pathIndex || !path) return;
                     const [r, g, b, a] = bench.colour;
+                    const { data } = buffer;
+                    // The path's texels the drawn rectangles hold painted. Found from the path
+                    // (some hundred texels), not from the rectangles' pixels as SE-015 does: a
+                    // symmetric stroke's echo can cover most of the canvas, and reading it all
+                    // here would cost the page more than the echo itself (review round 2).
                     const indices: number[] = [];
-                    for (const rect of rects) {
-                        for (let y = rect.y; y < rect.y + rect.height; y++) {
-                            for (let x = rect.x; x < rect.x + rect.width; x++) {
-                                const found = index.get(`${x},${y}`);
-                                if (found === undefined) continue;
-                                const at = (y * buffer.width + x) * 4;
-                                const { data } = buffer;
-                                if (
-                                    data[at] === r &&
-                                    data[at + 1] === g &&
-                                    data[at + 2] === b &&
-                                    data[at + 3] === a
-                                ) {
-                                    indices.push(found);
-                                }
-                            }
+                    for (let found = 0; found < path.length; found++) {
+                        const { x, y } = path[found]!;
+                        const drawn = rects.some(
+                            (rect) =>
+                                x >= rect.x &&
+                                x < rect.x + rect.width &&
+                                y >= rect.y &&
+                                y < rect.y + rect.height,
+                        );
+                        if (!drawn) continue;
+                        const at = (y * buffer.width + x) * 4;
+                        if (
+                            data[at] === r &&
+                            data[at + 1] === g &&
+                            data[at + 2] === b &&
+                            data[at + 3] === a
+                        ) {
+                            indices.push(found);
                         }
                     }
                     const draw = { t: Number.NaN, indices };
@@ -849,7 +905,16 @@ it.skipIf(!gpu)(
             if (new Set(path.map(({ x, y }) => `${x},${y}`)).size !== path.length) {
                 throw new Error("se-062: the continuous stroke visits a texel twice");
             }
+            if (profiling) {
+                await cdp.send("Profiler.enable");
+                await cdp.send("Profiler.setSamplingInterval", { interval: 200 });
+                await cdp.send("Profiler.start");
+            }
             const continuous = await strokeAlong(page, cdp, layout, path);
+            if (profiling) {
+                const { profile } = await cdp.send("Profiler.stop");
+                console.log(heaviest(profile).join("\n"));
+            }
 
             const browserVersion = browser.version();
             const overlayRedraws = await page.evaluate(() => window.__ngneTest!.overlay!.redraws);
@@ -873,7 +938,7 @@ it.skipIf(!gpu)(
             const resultMs = Math.max(stroke.p95Ms, first.p95Ms, second.p95Ms, short.p95Ms);
             if (pageErrors.length > 0) throw new Error(`se-062: page errors: ${pageErrors[0]}`);
             const entry: PerfEntry = {
-                id: `se-062-stroke-latency-symmetric-${gpuId}${echo ? "" : "-no-echo"}`,
+                id: `se-062-stroke-latency-symmetric-${gpuId}${variant}${echo ? "" : "-no-echo"}`,
                 ticket: "SE-062",
                 measurement:
                     "With symmetry and tiled mode both on (SE-062), " +
