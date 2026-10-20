@@ -83,7 +83,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-041                                                   |
 | Blocks       | SE-072                                                   |
 | Blocked until | —                                                       |

@@ -22,6 +22,11 @@ Node benchmarks: `PERF_RECORD=1 npx vitest run --config vitest.perf.config.ts te
 | `se-024-playback-rtx-4060` | SE-024 | The same on RTX 4060 | 0 skipped | 0 of 129 | as above | 2026-10-19 |
 | `se-044-preview`         | SE-044 | Import PNG dialog on a 1024×1024 source at the dialog's defaults (target 32×32 contain, smart alpha and colours): setting change (dither, count, fit, alpha, size, crop, cells) to the result pane drawn with the worker's answer, Chrome | 300 ms | 182.8 ms | largest of 48 changes | 2026-10-19 |
 | `se-044-preview-1024-target` | SE-044 | The same source to a 1024×1024 target, contain, Reduce to 256 colours; changes of dither, count, fit and crop | 300 ms | 543.4 ms (over) | largest of 30 changes | 2026-10-19 |
+| `se-026-timeline-scroll-intel-uhd` | SE-026 | Mean frame interval of a scripted zigzag scroll of the timeline at 200 frames × 30 layers (cells and frame numbers windowed), Chrome on Intel UHD | 20 ms (50 fps) | 7.50 ms (133 fps) | mean of 600 scroll frames; 125 frames moved the window; idle 144 fps | 2026-10-20 |
+| `se-026-timeline-scroll-rtx-4060` | SE-026 | The same on RTX 4060 | 20 ms (50 fps) | 7.52 ms (133 fps) | as above; idle 143 fps | 2026-10-20 |
+| `se-042-autosave-long-tasks` | SE-042 | Longest long task overlapping an autosave snapshot window: first full snapshot of a 16-frame 256×256 document, then 24 one-cel edits, Chrome | 50 ms | 0 ms | largest over 25 snapshots (0: none overlapped); 80 ms control task observed | 2026-10-20 |
+| `se-062-stroke-latency-symmetric-intel-uhd` | SE-062 | As `se-015-stroke-latency-intel-uhd` (with the echo), with symmetry and tiled mode both on | 33 ms | 18.0 ms | as SE-015; 719 frames submitted in the 6 s stroke | 2026-10-20 |
+| `se-062-stroke-latency-symmetric-rtx-4060` | SE-062 | The same on RTX 4060 | 33 ms | 16.8 ms | as above; 671 frames | 2026-10-20 |
 
 `se-043-import` was measured again on 2026-10-13 after the colour key moved before the resample
 (first record, 2026-10-12: 56.9 ms).

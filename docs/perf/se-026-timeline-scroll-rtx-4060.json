@@ -1,0 +1,35 @@
+{
+    "id": "se-026-timeline-scroll-rtx-4060",
+    "ticket": "SE-026",
+    "measurement": "Average animation frame interval while the timeline panel of a 200-frame × 30-layer document is scrolled by 37 px across and 9 px down per frame in a zigzag over the whole grid (1920×1080, DPR 1, RTX 4060)",
+    "statistic": "mean over 600 scroll frames (after 60 not counted)",
+    "budgetMs": 20,
+    "resultMs": 7.52,
+    "details": {
+        "fps": 132.92,
+        "budget": "at least 50 fps on average (SE-026 acceptance): 20 ms",
+        "frames": 600,
+        "framesScrolled": 125,
+        "p95IntervalMs": 13.8,
+        "maxIntervalMs": 27.9,
+        "idleFps": 142.87,
+        "cellsInDom": {
+            "max": 785,
+            "min": 589,
+            "withoutVirtualization": 6000
+        },
+        "panel": "1920×199 CSS px, content 5000×896",
+        "window": "1920×1080 CSS px",
+        "adapter": "nvidia / lovelace ()",
+        "chrome": "155.0.8059.82, new headless, --force-color-profile=srgb --force-high-performance-gpu --force-device-scale-factor=1"
+    },
+    "pass": true,
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-10-20T09:34:03.478Z"
+}

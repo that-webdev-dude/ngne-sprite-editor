@@ -1,0 +1,28 @@
+{
+    "id": "se-042-autosave-long-tasks",
+    "ticket": "SE-042",
+    "measurement": "Longest long task (PerformanceObserver) overlapping an autosave snapshot of a 16-frame 256×256 document: its first snapshot (16 images) and 24 single-cel edits",
+    "statistic": "max over all snapshots (0 when no long task overlaps one)",
+    "budgetMs": 50,
+    "resultMs": 0,
+    "details": {
+        "controlLongTaskMs": 80,
+        "snapshots": 25,
+        "attributedLongTasks": [],
+        "longTasksOnThePage": 4,
+        "firstSnapshotMs": 17.6,
+        "snapshotMedianMs": 5,
+        "snapshotMaxMs": 17.6,
+        "document": "16 frames, one layer, 256×256 opaque noise",
+        "chrome": "155.0.8059.82, new headless, --force-color-profile=srgb --force-device-scale-factor=1"
+    },
+    "pass": true,
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-10-20T08:52:14.417Z"
+}
