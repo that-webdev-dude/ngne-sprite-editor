@@ -1,4 +1,5 @@
 import type { RendererResourceInspection, RendererStatus } from "@ngne/core";
+import type { TiledMode } from "../core/model";
 import { readCanvas } from "./testing/readCanvas";
 import { oncePerMessage } from "./viewport/diagnostics";
 import { backingSize } from "./viewport/geometry";
@@ -283,7 +284,7 @@ export class NgneViewport implements ViewportPort {
         this.#markDirty();
     }
 
-    setTiled(tiled: "none" | "x" | "y" | "both"): void {
+    setTiled(tiled: TiledMode): void {
         if (tiled === (this.#scene.tiled ?? "none")) return;
         this.#scene.tiled = tiled;
         this.#markDirty();

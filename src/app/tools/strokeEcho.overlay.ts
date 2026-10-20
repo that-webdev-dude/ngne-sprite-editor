@@ -1,5 +1,6 @@
 import type { PixelBuffer, Rect } from "../../core/model";
-import type { TiledMode } from "../../engine/viewport/geometry";
+import type { TiledMode } from "../../core/model";
+import { tiledCopyOffsets } from "../../core/raster";
 import type { ViewportChecker } from "../../engine/viewport/types";
 import type {} from "../../import-meta";
 import type { OverlayLayer } from "../overlay/types";
@@ -51,16 +52,10 @@ export function tiledOffsets(
     width: number,
     height: number,
 ): { x: number; y: number }[] {
-    if (tiled === "none") return [];
-    const across = tiled === "x" || tiled === "both" ? [-1, 0, 1] : [0];
-    const down = tiled === "y" || tiled === "both" ? [-1, 0, 1] : [0];
-    const offsets: { x: number; y: number }[] = [];
-    for (const row of down) {
-        for (const column of across) {
-            if (row !== 0 || column !== 0) offsets.push({ x: column * width, y: row * height });
-        }
-    }
-    return offsets;
+    return tiledCopyOffsets(tiled).map((offset) => ({
+        x: offset.x * width,
+        y: offset.y * height,
+    }));
 }
 
 /** The texels a rectangle of document pixels touches, as whole-texel edges. */

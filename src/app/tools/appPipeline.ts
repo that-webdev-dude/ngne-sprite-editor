@@ -8,12 +8,10 @@ import { grabAxis } from "../symmetry/axisDrag";
 import type { ViewMapping } from "../view/coordinates";
 import { viewportLink } from "../viewport/viewportLink";
 import { toolState } from "./activeTool";
+import { VIEW_TOOLS } from "./viewTools";
 import { createToolPipeline } from "./pipeline";
 import type { ToolPipeline } from "./pipeline";
 import { strokeEcho } from "./strokeEcho";
-
-/** Tools that change only the view: a stroke of theirs does not stop editor playback. */
-const VIEW_TOOLS: ReadonlySet<string> = new Set(["hand", "zoom"]);
 
 /** Where the pointer pipeline of the app reads the mapping of the image on screen. */
 let mappingSource: (() => ViewMapping | null) | null = null;

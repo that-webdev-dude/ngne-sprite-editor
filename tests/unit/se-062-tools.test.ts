@@ -6,7 +6,15 @@ import { createPreferenceStore } from "../../src/app/preferences/preferences";
 import { activeDocument, isDirty, sessionsStore } from "../../src/app/state/sessions";
 import { axisGeometry, handleAt } from "../../src/app/symmetry/axisGeometry";
 import { createAxisGrab } from "../../src/app/symmetry/axisDrag";
-import { setSymmetry, setTiledMode } from "../../src/app/symmetry/symmetry";
+import { followDocumentSizes, setSymmetry, setTiledMode } from "../../src/app/symmetry/symmetry";
+import { createFloatingState } from "../../src/app/selection/floatingState";
+import { createMoveTool, MOVE_TOOL_ID } from "../../src/app/selection/move/moveTool";
+import { handTool } from "../../src/app/tools/hand/hand.tools";
+import { zoomTool } from "../../src/app/tools/zoom/zoom.tools";
+import { createBucket } from "../../src/app/tools/bucket/bucket";
+import { tiledOutlineRects } from "../../src/app/overlay/outline.overlay";
+import { rectMask, selectionOf } from "../../src/core/selection";
+import { canvasSizeCommand, rotateCanvasCommand, spriteSizeCommand } from "../../src/core/sprite";
 import {
     SYMMETRY_X_COMMAND,
     SYMMETRY_Y_COMMAND,
@@ -22,7 +30,8 @@ import { createToolPipeline } from "../../src/app/tools/pipeline";
 import type { ToolPipeline } from "../../src/app/tools/pipeline";
 import { polygonTool } from "../../src/app/tools/polygon/polygon.tools";
 import { FILLED } from "../../src/app/tools/shapes/shapeTool";
-import { rectangleTool } from "../../src/app/tools/shapes/shapes.tools";
+import { ellipseTool, lineTool, rectangleTool } from "../../src/app/tools/shapes/shapes.tools";
+import { curveTool } from "../../src/app/tools/curve/curve.tools";
 import { createStrokeEcho } from "../../src/app/tools/strokeEcho";
 import {
     createStrokeEchoLayer,
@@ -37,7 +46,7 @@ import { QUAD_LAYER } from "../../src/engine/viewport/geometry";
 import { replaceSceneDocument, ViewportSlots } from "../../src/engine/viewport/viewportSlots";
 import type { Scene } from "../../src/engine/viewport/viewportSlots";
 import { bitmap, FakeRenderer, flush, RecordingViewport } from "./se-011-support";
-import { createSprayTool } from "../../src/app/tools/spray/sprayTool";
+import { createSprayTool, SPRAY_RADIUS } from "../../src/app/tools/spray/sprayTool";
 import type { ToolSpec } from "../../src/app/tools/types";
 import { createViewMapping } from "../../src/app/view/coordinates";
 import { connectViewport } from "../../src/app/viewport/viewportController";
@@ -50,7 +59,7 @@ import { deserialize, serialize } from "../../src/core/project";
 import { paintInk } from "../../src/core/raster";
 import { tiledCopies } from "../../src/engine/viewport/geometry";
 import type { Quad } from "../../src/engine/viewport/geometry";
-import { FRAME, celImage, layerId, sprite } from "./se-010-support";
+import { FRAME, celImage, layerId, referenceLayer, sprite } from "./se-010-support";
 import type { Rgba } from "./se-010-support";
 
 import { at, harness, rgbaAt, stroke } from "./se-014-support";
@@ -69,7 +78,10 @@ const RED = 0xff0000ff;
 const TOOLS: readonly ToolSpec[] = [
     pencilTool,
     eraserTool,
+    lineTool,
     rectangleTool,
+    ellipseTool,
+    curveTool,
     bucketTool,
     contourTool,
     polygonTool,
@@ -185,61 +197,131 @@ describe("paint tools with symmetry", () => {
             expect(rgbaAt(image(document.session), 4, y)).toEqual(rgbaAt(once, 0, 0));
     });
 
-    it("the eraser, the rectangle, the contour, the polygon and the spray are mirrored as well", () => {
-        for (const [tool, draw] of [
-            [
-                "rectangle",
-                (h: Harness) =>
-                    stroke(h, [
-                        { x: 1, y: 1 },
-                        { x: 4, y: 3 },
-                    ]),
-            ],
-            [
-                "contour",
-                (h: Harness) =>
-                    stroke(h, [
-                        { x: 1, y: 1 },
-                        { x: 5, y: 1 },
-                        { x: 3, y: 4 },
-                    ]),
-            ],
-            [
-                "spray",
-                (h: Harness) =>
-                    stroke(h, [
-                        { x: 3, y: 3 },
-                        { x: 5, y: 4 },
-                    ]),
-            ],
-            [
-                "polygon",
-                (h: Harness) => {
-                    for (const pixel of [
-                        { x: 1, y: 1 },
-                        { x: 5, y: 2 },
-                        { x: 2, y: 4 },
-                    ]) {
-                        h.pipeline.down(at(h, pixel, { button: 0, buttons: 1 }));
-                        h.pipeline.up(at(h, pixel, { button: 0, buttons: 0 }));
-                    }
-                    h.pipeline.closeGesture();
-                },
-            ],
-        ] as const) {
-            const h = tools(tool);
-            const document = h.open(blank());
+    /** A click of the left button on `pixel`: one press of a gesture. */
+    const click = (h: Harness, pixel: { x: number; y: number }) => {
+        h.pipeline.down(at(h, pixel, { button: 0, buttons: 1 }));
+        h.pipeline.up(at(h, pixel, { button: 0, buttons: 0 }));
+    };
+    /** Each paint tool's gesture, its points moved right by `dx`. */
+    const DRAWS: readonly (readonly [string, (h: Harness, dx: number) => void])[] = [
+        [
+            "line",
+            (h, dx) =>
+                stroke(h, [
+                    { x: 1 + dx, y: 1 },
+                    { x: 5 + dx, y: 4 },
+                ]),
+        ],
+        [
+            "rectangle",
+            (h, dx) =>
+                stroke(h, [
+                    { x: 1 + dx, y: 1 },
+                    { x: 4 + dx, y: 3 },
+                ]),
+        ],
+        [
+            "ellipse",
+            (h, dx) =>
+                stroke(h, [
+                    { x: 1 + dx, y: 1 },
+                    { x: 5 + dx, y: 4 },
+                ]),
+        ],
+        [
+            "curve",
+            (h, dx) => {
+                // Start to end, then the two control points; the third release keeps it.
+                stroke(h, [
+                    { x: 1 + dx, y: 1 },
+                    { x: 5 + dx, y: 4 },
+                ]);
+                click(h, { x: 2 + dx, y: 5 });
+                click(h, { x: 5 + dx, y: 0 });
+            },
+        ],
+        [
+            "contour",
+            (h, dx) =>
+                stroke(h, [
+                    { x: 1 + dx, y: 1 },
+                    { x: 5 + dx, y: 1 },
+                    { x: 3 + dx, y: 4 },
+                ]),
+        ],
+        [
+            "spray",
+            (h, dx) =>
+                stroke(h, [
+                    { x: 3 + dx, y: 3 },
+                    { x: 5 + dx, y: 4 },
+                ]),
+        ],
+        [
+            "polygon",
+            (h, dx) => {
+                for (const pixel of [
+                    { x: 1 + dx, y: 1 },
+                    { x: 5 + dx, y: 2 },
+                    { x: 2 + dx, y: 4 },
+                ]) {
+                    click(h, pixel);
+                }
+                h.pipeline.closeGesture();
+            },
+        ],
+    ];
+
+    /** A harness on a blank document with `tool` selected, shapes filled where they can be. */
+    const drawing = (tool: string) => {
+        const h = tools(tool);
+        const document = h.open(blank());
+        if (tool === "rectangle" || tool === "ellipse" || tool === "polygon") {
+            h.tools.setOption(h.tools.active()!, FILLED.key, true);
+        }
+        // Dots within 2 px: none falls off the document's left or top edge at dx = 0.
+        if (tool === "spray") h.tools.setOption(h.tools.active()!, SPRAY_RADIUS.key, 2);
+        return { h, document };
+    };
+
+    it("line, rectangle, ellipse, curve, contour, spray and polygon are mirrored, each one undo step", () => {
+        for (const [tool, draw] of DRAWS) {
+            const { h, document } = drawing(tool);
             symmetry(h, "both");
-            if (tool === "rectangle" || tool === "polygon")
-                h.tools.setOption(h.tools.active()!, FILLED.key, true);
-            draw(h);
+            draw(h, 0);
             const result = image(document.session);
             expect(opaque(result).length, tool).toBeGreaterThan(0);
             expect(mirroredLeftRight(result), tool).toBe(true);
             expect(mirroredTopBottom(result), tool).toBe(true);
             expect(document.history.undoCount, tool).toBe(1);
         }
+    });
 
+    it("line, rectangle, ellipse, curve, contour, spray and polygon wrap around the right edge in tiled mode", () => {
+        for (const [tool, draw] of DRAWS) {
+            // The same gesture drawn untiled at the left edge, and tiled across the right one:
+            // the part beyond the edge lands where the untiled one painted, from column 0.
+            const plain = drawing(tool);
+            draw(plain.h, 0);
+            const atLeft = opaque(image(plain.document.session));
+            const tiled = drawing(tool);
+            setTiledMode("x", tiled.h.sessions);
+            draw(tiled.h, WIDTH - 3);
+            const wrapped = opaque(image(tiled.document.session));
+            const shifted = atLeft
+                .map((key) => key.split(",").map(Number) as [number, number])
+                .map(([x, y]) => `${(x + WIDTH - 3) % WIDTH},${y}`)
+                .sort();
+            expect(wrapped, tool).toEqual(shifted);
+            expect(
+                wrapped.some((key) => Number(key.split(",")[0]) < 3),
+                tool,
+            ).toBe(true);
+            expect(tiled.document.history.undoCount, tool).toBe(1);
+        }
+    });
+
+    it("the eraser is mirrored as well", () => {
         const h = tools("eraser");
         const document = h.open(filled(WIDTH, HEIGHT, [0, 0, 255, 255]));
         symmetry(h, "y");
@@ -388,9 +470,12 @@ describe("View menu", () => {
         expect(appCommands.get("view.symmetry")).toBeUndefined();
         expect(appCommands.get("view.tiled")).toBeUndefined();
         const view = menuCommands(buildMenu(appCommands.list(), ["View"])).map((entry) => entry.id);
-        const first = view.indexOf(SYMMETRY_X_COMMAND);
-        expect(first).toBeGreaterThanOrEqual(0);
-        expect(view.slice(first, first + 4)).toEqual(TOGGLES);
+        // In this order; later tickets may put items between them.
+        const indices = TOGGLES.map((id) => view.indexOf(id));
+        expect(indices[0]).toBeGreaterThanOrEqual(0);
+        for (let index = 1; index < indices.length; index++) {
+            expect(indices[index], TOGGLES[index]).toBeGreaterThan(indices[index - 1]!);
+        }
         const planned = plannedCommands.find((entry) => entry.id === "view.symmetry")!;
         for (const id of TOGGLES) {
             const toggle = command(id);
@@ -442,7 +527,10 @@ describe("View menu", () => {
 });
 
 /** A pipeline on the harness's stores that grabs the axes' handles. */
-function grabbing(h: Harness): ToolPipeline {
+function grabbing(
+    h: Harness,
+    bounds: () => { width: number; height: number } = () => ({ width: 0, height: 0 }),
+): ToolPipeline {
     return createToolPipeline({
         sessions: h.sessions,
         composites: h.composites,
@@ -454,12 +542,12 @@ function grabbing(h: Harness): ToolPipeline {
         nextFrame: h.frames.request,
         later: h.timers.set,
         onError: (error) => void h.errors.push(error),
-        grab: createAxisGrab(h.sessions),
+        grab: createAxisGrab(h.sessions, bounds),
     });
 }
 
 describe("dragging an axis", () => {
-    it("the axes lie on the first device pixel at their position, their handles outside the document", () => {
+    it("the axes lie on the device pixel at or before their position, their handles outside the document", () => {
         const mapping = createViewMapping({
             view: { scale: 8, originX: 20, originY: 10 },
             docWidth: 9,
@@ -555,6 +643,290 @@ describe("dragging an axis", () => {
         expect(pipeline.strokeTool?.id).toBe("pencil");
         pipeline.up(at(h, { x: 3, y: 2 }, { button: 0, buttons: 0 }));
         expect(opaque(image(document.session))).toEqual(["3,2", `3,${HEIGHT - 3}`]);
+    });
+
+    it("a handle gives way to the Move tool's transform box: a press on its n handle scales the float (review A)", () => {
+        const h = tools("pencil");
+        let version = 0;
+        const floating = createFloatingState({
+            sessions: h.sessions,
+            composites: h.composites,
+            viewport: { invalidate: () => {} },
+            nextFrame: h.frames.request,
+            echo: createStrokeEcho({ nextVersion: () => ++version }),
+            context: () => undefined,
+            onError: (error) => void h.errors.push(error),
+        });
+        h.registry.register(createMoveTool({ floating, ratio: () => 1 }), "test");
+        const session = filled(WIDTH, HEIGHT, [10, 20, 30, 255]);
+        const document = h.open(session, { scale: 16, originX: 40, originY: 40 });
+        symmetry(h, "x");
+        h.tools.select(MOVE_TOOL_ID);
+        const pipeline = grabbing(h);
+        // The whole canvas selected and lifted by a drag that ends where it began.
+        session.selection = selectionOf(
+            rectMask(WIDTH, HEIGHT, { x: 0, y: 0, width: WIDTH, height: HEIGHT }),
+        );
+        const inside = at(h, { x: 3, y: 3 });
+        pipeline.down({ ...inside, button: 0, buttons: 1 });
+        pipeline.up({ ...inside, button: 0, buttons: 0 });
+        expect(floating.floats()).toBe(true);
+        const before = floating.float!.transform;
+
+        // The n handle is at the top edge's middle, on the axis's column, where the axis's
+        // top handle reaches too.
+        const column = 40 + (WIDTH / 2) * 16;
+        const press = { ...inside, clientX: column, clientY: 40 - 4 };
+        const grab = axisGeometry(h.mapping()!, document.session.doc.settings.symmetry);
+        expect(handleAt(grab, { x: column, y: 40 - 4 }, 1)).toBe("x");
+        expect(pipeline.grabAt(press.clientX, press.clientY)).toBeNull();
+        pipeline.down({ ...press, button: 0, buttons: 1 });
+        expect(pipeline.strokeTool?.id).toBe(MOVE_TOOL_ID);
+        pipeline.move([{ ...press, clientY: press.clientY - 32, button: -1, buttons: 1 }]);
+        pipeline.up({ ...press, clientY: press.clientY - 32, button: 0, buttons: 0 });
+        const after = floating.float!.transform;
+        expect(after.height).toBe(before.height + 2);
+        expect(after.y).toBe(before.y - 2);
+        expect(document.session.doc.settings.symmetry.axisX).toBe(WIDTH);
+
+        // Off the box, the handle grabs as before.
+        floating.apply();
+        expect(pipeline.grabAt(press.clientX, press.clientY)?.id).toBe("symmetry-axis-x");
+    });
+
+    it("a handle gives way to the Move tool's reference box: inside it or on a corner (review A)", () => {
+        const h = tools("pencil");
+        h.registry.register(
+            createMoveTool({
+                floating: createFloatingState({
+                    sessions: h.sessions,
+                    composites: h.composites,
+                    viewport: { invalidate: () => {} },
+                    nextFrame: h.frames.request,
+                    echo: createStrokeEcho({ nextVersion: () => 0 }),
+                    context: () => undefined,
+                }),
+                ratio: () => 1,
+                references: { sourceSize: () => ({ width: 8, height: 4 }) },
+            }),
+            "test",
+        );
+        const session = filled(WIDTH, HEIGHT, [1, 2, 3, 255]);
+        // A reference of 8 × 4 source pixels at scale 2 over the top of the canvas and above it.
+        const reference = { ...referenceLayer("ref", "front"), x: 4, y: -6, scale: 2 };
+        session.doc.layers.push(reference);
+        session.activeLayerId = reference.id;
+        const document = h.open(session, { scale: 16, originX: 40, originY: 140 });
+        symmetry(h, "x");
+        h.tools.select(MOVE_TOOL_ID);
+        const pipeline = grabbing(h);
+        const handle = axisGeometry(h.mapping()!, document.session.doc.settings.symmetry)
+            .handles[0]!;
+        const point = { x: handle.rect.x + 3, y: handle.rect.y + 3 };
+        // The box spans document x 4..20 and y -6..2: the axis's top handle lies inside it.
+        expect(pipeline.grabAt(point.x, point.y)).toBeNull();
+        reference.locked = true;
+        expect(pipeline.grabAt(point.x, point.y)?.id).toBe("symmetry-axis-x");
+        reference.locked = false;
+        reference.y = -20;
+        expect(pipeline.grabAt(point.x, point.y)?.id).toBe("symmetry-axis-x");
+    });
+
+    it("a handle gives way to the hand (held) and the zoom: they work everywhere (review A)", () => {
+        const h = harness([...TOOLS, handTool, zoomTool]);
+        h.tools.select("pencil");
+        const document = h.open(blank(), { scale: 16, originX: 40, originY: 40 });
+        symmetry(h, "x");
+        const pipeline = grabbing(h);
+        const handle = axisGeometry(h.mapping()!, document.session.doc.settings.symmetry)
+            .handles[0]!;
+        const press = {
+            ...at(h, { x: 0, y: 0 }),
+            clientX: handle.rect.x + 2,
+            clientY: handle.rect.y + 2,
+        };
+        expect(pipeline.grabAt(press.clientX, press.clientY)?.id).toBe("symmetry-axis-x");
+        h.tools.hold("hand");
+        expect(pipeline.grabAt(press.clientX, press.clientY)).toBeNull();
+        pipeline.down({ ...press, button: 0, buttons: 1 });
+        expect(pipeline.strokeTool?.id).toBe("hand");
+        pipeline.up({ ...press, clientX: press.clientX + 30, button: 0, buttons: 0 });
+        h.tools.release("hand");
+        h.tools.select("zoom");
+        expect(pipeline.grabAt(press.clientX, press.clientY)).toBeNull();
+        expect(document.session.doc.settings.symmetry.axisX).toBe(WIDTH);
+    });
+
+    it("a handle whose end of the document is off the canvas is held inside it, over the document where there is no margin (review C)", () => {
+        const symmetryBoth = { mode: "both" as const, axisX: 8, axisY: 6 };
+        const mappingAt = (originX: number, originY: number) =>
+            createViewMapping({
+                view: { scale: 16, originX, originY },
+                docWidth: 8,
+                docHeight: 6,
+                ratio: 1,
+                left: 0,
+                top: 0,
+            });
+        const bounds = { width: 300, height: 200 };
+        // The whole document on the canvas with margins: the handles stay where they were.
+        const shown = mappingAt(60, 50);
+        expect(axisGeometry(shown, symmetryBoth, bounds)).toEqual(
+            axisGeometry(shown, symmetryBoth),
+        );
+        // Its top and left edges above and left of the canvas, its right and bottom beyond it.
+        const big = mappingAt(-40, -30);
+        const { handles } = axisGeometry(big, symmetryBoth, bounds);
+        const [top, bottom, left, right] = handles.map((handle) => handle.rect);
+        expect(top).toMatchObject({ y: 0, x: -40 + 64 - 3 });
+        // The bottom edge (device 66) is on the canvas: its handle stays in the margin below.
+        expect(bottom).toMatchObject({ y: -30 + 96 + 3 });
+        expect(left).toMatchObject({ x: 0, y: -30 + 48 - 3 });
+        expect(right).toMatchObject({ x: -40 + 128 + 3 });
+        // A canvas lower than the document: both ends off it, the top handle at its top edge,
+        // the bottom one at its bottom edge.
+        const low = { width: 300, height: 50 };
+        const held = axisGeometry(big, { ...symmetryBoth, mode: "x" }, low).handles;
+        expect(held.map((handle) => handle.rect.y)).toEqual([0, 50 - 7]);
+
+        // In the pipeline: a press on the held handle over the document drags the axis; a
+        // press on the document beside it paints.
+        const h = tools("pencil");
+        const document = h.open(blank(), { scale: 16, originX: 40, originY: -40 });
+        symmetry(h, "x");
+        const pipeline = grabbing(h, () => bounds);
+        const handle = axisGeometry(h.mapping()!, document.session.doc.settings.symmetry, bounds)
+            .handles[0]!;
+        expect(handle.rect.y).toBe(0);
+        const press = { ...at(h, { x: 0, y: 0 }), clientX: handle.rect.x + 3, clientY: 3 };
+        pipeline.down({ ...press, button: 0, buttons: 1 });
+        expect(pipeline.strokeTool?.id).toBe("symmetry-axis-x");
+        pipeline.move([{ ...press, clientX: press.clientX + 16, button: -1, buttons: 1 }]);
+        pipeline.up({ ...press, clientX: press.clientX + 16, button: 0, buttons: 0 });
+        expect(document.session.doc.settings.symmetry.axisX).toBe(WIDTH + 2);
+        expect(opaque(image(document.session))).toEqual([]);
+        pipeline.down({ ...press, clientX: press.clientX - 40, button: 0, buttons: 1 });
+        expect(pipeline.strokeTool?.id).toBe("pencil");
+    });
+});
+
+describe("axes follow the canvas size (review B)", () => {
+    function setUp(width: number, height: number, axes: { axisX: number; axisY: number }) {
+        const h = tools("pencil");
+        const session = filled(width, height, [1, 2, 3, 255]);
+        const document = h.open(session);
+        symmetry(h, "both", axes);
+        const stop = followDocumentSizes(h.sessions);
+        const axesNow = () => {
+            const { axisX, axisY } = document.session.doc.settings.symmetry;
+            return { axisX, axisY };
+        };
+        return { h, document, session, stop, axesNow };
+    }
+
+    it("Canvas Size shrinking keeps each axis's share of its side; undo gives the axes back exactly", () => {
+        const { document, session, stop, axesNow } = setUp(16, 12, { axisX: 7, axisY: 12 });
+        document.history.execute(
+            canvasSizeCommand(session, { width: 10, height: 6, anchor: { x: 0, y: 0 } })!,
+        );
+        // 7 / 32 of 20 half pixels is 4.375 → 4; 12 / 24 of 12 → 6.
+        expect(axesNow()).toEqual({ axisX: 4, axisY: 6 });
+        document.history.undo();
+        expect(axesNow()).toEqual({ axisX: 7, axisY: 12 });
+        document.history.redo();
+        expect(axesNow()).toEqual({ axisX: 4, axisY: 6 });
+        expect(document.history.undoCount).toBe(1);
+        stop();
+    });
+
+    it("Sprite Size ×2 doubles the axes", () => {
+        const { document, session, stop, axesNow } = setUp(16, 12, { axisX: 9, axisY: 5 });
+        document.history.execute(
+            spriteSizeCommand(session, { width: 32, height: 24, method: "nearest" })!,
+        );
+        expect(axesNow()).toEqual({ axisX: 18, axisY: 10 });
+        document.history.undo();
+        expect(axesNow()).toEqual({ axisX: 9, axisY: 5 });
+        stop();
+    });
+
+    it("Rotate 90° on a non-square canvas keeps each axis's share of its own side", () => {
+        const { document, session, stop, axesNow } = setUp(16, 8, { axisX: 8, axisY: 8 });
+        document.history.execute(rotateCanvasCommand(session, 90)!);
+        expect([session.doc.width, session.doc.height]).toEqual([8, 16]);
+        // A quarter of 32 half pixels → a quarter of 16; half of 16 → half of 32.
+        expect(axesNow()).toEqual({ axisX: 4, axisY: 16 });
+        document.history.undo();
+        expect(axesNow()).toEqual({ axisX: 8, axisY: 8 });
+        stop();
+    });
+
+    it("an axis moved at the new size counts from there; stopping leaves the axes alone", () => {
+        const { h, document, session, stop, axesNow } = setUp(16, 12, { axisX: 16, axisY: 12 });
+        document.history.execute(
+            canvasSizeCommand(session, { width: 8, height: 12, anchor: { x: 0, y: 0 } })!,
+        );
+        expect(axesNow()).toEqual({ axisX: 8, axisY: 12 });
+        setSymmetry({ axisX: 2 }, document.id, h.sessions);
+        document.history.undo();
+        // 2 / 16 of 32 half pixels.
+        expect(axesNow()).toEqual({ axisX: 4, axisY: 12 });
+        stop();
+        document.history.redo();
+        expect(axesNow()).toEqual({ axisX: 4, axisY: 12 });
+    });
+});
+
+describe("tiled mode: the outline and the bucket's press", () => {
+    it("the document outline leaves out the sides facing a copy, so the seams show (review G)", () => {
+        const rect = { x: 10, y: 20, width: 30, height: 40 };
+        const all = [
+            { x: 9, y: 19, width: 32, height: 1 },
+            { x: 9, y: 60, width: 32, height: 1 },
+            { x: 9, y: 20, width: 1, height: 40 },
+            { x: 40, y: 20, width: 1, height: 40 },
+        ];
+        expect(tiledOutlineRects(rect, "none")).toEqual(all);
+        // Tiled X: top and bottom only, without the corners over the copies left and right.
+        expect(tiledOutlineRects(rect, "x")).toEqual([
+            { x: 10, y: 19, width: 30, height: 1 },
+            { x: 10, y: 60, width: 30, height: 1 },
+        ]);
+        expect(tiledOutlineRects(rect, "y")).toEqual([all[2], all[3]]);
+        expect(tiledOutlineRects(rect, "both")).toEqual([]);
+    });
+
+    it("a bucket press off the canvas samples nothing unless tiled mode wraps it onto it (review H)", () => {
+        let sampled = 0;
+        const bucket = createBucket({
+            composites: {
+                cacheOf: () => {
+                    sampled++;
+                    return null;
+                },
+            },
+        });
+        const h = harness([bucket]);
+        h.tools.select("bucket");
+        h.tools.setOption(h.tools.active()!, "sample", "composite");
+        h.editor.getState().setForeground(RED);
+        const document = h.open(blank(4, 4));
+        stroke(h, [{ x: 5, y: 1 }]);
+        expect(sampled).toBe(0);
+        expect(opaque(image(document.session))).toEqual([]);
+        // Tiled in Y only: still off the canvas on X.
+        setTiledMode("y", h.sessions);
+        stroke(h, [{ x: 5, y: 1 }]);
+        expect(sampled).toBe(0);
+        setTiledMode("x", h.sessions);
+        stroke(h, [{ x: 5, y: 1 }]);
+        expect(sampled).toBe(1);
+        expect(opaque(image(document.session))).toHaveLength(16);
+        // Beyond the 3 × 3 the viewport draws, a press names nothing (review E).
+        document.history.undo();
+        stroke(h, [{ x: 9, y: 1 }]);
+        expect(sampled).toBe(1);
+        expect(opaque(image(document.session))).toEqual([]);
     });
 });
 

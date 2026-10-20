@@ -200,10 +200,45 @@ describe("symmetricRows", () => {
             first: 0,
             last: 15,
         });
-        expect(symmetricRows(sym({ wrapY: true }), 10)).toEqual({
-            first: undefined,
-            last: undefined,
+        // Tiled mode Y: the rows of the three copies drawn in a column (review E).
+        expect(symmetricRows(sym({ wrapY: true }), 10)).toEqual({ first: -10, last: 19 });
+        expect(symmetricRows(sym({ wrapY: true, mirrorY: true, axisY: 4 }), 10)).toEqual({
+            first: -10,
+            last: 19,
         });
+    });
+
+    it("on a tiled axis, paint beyond the copies the viewport draws lands nowhere (review E)", () => {
+        const tiled = sym({ wrapX: true, wrapY: true });
+        // Columns -8..15 and rows -4..7 are the 3 × 3 of an 8 × 4 canvas.
+        expect(runs(tiled, 8, 4, 1, 14, 18)).toEqual(["1:6-8"]);
+        expect(runs(tiled, 8, 4, 1, 16, 18)).toEqual([]);
+        expect(runs(tiled, 8, 4, 1, -10, -7)).toEqual(["1:0-1"]);
+        expect(runs(tiled, 8, 4, 8, 0, 2)).toEqual([]);
+        expect(runs(tiled, 8, 4, -5, 0, 2)).toEqual([]);
+        expect(runs(tiled, 8, 4, -4, 0, 2)).toEqual(["0:0-2"]);
+        expect(runs(tiled, 8, 4, 7, 0, 2)).toEqual(["3:0-2"]);
+        // On an axis that is not tiled the canvas clips as before.
+        expect(runs(sym({ wrapX: true }), 8, 4, 1, 16, 18)).toEqual([]);
+        // A mirror image of paint inside the 3 × 3 is kept wherever it lands.
+        expect(runs(sym({ wrapX: true, mirrorX: true, axisX: 0 }), 8, 4, 0, 13, 14)).toEqual([
+            "0:5-6",
+            "0:2-3",
+        ]);
+        // The bucket's press: a seed beyond the 3 × 3 names nothing.
+        expect(symmetricPoints(tiled, 8, 4, p(15, -4))).toEqual([p(7, 0)]);
+        expect(symmetricPoints(tiled, 8, 4, p(16, 1))).toEqual([]);
+        expect(symmetricPoints(tiled, 8, 4, p(1, 8))).toEqual([]);
+        // A freehand stroke going far right keeps only what lies within the copies.
+        const [image, original] = canvas(8, 4);
+        const stroke = new FreehandStroke(image, original, {
+            brush: createBrush("square", 1),
+            ink: paintInk("simple", BLACK, 255),
+            symmetry: sym({ wrapX: true }),
+        });
+        stroke.start(p(13, 1));
+        stroke.to(p(30, 1));
+        expect(painted(image)).toEqual(["5,1", "6,1", "7,1"]);
     });
 });
 

@@ -1,4 +1,4 @@
-import type { BitMask, DocSettings, PixelBuffer } from "../model";
+import type { BitMask, DocSettings, PixelBuffer, TiledMode } from "../model";
 import { floodMask } from "./flood";
 import type { FloodOptions } from "./flood";
 import type { PixelPoint } from "./line";
@@ -36,6 +36,22 @@ export interface StrokeSymmetry {
     readonly wrapY: boolean;
 }
 
+/**
+ * The copies tiled mode draws around the canvas, in canvas sizes: (-1..1, -1..1) on the tiled
+ * axes, the canvas's own (0, 0) left out. Two for X or Y, eight for both, none for "none".
+ * The viewport's quads (`tiledCopies`) and the stroke echo (`tiledOffsets`) share it.
+ */
+export function tiledCopyOffsets(tiled: TiledMode): { x: number; y: number }[] {
+    if (tiled === "none") return [];
+    const across = tiled === "x" || tiled === "both" ? [-1, 0, 1] : [0];
+    const down = tiled === "y" || tiled === "both" ? [-1, 0, 1] : [0];
+    const offsets: { x: number; y: number }[] = [];
+    for (const y of down) {
+        for (const x of across) if (x !== 0 || y !== 0) offsets.push({ x, y });
+    }
+    return offsets;
+}
+
 /** Receives one run of a row inside the canvas: pixels `[from, to)` of row `y`. */
 export type RunVisitor = (y: number, from: number, to: number) => void;
 
@@ -60,8 +76,8 @@ export function strokeSymmetry(
 
 /** `value` modulo `size`, from 0 to `size` - 1. */
 function wrap(value: number, size: number): number {
-    const rest = value % size;
-    return rest < 0 ? rest + size : rest;
+    // Through `+ size`: a multiple of `size` below 0 gives 0, not -0.
+    return ((value % size) + size) % size;
 }
 
 /** Visits the run `[from, to)` of row `y` wrapped (tiled) or clipped to the canvas. */
@@ -102,7 +118,8 @@ function placeRun(
  * Visits the runs the run `[from, to)` of row `y` paints with `symmetry` on a canvas of
  * `width` × `height`: the run and its mirror images, each wrapped around the edges in tiled
  * mode or clipped to the canvas. A mirror image equal to the run is left out; runs that only
- * overlap are each visited. Without symmetry the run is only clipped.
+ * overlap are each visited. On a tiled axis the run is first cut to the copies the viewport
+ * draws, `[-size, 2 × size)`. Without symmetry the run is only clipped.
  */
 export function forEachSymmetricRun(
     symmetry: StrokeSymmetry | null,
@@ -121,6 +138,15 @@ export function forEachSymmetricRun(
         return;
     }
     const { mirrorX, mirrorY, axisX, axisY } = symmetry;
+    // Tiled mode wraps what the viewport draws, the 3 × 3 of copies: on a tiled axis the
+    // pointer's pixels beyond them paint nothing (SE-062 review E). Mirror images are made
+    // from what is left, and wrapped wherever they land.
+    if (symmetry.wrapY && (y < -height || y >= 2 * height)) return;
+    if (symmetry.wrapX) {
+        if (from < -width) from = -width;
+        if (to > 2 * width) to = 2 * width;
+        if (from >= to) return;
+    }
     placeRun(symmetry, width, height, y, from, to, visit);
     const mirroredFrom = axisX - to;
     const mirroredTo = axisX - from;
@@ -135,14 +161,14 @@ export function forEachSymmetricRun(
 /**
  * The rows a filled shape's runs must be looked at in, for its pixels and their mirror images
  * on a canvas `height` pixels high: the canvas's rows, those whose mirror image lies on the
- * canvas, or every row of the shape in tiled mode Y (undefined bounds).
+ * canvas, or in tiled mode Y the rows of the three copies drawn in a column.
  */
 export function symmetricRows(
     symmetry: StrokeSymmetry | null,
     height: number,
-): { first: number | undefined; last: number | undefined } {
+): { first: number; last: number } {
     if (!symmetry) return { first: 0, last: height - 1 };
-    if (symmetry.wrapY) return { first: undefined, last: undefined };
+    if (symmetry.wrapY) return { first: -height, last: 2 * height - 1 };
     if (!symmetry.mirrorY) return { first: 0, last: height - 1 };
     // Row `y` mirrors to `axisY - 1 - y`, which lies on the canvas for these rows.
     return {
@@ -154,7 +180,8 @@ export function symmetricRows(
 /**
  * The pixels a press at `point` names with `symmetry` on a canvas of `width` × `height`: the
  * point wrapped onto the canvas in tiled mode, then its mirror images that lie on it (wrapped
- * too), each once. Empty when the point is off the canvas (and not wrapped onto it).
+ * too), each once. Empty when the point is off the canvas and not wrapped onto it: on a tiled
+ * axis a point beyond the copies the viewport draws, `[-size, 2 × size)`, names nothing.
  */
 export function symmetricPoints(
     symmetry: StrokeSymmetry | null,
@@ -163,6 +190,8 @@ export function symmetricPoints(
     point: PixelPoint,
 ): PixelPoint[] {
     let { x, y } = point;
+    if (symmetry?.wrapX && (x < -width || x >= 2 * width)) return [];
+    if (symmetry?.wrapY && (y < -height || y >= 2 * height)) return [];
     if (symmetry?.wrapX) x = wrap(x, width);
     if (symmetry?.wrapY) y = wrap(y, height);
     if (x < 0 || x >= width || y < 0 || y >= height) return [];

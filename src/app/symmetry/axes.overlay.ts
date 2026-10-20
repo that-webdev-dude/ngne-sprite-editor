@@ -36,10 +36,10 @@ export const overlayLayers: OverlayLayer[] = [
     {
         id: "symmetry-axes",
         order: SYMMETRY_AXES_ORDER,
-        draw({ context, document, mapping }) {
+        draw({ context, document, mapping, size }) {
             const { symmetry } = document.session.doc.settings;
             if (symmetry.mode === "none") return;
-            const { lines, handles } = axisGeometry(mapping, symmetry);
+            const { lines, handles } = axisGeometry(mapping, symmetry, size);
             // The dark line one pixel wider on each side, under the light one.
             fill(
                 context,

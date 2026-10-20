@@ -54,6 +54,7 @@ export {
     symmetricFloodMask,
     symmetricPoints,
     symmetricRows,
+    tiledCopyOffsets,
 } from "./symmetry";
 export type { RunVisitor, StrokeSymmetry } from "./symmetry";
 export type { BrushStrokeOptions } from "./stroke";

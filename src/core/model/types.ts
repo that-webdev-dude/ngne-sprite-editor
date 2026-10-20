@@ -142,12 +142,15 @@ export interface SymmetrySettings {
     axisY: number;
 }
 
+/** The axes tiled mode repeats the canvas on (SE-062). */
+export type TiledMode = "none" | "x" | "y" | "both";
+
 export interface DocSettings {
     grid: GridSettings;
     pixelGrid: boolean;
     onion: OnionSettings;
     symmetry: SymmetrySettings;
-    tiled: "none" | "x" | "y" | "both";
+    tiled: TiledMode;
 }
 
 export interface ExportSettings {

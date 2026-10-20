@@ -1,11 +1,11 @@
-import type { PixelBuffer } from "../../core/model";
+import type { PixelBuffer, TiledMode } from "../../core/model";
 import { UploadQueue } from "../UploadQueue";
 import type { TextureTarget, Upload } from "../UploadQueue";
 import { checkerPixels, checkerSpec } from "./checker";
 import { FrameSlots } from "./frameSlots";
 import type { SlotImage } from "./frameSlots";
 import { imageQuad, QUAD_LAYER, tiledCopies } from "./geometry";
-import type { Quad, TiledMode } from "./geometry";
+import type { Quad } from "./geometry";
 import { blitCell, cellUv, createGridImage, playGridLayout } from "./playGrid";
 import type { PlayGridLayout } from "./playGrid";
 import { ReferenceSlots, referenceSlotIndex } from "./referenceSlots";

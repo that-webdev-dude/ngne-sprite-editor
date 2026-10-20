@@ -2,6 +2,7 @@ import type { ReferenceLayer } from "../../core/model";
 import { setReferenceCommand } from "../../core/references";
 import type { ReferenceChange, ReferencePlacement } from "../../core/references";
 import type { OpenDocument } from "../state/sessions";
+import { hitBox } from "../selection/transform/handles";
 import { PAINT_REFUSED } from "../tools/paintTarget";
 import type { ToolContext, ToolPointer } from "../tools/types";
 import type { Point } from "../view/coordinates";
@@ -89,6 +90,11 @@ export interface ReferenceMove {
      * a drag begins, or the status bar says why the layer cannot move.
      */
     press(context: ToolContext, pointer: ToolPointer, ratio: number): boolean;
+    /**
+     * Whether a press at `pointer` would be on the active reference layer's box: inside it or
+     * on a corner, while the layer can move and its box is known (`ToolSpec.claims`, SE-062).
+     */
+    claims(document: OpenDocument, pointer: ToolPointer, ratio: number): boolean;
     /** The pointer moved during a drag of `context` (nothing without one). */
     follow(context: ToolContext, pointer: ToolPointer): void;
     /** The release: the drag's change becomes one undo step. */
@@ -152,6 +158,17 @@ export function createReferenceMove(sources: ReferenceMoveSources = {}): Referen
     };
 
     return {
+        claims(document, pointer, ratio) {
+            const { session } = document;
+            const layer = session.doc.layers.find((entry) => entry.id === session.activeLayerId);
+            if (layer?.kind !== "reference" || !layer.visible || layer.locked) return false;
+            const size = sourceSize(document, layer);
+            if (!size) return false;
+            const box = referenceBox({ x: layer.x, y: layer.y, scale: layer.scale }, size);
+            const scale = document.view.scale;
+            if (hitReferenceCorner(box, pointer.position, scale, ratio)) return true;
+            return hitBox(box, pointer.position, scale, ratio).kind === "inside";
+        },
         press(context, pointer, ratio) {
             const { session, document } = context;
             const layer = session.doc.layers.find((entry) => entry.id === session.activeLayerId);

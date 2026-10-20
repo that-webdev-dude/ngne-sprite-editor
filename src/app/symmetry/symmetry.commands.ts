@@ -1,5 +1,5 @@
 import type { CommandSpec } from "../commands/types";
-import { activeSymmetry, setSymmetry, setTiledMode } from "./symmetry";
+import { activeSymmetry, followDocumentSizes, setSymmetry, setTiledMode } from "./symmetry";
 import type { SymmetryMode, TiledMode } from "./symmetry";
 
 // The View menu's symmetry and tiled mode toggles (SPEC §2.3 View; SE-062), in the group of
@@ -64,6 +64,10 @@ function tiledToggle(id: string, axis: "x" | "y", name: string, order: number): 
         },
     };
 }
+
+// The axes of the app's documents follow their canvas when its size changes (SE-062 review
+// B), from when the app loads its commands at start, for the life of the page.
+followDocumentSizes();
 
 export const commands: CommandSpec[] = [
     symmetryToggle(SYMMETRY_X_COMMAND, "x", "Horizontal Symmetry", 400),

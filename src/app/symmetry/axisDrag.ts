@@ -3,7 +3,10 @@ import type { SymmetrySettings } from "../../core/model";
 import { sessionsStore } from "../state/sessions";
 import type { OpenDocument, SessionsState } from "../state/sessions";
 import type { Tool, ToolContext, ToolPointer } from "../tools/types";
+import { VIEW_TOOLS } from "../tools/viewTools";
 import type { ViewMapping } from "../view/coordinates";
+import { viewportSize } from "../view/viewportSize";
+import type { DeviceSize } from "../../engine/viewport/types";
 import { axisGeometry, handleAt } from "./axisGeometry";
 import type { AxisName } from "./axisGeometry";
 import { setSymmetry } from "./symmetry";
@@ -16,12 +19,17 @@ import { setSymmetry } from "./symmetry";
 // document as it goes, with no history entry (SPEC §5.2); Escape, a pointer cancel or the
 // document left puts the axis back where the press found it. The axis stays on the canvas:
 // 0 to twice its side, in half pixels.
+//
+// A handle gives way to the hand and the zoom (held or selected: they work everywhere) and,
+// through the pipeline, to the active tool's own chrome (`ToolSpec.claims`: the Move tool's
+// transform and reference boxes), SE-062 review A.
 
 /** The pipeline's grab: the tool a left press takes on a handle, or null. */
 export type AxisGrab = (
     pointer: ToolPointer,
     document: OpenDocument,
     mapping: ViewMapping,
+    active?: Tool | null,
 ) => Tool | null;
 
 interface AxisDrag {
@@ -75,22 +83,27 @@ function axisTool(axis: AxisName, sessions: StoreApi<SessionsState>): Tool {
 
 /**
  * The grab of the axes' handles on the documents of `sessions`: the tool that drags the axis
- * whose handle is under the pointer on the document, shown with `mapping`; null when no handle
- * is there or the document has no symmetry.
+ * whose handle is under the pointer on the document, shown with `mapping` on a canvas of
+ * `bounds()` (handles held inside it, `axisGeometry`); null when no handle is there, the
+ * document has no symmetry, or the active tool is a view tool.
  */
-export function createAxisGrab(sessions: StoreApi<SessionsState>): AxisGrab {
+export function createAxisGrab(
+    sessions: StoreApi<SessionsState>,
+    bounds: () => DeviceSize = () => ({ width: 0, height: 0 }),
+): AxisGrab {
     const tools: Readonly<Record<AxisName, Tool>> = {
         x: axisTool("x", sessions),
         y: axisTool("y", sessions),
     };
-    return (pointer, document, mapping) => {
+    return (pointer, document, mapping, active) => {
+        if (active && VIEW_TOOLS.has(active.id)) return null;
         const { symmetry } = document.session.doc.settings;
         if (symmetry.mode === "none") return null;
-        const geometry = axisGeometry(mapping, symmetry);
+        const geometry = axisGeometry(mapping, symmetry, bounds());
         const axis = handleAt(geometry, pointer.device, mapping.frame.ratio);
         return axis ? tools[axis] : null;
     };
 }
 
-/** The app's grab, on its session store (`tools/appPipeline.ts`). */
-export const grabAxis: AxisGrab = createAxisGrab(sessionsStore);
+/** The app's grab, on its session store and its viewport's size (`tools/appPipeline.ts`). */
+export const grabAxis: AxisGrab = createAxisGrab(sessionsStore, () => viewportSize.size);

@@ -1,5 +1,5 @@
 import type { StoreApi } from "zustand/vanilla";
-import type { DocSettings, SymmetrySettings } from "../../core/model";
+import type { SymmetrySettings, TiledMode } from "../../core/model";
 import { activeDocument, sessionsStore } from "../state/sessions";
 import type { OpenDocument, SessionsState } from "../state/sessions";
 
@@ -12,7 +12,7 @@ import type { OpenDocument, SessionsState } from "../state/sessions";
 // Each function works on the app's session store unless it is given another (tests).
 
 export type SymmetryMode = SymmetrySettings["mode"];
-export type TiledMode = DocSettings["tiled"];
+export type { TiledMode };
 
 /** The symmetry and tiled mode of the active document, with its size; null while none is open. */
 export function activeSymmetry(sessions: StoreApi<SessionsState> = sessionsStore): {
@@ -62,6 +62,64 @@ export function setSymmetry(
     state.updateDocSettings(document.id, (settings) => {
         settings.symmetry = next;
     });
+}
+
+/** Where a document's axes were last seen: its size, the axes, and their share of each side. */
+interface SeenAxes {
+    width: number;
+    height: number;
+    axisX: number;
+    axisY: number;
+    /** `axisX` / (2 × width) when the axes were last set at a size, kept through resizes. */
+    shareX: number;
+    shareY: number;
+}
+
+/**
+ * Keeps the symmetry axes of every open document of `sessions` where they were relative to
+ * the canvas when its size changes (SE-062 review B; REVIEW E100: Canvas Size, Sprite Size,
+ * Rotate, Crop, and their undo and redo): each axis keeps its share of its side, snapped to
+ * half pixels and clamped to the canvas, through `setSymmetry` (no history entry, never
+ * dirty). The share is that of the axes as last set, not of the snapped value, so a resize
+ * and its undo give the axis back exactly. A rotation keeps each axis on its own direction:
+ * the modes are not swapped. Returns the function that stops following.
+ */
+export function followDocumentSizes(sessions: StoreApi<SessionsState> = sessionsStore): () => void {
+    const seen = new WeakMap<OpenDocument["session"], SeenAxes>();
+    const record = (document: OpenDocument) => {
+        const { width, height, settings } = document.session.doc;
+        const { axisX, axisY } = settings.symmetry;
+        seen.set(document.session, {
+            width,
+            height,
+            axisX,
+            axisY,
+            shareX: axisX / (2 * width),
+            shareY: axisY / (2 * height),
+        });
+    };
+    const follow = (state: SessionsState) => {
+        for (const document of state.documents) {
+            const before = seen.get(document.session);
+            const { width, height, settings } = document.session.doc;
+            if (!before) {
+                record(document);
+                continue;
+            }
+            if (before.width === width && before.height === height) {
+                const { axisX, axisY } = settings.symmetry;
+                // Set by the user (a drag, a file opened): the new share counts from here.
+                if (axisX !== before.axisX || axisY !== before.axisY) record(document);
+                continue;
+            }
+            const axisX = clampAxis(before.shareX * 2 * width, width);
+            const axisY = clampAxis(before.shareY * 2 * height, height);
+            seen.set(document.session, { ...before, width, height, axisX, axisY });
+            setSymmetry({ axisX, axisY }, document.id, sessions);
+        }
+    };
+    follow(sessions.getState());
+    return sessions.subscribe(follow);
 }
 
 /** Changes the tiled mode of the active document, as `setSymmetry` does. */

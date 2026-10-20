@@ -1,16 +1,23 @@
 import type { SymmetrySettings } from "../../core/model";
 import type { DeviceRect } from "../../engine/viewport/geometry";
+import type { DeviceSize } from "../../engine/viewport/types";
 import type { Point, ViewMapping } from "../view/coordinates";
 
 // Where the symmetry axes and their handles are on the overlay (SE-062), in the canvas's
 // device pixels. Pure: the draw layer (`axes.overlay.ts`) draws them and the axis drag
 // (`axisDrag.ts`) hit-tests them, both from this.
 //
-// An axis is a line of 1 device pixel across the document: the first device pixel at or after
-// its position, as a grid line is the first device pixel of a texel (DESIGN §6), so an axis
-// on a texel boundary lies where a grid line would and one through a texel's middle on that
-// texel's middle column. A handle sits at each end of the line, just outside the document
-// (past its outline), so a press there drags the axis and a press on the document paints.
+// An axis is a line of 1 device pixel across the document: the device pixel its position lies
+// in, at or before it (its floor), as a grid line is the first device pixel of a texel (DESIGN
+// §6), so an axis on a texel boundary lies where a grid line would and one through a texel's
+// middle on that texel's middle column. A handle sits at each end of the line, just outside
+// the document (past its outline), so a press there drags the axis and a press on the document
+// paints.
+//
+// Where the document's edge is off the canvas (zoomed in, or panned), a handle would be out of
+// reach: it is held inside the canvas along its axis (SE-062 review C). It then stays in the
+// margin outside the document while the canvas shows one, and is otherwise at the canvas's
+// edge, over the document: there, in its own square, a press takes the axis, not the paint.
 
 /** Side of a handle in CSS pixels, as the transform box's handles (SE-033). */
 export const AXIS_HANDLE_SIZE = 7;
@@ -43,10 +50,20 @@ export interface AxisGeometry {
     handles: AxisHandle[];
 }
 
-/** The axes `symmetry` shows on the document `mapping` places, and their handles. */
+/** `value` held within `[0, limit - size]`; as it is when `limit` is unknown (0). */
+function within(value: number, size: number, limit: number): number {
+    if (limit <= 0) return value;
+    return Math.max(0, Math.min(limit - size, value));
+}
+
+/**
+ * The axes `symmetry` shows on the document `mapping` places, and their handles, held inside
+ * a canvas of `bounds` along their axis (none when absent or 0).
+ */
 export function axisGeometry(
     mapping: ViewMapping,
     symmetry: Readonly<SymmetrySettings>,
+    bounds: DeviceSize = { width: 0, height: 0 },
 ): AxisGeometry {
     const lines: AxisLine[] = [];
     const handles: AxisHandle[] = [];
@@ -59,29 +76,21 @@ export function axisGeometry(
     if (mode === "x" || mode === "both") {
         const at = Math.floor(mapping.docToDevice(symmetry.axisX / 2, 0).x);
         lines.push({ axis: "x", at, rect: { x: at, y: rect.y, width: 1, height: rect.height } });
+        const top = within(rect.y - gap - size, size, bounds.height);
+        const bottom = within(rect.y + rect.height + gap, size, bounds.height);
         handles.push(
-            {
-                axis: "x",
-                rect: { x: at - half, y: rect.y - gap - size, width: size, height: size },
-            },
-            {
-                axis: "x",
-                rect: { x: at - half, y: rect.y + rect.height + gap, width: size, height: size },
-            },
+            { axis: "x", rect: { x: at - half, y: top, width: size, height: size } },
+            { axis: "x", rect: { x: at - half, y: bottom, width: size, height: size } },
         );
     }
     if (mode === "y" || mode === "both") {
         const at = Math.floor(mapping.docToDevice(0, symmetry.axisY / 2).y);
         lines.push({ axis: "y", at, rect: { x: rect.x, y: at, width: rect.width, height: 1 } });
+        const left = within(rect.x - gap - size, size, bounds.width);
+        const right = within(rect.x + rect.width + gap, size, bounds.width);
         handles.push(
-            {
-                axis: "y",
-                rect: { x: rect.x - gap - size, y: at - half, width: size, height: size },
-            },
-            {
-                axis: "y",
-                rect: { x: rect.x + rect.width + gap, y: at - half, width: size, height: size },
-            },
+            { axis: "y", rect: { x: left, y: at - half, width: size, height: size } },
+            { axis: "y", rect: { x: right, y: at - half, width: size, height: size } },
         );
     }
     return { lines, handles };

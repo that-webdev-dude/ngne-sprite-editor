@@ -1,3 +1,5 @@
+import type { TiledMode } from "../../core/model";
+import { tiledCopyOffsets } from "../../core/raster/symmetry";
 import type { DeviceSize, ViewportView } from "./types";
 
 // Where the viewport's quads go, in integer device pixels (SPEC §6.4). Pure functions: no
@@ -83,31 +85,18 @@ export function imageQuad(
     };
 }
 
-/** The axes tiled mode repeats the canvas on (`DocSettings.tiled`, SE-062). */
-export type TiledMode = "none" | "x" | "y" | "both";
-
 /**
  * The copies tiled mode draws of `quad` around it (SPEC §6.4, SE-062): one on each side of
  * the repeated axes, a whole quad's width or height away — two for X or Y, eight for both,
- * which with the quad make the 3 × 3. Its edges are whole device pixels, so are the copies'.
- * None for "none".
+ * which with the quad make the 3 × 3 (`tiledCopyOffsets`). Its edges are whole device pixels,
+ * so are the copies'. None for "none".
  */
 export function tiledCopies(quad: Quad, tiled: TiledMode): Quad[] {
-    if (tiled === "none") return [];
-    const across = tiled === "x" || tiled === "both" ? [-1, 0, 1] : [0];
-    const down = tiled === "y" || tiled === "both" ? [-1, 0, 1] : [0];
-    const copies: Quad[] = [];
-    for (const row of down) {
-        for (const column of across) {
-            if (row === 0 && column === 0) continue;
-            copies.push({
-                ...quad,
-                x: quad.x + column * quad.width,
-                y: quad.y + row * quad.height,
-            });
-        }
-    }
-    return copies;
+    return tiledCopyOffsets(tiled).map((offset) => ({
+        ...quad,
+        x: quad.x + offset.x * quad.width,
+        y: quad.y + offset.y * quad.height,
+    }));
 }
 
 /** Largest canvas side WebGPU allows by default (SPEC §6.2 #11). */

@@ -146,6 +146,23 @@ export function createMoveTool(sources: MoveToolSources): ToolSpec {
         // Only where the pointer is matters: each sample would rewrite the float's two
         // rectangles and make a new selection (a transform also renders the float anew).
         latestSample: true,
+        // Its float's pixels and box, or the active reference layer's box, keep a press there
+        // from other chrome over the viewport (SE-062: a symmetry axis's handle).
+        claims(document, pointer) {
+            const floated = floating.floats(document) ? floating.float : null;
+            if (floated) {
+                if (floated.contains(pointer.pixel.x, pointer.pixel.y)) return true;
+                if (!floated.selects) return false;
+                const hit = hitBox(
+                    floated.transform,
+                    pointer.position,
+                    document.view.scale,
+                    ratio(),
+                );
+                return hit.kind !== "outside";
+            }
+            return references.claims(document, pointer, ratio());
+        },
         onDown(context, pointer) {
             const start = { x: pointer.pixel.x, y: pointer.pixel.y };
             const floated = floating.floats(context.document) ? floating.float : null;

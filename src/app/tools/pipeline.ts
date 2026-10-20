@@ -108,9 +108,16 @@ export interface PipelineSources extends LiveCompositeSources {
     /**
      * Chrome over the viewport that a left press grabs before the active tool (SE-062: the
      * handle of a symmetry axis): the tool that takes the press there, for that one stroke,
-     * or null. The grab neither paints nor stops editor playback. None when absent.
+     * or null. `active` is the tool the press would go to otherwise; a press its own chrome
+     * claims there (`ToolSpec.claims`) is never asked about. The grab neither paints nor stops
+     * editor playback. None when absent.
      */
-    grab?(pointer: ToolPointer, document: OpenDocument, mapping: ViewMapping): Tool | null;
+    grab?(
+        pointer: ToolPointer,
+        document: OpenDocument,
+        mapping: ViewMapping,
+        active: Tool | null,
+    ): Tool | null;
 }
 
 export interface ToolPipeline {
@@ -388,7 +395,11 @@ export function createToolPipeline(sources: PipelineSources): ToolPipeline {
         const document = activeDocument(sessions.getState());
         const mapping = sources.mapping();
         if (!document || !mapping) return null;
-        return sources.grab(toolPointer(input, mapping, button), document, mapping);
+        const pointer = toolPointer(input, mapping, button);
+        // The active tool's own box or handle there keeps the press (SE-062 review A).
+        const active = sources.tools.active();
+        if (active?.claims?.(document, pointer)) return null;
+        return sources.grab(pointer, document, mapping, active);
     };
 
     return {

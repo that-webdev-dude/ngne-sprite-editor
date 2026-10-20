@@ -242,6 +242,13 @@ export interface ToolSpec {
      * A sample whose buttons no longer hold the stroke's still ends the stroke where it is.
      */
     latestSample?: boolean;
+    /**
+     * Whether a press at `pointer` on `document` would act on this tool's own chrome there (a
+     * box, a handle: the Move tool's transform box and reference box). Other chrome over the
+     * viewport that takes presses (a symmetry axis's handle, SE-062) gives way to it. Must not
+     * change anything. The default is never.
+     */
+    claims?(document: OpenDocument, pointer: ToolPointer): boolean;
     onDown?(context: ToolContext, pointer: ToolPointer): void;
     onMove?(context: ToolContext, pointer: ToolPointer): void;
     /**

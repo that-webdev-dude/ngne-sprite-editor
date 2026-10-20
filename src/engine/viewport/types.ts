@@ -1,4 +1,4 @@
-import type { PixelBuffer } from "../../core/model";
+import type { PixelBuffer, TiledMode } from "../../core/model";
 
 // What the viewport is told to show (SPEC §6.4). Types and the key helpers only, with no DOM
 // and no NGNE in them: `app` describes a document to the viewport with these.
@@ -143,5 +143,5 @@ export interface ViewportPort {
      * Forgotten with the document (`setDocument`). Optional, so a port without tiled mode (a
      * test's) need not have it.
      */
-    setTiled?(tiled: "none" | "x" | "y" | "both"): void;
+    setTiled?(tiled: TiledMode): void;
 }

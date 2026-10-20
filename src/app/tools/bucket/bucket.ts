@@ -1,6 +1,12 @@
 import { compositeFrame } from "../../../core/composite";
 import type { PixelBuffer } from "../../../core/model";
-import { FLOOD_MAX_TOLERANCE, paintInk, paintMask, symmetricFloodMask } from "../../../core/raster";
+import {
+    FLOOD_MAX_TOLERANCE,
+    paintInk,
+    paintMask,
+    symmetricFloodMask,
+    symmetricPoints,
+} from "../../../core/raster";
 import type { ActiveComposites } from "../../state/composites";
 import { INK, inkOf, OPACITY, opacityOf } from "../brush/brushOptions";
 import { strokeSymmetryOf } from "../brush/strokeOptions";
@@ -91,7 +97,11 @@ export function createBucket(sources: BucketSources): ToolSpec {
         onDown(context: ToolContext, pointer: ToolPointer) {
             const { paint, options: values } = context;
             if (!paint) return;
-            // Off the canvas no seed is named, unless tiled mode wraps the press onto it.
+            // Off the canvas no seed is named, unless tiled mode wraps the press onto it: then
+            // nothing is sampled either (SE-062 review H).
+            const symmetry = strokeSymmetryOf(context);
+            const { width, height } = paint.image;
+            if (symmetricPoints(symmetry, width, height, pointer.pixel).length === 0) return;
             const mask = symmetricFloodMask(
                 sampled(context, paint.image, paint.frameId),
                 pointer.pixel,
@@ -100,7 +110,7 @@ export function createBucket(sources: BucketSources): ToolSpec {
                     contiguous: values[CONTIGUOUS.key] !== false,
                     within: context.session.selection?.mask ?? null,
                 },
-                strokeSymmetryOf(context),
+                symmetry,
             );
             const ink = paintInk(inkOf(values), context.colour, opacityOf(values));
             // Each pixel is inked from its own value before it is written: no copy is needed.
