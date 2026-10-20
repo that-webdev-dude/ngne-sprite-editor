@@ -10,7 +10,7 @@ Exit: gate G3 ([README](README.md#gates)).
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | Ready                                                    |
+| Status       | In progress                                              |
 | Depends on   | SE-023, SE-025, SE-033, SE-044, SE-052, SE-053, SE-054   |
 | Blocks       | SE-071, SE-072, SE-073                                   |
 | Blocked until | —                                                       |

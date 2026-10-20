@@ -97,7 +97,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-065 | Tools II: curve, contour, polygon, spray          | M    | 017                                | —             | Done   |
 | SE-066 | Palette files, replace colour and sort            | M    | 030, 060                           | —             | Done   |
 | **M7** | **[Hardening and release](M7-hardening-and-release.md)** | |                                    |               |        |
-| SE-070 | End-to-end regression suite and performance record | L   | 023, 025, 033, 044, 052, 053, 054  | —             | Ready  |
+| SE-070 | End-to-end regression suite and performance record | L   | 023, 025, 033, 044, 052, 053, 054  | —             | In progress |
 | SE-071 | Accessibility and interface audit                 | M    | 064, 070                           | —             | Ready  |
 | SE-072 | Installable PWA and offline use                   | M    | 042, 070                           | —             | Ready  |
 | SE-073 | Documentation and release (gate G3)               | M    | 070, 071, 072                      | G3            | Ready  |
