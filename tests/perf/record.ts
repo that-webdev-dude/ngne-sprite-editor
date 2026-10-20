@@ -5,6 +5,12 @@ import { fileURLToPath } from "node:url";
 // A benchmark measures and calls `record`. The result is always printed; the file under
 // docs/perf is written only with PERF_RECORD=1, which the orchestrator sets when it runs the
 // measurement alone on the reference hardware (docs/tickets/EXECUTION.md, Measurements).
+//
+// PERF_ID (SE-070) names one run's record: with it, the record is printed and written under
+// that id instead of the benchmark's own, which it keeps as `benchmarkId`. A run on other
+// hardware is then recorded beside the reference records without replacing them, for example
+// `PERF_ID=se-070-stroke-cloud-swiftshader` (tests/perf/README.md). Without PERF_ID nothing
+// changes. A process records once under a PERF_ID: a second record would replace the first.
 
 export interface PerfEntry {
     /** File name under docs/perf without extension, for example `se-010-dirty-rectangle`. */
@@ -31,6 +37,33 @@ export interface PerfEntry {
     unit?: "ms" | "count";
 }
 
+/** What PERF_ID may be: a file name of lowercase letters, digits and single hyphens. */
+const PERF_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** The benchmark id last recorded under the current PERF_ID in this process. */
+let recordedUnderId: { perfId: string; benchmarkId: string } | null = null;
+
+/**
+ * The entry as it is printed and written: under PERF_ID when that is set, with the
+ * benchmark's own id as `benchmarkId`. Throws for a PERF_ID that is no plain file name, and
+ * for a second record under the same PERF_ID in one process.
+ */
+export function namedEntry(entry: PerfEntry): PerfEntry & { benchmarkId?: string } {
+    const perfId = process.env.PERF_ID ?? "";
+    if (perfId === "") return entry;
+    if (!PERF_ID_PATTERN.test(perfId)) {
+        throw new Error(`PERF_ID "${perfId}" is not a plain file name (a-z, 0-9, hyphens).`);
+    }
+    if (recordedUnderId?.perfId === perfId) {
+        throw new Error(
+            `PERF_ID "${perfId}" already holds the record of ${recordedUnderId.benchmarkId}; ` +
+                `${entry.id} would replace it. Run one benchmark per PERF_ID.`,
+        );
+    }
+    recordedUnderId = { perfId, benchmarkId: entry.id };
+    return { ...entry, id: perfId, benchmarkId: entry.id };
+}
+
 /** The console line of a record. */
 export function recordLine(entry: PerfEntry): string {
     const count = entry.unit === "count";
@@ -44,12 +77,14 @@ export function recordLine(entry: PerfEntry): string {
 
 /**
  * Prints `entry`, and with PERF_RECORD=1 writes it to `<directory>/<id>.json` (docs/perf by
- * default) with the environment and the date, and `pass` when it has a budget.
+ * default) with the environment and the date, and `pass` when it has a budget. With PERF_ID
+ * the id is PERF_ID's (`namedEntry`).
  */
 export function record(
-    entry: PerfEntry,
+    benchmarkEntry: PerfEntry,
     directory = fileURLToPath(new URL("../../docs/perf/", import.meta.url)),
 ): void {
+    const entry = namedEntry(benchmarkEntry);
     console.log(recordLine(entry));
     if (process.env.PERF_RECORD !== "1") return;
 
