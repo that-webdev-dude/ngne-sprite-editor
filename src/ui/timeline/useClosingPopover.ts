@@ -53,6 +53,11 @@ export function useClosingPopover<Draft>(
     const [last, setLast] = useState<Draft | null>(draft);
     const [opening, setOpening] = useState(0);
     // The draft that ended is kept while it closes; a new draft takes its place at once.
+    // The pass that sees the draft end shows it too. React renders the host again at once with
+    // the state set here, and the memos of the second pass compare with the first: a null
+    // shown in the first gave the popover a new anchor, which Radix positioned again in a task
+    // of its own between the history step and its frames (the canvas lost a frame on CI).
+    let shown = draft ?? closed;
     if (draft !== null && last !== draft) {
         setLast(draft);
         if (closed !== null) {
@@ -62,6 +67,7 @@ export function useClosingPopover<Draft>(
     } else if (draft === null && last !== null) {
         setLast(null);
         setClosed(last);
+        shown = last;
     }
 
     // The close, in its own commit: the page takes presses again and the focus leaves the
@@ -127,5 +133,5 @@ export function useClosingPopover<Draft>(
         };
     }, [closed]);
 
-    return { shown: draft ?? closed, opening, contentRef, returnToRef };
+    return { shown, opening, contentRef, returnToRef };
 }
