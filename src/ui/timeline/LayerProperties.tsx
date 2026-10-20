@@ -1,20 +1,30 @@
 import { Popover as RadixPopover } from "radix-ui";
-import { useId, useRef } from "react";
+import { memo, useEffect, useId, useMemo, useRef } from "react";
+import type { RefObject } from "react";
 import { MAX_NAME_LENGTH } from "../../core/model";
+import type { BlendMode } from "../../core/model";
 import { TIMELINE_COMMANDS } from "../../app/timeline/timelineCommandIds";
 import {
     MAX_REFERENCE_OFFSET,
     MAX_REFERENCE_SCALE,
     MIN_REFERENCE_SCALE,
 } from "../../core/project/format";
-import { editProperties, editReferenceProperties } from "../../app/timeline/timelineState";
+import {
+    editProperties,
+    editReferenceProperties,
+    useTimelineState,
+} from "../../app/timeline/timelineState";
 import type { PropertiesDraft, ReferenceDraft } from "../../app/timeline/timelineState";
 import { referenceFit } from "../../app/references/references";
+import { useSessions } from "../../app/state/sessions";
 import { runCommand } from "../commands/runCommand";
 import { Button } from "../primitives/Button";
 import { NumberField } from "../primitives/NumberField";
 import { SegmentedControl } from "../primitives/SegmentedControl";
+import { Select } from "../primitives/Select";
 import { Slider } from "../primitives/Slider";
+import { layerHeaderOf } from "./timelineDom";
+import { useClosingDraft } from "./useClosingDraft";
 import "../primitives/popover.css";
 
 /**
@@ -24,6 +34,64 @@ import "../primitives/popover.css";
  */
 export function finishProperties(): void {
     runCommand(TIMELINE_COMMANDS.applyLayerProperties);
+}
+
+/**
+ * The names of the blend modes (SE-061), in the order of SPEC §5.1 `BlendMode`: Aseprite's
+ * names, in the interface's spelling of "colour".
+ */
+const BLEND_MODE_NAMES: Readonly<Record<BlendMode, string>> = {
+    normal: "Normal",
+    multiply: "Multiply",
+    screen: "Screen",
+    overlay: "Overlay",
+    darken: "Darken",
+    lighten: "Lighten",
+    "color-dodge": "Colour Dodge",
+    "color-burn": "Colour Burn",
+    "hard-light": "Hard Light",
+    "soft-light": "Soft Light",
+    difference: "Difference",
+    exclusion: "Exclusion",
+    hue: "Hue",
+    saturation: "Saturation",
+    color: "Colour",
+    luminosity: "Luminosity",
+    addition: "Addition",
+    subtract: "Subtract",
+    divide: "Divide",
+};
+
+const BLEND_OPTIONS = (Object.keys(BLEND_MODE_NAMES) as BlendMode[]).map((value) => ({
+    value,
+    label: BLEND_MODE_NAMES[value],
+}));
+
+/**
+ * The blend mode of a pixel layer (SE-061), applied with the other fields when the popover
+ * closes. Enter on the select opens it or picks a mode; it never closes the popover.
+ */
+function BlendField({ blend }: { blend: BlendMode }) {
+    return (
+        <span
+            className="timeline-properties__blend"
+            onKeyDown={(event) => {
+                // Radix lets Enter on an option bubble (through the portal) to the form.
+                if (event.key === "Enter") event.preventDefault();
+            }}
+        >
+            <span className="ui-field__label" aria-hidden="true">
+                Blend mode
+            </span>
+            <Select
+                label="Blend mode"
+                hideLabel
+                value={blend}
+                onChange={(next) => editProperties({ blend: next })}
+                options={BLEND_OPTIONS}
+            />
+        </span>
+    );
 }
 
 /** Scale is shown in percent: document pixels per 100 source pixels. */
@@ -95,17 +163,25 @@ function ReferenceFields({ draft, owner }: { draft: ReferenceDraft; owner: Prope
 }
 
 /**
- * The layer properties popover (DESIGN §7: name, opacity; for a reference layer X, Y, scale and
- * placement, SE-045; the blend mode is SE-061's), beside
+ * The layer properties popover (DESIGN §7: name, opacity; for a pixel layer the blend mode,
+ * SE-061; for a reference layer X, Y, scale and placement, SE-045), beside
  * the row of its layer. What it shows changes no document until it closes — by Enter, Escape
  * or a press outside — and then once, in one undo step. The focus returns to where it was when
  * the popover opened, or to `fallback` when that is gone (a menu item).
  *
- * The popover is modal (`modal` on its root, in the panel): it keeps the focus while a menu that
- * opened it gives the focus back to its trigger, and a press outside closes it without
- * reaching what lies there (a press on the canvas paints nothing).
+ * The popover is modal (`modal` on its root, `LayerPropertiesHost`): it keeps the focus while
+ * a menu that opened it gives the focus back to its trigger, and a press outside closes it
+ * without reaching what lies there (a press on the canvas paints nothing). A memo: the host
+ * renders again when the popover closes, and rendering the fields again then would cost the
+ * canvas a frame (SE-061).
  */
-export function LayerProperties({ draft, fallback }: { draft: PropertiesDraft; fallback(): void }) {
+const LayerProperties = memo(function LayerProperties({
+    draft,
+    fallback,
+}: {
+    draft: PropertiesDraft;
+    fallback(): void;
+}) {
     const nameId = useId();
     /** Where the focus was when the popover opened. */
     const returnTo = useRef<Element | null>(null);
@@ -168,6 +244,7 @@ export function LayerProperties({ draft, fallback }: { draft: PropertiesDraft; f
                         value={draft.opacity}
                         onChange={(opacity) => editProperties({ opacity })}
                     />
+                    {draft.blend !== null ? <BlendField blend={draft.blend} /> : null}
                     {draft.reference ? (
                         <ReferenceFields draft={draft.reference} owner={draft} />
                     ) : null}
@@ -175,4 +252,55 @@ export function LayerProperties({ draft, fallback }: { draft: PropertiesDraft; f
             </RadixPopover.Content>
         </RadixPopover.Portal>
     );
-}
+});
+
+/**
+ * The layer properties popover's place in the timeline panel: a modal `RadixPopover.Root`
+ * whose anchor is the row header of the popover's layer in `grid` (a virtual anchor: wrapping
+ * the header in an anchor element would rebuild the row when the popover opens and closes, and
+ * lose the focus inside it). It follows the popover's state by itself, so opening and closing
+ * it do not render the panel again, and it closes after the canvas has had the frames to show
+ * what it applied (`useClosingDraft`, SE-061). A popover whose document stops being the active
+ * one is applied.
+ */
+export const LayerPropertiesHost = memo(function LayerPropertiesHost({
+    grid,
+    documentId,
+    fallback,
+}: {
+    grid: RefObject<HTMLElement | null>;
+    /** The document the panel shows. */
+    documentId: string;
+    fallback(): void;
+}) {
+    const properties = useTimelineState((state) => state.properties);
+    const liveId = useSessions((state) => state.activeId);
+    useEffect(() => {
+        if (properties && properties.documentId !== liveId) finishProperties();
+    }, [properties, liveId]);
+    const shown = useClosingDraft(properties?.documentId === documentId ? properties : null);
+    const layerId = shown?.layerId ?? null;
+    const anchor = useMemo(
+        () => ({
+            current: {
+                getBoundingClientRect: (): DOMRect => {
+                    const header = layerId === null ? null : layerHeaderOf(grid.current, layerId);
+                    return (header ?? grid.current ?? document.body).getBoundingClientRect();
+                },
+            },
+        }),
+        [grid, layerId],
+    );
+    return (
+        <RadixPopover.Root
+            modal
+            open={shown !== null}
+            onOpenChange={(open) => {
+                if (!open) finishProperties();
+            }}
+        >
+            <RadixPopover.Anchor virtualRef={anchor} />
+            {shown ? <LayerProperties draft={shown} fallback={fallback} /> : null}
+        </RadixPopover.Root>
+    );
+});

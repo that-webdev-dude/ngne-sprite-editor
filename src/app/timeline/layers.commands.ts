@@ -8,6 +8,7 @@ import {
     isLayerName,
     normalizeLayerName,
     renameLayerCommand,
+    setLayerBlendModeCommand,
     setLayerLockedCommand,
     setLayerOpacityCommand,
     setLayerVisibleCommand,
@@ -34,7 +35,7 @@ import type { PropertiesDraft } from "./timelineState";
 
 // Layer commands of the timeline (SPEC §7.3, §7.8; SE-022): new, duplicate and delete take
 // the Layer menu items planned for them; New Layer is Shift+N. Layer Properties… opens the
-// popover of DESIGN §7 (name, opacity) for the active layer, which applies its values in one
+// popover of DESIGN §7 (name, opacity, a pixel layer's blend mode) for the active layer, which applies its values in one
 // undo step when it closes (Apply Layer Properties). Rename Layer starts the in-place rename
 // of the active layer, as a double-click on its name does (Apply Layer Name ends it). Show /
 // Hide and Lock / Unlock act on the layer whose row button ran them, otherwise on the active
@@ -151,15 +152,16 @@ function openProperties(): void {
             layerId: layer.id,
             name: layer.name,
             opacity: layer.opacity,
+            blend: layer.kind === "pixel" ? layer.blend : null,
             reference,
         },
     });
 }
 
 /**
- * Apply Layer Properties: closes the popover; its name and opacity (and a reference layer's
- * X, Y, scale and placement) become one undo step of the layer's document, or none when
- * nothing changed. A name that is empty after trimming is
+ * Apply Layer Properties: closes the popover; its name and opacity, and a pixel layer's blend
+ * mode (SE-061) or a reference layer's X, Y, scale and placement, become one undo step of the
+ * layer's document, or none when nothing changed. A name that is empty after trimming is
  * not applied (the layer keeps its name). While the document cannot take the edit, the popover
  * stays open with what it shows.
  */
@@ -179,6 +181,11 @@ function applyProperties(): void {
     }
     const opacity = setLayerOpacityCommand(session, layer.id, properties.opacity);
     if (opacity) edits.push(opacity);
+    // The blend mode of a pixel layer (SE-061).
+    if (properties.blend !== null && layer.kind === "pixel") {
+        const blend = setLayerBlendModeCommand(session, layer.id, properties.blend);
+        if (blend) edits.push(blend);
+    }
     const { reference } = properties;
     // A locked reference keeps its geometry (SPEC §7.6).
     if (reference && layer.kind === "reference" && !layer.locked) {

@@ -281,6 +281,22 @@
     grid-column: 1 / -1;
 }
 
+/* The blend mode of a pixel layer (SE-061): its label in the first column, the select across
+   the second, as the name. */
+.timeline-properties__blend {
+    display: contents;
+}
+
+.timeline-properties__blend .ui-field,
+.timeline-properties__blend .ui-select {
+    width: 100%;
+}
+
+/* The cel properties popover (SE-061): the linked state, then Unlink at its right. */
+.timeline-properties__link {
+    color: var(--text-muted);
+}
+
 /* A reference layer's fields (SE-045): X, Y and Scale in a column, then placement and fit. */
 .timeline-properties__reference {
     display: grid;

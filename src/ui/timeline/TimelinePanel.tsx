@@ -1,4 +1,3 @@
-import { Popover as RadixPopover } from "radix-ui";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { activeDocument, sessionsStore, useSessions } from "../../app/state/sessions";
 import { effectiveSelection } from "../../app/timeline/selection";
@@ -7,8 +6,9 @@ import { TIMELINE_COMMANDS } from "../../app/timeline/timelineCommandIds";
 import { useTimelineState } from "../../app/timeline/timelineState";
 import { runCommand } from "../commands/runCommand";
 import { useGridWindow } from "./gridWindow";
+import { CelPropertiesHost } from "./CelProperties";
 import { FrameHeaders } from "./FrameHeaders";
-import { finishProperties, LayerProperties } from "./LayerProperties";
+import { LayerPropertiesHost } from "./LayerProperties";
 import { LayerRow, ReferenceRow } from "./LayerRow";
 import { TagBar } from "./TagBar";
 import { TimelineContextMenu } from "./TimelineContextMenu";
@@ -18,7 +18,6 @@ import {
     cellOf,
     focusCell,
     keepInView,
-    layerHeaderOf,
     TIMELINE_FIELD_ATTRIBUTE,
 } from "./timelineDom";
 import { TimelineCorner, Transport } from "./Transport";
@@ -42,13 +41,15 @@ import "./timeline.css";
  * SE-026: frames, layers and cels are dragged (`useTimelineDrag`), right-clicks open the
  * context menus of the registry (`TimelineContextMenu`), and of the cels' cells only those in
  * the grid's window and the active cell are rendered (`useGridWindow`).
+ *
+ * SE-061: the layer and cel properties popovers are hosts of their own (`LayerPropertiesHost`,
+ * `CelPropertiesHost`), so opening and closing them does not render the panel again.
  */
 export function TimelinePanel() {
     const { model, selection } = useShownTimeline();
     const live = useLiveCel();
     const liveId = useSessions((state) => state.activeId);
     const rename = useTimelineState((state) => state.rename);
-    const properties = useTimelineState((state) => state.properties);
     const root = useRef<HTMLDivElement>(null);
     const grid = useRef<HTMLDivElement>(null);
     const windowStore = useGridWindow(root, grid, model !== null);
@@ -132,30 +133,11 @@ export function TimelinePanel() {
     }, []);
 
     // An edit whose document stops being the active one ends: applied when its document can
-    // take it (a closed document's edits are dropped by `timelineLifetime`).
+    // take it (a closed document's edits are dropped by `timelineLifetime`). The popovers'
+    // hosts do the same for theirs.
     useEffect(() => {
-        if (properties && properties.documentId !== liveId) finishProperties();
         if (rename && rename.documentId !== liveId) runCommand(TIMELINE_COMMANDS.applyLayerName);
-    }, [properties, rename, liveId]);
-    const activeId = model?.documentId ?? null;
-
-    // The layer properties popover points at the row header of its layer. A virtual anchor:
-    // wrapping the header in an anchor element would rebuild the row when the popover opens
-    // and closes, and lose the focus inside it.
-    const editedLayer =
-        properties && properties.documentId === activeId ? properties.layerId : null;
-    const anchor = useMemo(
-        () => ({
-            current: {
-                getBoundingClientRect: (): DOMRect => {
-                    const header =
-                        editedLayer === null ? null : layerHeaderOf(grid.current, editedLayer);
-                    return (header ?? grid.current ?? window.document.body).getBoundingClientRect();
-                },
-            },
-        }),
-        [editedLayer],
-    );
+    }, [rename, liveId]);
 
     if (!model) return null;
 
@@ -165,7 +147,6 @@ export function TimelinePanel() {
     const liveLayerId = live?.documentId === model.documentId ? live.layerId : null;
     const liveFrameIndex = live ? frameIds.indexOf(live.frameId) : -1;
     const renaming = rename?.documentId === model.documentId ? rename : null;
-    const editing = properties?.documentId === model.documentId ? properties : null;
 
     // The bar grows by a row per overlap level of the tags, up to three (DESIGN §2).
     const tagRows = Math.min(model.tags.rows, SHOWN_TAG_ROWS);
@@ -191,118 +172,114 @@ export function TimelinePanel() {
                         onPress={focusActiveInPlace}
                     />
                 </div>
-                <RadixPopover.Root
-                    modal
-                    open={editing !== null}
-                    onOpenChange={(open) => {
-                        if (!open) finishProperties();
+                <div
+                    ref={grid}
+                    className="timeline__grid"
+                    role="grid"
+                    aria-label="Cels"
+                    aria-multiselectable="true"
+                    onFocus={(event) => {
+                        cellFocused.current = event.target.hasAttribute(CELL_ATTRIBUTE);
                     }}
+                    onBlur={() => {
+                        cellFocused.current = false;
+                    }}
+                    aria-rowcount={rowCount}
+                    aria-colcount={frameIds.length + 1}
                 >
-                    <RadixPopover.Anchor virtualRef={anchor} />
                     <div
-                        ref={grid}
-                        className="timeline__grid"
-                        role="grid"
-                        aria-label="Cels"
-                        aria-multiselectable="true"
-                        onFocus={(event) => {
-                            cellFocused.current = event.target.hasAttribute(CELL_ATTRIBUTE);
-                        }}
-                        onBlur={() => {
-                            cellFocused.current = false;
-                        }}
-                        aria-rowcount={rowCount}
-                        aria-colcount={frameIds.length + 1}
+                        className="timeline__row timeline__row--header"
+                        role="row"
+                        aria-rowindex={1}
                     >
-                        <div
-                            className="timeline__row timeline__row--header"
-                            role="row"
-                            aria-rowindex={1}
-                        >
-                            <TimelineCorner />
-                            <FrameHeaders
-                                frameIds={frameIds}
-                                selection={current}
-                                activeFrameIndex={activeFrameIndex}
-                                focusIndex={liveFrameIndex}
-                                windowStore={windowStore}
-                                onPress={onPress}
-                            />
-                        </div>
-                        {model.layers.map((layer, row) => (
-                            <LayerRow
-                                key={layer.id}
-                                layer={layer}
-                                row={row}
-                                windowStore={windowStore}
-                                frameIds={frameIds}
-                                tinted={layer.id === model.activeLayerId}
-                                activeFrameIndex={activeFrameIndex}
-                                focusRow={layer.id === liveLayerId}
-                                focusIndex={layer.id === liveLayerId ? liveFrameIndex : -1}
-                                selection={current}
-                                renaming={renaming?.layerId === layer.id ? renaming.name : null}
-                                onPress={onPress}
-                                onRenameEnd={focusActive}
-                            />
-                        ))}
-                        {model.references.length > 0 ? (
-                            // The Reference group (SE-045): under the pixel layers, top first.
-                            <div
-                                className="timeline__references"
-                                role="rowgroup"
-                                aria-label="Reference"
-                            >
-                                <div className="timeline__group-label" aria-hidden="true">
-                                    Reference
-                                </div>
-                                {model.references.map((layer, row) => (
-                                    <ReferenceRow
-                                        key={layer.id}
-                                        layer={layer}
-                                        rowIndex={model.layers.length + row + 2}
-                                        frameCount={frameIds.length}
-                                        frameIndex={
-                                            layer.id === liveLayerId
-                                                ? liveFrameIndex
-                                                : activeFrameIndex
-                                        }
-                                        tinted={layer.id === model.activeLayerId}
-                                        focusRow={layer.id === liveLayerId}
-                                        frameId={
-                                            live?.documentId === model.documentId
-                                                ? live.frameId
-                                                : model.activeFrameId
-                                        }
-                                        selection={current}
-                                        renaming={
-                                            renaming?.layerId === layer.id ? renaming.name : null
-                                        }
-                                        onPress={onPress}
-                                        onRenameEnd={focusActive}
-                                    />
-                                ))}
-                            </div>
-                        ) : null}
-                        {indicator ? (
-                            // Where the drag drops (SE-026).
-                            <div
-                                className="timeline__drop"
-                                aria-hidden="true"
-                                data-drop={indicator.kind}
-                                data-copy={indicator.copy || undefined}
-                                data-refused={indicator.refused || undefined}
-                                style={{
-                                    left: indicator.left,
-                                    top: indicator.top,
-                                    width: indicator.width,
-                                    height: indicator.height,
-                                }}
-                            />
-                        ) : null}
+                        <TimelineCorner />
+                        <FrameHeaders
+                            frameIds={frameIds}
+                            selection={current}
+                            activeFrameIndex={activeFrameIndex}
+                            focusIndex={liveFrameIndex}
+                            windowStore={windowStore}
+                            onPress={onPress}
+                        />
                     </div>
-                    {editing ? <LayerProperties draft={editing} fallback={focusActive} /> : null}
-                </RadixPopover.Root>
+                    {model.layers.map((layer, row) => (
+                        <LayerRow
+                            key={layer.id}
+                            layer={layer}
+                            row={row}
+                            windowStore={windowStore}
+                            frameIds={frameIds}
+                            tinted={layer.id === model.activeLayerId}
+                            activeFrameIndex={activeFrameIndex}
+                            focusRow={layer.id === liveLayerId}
+                            focusIndex={layer.id === liveLayerId ? liveFrameIndex : -1}
+                            selection={current}
+                            renaming={renaming?.layerId === layer.id ? renaming.name : null}
+                            onPress={onPress}
+                            onRenameEnd={focusActive}
+                        />
+                    ))}
+                    {model.references.length > 0 ? (
+                        // The Reference group (SE-045): under the pixel layers, top first.
+                        <div
+                            className="timeline__references"
+                            role="rowgroup"
+                            aria-label="Reference"
+                        >
+                            <div className="timeline__group-label" aria-hidden="true">
+                                Reference
+                            </div>
+                            {model.references.map((layer, row) => (
+                                <ReferenceRow
+                                    key={layer.id}
+                                    layer={layer}
+                                    rowIndex={model.layers.length + row + 2}
+                                    frameCount={frameIds.length}
+                                    frameIndex={
+                                        layer.id === liveLayerId ? liveFrameIndex : activeFrameIndex
+                                    }
+                                    tinted={layer.id === model.activeLayerId}
+                                    focusRow={layer.id === liveLayerId}
+                                    frameId={
+                                        live?.documentId === model.documentId
+                                            ? live.frameId
+                                            : model.activeFrameId
+                                    }
+                                    selection={current}
+                                    renaming={renaming?.layerId === layer.id ? renaming.name : null}
+                                    onPress={onPress}
+                                    onRenameEnd={focusActive}
+                                />
+                            ))}
+                        </div>
+                    ) : null}
+                    {indicator ? (
+                        // Where the drag drops (SE-026).
+                        <div
+                            className="timeline__drop"
+                            aria-hidden="true"
+                            data-drop={indicator.kind}
+                            data-copy={indicator.copy || undefined}
+                            data-refused={indicator.refused || undefined}
+                            style={{
+                                left: indicator.left,
+                                top: indicator.top,
+                                width: indicator.width,
+                                height: indicator.height,
+                            }}
+                        />
+                    ) : null}
+                </div>
+                <LayerPropertiesHost
+                    grid={grid}
+                    documentId={model.documentId}
+                    fallback={focusActive}
+                />
+                <CelPropertiesHost
+                    grid={grid}
+                    documentId={model.documentId}
+                    fallback={focusActive}
+                />
             </div>
         </TimelineContextMenu>
     );

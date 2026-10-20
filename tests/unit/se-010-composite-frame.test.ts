@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { BLEND_FUNCTIONS, compositeFrame } from "../../src/core/composite";
@@ -21,6 +22,11 @@ import {
     sprites,
 } from "./se-010-support";
 import type { Rgba } from "./se-010-support";
+
+/** The expected composites of SE-061 (`fixtures/se-061-blend-golden.generate.mjs`). */
+const se061Golden = JSON.parse(
+    readFileSync(new URL("./fixtures/se-061-blend-golden.json", import.meta.url), "utf8"),
+) as { se010: { expected: Record<BlendMode, string[]> } };
 
 const BLUE: Rgba = [0, 0, 255, 255];
 const RED: Rgba = [255, 0, 0, 255];
@@ -600,7 +606,7 @@ describe("blend functions", () => {
         for (const mode of modes) expect(BLEND_FUNCTIONS[mode]).toBeTypeOf("function");
     });
 
-    it("every mode other than normal blends as normal until SE-061", () => {
+    it("every mode blends by its own function: Aseprite's, as the SE-061 fixture holds it", () => {
         const layers = [
             {
                 pixels: [BLUE, [200, 60, 250, 128], CLEAR, [10, 200, 30, 180]] as Rgba[],
@@ -611,14 +617,26 @@ describe("blend functions", () => {
                 pixels: [HALF_RED, [100, 50, 7, 128], RED, [250, 10, 130, 200]] as Rgba[],
             },
         ];
-        const expected = compositeFrame(sprite(4, 1, layers), FRAME);
+        // Computed from Aseprite's blend functions for these pixels (SE-061).
+        const expectedOf = (mode: BlendMode): PixelBuffer => ({
+            width: 4,
+            height: 1,
+            data: Uint8ClampedArray.from(
+                se061Golden.se010.expected[mode]
+                    .join(" ")
+                    .split(" ")
+                    .flatMap((pixel) =>
+                        [0, 2, 4, 6].map((at) => Number.parseInt(pixel.slice(at, at + 2), 16)),
+                    ),
+            ),
+        });
 
         for (const mode of modes) {
             const doc = sprite(4, 1, [
                 { ...layers[0], blend: mode },
                 { ...layers[1], blend: mode },
             ]);
-            expect(firstDifference(compositeFrame(doc, FRAME), expected), mode).toBeNull();
+            expect(firstDifference(compositeFrame(doc, FRAME), expectedOf(mode)), mode).toBeNull();
         }
     });
 

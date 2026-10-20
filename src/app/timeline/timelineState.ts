@@ -1,6 +1,7 @@
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import type { StoreApi } from "zustand/vanilla";
+import type { BlendMode } from "../../core/model";
 import type { TimelineSelection } from "./selection";
 
 // Editor state of the timeline panel (DESIGN §5.6, SE-022), outside any document and not
@@ -42,8 +43,8 @@ export interface ReferenceDraft {
 
 /**
  * The layer properties popover (DESIGN §7): what it shows, applied when it closes. Each kind
- * of layer adds its own group of fields (`reference` for a reference layer, SE-045); a later
- * ticket adds a field beside them (the blend mode, SE-061).
+ * of layer adds its own fields: the blend mode of a pixel layer (SE-061), the group
+ * `reference` of a reference layer (SE-045).
  */
 export interface PropertiesDraft {
     readonly documentId: string;
@@ -51,6 +52,8 @@ export interface PropertiesDraft {
     readonly name: string;
     /** 0..255. */
     readonly opacity: number;
+    /** The blend mode of a pixel layer; null for a reference layer, which has none. */
+    readonly blend: BlendMode | null;
     /** The fields of a reference layer; null for a pixel layer. */
     readonly reference: ReferenceDraft | null;
 }
@@ -112,10 +115,17 @@ export function cancelRename(): void {
     if (timelineStore.getState().rename) timelineStore.setState({ rename: null });
 }
 
-/** Changes what the open layer properties popover shows; the document changes when it closes. */
-export function editProperties(change: Partial<Pick<PropertiesDraft, "name" | "opacity">>): void {
+/**
+ * Changes what the open layer properties popover shows; the document changes when it closes.
+ * A blend mode is taken only for a pixel layer's popover.
+ */
+export function editProperties(
+    change: Partial<Pick<PropertiesDraft, "name" | "opacity" | "blend">>,
+): void {
     const { properties } = timelineStore.getState();
-    if (properties) timelineStore.setState({ properties: { ...properties, ...change } });
+    if (!properties) return;
+    if (change.blend !== undefined && properties.blend === null) return;
+    timelineStore.setState({ properties: { ...properties, ...change } });
 }
 
 /**
