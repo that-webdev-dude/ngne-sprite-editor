@@ -11,8 +11,15 @@ import {
 } from "../../src/core/composite";
 import { History } from "../../src/core/history";
 import { flattenCommand, mergeDownCommand, setLayerBlendModeCommand } from "../../src/core/layers";
-import { celAt, frameIndex, sequentialIds } from "../../src/core/model";
-import type { BlendMode, DocSession, PixelBuffer, Rect, SpriteDoc } from "../../src/core/model";
+import { celAt, celKey, frameIndex, sequentialIds } from "../../src/core/model";
+import type {
+    BlendMode,
+    DocSession,
+    PixelBuffer,
+    PixelLayer,
+    Rect,
+    SpriteDoc,
+} from "../../src/core/model";
 import { createPixelBuffer } from "../../src/core/pixels";
 import {
     FRAME,
@@ -447,25 +454,77 @@ function twoLayers(upper: Partial<LayerSpec> = {}): SpriteDoc {
 
 describe("commands that change a mode or a cel opacity", () => {
     it("merge down of a multiply layer equals compositeFrame of the two layers, pixel for pixel, at every frame", () => {
-        const doc = twoLayers({ blend: "multiply" });
-        // A layer below that is not merged: the target's image is the two layers alone.
-        const expected = doc.frames.map((frame) => compositeFrame(doc, frame.id));
-        const session = sessionOf(doc);
-        const history = new History(session);
+        // Three layers: a base that is not merged, the target and the multiply layer over it.
+        // The target has two linked cels (frames 1 and 2) whose results differ, and the upper
+        // layer is merged hidden as well as shown (merge down takes it as visible).
+        for (const visible of [true, false]) {
+            const two = twoLayers({ blend: "multiply", visible });
+            const base: PixelLayer = {
+                id: "base",
+                name: "Base",
+                kind: "pixel",
+                visible: true,
+                locked: false,
+                opacity: 255,
+                blend: "normal",
+            };
+            const doc: SpriteDoc = { ...two, layers: [base, ...two.layers] };
+            addFrame(doc, "frame-2");
+            for (const frame of doc.frames) {
+                setCel(doc, "base", frame.id, [
+                    [30, 200, 90, 255],
+                    [250, 250, 0, 255],
+                    [0, 40, 200, 255],
+                    [128, 128, 128, 255],
+                ]);
+            }
+            const linked = celAt(doc, layerId(0), "frame-1")!;
+            doc.cels.set(celKey(layerId(0), "frame-2"), { ...linked });
+            setCel(doc, layerId(1), "frame-2", [
+                [9, 9, 9, 255],
+                [200, 100, 0, 128],
+                [0, 0, 0, 0],
+                [255, 255, 255, 255],
+            ]);
+            // The two layers alone, both taken as visible: what the target holds afterwards.
+            const pair = {
+                ...doc,
+                layers: doc.layers
+                    .filter((layer) => layer.id !== "base")
+                    .map((layer) => ({ ...layer, visible: true })),
+            };
+            const expected = doc.frames.map((frame) => compositeFrame(pair, frame.id));
+            const session: DocSession = {
+                doc,
+                selection: null,
+                activeLayerId: layerId(1),
+                activeFrameId: FRAME,
+            };
+            const history = new History(session);
 
-        history.execute(mergeDownCommand(session, layerId(1), { newId: sequentialIds("merged") }));
+            history.execute(
+                mergeDownCommand(session, layerId(1), { newId: sequentialIds("merged") }),
+            );
 
-        expect(doc.layers).toHaveLength(1);
-        expect(doc.layers[0]).toMatchObject({ id: layerId(0), blend: "normal", opacity: 255 });
-        doc.frames.forEach((frame, index) => {
-            const cel = celAt(doc, layerId(0), frame.id);
-            expect(cel?.opacity).toBe(255);
-            const image = doc.images.get(cel?.imageId ?? "")!;
-            expect(firstDifference(image, expected[index]), frame.id).toBeNull();
-            expect(firstDifference(compositeFrame(doc, frame.id), expected[index])).toBeNull();
-        });
-        expect(history.undo()).toBe(true);
-        expect(doc.layers[1]).toMatchObject({ blend: "multiply", opacity: 180 });
+            expect(doc.layers.map((layer) => layer.id)).toEqual(["base", layerId(0)]);
+            expect(doc.layers[1]).toMatchObject({ blend: "normal", opacity: 255, visible: true });
+            doc.frames.forEach((frame, index) => {
+                const cel = celAt(doc, layerId(0), frame.id);
+                expect(cel?.opacity, frame.id).toBe(255);
+                const image = doc.images.get(cel?.imageId ?? "")!;
+                expect(
+                    firstDifference(image, expected[index]),
+                    `${visible} ${frame.id}`,
+                ).toBeNull();
+            });
+            // The linked cels' results differ: each has an image of its own now.
+            expect(celAt(doc, layerId(0), "frame-1")?.imageId).not.toBe(
+                celAt(doc, layerId(0), "frame-2")?.imageId,
+            );
+            expect(history.undo()).toBe(true);
+            expect(doc.layers[2]).toMatchObject({ blend: "multiply", opacity: 180, visible });
+            expect(celAt(doc, layerId(0), "frame-2")?.imageId).toBe(linked.imageId);
+        }
     });
 
     it("merge down of a layer in any mode over a layer in any mode bakes what compositeFrame shows", () => {

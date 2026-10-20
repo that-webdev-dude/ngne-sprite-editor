@@ -1,5 +1,5 @@
 import { Popover as RadixPopover } from "radix-ui";
-import { memo, useEffect, useId, useMemo, useRef } from "react";
+import { memo, useEffect, useId, useMemo } from "react";
 import type { RefObject } from "react";
 import { MAX_NAME_LENGTH } from "../../core/model";
 import type { BlendMode } from "../../core/model";
@@ -24,7 +24,7 @@ import { SegmentedControl } from "../primitives/SegmentedControl";
 import { Select } from "../primitives/Select";
 import { Slider } from "../primitives/Slider";
 import { layerHeaderOf } from "./timelineDom";
-import { useClosingDraft } from "./useClosingDraft";
+import { useClosingPopover } from "./useClosingPopover";
 import "../primitives/popover.css";
 
 /**
@@ -167,27 +167,30 @@ function ReferenceFields({ draft, owner }: { draft: ReferenceDraft; owner: Prope
  * SE-061; for a reference layer X, Y, scale and placement, SE-045), beside
  * the row of its layer. What it shows changes no document until it closes — by Enter, Escape
  * or a press outside — and then once, in one undo step. The focus returns to where it was when
- * the popover opened, or to `fallback` when that is gone (a menu item).
+ * the popover opened, or to the host's fallback when that is gone (a menu item).
  *
  * The popover is modal (`modal` on its root, `LayerPropertiesHost`): it keeps the focus while
  * a menu that opened it gives the focus back to its trigger, and a press outside closes it
  * without reaching what lies there (a press on the canvas paints nothing). A memo: the host
- * renders again when the popover closes, and rendering the fields again then would cost the
- * canvas a frame (SE-061).
+ * also renders for what is not the popover's (the active document), and rendering the fields
+ * again in a history step's microtasks costs the canvas a frame (SE-061).
  */
 const LayerProperties = memo(function LayerProperties({
     draft,
-    fallback,
+    returnToRef,
+    contentRef,
 }: {
     draft: PropertiesDraft;
-    fallback(): void;
+    /** Set to where the focus was when the popover opened (`useClosingPopover`). */
+    returnToRef: RefObject<Element | null>;
+    /** The content element, which `useClosingPopover` makes inert when the popover closes. */
+    contentRef: RefObject<HTMLDivElement | null>;
 }) {
     const nameId = useId();
-    /** Where the focus was when the popover opened. */
-    const returnTo = useRef<Element | null>(null);
     return (
         <RadixPopover.Portal>
             <RadixPopover.Content
+                ref={contentRef}
                 className="ui-popover timeline-properties"
                 aria-label="Layer properties"
                 side="right"
@@ -195,17 +198,12 @@ const LayerProperties = memo(function LayerProperties({
                 sideOffset={6}
                 collisionPadding={8}
                 onOpenAutoFocus={() => {
-                    returnTo.current = document.activeElement;
+                    returnToRef.current = document.activeElement;
                 }}
                 onCloseAutoFocus={(event) => {
-                    // There is no trigger to go back to.
+                    // There is no trigger to go back to; the host moved the focus already, in
+                    // the commit that closed the popover (`useClosingPopover`).
                     event.preventDefault();
-                    const target = returnTo.current;
-                    if (target instanceof HTMLElement && target.isConnected) {
-                        target.focus({ preventScroll: true });
-                    } else {
-                        fallback();
-                    }
                 }}
             >
                 <form
@@ -259,9 +257,8 @@ const LayerProperties = memo(function LayerProperties({
  * whose anchor is the row header of the popover's layer in `grid` (a virtual anchor: wrapping
  * the header in an anchor element would rebuild the row when the popover opens and closes, and
  * lose the focus inside it). It follows the popover's state by itself, so opening and closing
- * it do not render the panel again, and it closes after the canvas has had the frames to show
- * what it applied (`useClosingDraft`, SE-061). A popover whose document stops being the active
- * one is applied.
+ * it do not render the panel again (SE-061); the focus goes back in the commit that closes it
+ * (`useClosingPopover`). A popover whose document stops being the active one is applied.
  */
 export const LayerPropertiesHost = memo(function LayerPropertiesHost({
     grid,
@@ -278,7 +275,10 @@ export const LayerPropertiesHost = memo(function LayerPropertiesHost({
     useEffect(() => {
         if (properties && properties.documentId !== liveId) finishProperties();
     }, [properties, liveId]);
-    const shown = useClosingDraft(properties?.documentId === documentId ? properties : null);
+    const { shown, opening, contentRef, returnToRef } = useClosingPopover(
+        properties?.documentId === documentId ? properties : null,
+        fallback,
+    );
     const layerId = shown?.layerId ?? null;
     const anchor = useMemo(
         () => ({
@@ -300,7 +300,14 @@ export const LayerPropertiesHost = memo(function LayerPropertiesHost({
             }}
         >
             <RadixPopover.Anchor virtualRef={anchor} />
-            {shown ? <LayerProperties draft={shown} fallback={fallback} /> : null}
+            {shown ? (
+                <LayerProperties
+                    key={opening}
+                    draft={shown}
+                    returnToRef={returnToRef}
+                    contentRef={contentRef}
+                />
+            ) : null}
         </RadixPopover.Root>
     );
 });

@@ -2,6 +2,9 @@
 //
 //     node tests/unit/fixtures/se-061-blend-golden.generate.mjs
 //
+// It writes the file already formatted by the repository's Prettier: no other step is needed
+// for `npm run format:check`.
+//
 // The values come from Aseprite's published blend functions, transcribed here line by line
 // from its source, not from the editor's compositor (`src/core/composite`), which this file
 // does not import:
@@ -25,6 +28,7 @@
 // colour of a backdrop with alpha 0, so every pixel with alpha above 0 is Aseprite's.
 
 import { writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 // --- C helpers -----------------------------------------------------------------------------
 
@@ -402,7 +406,11 @@ const fixture = {
         ),
     },
 };
+// Written as the repository's Prettier formats it, so `npm run format:check` passes as is.
+const target = new URL("./se-061-blend-golden.json", import.meta.url);
+const prettier = await import("prettier");
+const options = await prettier.resolveConfig(fileURLToPath(target));
 writeFileSync(
-    new URL("./se-061-blend-golden.json", import.meta.url),
-    `${JSON.stringify(fixture, null, 4)}\n`,
+    target,
+    await prettier.format(JSON.stringify(fixture), { ...options, parser: "json" }),
 );

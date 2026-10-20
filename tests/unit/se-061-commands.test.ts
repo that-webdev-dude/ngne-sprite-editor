@@ -15,6 +15,7 @@ import {
 import { linkCelsCommand } from "../../src/core/cels";
 import { addFrameCommand } from "../../src/core/frames";
 import { addLayerCommand, setLayerLockedCommand } from "../../src/core/layers";
+import { addReferenceLayerCommand } from "../../src/core/references";
 import { celAt, createDocument, sequentialIds } from "../../src/core/model";
 import type { PixelLayer } from "../../src/core/model";
 
@@ -128,6 +129,31 @@ describe("Cel Properties", () => {
         // The new document's cel is empty.
         expect(command(CEL_PROPERTIES_COMMANDS.open).enabled()).toBe(false);
         paint(document, 200);
+        sessionsStore.getState().touch(document.id);
+        expect(command(CEL_PROPERTIES_COMMANDS.open).enabled()).toBe(true);
+    });
+
+    it("is disabled while the active layer is a reference layer, which has no cels", () => {
+        const document = open();
+        paint(document, 200);
+        const { session, history } = document;
+        const pixel = session.activeLayerId;
+        history.execute(
+            addReferenceLayerCommand(session, {
+                sourceId: "source-1",
+                sourceWidth: 2,
+                sourceHeight: 2,
+                newId: sequentialIds("ref"),
+            }),
+        );
+        const reference = session.doc.layers.find((layer) => layer.kind === "reference")!;
+        session.activeLayerId = reference.id;
+        sessionsStore.getState().touch(document.id);
+        expect(command(CEL_PROPERTIES_COMMANDS.open).enabled()).toBe(false);
+        run(CEL_PROPERTIES_COMMANDS.open);
+        expect(celPropertiesStore.getState().draft).toBeNull();
+
+        session.activeLayerId = pixel;
         sessionsStore.getState().touch(document.id);
         expect(command(CEL_PROPERTIES_COMMANDS.open).enabled()).toBe(true);
     });

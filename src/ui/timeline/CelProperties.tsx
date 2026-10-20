@@ -1,5 +1,5 @@
 import { Popover as RadixPopover } from "radix-ui";
-import { memo, useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo } from "react";
 import type { RefObject } from "react";
 import { celFacts, editCelOpacity, useCelProperties } from "../../app/timeline/celProperties";
 import type { CelPropertiesDraft } from "../../app/timeline/celProperties";
@@ -9,7 +9,7 @@ import { runCommand } from "../commands/runCommand";
 import { Button } from "../primitives/Button";
 import { Slider } from "../primitives/Slider";
 import { cellOf } from "./timelineDom";
-import { useClosingDraft } from "./useClosingDraft";
+import { useClosingPopover } from "./useClosingPopover";
 import "../primitives/popover.css";
 
 /**
@@ -31,18 +31,20 @@ function linkText(linkedWith: number): string {
  * Unlink, beside the cel's cell. As the layer properties popover, what it shows changes no
  * document until it closes (Enter, Escape or a press outside), then once, in one undo step;
  * Unlink acts at once. On a locked layer its controls are disabled. The focus returns to where
- * it was when it opened, or to `fallback` when that is gone (a menu item). Rendered inside the
- * modal `RadixPopover.Root` of `CelPropertiesHost`; a memo, as `LayerProperties` is.
+ * it was when it opened, or to the host's fallback when that is gone (a menu item). Rendered
+ * inside the modal `RadixPopover.Root` of `CelPropertiesHost`; a memo, as `LayerProperties` is.
  */
 const CelProperties = memo(function CelProperties({
     draft,
-    fallback,
+    returnToRef,
+    contentRef,
 }: {
     draft: CelPropertiesDraft;
-    fallback(): void;
+    /** Set to where the focus was when the popover opened (`useClosingPopover`). */
+    returnToRef: RefObject<Element | null>;
+    /** The content element, which `useClosingPopover` makes inert when the popover closes. */
+    contentRef: RefObject<HTMLDivElement | null>;
 }) {
-    /** Where the focus was when the popover opened. */
-    const returnTo = useRef<Element | null>(null);
     // A primitive, so the popover renders again only when the facts change.
     const key = useSessions((state) => {
         const document = state.documents.find((entry) => entry.id === draft.documentId);
@@ -55,6 +57,7 @@ const CelProperties = memo(function CelProperties({
     return (
         <RadixPopover.Portal>
             <RadixPopover.Content
+                ref={contentRef}
                 className="ui-popover timeline-properties"
                 aria-label="Cel properties"
                 side="top"
@@ -62,17 +65,12 @@ const CelProperties = memo(function CelProperties({
                 sideOffset={6}
                 collisionPadding={8}
                 onOpenAutoFocus={() => {
-                    returnTo.current = document.activeElement;
+                    returnToRef.current = document.activeElement;
                 }}
                 onCloseAutoFocus={(event) => {
-                    // There is no trigger to go back to.
+                    // There is no trigger to go back to; the host moved the focus already, in
+                    // the commit that closed the popover (`useClosingPopover`).
                     event.preventDefault();
-                    const target = returnTo.current;
-                    if (target instanceof HTMLElement && target.isConnected) {
-                        target.focus({ preventScroll: true });
-                    } else {
-                        fallback();
-                    }
                 }}
             >
                 <form
@@ -125,9 +123,9 @@ const CelProperties = memo(function CelProperties({
 /**
  * The cel properties popover's place in the timeline panel: a modal `RadixPopover.Root` whose
  * virtual anchor is the cell of the popover's cel in `grid`. It follows the popover's state by
- * itself, so opening and closing the popover do not render the panel again, and it closes
- * after the canvas has had the frames to show what it applied (`useClosingDraft`). A popover
- * whose document stops being the active one is applied.
+ * itself, so opening and closing the popover do not render the panel again; the focus goes
+ * back in the commit that closes it (`useClosingPopover`). A popover whose document stops being
+ * the active one is applied.
  */
 export const CelPropertiesHost = memo(function CelPropertiesHost({
     grid,
@@ -144,7 +142,10 @@ export const CelPropertiesHost = memo(function CelPropertiesHost({
     useEffect(() => {
         if (draft && draft.documentId !== liveId) finishCelProperties();
     }, [draft, liveId]);
-    const shown = useClosingDraft(draft?.documentId === documentId ? draft : null);
+    const { shown, opening, contentRef, returnToRef } = useClosingPopover(
+        draft?.documentId === documentId ? draft : null,
+        fallback,
+    );
     const layerId = shown?.layerId ?? null;
     const frameId = shown?.frameId ?? null;
     const anchor = useMemo(
@@ -170,7 +171,14 @@ export const CelPropertiesHost = memo(function CelPropertiesHost({
             }}
         >
             <RadixPopover.Anchor virtualRef={anchor} />
-            {shown ? <CelProperties draft={shown} fallback={fallback} /> : null}
+            {shown ? (
+                <CelProperties
+                    key={opening}
+                    draft={shown}
+                    returnToRef={returnToRef}
+                    contentRef={contentRef}
+                />
+            ) : null}
         </RadixPopover.Root>
     );
 });
