@@ -243,6 +243,114 @@ tickets Done in this leg; any ticket In progress and its exact state; a warning 
 my push.
 ```
 
-For run 4, replace the ticket list (SE-070, SE-071, SE-072, SE-073), the decisions heading,
-the shared-module line (none), the measurements (SE-070) and the checkpoint (E, which stops
-before the release tag and the deployment).
+Run 4 is not carried out in legs: it is one unattended cloud session ([Run 4 in the cloud](#run-4-in-the-cloud)).
+
+## Run 4 in the cloud
+
+Owner decision of 2026-10-20: run 4 (SE-070 → SE-071 ∥ SE-072 → SE-073) runs as one overnight
+cloud session, bounded by credit (£224 left) instead of the 5-hour usage gate. Differences from
+the local legs, all reflected in the prompt:
+
+- Linux container, headed Chrome under xvfb with SwiftShader, as GitHub CI: Windows-only
+  behaviour does not apply, and no Intel UHD or RTX 4060 exists. SE-070's acceptance "every
+  budget recorded on reference hardware" cannot be met there; the cloud records are labelled
+  `cloud-swiftshader` and the reference-hardware measurement stays with the owner.
+- The session may push **only** the branch `run-4`, never `main`. The owner reviews the branch,
+  runs the reference-hardware measurements and merges.
+- No memory notes exist in the container: the lessons of runs 1–3 are inside the prompt.
+- No tag, no deployment, no change of a gate state to Passed that needs the owner (G3, E).
+
+Start the cloud session on `main` at its current HEAD (pushed, CI state known), with a
+network policy that allows npm, GitHub and the Playwright browser download.
+
+```text
+ultracode: execute run 4 of docs/tickets/EXECUTION.md (SE-070, SE-071, SE-072, SE-073) as one
+unattended session in a Linux cloud container. Nobody answers questions tonight: where AGENTS.md
+says "stop and report", decide, record the decision, continue (autonomy as in docs/REVIEW.md
+"Run 1 decisions (W2–W4)", "Run 2 decisions", "Run 3 decisions"). Ask only if you cannot go on.
+
+## Hard limits
+- Branch: create `run-4` from `main`. Push only `run-4` (`git push -u origin run-4`), after
+  every ticket's merge and at the end. Never push, merge into or rewrite `main`. No pull request.
+- No release tag, no deployment, no workflow run that deploys (SE-073: written owner approval
+  needed). Do not set gate G3 or checkpoint E to Passed; do not edit "Descoped tickets".
+- package.json: only SE-072 (PWA plugin) and SE-073 (version 1.0.0, as that ticket states;
+  record it as a decision). Nothing else; never weaken, skip or delete a test; never record a
+  number that was not measured; never present a SwiftShader number as reference hardware.
+- Models: Opus for every agent (`model: "opus"`), never Fable. At most two agents at a time.
+- Credit guard: £224 in total for the whole night. One implementing agent
+  per ticket, one read-only review per ticket, one fix round (a second only for a CONFIRMED
+  correctness bug), at most 3 CI-fix pushes in total. If a usage or spend tool is available,
+  read it before each start: start nothing new above £150 spent, and below £30 left stop and
+  report. If none is available, stop after SE-072 is Done unless SE-073 is clearly cheap.
+
+## Setup (once)
+npm ci; `npx playwright install --with-deps chromium`; `sudo apt-get install -y libvulkan1
+mesa-vulkan-drivers xvfb xauth` if missing. E2E exactly as .github/workflows/ci.yml:
+`E2E_HEADLESS=0 xvfb-run -a -s "-screen 0 4096x2304x24" npx playwright test <args>`, with
+`CI=1`. Locally in the container the Done gate is the full suite in the CI split (four
+`--project=parallel --no-deps --shard=i/4` runs, then `--project=alone --no-deps`), one worker
+each, run sequentially; run `npm run check` BEFORE the E2E runs (a throttled machine times out
+unit tests). If `gh` is authenticated, read CI of the pushed `run-4` with `gh run list --branch
+run-4` and fix red runs before the next ticket; otherwise say CI was not readable.
+
+## Order
+1. Read: this file, docs/tickets/README.md (index, gates), docs/tickets/M7-hardening-and-
+   release.md, SPEC §6.6, §11, docs/REVIEW.md "Run 3 decisions", docs/perf/README.md. Confirm
+   every ticket SE-001..SE-066 other than M7 is Done; if one is not, record it and continue
+   only with what its absence does not block.
+2. SE-070 alone (L). Set In progress when its agent starts. Golden path 10 consecutive runs;
+   soak; baselines; the `tests/perf/` page for every §6.6 scenario. Take the measurements
+   yourself, alone, no agent running, into `docs/perf/` as `se-070-*-cloud-swiftshader.*`;
+   SPEC §6.6 "reference hardware" items stay open: list them in REVIEW.md for the owner. File
+   an issue-style entry (REVIEW.md) for any budget missed on SwiftShader, marked "not reference".
+3. SE-071 and SE-072 in parallel after SE-070 is Done (disjoint files; SE-072 owns
+   vite.config.ts, the service worker, manifest, main entry; SE-071 must not edit them: its
+   findings there go to REVIEW.md). SE-072's manual-install record in docs/audit/pwa.md cannot
+   be done in a container: write what the E2E proves and mark the manual install "owner to do".
+4. SE-073 after both are Done, to the point of the release candidate: README, GUIDE, FORMAT
+   frozen, version 1.0.0, changelog, CI jobs (README commands verbatim, link check), engine gap
+   report, deploy workflow written but NOT triggered and with no tag. Acceptance items that
+   need the owner (tag, deployment, written approval, G3) are listed as open.
+5. Stop: checkpoint E.
+
+## Per ticket
+Merge by rebase onto `run-4` + fast-forward, one commit per ticket (`SE-070 ...`), then a
+"Mark SE-0xx Done" commit. Before Done: `npm run check`, then the full E2E in the CI split.
+One read-only review (told not to run E2E or check) against the ticket's acceptance list,
+then one fix round by a fresh agent briefed on the diff, then one more full run if the fix
+touches shared startup or layout code. Record decisions in docs/REVIEW.md under "Run 4
+decisions", one subsection per ticket (finding table as in "Run 3 decisions").
+
+## Brief every implementing and fixing agent with
+- Worktree under .claude/worktrees; branch `se-0xx`; worktrees start at origin/main, so
+  `git merge --ff-only run-4` first. `npm ci` in it. Own files + the ticket's tests only.
+- Radix: E2E waits for its deferred work (focus after open, between arrow keys, before an
+  outside click, radios check only while the key is down). Grep E2E for `press` +
+  `toBeHidden/toBeVisible` + another key with no focus wait.
+- A test that counts animation frames is tagged `@alone`, waits for each submitted frame
+  before causing the next, and is checked with a 3× CDP CPU throttle (the 60 Hz runner).
+  A test that resizes then maps pointer positions waits for two equal size reads first.
+- Linux Chrome sends `contextmenu` at the press; branch on `process.platform` for any
+  right-press-then-move step. Local Windows runs do not exist in this session.
+- Assert what the ticket owns; derive lists (palette, menus, registry ids) from the registry;
+  leave later tickets their part. A test reading a registry-sized list breaks when a command
+  is added. When filling a placeholder, grep `tests/` for the old text and update every hit.
+- Benchmarks: report only through tests/perf/record.ts; check `framesSubmitted` is plausible
+  and the harness does no per-pixel work of its own before believing a number; clip overlay
+  geometry to the canvas.
+- A review that wants a test to assert less is refused unless the old assertion pinned a
+  placeholder (AGENTS.md exception).
+- Kill the agent's leftover vite/playwright/chrome processes after every stop; check for them
+  before any full run or measurement. Never merge while a full run serves the checkout.
+
+## Stop report (REVIEW.md "Run 4 decisions" end + final message)
+Tickets Done; any ticket In progress and its exact state; every acceptance item not met or
+only met on SwiftShader (with the reference-hardware measurement the owner must take); decisions
+made in the owner's place; CI state of the pushed `run-4` (or "not readable"); credit used if
+known; the exact commands for the owner: review `git log main..run-4`, merge, push, then
+measure on reference hardware. State plainly that nothing was tagged, deployed or merged.
+```
+
+After the run: the owner reviews `run-4`, takes the reference-hardware measurements of SE-070
+into `docs/perf/`, does the manual PWA install, and decides G3 and checkpoint E before the tag.
