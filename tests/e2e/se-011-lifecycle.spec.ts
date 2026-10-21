@@ -345,6 +345,9 @@ test("a renderer that fails is replaced by a fresh one, and its error is shown o
         await expect(toasts).toHaveText(
             "Viewport: The renderer could not recover from a lost GPU device; the viewport replaces it with a new one.",
         );
+        // No toast shows NGNE's own text, and this is the only alert on the page.
+        await expect(page.getByRole("alert").filter({ hasText: failure })).toHaveCount(0);
+        await expect(page.getByRole("alert")).toHaveCount(1);
         expect(errors.filter((line) => failure.test(line))).toHaveLength(1);
         expect(errors).toHaveLength(1);
     }

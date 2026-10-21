@@ -3,7 +3,6 @@ import type { Page } from "@playwright/test";
 import type * as CommandTypes from "../../src/app/commands/types";
 import type * as ToolRegistryModule from "../../src/app/tools/toolRegistry";
 import type * as DockRegistryModule from "../../src/ui/dock/registry";
-import type * as ToastModule from "../../src/ui/toast/toast";
 import { collectErrors, region, REGIONS, settleTimers } from "./se-006-support";
 import { menuTrigger } from "./se-007-support";
 import { THEMES } from "./se-008-support";
@@ -11,11 +10,15 @@ import { infoToast } from "./se-041-support";
 import { arrangePickers, openTab, overflowButton } from "./se-047-support";
 import {
     closeAll,
+    dismissEveryToast,
     escapeTop,
     expectAccessible,
     focusInside,
+    motionProblems,
+    NOTIFICATIONS,
     openRichDocument,
     runCommand,
+    showEveryToast,
     startEditor,
     topSurface,
 } from "./se-071-support";
@@ -34,6 +37,11 @@ async function surfaceOnTop(page: Page, what: string): Promise<{ selector: strin
     const top = (await topSurface(page))!;
     await expect.poll(() => focusInside(page, top.selector), `${what} has the focus`).toBe(true);
     return top;
+}
+
+/** With reduced motion (`startEditor`) nothing moves: an open surface, or once it closed. */
+async function expectStill(page: Page, what: string): Promise<void> {
+    expect(await motionProblems(page), `${what}: reduced motion`).toEqual([]);
 }
 
 for (const theme of THEMES) {
@@ -125,7 +133,9 @@ for (const theme of THEMES) {
             const top = await surfaceOnTop(page, `menu ${menu}`);
             expect(top.name).toBe(menu);
             await expectAccessible(page, `menu ${menu}`, top.selector);
+            await expectStill(page, `menu ${menu}`);
             await escapeTop(page);
+            await expectStill(page, `menu ${menu} closed`);
         }
         expect(submenus.length).toBeGreaterThan(0);
         for (const path of submenus) {
@@ -142,6 +152,7 @@ for (const theme of THEMES) {
             }
             const top = await surfaceOnTop(page, `submenu ${path.join(" › ")}`);
             await expectAccessible(page, `submenu ${path.join(" › ")}`, top.selector);
+            await expectStill(page, `submenu ${path.join(" › ")}`);
             // Escape once the submenu holds the focus (Radix), and again while a menu is open.
             await closeAll(page);
             await expect(page.getByRole("menu")).toHaveCount(0);
@@ -177,7 +188,9 @@ for (const theme of THEMES) {
             await openers[menu]!();
             const top = await surfaceOnTop(page, `context menu ${menu}`);
             await expectAccessible(page, `context menu ${menu}`, top.selector);
+            await expectStill(page, `context menu ${menu}`);
             await escapeTop(page);
+            await expectStill(page, `context menu ${menu} closed`);
         }
         expect(errors).toEqual([]);
     });
@@ -215,7 +228,9 @@ for (const theme of THEMES) {
             }
             const top = await surfaceOnTop(page, label);
             await expectAccessible(page, `popover of ${label}`, top.selector);
+            await expectStill(page, `popover of ${label}`);
             await escapeTop(page);
+            await expectStill(page, `popover of ${label} closed`);
         }
 
         // The list of every select of the shell.
@@ -229,7 +244,9 @@ for (const theme of THEMES) {
             await select.click();
             const top = await surfaceOnTop(page, `select ${label}`);
             await expectAccessible(page, `list of ${label}`, top.selector);
+            await expectStill(page, `list of ${label}`);
             await escapeTop(page);
+            await expectStill(page, `list of ${label} closed`);
         }
 
         // The overflow menu of the document tabs.
@@ -237,7 +254,9 @@ for (const theme of THEMES) {
         await overflowButton(page).click();
         const tabs = await surfaceOnTop(page, "All documents");
         await expectAccessible(page, "All documents", tabs.selector);
+        await expectStill(page, "All documents");
         await escapeTop(page);
+        await expectStill(page, "All documents closed");
 
         // A tooltip, on keyboard focus.
         const tool = region(page, "tool-rail").locator("[data-tool]").first();
@@ -247,15 +266,11 @@ for (const theme of THEMES) {
         await expect(page.getByRole("tooltip")).toBeVisible();
         await expectAccessible(page, "tooltip", '[role="tooltip"]');
 
-        // An information and an error toast.
-        await page.evaluate(async () => {
-            const path = "/src/ui/toast/toast.ts";
-            const { toast } = (await import(/* @vite-ignore */ path)) as typeof ToastModule;
-            toast.info("Saved hero.ngsprite");
-            toast.error("Could not open “hero.ngsprite”. The file is not a sprite project.");
-        });
-        await expect(page.locator(".ui-toast")).toHaveCount(2);
-        await expectAccessible(page, "toasts", '[aria-label="Notifications"]');
+        // A toast of every kind: information, error, SE-072's update toast with Reload, a
+        // failed storage write.
+        await showEveryToast(page);
+        await expectAccessible(page, "toasts", NOTIFICATIONS);
+        await dismissEveryToast(page);
 
         // The two full-window notices: the window too small, then no WebGPU.
         await page.setViewportSize({ width: 1200, height: 700 });

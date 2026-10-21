@@ -64,6 +64,45 @@ describe("storage failures", () => {
         expect(notify).toHaveBeenCalledTimes(1);
     });
 
+    it("shows a failure from before the toasts are ready once they are, and once only", async () => {
+        vi.resetModules();
+        const notices = (await import("../../src/app/notices/notices")) as typeof NoticesModule;
+        const storage = (await import("../../src/app/platform/storage")) as typeof StorageModule;
+        const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+        try {
+            // No sink yet: the interface has not attached its toasts.
+            expect(storage.writeItem(fullStorage(), "key", "value")).toBe(false);
+            expect(storage.storageFailures.reported).toBe(true);
+            expect(logged).toHaveBeenCalledWith(storage.STORAGE_WRITE_FAILED_MESSAGE);
+            const first: [string, string][] = [];
+            notices.notices.attachSink((kind, message) => first.push([kind, message]));
+            expect(first).toEqual([["error", storage.STORAGE_WRITE_FAILED_MESSAGE]]);
+            // Shown once: a later sink and a later failure add nothing.
+            const second: [string, string][] = [];
+            notices.notices.attachSink((kind, message) => second.push([kind, message]));
+            expect(storage.writeItem(fullStorage(), "key", "value")).toBe(false);
+            expect(first).toHaveLength(1);
+            expect(second).toEqual([]);
+        } finally {
+            logged.mockRestore();
+        }
+    });
+
+    it("keeps an ordinary notice from before the toasts on the console only", async () => {
+        vi.resetModules();
+        const notices = (await import("../../src/app/notices/notices")) as typeof NoticesModule;
+        const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+        try {
+            notices.notices.error("Could not open “hero.ngsprite”.");
+            expect(logged).toHaveBeenCalledTimes(1);
+            const sent: [string, string][] = [];
+            notices.notices.attachSink((kind, message) => sent.push([kind, message]));
+            expect(sent).toEqual([]);
+        } finally {
+            logged.mockRestore();
+        }
+    });
+
     it("keeps values in memory without a store and reports nothing", async () => {
         const { storage, sent } = await fresh();
         expect(storage.writeItem(null, "key", "value")).toBe(false);

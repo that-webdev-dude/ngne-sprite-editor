@@ -82,8 +82,11 @@ test("a full storage is reported once by a toast, whichever store writes, and th
 
     // Every store fails again; nothing more is reported.
     await writeEveryStore(page);
-    const writes = await page.evaluate(() => [...new Set(window.__se071Writes)].sort());
-    expect(writes).toEqual(Object.values(KEYS).sort());
+    // A store may write one task later (the layout after the key, the recent commands after
+    // the palette closes): wait for all four.
+    await expect
+        .poll(() => page.evaluate(() => [...new Set(window.__se071Writes)].sort()))
+        .toEqual(Object.values(KEYS).sort());
     await page.waitForTimeout(500);
     await expect(failureToasts(page)).toHaveCount(0);
     expect(await page.locator(".ui-toast--error").count()).toBe(0);
@@ -120,11 +123,14 @@ test("a store that takes the writes reports nothing", async ({ page }) => {
     await openEditor(page);
     await openSession(page, { name: "hero", width: 16, height: 16 });
     await writeEveryStore(page);
-    const stored = await page.evaluate(
-        (keys) => keys.map((key) => window.localStorage.getItem(key) !== null),
-        Object.values(KEYS),
-    );
-    expect(stored).toEqual([true, true, true, true]);
+    await expect
+        .poll(() =>
+            page.evaluate(
+                (keys) => keys.map((key) => window.localStorage.getItem(key) !== null),
+                Object.values(KEYS),
+            ),
+        )
+        .toEqual([true, true, true, true]);
     await page.waitForTimeout(500);
     await expect(page.locator(".ui-toast--error")).toHaveCount(0);
     expect(errors).toEqual([]);

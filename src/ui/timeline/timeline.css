@@ -26,14 +26,10 @@
     height: var(--row-height);
 }
 
-/*
- * Above the timeline's splitter (z-index 5), whose 8 px hit area reaches 4 px into the panel:
- * the transport buttons take the presses on their own top edge (SE-071).
- */
 .timeline__bar {
     position: sticky;
     top: 0;
-    z-index: 6;
+    z-index: 4;
     background: var(--bg-panel);
 }
 

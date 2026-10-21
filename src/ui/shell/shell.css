@@ -145,7 +145,16 @@
     left: 0;
 }
 
+/*
+ * The timeline's content lies above its splitter (z-index 5), whose 8 px hit area reaches
+ * 3 px past the border into the panel: there the transport bar takes the presses on its
+ * buttons' top edge (SE-071). The z-index has to be here: the timeline's scroller has
+ * `contain: strict`, a stacking context of its own, so no z-index inside it can lift the bar
+ * over the splitter. The splitter keeps its line and the 4 px above the border.
+ */
 .shell-timeline__content {
+    position: relative;
+    z-index: 6;
     height: 100%;
     overflow: hidden;
 }

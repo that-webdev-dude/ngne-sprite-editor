@@ -149,7 +149,7 @@ tokens only. Dark is the default; light is a full second set under `[data-theme=
 | Popover          | Colour picker, layer properties, onion-skin settings; closes on Escape and outside click |
 | Context menu     | Right-click on layers, frames, cels and tags. Not on the canvas or on swatches, where the right button means background colour; swatch actions live in the palette's overflow menu and on the Menu key |
 | Toast            | Bottom-centre, one line, 4 s (errors stay until dismissed)                              |
-| Splitter         | 8 px hit area, 1 px visible line; double-click resets. A control beside a splitter takes the presses where the hit area meets it (the timeline's transport bar lies over the lower half of its splitter), and the dock's splitter stops where the timeline's begins, so no press lands on two (SE-071) |
+| Splitter         | 8 px hit area, 1 px visible line; double-click resets. A control beside a splitter takes the presses where the hit area meets it: the timeline's content lies above the part of its splitter's hit area inside the panel (the 3 px below the border), so the transport buttons take the presses on their top edge, and the splitter keeps its line and the 4 px above it; the dock's splitter stops where the timeline's begins, so no press lands on two (SE-071) |
 
 Message channels: a **toast** reports the result of an explicit command (saved, exported,
 import failed) and asynchronous failures; the **status bar** shows transient tool feedback
@@ -509,7 +509,9 @@ including deleting layers and frames, relies on undo.
 - Every command is reachable by keyboard via menu or palette; visible focus on all controls.
   F6 / Shift+F6 cycle regions; Tab toggles the timeline only while the canvas has focus.
 - Radix primitives supply roles, focus trapping and typeahead for menus and dialogs.
-- Icon-only controls carry `aria-label` and a tooltip.
+- Icon-only controls carry `aria-label` and a tooltip. The cells of a choice that show a place
+  or a colour rather than an icon — the pivot and anchor grids, the tag colour presets — carry
+  their `aria-label` in a labelled group and no tooltip, as the palette swatches do (SE-071).
 - Text contrast per §3.1 in both themes.
 - Pointer targets are at least 24×24 px. Exceptions, each also operable from the keyboard:
   palette swatches (16 px, arrow-key navigation), timeline cells (24×28), splitters (8 px,

@@ -4,12 +4,19 @@ import type * as CommandTypes from "../../src/app/commands/types";
 import { collectErrors, REGIONS, settleTimers } from "./se-006-support";
 import { menuTrigger } from "./se-007-support";
 import { activeOption, openPalette, paletteInput, paletteOption } from "./se-064-support";
+import { autosaveContents, reloadEditor } from "./se-042-support";
+import { dropFiles } from "./se-044-support";
+import { arrangeFolders, folderFiles, putFiles } from "./se-052-support";
 import {
     armCommand,
     askingCommands,
     closeAll,
+    commandFailures,
+    escapeTop,
+    openKind,
     openRichDocument,
     runCommand,
+    SOURCE_PNG,
     startEditor,
     surfaceOpened,
     topSurface,
@@ -411,6 +418,112 @@ test("a surface opened from a context menu by the keyboard returns the focus to 
         }
     }
     expect(opened).toBeGreaterThan(1);
+    expect(errors).toEqual([]);
+});
+
+test("the dialogs a situation opens — the overwrite question, the drop chooser, recovery — close on Escape, change nothing and put the focus back", async ({
+    page,
+}) => {
+    test.setTimeout(5 * 60_000);
+    const errors = collectErrors(page);
+    await startEditor(page);
+    await openRichDocument(page);
+    const layers = () =>
+        page.evaluate(() => {
+            const state = window.__ngneTest!.sessions.getState();
+            const document = state.documents.find((entry) => entry.id === state.activeId);
+            return document?.session.doc.layers.map((layer) => layer.id).join(",") ?? "";
+        });
+
+    // The overwrite question: Export into a folder that holds a file of the bundle. The
+    // Export dialog has answered and closed by then (one dialog at a time, SE-052), so Escape,
+    // which answers no, writes nothing and gives the focus back to where Export… was run.
+    await putFiles(page, "se071", { "hero.png": [1] });
+    await arrangeFolders(page, { nextFolder: ["se071"] });
+    await focusRegion(page, "viewport");
+    const viewport = await page.evaluateHandle(() => document.activeElement);
+    await armCommand(page, "file.export");
+    await page.keyboard.press("Control+KeyE");
+    expect(await surfaceOpened(page), "Export").toBe(true);
+    expect(await openKind(page)).toBe("export");
+    const exportDialog = (await topSurface(page))!;
+    await page
+        .locator(exportDialog.selector)
+        .getByRole("button", { name: "Export", exact: true })
+        .focus();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => openKind(page), "overwrite question").toBe("export-overwrite");
+    await settleTimers(page);
+    expect((await topSurface(page))?.name).toBe("Replace files?");
+    const files = [...(await folderFiles(page, "se071")).entries()];
+    let before = await historyState(page);
+    await escapeTop(page);
+    expect(await historyState(page), "overwrite question: Escape changes nothing").toBe(before);
+    expect(await openKind(page), "overwrite question: nothing else opens").toBeNull();
+    await expect
+        .poll(
+            async () =>
+                (await focusIsOn(page, viewport)) ? "on the viewport" : await describeFocus(page),
+            "overwrite question: the focus is back",
+        )
+        .toBe("on the viewport");
+    await page.waitForTimeout(300);
+    expect([...(await folderFiles(page, "se071")).entries()], "no file written").toEqual(files);
+
+    // The drop chooser: an image dropped on the viewport. Escape imports nothing.
+    await focusRegion(page, "viewport");
+    before = await historyState(page);
+    const layersBefore = await layers();
+    expect(await dropFiles(page, [SOURCE_PNG], { x: 400, y: 300 })).toBe(true);
+    expect(await surfaceOpened(page), "drop chooser").toBe(true);
+    await escapeTop(page);
+    expect(await historyState(page), "drop chooser: Escape changes nothing").toBe(before);
+    expect(await layers(), "drop chooser: nothing imported").toBe(layersBefore);
+    await expect
+        .poll(
+            async () =>
+                (await focusIsOn(page, viewport)) ? "on the viewport" : await describeFocus(page),
+            "drop chooser: the focus is back",
+        )
+        .toBe("on the viewport");
+
+    // Recovery at the next launch: Escape keeps the snapshots for the launch after and opens
+    // nothing. Nothing had the focus before it opened: it goes to the viewport, or without a
+    // document to the empty state's first control, never to the page's body.
+    await expect
+        .poll(async () => (await autosaveContents(page)).snapshots.length, "a snapshot")
+        .toBeGreaterThan(0);
+    expect(await reloadEditor(page), "snapshots offered").toBeGreaterThan(0);
+    expect(await surfaceOpened(page), "recovery").toBe(true);
+    const snapshots = (await autosaveContents(page)).snapshots.map((entry) => entry.key).sort();
+    const documents = await page.evaluate(
+        () => window.__ngneTest!.sessions.getState().documents.length,
+    );
+    await escapeTop(page);
+    await expect
+        .poll(
+            async () =>
+                (await page.evaluate(
+                    () =>
+                        document.activeElement?.matches(
+                            "[data-viewport-focus], [data-empty-state] button",
+                        ) ?? false,
+                ))
+                    ? "on the viewport"
+                    : await describeFocus(page),
+            "recovery: the focus is on the viewport",
+        )
+        .toBe("on the viewport");
+    await page.waitForTimeout(300);
+    expect(
+        (await autosaveContents(page)).snapshots.map((entry) => entry.key).sort(),
+        "recovery: the snapshots are kept",
+    ).toEqual(snapshots);
+    expect(
+        await page.evaluate(() => window.__ngneTest!.sessions.getState().documents.length),
+        "recovery: nothing opened",
+    ).toBe(documents);
+    expect(await commandFailures(page)).toEqual([]);
     expect(errors).toEqual([]);
 });
 

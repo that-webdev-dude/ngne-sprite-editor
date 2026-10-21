@@ -75,9 +75,12 @@ export function createStorageFailures(notify: (message: string) => void): Storag
     };
 }
 
-/** The failed writes of the app, reported as an error notice (a toast once the UI shows them). */
+/**
+ * The failed writes of the app, reported as an error notice: a toast, or, for a write that
+ * fails before the interface shows notices, a toast once it does (`untilShown`).
+ */
 export const storageFailures: StorageFailures = createStorageFailures((message) =>
-    notices.error(message),
+    notices.error(message, { untilShown: true }),
 );
 
 /**
