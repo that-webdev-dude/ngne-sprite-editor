@@ -8,10 +8,25 @@ import type { StoreApi } from "zustand/vanilla";
  */
 export type ToastKind = "info" | "error";
 
+/** A button on a toast (SE-072: Reload on the update toast); running it dismisses the toast. */
+export interface ToastAction {
+    label: string;
+    run(): void;
+}
+
 export interface ToastItem {
     id: number;
     kind: ToastKind;
     message: string;
+    action?: ToastAction;
+}
+
+export interface ToastOptions {
+    /**
+     * A button beside the message. An information toast with an action stays until it is
+     * dismissed or its action runs, so the action does not vanish while the user reaches it.
+     */
+    action?: ToastAction;
 }
 
 export interface ToastState {
@@ -19,8 +34,8 @@ export interface ToastState {
 }
 
 export interface ToastService {
-    /** Shown for 4 s. Returns the toast id. */
-    info(message: string): number;
+    /** Shown for 4 s, or until dismissed when it has an action. Returns the toast id. */
+    info(message: string, options?: ToastOptions): number;
     /** Stays until dismissed. Returns the toast id. */
     error(message: string): number;
     dismiss(id: number): void;
@@ -48,17 +63,22 @@ export function createToastService(): ToastService {
         );
     };
     // A message that is already on screen is not stacked a second time.
-    const show = (kind: ToastKind, message: string): number => {
+    const show = (kind: ToastKind, message: string, options: ToastOptions = {}): number => {
         const { toasts } = store.getState();
         const shown = toasts.find((item) => item.kind === kind && item.message === message);
         const id = shown?.id ?? nextId++;
-        if (!shown) store.setState({ toasts: [...toasts, { id, kind, message }] });
-        if (kind === "info") expire(id);
+        const { action } = options;
+        if (!shown) {
+            store.setState({
+                toasts: [...toasts, { id, kind, message, ...(action && { action }) }],
+            });
+        }
+        if (kind === "info" && !action && !shown?.action) expire(id);
         return id;
     };
 
     return {
-        info: (message) => show("info", message),
+        info: (message, options) => show("info", message, options),
         error: (message) => show("error", message),
         dismiss,
         store,

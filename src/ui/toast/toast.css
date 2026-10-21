@@ -28,8 +28,12 @@
     animation: var(--surface-fade);
 }
 
-.ui-toast--error {
+.ui-toast--error,
+.ui-toast--action {
     padding-right: var(--space-4);
+}
+
+.ui-toast--error {
     border-color: var(--danger);
 }
 
