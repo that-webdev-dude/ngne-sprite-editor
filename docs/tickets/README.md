@@ -98,8 +98,8 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-066 | Palette files, replace colour and sort            | M    | 030, 060                           | —             | Done   |
 | **M7** | **[Hardening and release](M7-hardening-and-release.md)** | |                                    |               |        |
 | SE-070 | End-to-end regression suite and performance record | L   | 023, 025, 033, 044, 052, 053, 054  | —             | Done   |
-| SE-071 | Accessibility and interface audit                 | M    | 064, 070                           | —             | Ready  |
-| SE-072 | Installable PWA and offline use                   | M    | 042, 070                           | —             | Ready  |
+| SE-071 | Accessibility and interface audit                 | M    | 064, 070                           | —             | In progress |
+| SE-072 | Installable PWA and offline use                   | M    | 042, 070                           | —             | In progress |
 | SE-073 | Documentation and release (gate G3)               | M    | 070, 071, 072                      | G3            | Ready  |
 
 52 tickets: 31 M, 21 L; 122 dependency edges. From the size ranges: 146–219 developer-days for
