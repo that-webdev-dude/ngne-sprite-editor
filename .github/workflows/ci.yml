@@ -94,3 +94,28 @@ jobs:
                   name: e2e-results-golden-path
                   path: test-results
                   if-no-files-found: ignore
+
+    readme-commands:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+            - name: Execute README commands verbatim
+              shell: bash
+              run: |
+                  commands=$(sed -n '/<!-- readme-commands:start -->/,/<!-- readme-commands:end -->/p' README.md | sed '/^<!--/d; /^```/d; /^[[:space:]]*$/d')
+                  test "$commands" = $'npm ci\nnpm run build\nnpm test'
+                  while IFS= read -r command; do
+                      bash -e -c "$command"
+                  done <<< "$commands"
+
+    links:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+            - run: node scripts/check-links.mjs

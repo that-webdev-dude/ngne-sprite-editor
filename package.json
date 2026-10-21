@@ -1,6 +1,6 @@
 {
     "name": "ngne-sprite-editor",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "private": true,
     "description": "Browser pixel-art sprite editor rendered by the NGNE engine",
     "license": "MIT",

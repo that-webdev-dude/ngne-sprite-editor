@@ -116,7 +116,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Ready                                                    |
+| Status       | In progress                                              |
 | Depends on   | SE-070, SE-071, SE-072                                   |
 | Blocks       | —                                                        |
 | Blocked until | Gate G3: every other v1 ticket Done, or descoped by the owner in writing in REVIEW.md |

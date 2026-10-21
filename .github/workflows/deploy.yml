@@ -1,0 +1,44 @@
+name: Deploy to GitHub Pages
+
+# The owner records written release approval in docs/REVIEW.md before pushing a tag
+# or choosing Run workflow. SE-073 prepares this workflow without dispatching it.
+on:
+    workflow_dispatch:
+    push:
+        tags: ["v*"]
+
+permissions:
+    contents: read
+
+concurrency:
+    group: pages
+    cancel-in-progress: false
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: npm
+            - run: npm ci
+            - run: npx vite build --base=/ngne-sprite-editor/
+            - uses: actions/upload-pages-artifact@v3
+              with:
+                  path: dist
+
+    deploy:
+        needs: build
+        runs-on: ubuntu-latest
+        permissions:
+            pages: write
+            id-token: write
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        steps:
+            - name: Deploy Pages artifact
+              id: deployment
+              uses: actions/deploy-pages@v5

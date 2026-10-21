@@ -26,7 +26,7 @@ A ticket may start only when every dependency is Done **and** its "Blocked until
 | G0   | Engine feasibility: every SE-002 question meets its go threshold, or SPEC §6/§9 is amended with the fallback and the amendment is recorded in REVIEW.md | SE-002 | SE-011, SE-053, SE-054 | Passed 2026-10-12 |
 | G1   | Drawing loop: SE-015 and SE-017 Done, including the recorded stroke latency budget (with or without the echo fallback) | SE-017 | SE-022, SE-041, SE-054 | Passed 2026-10-15 |
 | G2   | Export conformance: the three conditions of SPEC §9.7 pass locally and in CI                       | SE-053  | SE-052, SE-070 (as dependencies) | Passed 2026-10-14 |
-| G3   | Release readiness: every v1 ticket other than SE-073 is Done, or descoped by the owner in writing in REVIEW.md. `.ngsprite` v1 and `ngne-sprite-atlas` v1 are frozen at this point | — | SE-073 | Pending |
+| G3   | Release readiness: every v1 ticket other than SE-073 is Done, or descoped by the owner in writing in REVIEW.md. `.ngsprite` v1 and `ngne-sprite-atlas` v1 are frozen from release 1.0.0; any change needs a new version number and a migration | — | SE-073 | Passed 2026-10-21 |
 
 Why G1 gates interface work that does not technically depend on drawing: the stroke latency
 result can change the viewport design (SPEC §6.6). Building the timeline, file workflows and
@@ -100,7 +100,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-070 | End-to-end regression suite and performance record | L   | 023, 025, 033, 044, 052, 053, 054  | —             | Done   |
 | SE-071 | Accessibility and interface audit                 | M    | 064, 070                           | —             | Done   |
 | SE-072 | Installable PWA and offline use                   | M    | 042, 070                           | —             | Done   |
-| SE-073 | Documentation and release (gate G3)               | M    | 070, 071, 072                      | G3            | Ready  |
+| SE-073 | Documentation and release (gate G3)               | M    | 070, 071, 072                      | G3            | In progress |
 
 52 tickets: 31 M, 21 L; 122 dependency edges. From the size ranges: 146–219 developer-days for
 one developer. Tickets outside SE-073's dependency closure (026, 034, 046, 047, 060, 061, 062,
