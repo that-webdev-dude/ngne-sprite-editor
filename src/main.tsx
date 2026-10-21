@@ -1,17 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { STARTED } from "./app/pwa/precache";
 import { registerAppUpdates, UPDATE_CHECK_MS } from "./app/pwa/updates";
 import { App } from "./ui/App";
 import { showUpdateToast } from "./ui/pwa/updateToast";
-
-declare global {
-    interface ImportMetaEnv {
-        /** Vite's `base`: where the app, its manifest and its service worker are served. */
-        readonly BASE_URL: string;
-        /** True in a build, which has the service worker beside it (vite.config.ts). */
-        readonly SERVICE_WORKER: boolean;
-    }
-}
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root element");
@@ -27,6 +19,9 @@ createRoot(root).render(
 // The worker is registered once the page has loaded, so its download of the whole build does
 // not compete with the page's own start.
 function startServiceWorker(container: ServiceWorkerContainer): void {
+    // The worker that served this page learns that it runs its deployment: older caches can
+    // go once no window runs an older one (sw.ts).
+    container.controller?.postMessage({ type: STARTED });
     const updates = registerAppUpdates({
         container,
         url: `${import.meta.env.BASE_URL}sw.js`,

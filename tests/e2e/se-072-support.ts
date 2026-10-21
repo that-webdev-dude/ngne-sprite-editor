@@ -1,6 +1,6 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "@playwright/test";
 import type { Browser, BrowserContext, Page, TestInfo } from "@playwright/test";
@@ -32,8 +32,11 @@ export interface BuildOptions {
     /** Vite's `base`; the default is "/". */
     base?: string;
     /**
-     * Marks the build's `index.html` with `<meta name="se-072-deployment" content="…">`, so two
-     * builds differ as two deployments of the app do and a page tells which one it runs.
+     * Marks the build as a deployment of its own, so two builds differ as two deployments of
+     * the app do: its `index.html` carries `<meta name="se-072-deployment" content="…">`, and
+     * its entry chunk starts by setting `window.__se072Deployment` to the name, so the chunk's
+     * content and hashed name are the deployment's own too, and a page tells which one it
+     * runs, by its shell and by its code.
      */
     deployment?: string;
 }
@@ -44,9 +47,18 @@ process.once("exit", () => {
     for (const folder of folders) rmSync(folder, { recursive: true, force: true });
 });
 
+declare global {
+    interface Window {
+        /** The deployment whose entry chunk runs the page (`BuildOptions.deployment`). */
+        __se072Deployment?: string;
+    }
+}
+
 function deploymentMarker(name: string): Plugin {
     return {
         name: "se-072-deployment",
+        renderChunk: (code, chunk) =>
+            chunk.isEntry ? `window.__se072Deployment = ${JSON.stringify(name)};\n${code}` : null,
         transformIndexHtml: () => [
             {
                 tag: "meta",
@@ -118,6 +130,28 @@ export async function serve(outDir: string, base = "/", port = 0): Promise<Serve
 /** Waits until a service worker controls the page: the app's files are all in its cache. */
 export async function waitForWorkerControl(page: Page): Promise<void> {
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+}
+
+/** The deployment whose entry chunk runs the page (`BuildOptions.deployment`). */
+export function deploymentCodeOf(page: Page): Promise<string | null> {
+    return page.evaluate(() => window.__se072Deployment ?? null);
+}
+
+/**
+ * The URL of every file of the build in `outDir` the service worker keeps: the list the build
+ * put into `sw.js` in place of `self.__WB_MANIFEST`, relative to the base.
+ */
+export function precacheListOf(outDir: string): string[] {
+    const worker = readFileSync(join(outDir, "sw.js"), "utf8");
+    return [...worker.matchAll(/["']?url["']?\s*:\s*["']([^"']+)["']/g)].map((match) => match[1]!);
+}
+
+/** Every file in `outDir` and its folders, by its path relative to `outDir` with "/". */
+export function filesOf(outDir: string): string[] {
+    return readdirSync(outDir, { recursive: true, withFileTypes: true })
+        .filter((entry) => entry.isFile())
+        .map((entry) => relative(outDir, join(entry.parentPath, entry.name)).split(sep).join("/"))
+        .sort();
 }
 
 /** The deployment marker of the page's `index.html` (`BuildOptions.deployment`). */

@@ -5,14 +5,21 @@ import {
     CACHE_PREFIX,
     SKIP_WAITING,
     cacheName,
+    cacheable,
+    mayDeleteStale,
+    olderFile,
     precacheUrls,
     route,
+    searchOrder,
     staleCaches,
     uniqueEntries,
 } from "../../src/app/pwa/precache";
 import type { PrecacheEntry } from "../../src/app/pwa/precache";
 import { installLaunchQueue, launchedFile } from "../../src/app/pwa/launchQueue";
-import { registerAppUpdates } from "../../src/app/pwa/updates";
+import type { LaunchTarget } from "../../src/app/pwa/launchQueue";
+import type { ChosenFile } from "../../src/app/platform/projectFiles";
+import { RELOAD_KEPT_MS, registerAppUpdates } from "../../src/app/pwa/updates";
+import { showUpdateToast, UPDATE_MESSAGE } from "../../src/ui/pwa/updateToast";
 import type { ContainerLike, RegistrationLike, WorkerLike } from "../../src/app/pwa/updates";
 import { createToastService, INFO_TOAST_MS } from "../../src/ui/toast/toast";
 
@@ -73,6 +80,65 @@ describe("service worker precache (src/app/pwa/precache.ts)", () => {
         expect(
             route({ url: `${SCOPE}index.html`, method: "POST", mode: "cors" }, SCOPE, precached),
         ).toBeNull();
+    });
+
+    it("looks for a file in its own cache, then the older ones, newest first", () => {
+        const current = `${CACHE_PREFIX}cccccccc`;
+        const names = [`${CACHE_PREFIX}aaaaaaaa`, "other-app", current, `${CACHE_PREFIX}bbbbbbbb`];
+        expect(searchOrder(names, current)).toEqual([
+            current,
+            `${CACHE_PREFIX}bbbbbbbb`,
+            `${CACHE_PREFIX}aaaaaaaa`,
+        ]);
+        expect(searchOrder([current], current)).toEqual([current]);
+    });
+
+    it("looks for a file of the scope that is not this build's in the older caches (a window of an older deployment)", () => {
+        const precached = new Set(precacheUrls(uniqueEntries(ENTRIES), SCOPE));
+        const older = (url: string, mode = "cors", method = "GET") =>
+            olderFile({ url, method, mode }, SCOPE, precached);
+        // An older deployment's chunk or web worker script: not in this build.
+        expect(older(`${SCOPE}assets/importWorker-old.js`)).toBe(
+            `${SCOPE}assets/importWorker-old.js`,
+        );
+        expect(older(`${SCOPE}assets/old.js#x`)).toBe(`${SCOPE}assets/old.js`);
+        // This build's files are `route`'s; navigations, other methods and other places are
+        // the network's.
+        expect(older(`${SCOPE}assets/index-abc.js`)).toBeNull();
+        expect(older(`${SCOPE}assets/old.js`, "navigate")).toBeNull();
+        expect(older(`${SCOPE}assets/old.js`, "cors", "POST")).toBeNull();
+        expect(older("https://example.test/elsewhere/old.js")).toBeNull();
+        expect(older("https://other.test/sub/path/old.js")).toBeNull();
+    });
+
+    it("keeps the older caches while a window open when it took over is still there", () => {
+        // The single window reloaded: its new page is no older window.
+        expect(mayDeleteStale(["new-page"], ["old-page"])).toBe(true);
+        expect(mayDeleteStale([], ["old-page"])).toBe(true);
+        expect(mayDeleteStale([], [])).toBe(true);
+        // A second window still runs the older deployment.
+        expect(mayDeleteStale(["new-page", "second-window"], ["old-page", "second-window"])).toBe(
+            false,
+        );
+    });
+
+    it("rebuilds a redirected response before it is cached and keeps any other", async () => {
+        const plain = new Response("x", { status: 200 });
+        expect(await cacheable(plain)).toBe(plain);
+        const redirected = {
+            redirected: true,
+            status: 200,
+            statusText: "OK",
+            headers: new Headers({ "content-type": "text/html" }),
+            blob: async () => new Blob(["<!doctype html>"]),
+        };
+        const rebuilt = await cacheable(redirected);
+        expect(rebuilt).toBeInstanceOf(Response);
+        expect(rebuilt.redirected).toBe(false);
+        expect(rebuilt.status).toBe(200);
+        expect(rebuilt.statusText).toBe("OK");
+        expect(rebuilt.headers.get("content-type")).toBe("text/html");
+        expect(await (rebuilt as Response).text()).toBe("<!doctype html>");
     });
 });
 
@@ -206,6 +272,68 @@ describe("update flow (src/app/pwa/updates.ts)", () => {
         expect(reload).toHaveBeenCalledTimes(1);
     });
 
+    it("offers Reload again when the reload was cancelled (Stay), and reloads nothing without it", async () => {
+        vi.useFakeTimers();
+        try {
+            const { container, registration, reload, updates } = start({});
+            const service = createToastService();
+            showUpdateToast(updates, service);
+            await vi.advanceTimersByTimeAsync(0);
+            const worker = new FakeWorker();
+            registration.install(worker);
+            worker.become("installed");
+            const offered = () =>
+                service.store.getState().toasts.filter((item) => item.message === UPDATE_MESSAGE);
+            expect(offered()).toHaveLength(1);
+
+            // Reload (the toast's action dismisses the toast); the new worker takes over and
+            // the page reloads, but the browser's question is answered Stay.
+            const [toast] = offered();
+            service.dismiss(toast!.id);
+            toast!.action!.run();
+            expect(worker.messages).toEqual([{ type: SKIP_WAITING }]);
+            container.change(worker);
+            expect(reload).toHaveBeenCalledTimes(1);
+            expect(offered()).toHaveLength(0);
+
+            // The page still runs: Reload is offered again.
+            vi.advanceTimersByTime(RELOAD_KEPT_MS);
+            expect(updates.store.getState().ready).toBe(true);
+            expect(offered()).toHaveLength(1);
+            // A later change of worker reloads nothing without the user's choice.
+            container.change(new FakeWorker());
+            expect(reload).toHaveBeenCalledTimes(1);
+            // Reload again reloads (the new worker controls the page already).
+            offered()[0]!.action!.run();
+            expect(reload).toHaveBeenCalledTimes(2);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("waits once more when the page was held by the browser's question, and offers nothing once the page has gone", async () => {
+        vi.useFakeTimers();
+        try {
+            const { reload, updates } = start({});
+            await vi.advanceTimersByTimeAsync(0);
+            // Another window applied the update: Reload just reloads.
+            updates.store.setState({ ready: true });
+            updates.apply();
+            expect(reload).toHaveBeenCalledTimes(1);
+            // The question held the page's timers for a while: the check comes late and waits
+            // once more, for the page to leave (Leave) or stay.
+            vi.setSystemTime(Date.now() + RELOAD_KEPT_MS * 10);
+            vi.advanceTimersByTime(RELOAD_KEPT_MS);
+            const states: boolean[] = [];
+            updates.store.subscribe((state) => states.push(state.ready));
+            expect(states).toEqual([]);
+            vi.advanceTimersByTime(RELOAD_KEPT_MS);
+            expect(states).toEqual([false, true]);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it("reports a registration that fails and keeps the page as it is", async () => {
         const container = new FakeContainer(null);
         container.register = () => Promise.reject(new Error("no worker"));
@@ -292,26 +420,118 @@ describe("launch queue (src/app/pwa/launchQueue.ts)", () => {
         expect(await launchedFile({ kind: "directory", name: "x" })).toBeNull();
     });
 
-    it("sets the consumer once and keeps launches while no install is there", async () => {
+    /** Opens what it is given, busy for each open until `finish` lets it end. */
+    function fakeTarget() {
+        const opened: string[][] = [];
+        const errors: string[] = [];
+        const listeners = new Set<() => void>();
+        let busy = false;
+        let hold = false;
+        const finishers: (() => void)[] = [];
+        const target: LaunchTarget = {
+            canAct: () => !busy,
+            subscribe(listener) {
+                listeners.add(listener);
+                return () => listeners.delete(listener);
+            },
+            async openFiles(files: readonly ChosenFile[]) {
+                if (busy) return false;
+                opened.push(files.map((file) => file.name));
+                if (!hold) return true;
+                setBusy(true);
+                await new Promise<void>((resolve) => finishers.push(resolve));
+                setBusy(false);
+                return true;
+            },
+            error: (message) => void errors.push(message),
+        };
+        const setBusy = (value: boolean) => {
+            busy = value;
+            for (const listener of [...listeners]) listener();
+        };
+        return {
+            target,
+            opened,
+            errors,
+            setBusy,
+            holdEachOpen: () => void (hold = true),
+            finish: () => finishers.shift()?.(),
+        };
+    }
+
+    function stubQueue() {
         let consumer: ((params: { files?: unknown[] }) => void) | null = null;
         const queue = { setConsumer: vi.fn((next: typeof consumer) => void (consumer = next)) };
-        const opened: string[][] = [];
-        const open = async (files: readonly { name: string }[]) => {
-            opened.push(files.map((file) => file.name));
-        };
-        const stop = installLaunchQueue({ queue, open });
-        consumer!({ files: [handle("a.ngsprite", [1])] });
+        return { queue, launch: (files: unknown[]) => consumer!({ files }) };
+    }
+
+    it("sets the consumer once and keeps launches while no install is there", async () => {
+        const { queue, launch } = stubQueue();
+        const { target, opened } = fakeTarget();
+        const stop = installLaunchQueue({ queue, target });
+        launch([handle("a.ngsprite", [1])]);
         await flush();
         expect(opened).toEqual([["a.ngsprite"]]);
         stop();
         // While none is installed (React runs an effect's cleanup and the effect again).
-        consumer!({ files: [handle("b.ngsprite", [1]), { kind: "directory", name: "d" }] });
-        consumer!({ files: [] });
+        launch([handle("b.ngsprite", [1]), { kind: "directory", name: "d" }]);
+        launch([]);
         await flush();
         expect(opened).toEqual([["a.ngsprite"]]);
-        installLaunchQueue({ queue, open });
+        const again = installLaunchQueue({ queue, target });
         await flush();
         expect(opened).toEqual([["a.ngsprite"], ["b.ngsprite"]]);
         expect(queue.setConsumer).toHaveBeenCalledTimes(1);
+        again();
+    });
+
+    it("opens back-to-back launches one after another, each once the workflows are idle", async () => {
+        const { queue, launch } = stubQueue();
+        const fake = fakeTarget();
+        fake.holdEachOpen();
+        const stop = installLaunchQueue({ queue, target: fake.target });
+        // Two files opened from the desktop in quick succession.
+        launch([handle("first.ngsprite", [1])]);
+        launch([handle("second.ngsprite", [2])]);
+        await flush();
+        expect(fake.opened).toEqual([["first.ngsprite"]]);
+        fake.finish();
+        await flush();
+        expect(fake.opened).toEqual([["first.ngsprite"], ["second.ngsprite"]]);
+        fake.finish();
+        await flush();
+
+        // A launch while another operation runs (a Save picker, an export) waits for its end.
+        fake.setBusy(true);
+        launch([handle("third.ngsprite", [3])]);
+        await flush();
+        expect(fake.opened).toHaveLength(2);
+        fake.setBusy(false);
+        await flush();
+        expect(fake.opened).toEqual([["first.ngsprite"], ["second.ngsprite"], ["third.ngsprite"]]);
+        fake.finish();
+        await flush();
+        expect(fake.errors).toEqual([]);
+        stop();
+    });
+
+    it("opens every file of one launch and reports one that cannot be read", async () => {
+        const { queue, launch } = stubQueue();
+        const fake = fakeTarget();
+        const stop = installLaunchQueue({ queue, target: fake.target });
+        const gone = {
+            ...handle("gone.ngsprite", [1]),
+            getFile: async () => {
+                throw new DOMException("A requested file could not be found.", "NotFoundError");
+            },
+        };
+        launch([handle("one.ngsprite", [1]), gone, handle("two.ngsprite", [2])]);
+        await flush();
+        await flush();
+        expect(fake.opened).toEqual([["one.ngsprite"], ["two.ngsprite"]]);
+        expect(fake.errors).toEqual([
+            "Could not open “gone.ngsprite”. A requested file could not be found.",
+        ]);
+        stop();
     });
 });

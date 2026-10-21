@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test";
 import { celKey, createDocument } from "../../src/core/model";
 import { serialize } from "../../src/core/project";
 import { collectErrors } from "./se-006-support";
-import { documentName, infoToast } from "./se-041-support";
+import { documentName, errorToast, infoToast } from "./se-041-support";
 import { tabs } from "./se-047-support";
 import { buildApp, serve } from "./se-072-support";
 import type { Served } from "./se-072-support";
@@ -18,6 +18,11 @@ declare global {
     interface Window {
         /** The launch queue stub: delivers a launch of the file `name` with `bytes`. */
         __se072Launch?(name: string, bytes: number[]): void;
+        /**
+         * Delivers one launch of several files; an `unreadable` one has a handle whose file
+         * cannot be read (moved or deleted since).
+         */
+        __se072LaunchFiles?(files: { name: string; bytes: number[]; unreadable?: boolean }[]): void;
         /** Every write through a launched file's handle: the file name and its bytes. */
         __se072Writes?: { name: string; bytes: number[] }[];
     }
@@ -44,12 +49,20 @@ async function stubLaunchQueue(
 ): Promise<void> {
     await page.addInitScript((launches) => {
         window.__se072Writes = [];
-        const handle = (name: string, bytes: number[]) => {
+        const handle = (name: string, bytes: number[], unreadable = false) => {
             const file = new File([Uint8Array.from(bytes)], name);
             const self = {
                 kind: "file",
                 name,
-                getFile: async () => file,
+                getFile: async () => {
+                    if (unreadable) {
+                        throw new DOMException(
+                            "A requested file could not be found.",
+                            "NotFoundError",
+                        );
+                    }
+                    return file;
+                },
                 async createWritable() {
                     const chunks: number[] = [];
                     return {
@@ -85,6 +98,12 @@ async function stubLaunchQueue(
         });
         window.__se072Launch = (name, bytes) => {
             pending.push({ files: [handle(name, bytes)] });
+            deliver();
+        };
+        window.__se072LaunchFiles = (files) => {
+            pending.push({
+                files: files.map(({ name, bytes, unreadable }) => handle(name, bytes, unreadable)),
+            });
             deliver();
         };
     }, launches);
@@ -130,5 +149,54 @@ test("launch queue: the file the app is launched with opens in a tab, and Save w
     await expect(documentName(page)).toHaveText("second");
     await expect(tabs(page)).toHaveCount(2);
     await expect(tabs(page).nth(1)).toHaveAttribute("aria-selected", "true");
+    expect(errors).toEqual([]);
+});
+
+test("launch queue: launches back to back all open, one after another, and a file that cannot be opened is reported", async ({
+    page,
+}) => {
+    const errors = collectErrors(page);
+    await stubLaunchQueue(page, []);
+    await page.goto(served.url);
+    await expect(page.locator('[data-region="viewport"]')).toBeVisible();
+    // The consumer is set (the stub delivers what is pending once it is).
+    await page.waitForFunction(() => window.__se072Launch !== undefined);
+
+    // Two files opened from the desktop in quick succession: the second comes while the
+    // first still opens, and waits for it instead of being dropped.
+    await page.evaluate(
+        ({ one, two }) => {
+            window.__se072Launch!("one.ngsprite", one);
+            window.__se072Launch!("two.ngsprite", two);
+        },
+        { one: projectBytes("one", 4, 4), two: projectBytes("two", 5, 5) },
+    );
+    await expect(tabs(page)).toHaveCount(2);
+    await expect(tabs(page).nth(0)).toContainText("one");
+    await expect(tabs(page).nth(1)).toContainText("two");
+    await expect(documentName(page)).toHaveText("two");
+
+    // One launch of three files: every project file opens; a corrupt one and one that cannot
+    // be read are reported by an error toast each, as Open reports them.
+    await page.evaluate(
+        ({ three }) =>
+            window.__se072LaunchFiles!([
+                { name: "corrupt.ngsprite", bytes: [1, 2, 3, 4] },
+                { name: "gone.ngsprite", bytes: [], unreadable: true },
+                { name: "three.ngsprite", bytes: three },
+            ]),
+        { three: projectBytes("three", 6, 6) },
+    );
+    await expect(tabs(page)).toHaveCount(3);
+    await expect(documentName(page)).toHaveText("three");
+    await expect(
+        errorToast(page).filter({ hasText: "Could not open “corrupt.ngsprite”." }),
+    ).toBeVisible();
+    await expect(
+        errorToast(page).filter({
+            hasText: "Could not open “gone.ngsprite”. A requested file could not be found.",
+        }),
+    ).toBeVisible();
+    await expect(errorToast(page)).toHaveCount(2);
     expect(errors).toEqual([]);
 });

@@ -6,7 +6,7 @@ import { decodePng } from "../../src/core/png";
 import { collectErrors } from "./se-006-support";
 import { openEditor } from "./se-007-support";
 import { recoveryOffered } from "./se-042-support";
-import { buildApp, serve, waitForWorkerControl } from "./se-072-support";
+import { buildApp, filesOf, precacheListOf, serve, waitForWorkerControl } from "./se-072-support";
 import type { Served } from "./se-072-support";
 
 // SE-072: the production build is an installable app (its manifest, its icons, its service
@@ -33,11 +33,27 @@ interface WebManifest {
     launch_handler: { client_mode: string[] };
 }
 
+/** What `Page.getAppManifest` answers, as far as the spec reads it. */
+interface AppManifestAnswer {
+    url: string;
+    errors: { message: string; critical: number }[];
+    /** The manifest as Chrome parsed it, where the protocol exposes it (experimental). */
+    manifest?: {
+        launchHandler?: { clientMode: string };
+        fileHandlers?: {
+            action: string;
+            accepts: { mediaType: string; fileExtensions: string[] }[];
+        }[];
+    };
+}
+
+let outDir: string;
 let served: Served;
 
 test.beforeAll(async () => {
     test.setTimeout(120_000);
-    served = await serve(await buildApp());
+    outDir = await buildApp();
+    served = await serve(outDir);
 });
 
 test.afterAll(async () => {
@@ -78,6 +94,27 @@ test("the production build is installable: Chrome fires beforeinstallprompt", as
             installabilityErrors: unknown[];
         };
         expect(installabilityErrors).toEqual([]);
+        // Chrome's parser drops a malformed member (`file_handlers`, `launch_handler`) with an
+        // error and installs the app all the same: the manifest parses without any.
+        const answer = (await cdp.send("Page.getAppManifest", {})) as AppManifestAnswer;
+        expect(answer.url).toBe(new URL("manifest.webmanifest", served.url).href);
+        expect(answer.errors).toEqual([]);
+        // Where the protocol exposes the parsed manifest, it holds the launch handler and the
+        // `.ngsprite` handler. (Chrome for Testing 156 lists the launch handler there, and no
+        // file handlers for any manifest, so that check waits for a Chrome that lists them.)
+        if (answer.manifest?.launchHandler !== undefined) {
+            expect(answer.manifest.launchHandler).toEqual({ clientMode: "kFocusExisting" });
+        }
+        if (answer.manifest?.fileHandlers !== undefined) {
+            expect(answer.manifest.fileHandlers).toEqual([
+                expect.objectContaining({
+                    action: served.url,
+                    accepts: [
+                        { mediaType: "application/x-ngsprite", fileExtensions: [".ngsprite"] },
+                    ],
+                }),
+            ]);
+        }
         expect(errors).toEqual([]);
     } finally {
         await context.close();
@@ -123,6 +160,19 @@ test("the manifest names the app, opens it standalone, has its icons and its fil
         "192x192": ["any", "maskable"],
         "512x512": ["any", "maskable"],
     });
+});
+
+test("the service worker keeps every file the build emits", () => {
+    const kept = new Set(precacheListOf(outDir));
+    const emitted = filesOf(outDir).filter((file) => file !== "sw.js");
+    // The shell, the manifest, the icons, the entry chunk, the stylesheet and both web workers.
+    expect(emitted).toEqual(
+        expect.arrayContaining(["index.html", "manifest.webmanifest", "icons/icon-192.png"]),
+    );
+    expect(emitted.filter((file) => file.endsWith(".js")).length).toBeGreaterThanOrEqual(3);
+    expect(emitted.filter((file) => !kept.has(file))).toEqual([]);
+    // And nothing it lists is missing from the build.
+    expect([...kept].filter((file) => !emitted.includes(file))).toEqual([]);
 });
 
 test("the dev server registers no service worker and links no manifest", async ({ page }) => {

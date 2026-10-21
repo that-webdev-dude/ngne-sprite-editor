@@ -13,6 +13,13 @@ import { SKIP_WAITING } from "./precache";
 // When another window of the app applied the update, this page is controlled by the new
 // worker while it still runs the old files: `ready` is true here too, and Reload just reloads.
 // A worker that takes control of a page that had none (the first visit) is no update.
+//
+// The reload can be cancelled: with unsaved changes the browser asks before the page is left,
+// and the user may answer Stay. A page still running a while after its reload was asked for
+// was kept: the choice is undone and Reload offered again (the new worker controls the page
+// by then, so Reload just reloads), and nothing reloads the page without being asked again.
+// The browser's question holds the page's timers while it is shown, so the while counts only
+// time the page runs: a check that comes much later than it was due waits once more.
 
 /** The parts of a `ServiceWorker` used here. */
 export interface WorkerLike {
@@ -55,6 +62,8 @@ export interface AppUpdateOptions {
     url: string;
     scope: string;
     reload(): void;
+    /** How long a page whose reload was asked for must keep running to count as kept. */
+    keptAfterMs?: number;
     /** Where a failed registration is reported; the default is the console. */
     report?(error: unknown): void;
 }
@@ -62,9 +71,13 @@ export interface AppUpdateOptions {
 /** How often an open page asks for a new deployment, besides when it is shown again. */
 export const UPDATE_CHECK_MS = 60 * 60 * 1000;
 
+/** How long a page must keep running after its reload was asked for to count as kept. */
+export const RELOAD_KEPT_MS = 1500;
+
 /** Registers the worker at `url` and follows its updates. */
 export function registerAppUpdates(options: AppUpdateOptions): AppUpdates {
-    const { container, url, scope, reload } = options;
+    const { container, url, scope } = options;
+    const keptAfterMs = options.keptAfterMs ?? RELOAD_KEPT_MS;
     const report = options.report ?? ((error: unknown) => console.warn(error));
     const store = createStore<UpdateState>(() => ({ ready: false }));
     let registration: RegistrationLike | null = null;
@@ -87,14 +100,32 @@ export function registerAppUpdates(options: AppUpdateOptions): AppUpdates {
         worker.addEventListener("statechange", settle);
     };
 
+    // Reloads; when the page is still there `keptAfterMs` of running time later, the reload
+    // was cancelled (Stay): Reload is offered again.
+    const reload = () => {
+        options.reload();
+        const due = (from: number) => {
+            setTimeout(() => {
+                const late = Date.now() - from > keptAfterMs * 2;
+                if (late) due(Date.now());
+                else offerAgain();
+            }, keptAfterMs);
+        };
+        due(Date.now());
+    };
+    const offerAgain = () => {
+        if (!accepted) return;
+        accepted = false;
+        store.setState({ ready: false });
+        store.setState({ ready: true });
+    };
+
     container.addEventListener("controllerchange", () => {
-        if (accepted) {
-            reload();
-            return;
-        }
-        if (controlled) store.setState({ ready: true });
+        const updated = controlled;
         controlled = true;
         waiting = null;
+        if (accepted) reload();
+        else if (updated) store.setState({ ready: true });
     });
 
     const registered = container.register(url, { scope }).then(
@@ -114,6 +145,7 @@ export function registerAppUpdates(options: AppUpdateOptions): AppUpdates {
             await registration?.update().catch(() => {});
         },
         apply() {
+            if (accepted) return;
             accepted = true;
             if (waiting) waiting.postMessage({ type: SKIP_WAITING });
             else reload();

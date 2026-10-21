@@ -5,7 +5,9 @@
 // with `injectManifest`): each file's URL relative to the app's base, with a revision for a
 // file whose name has no content hash. One deployment's files go into one cache, named after a
 // hash of that list, so a new deployment fills a cache of its own while the running one keeps
-// answering from the old cache, which goes when the new worker takes over.
+// answering from the old cache. Older caches stay while a window still runs an older
+// deployment (it loaded its files before the new worker took over, and still asks for them:
+// its web workers' scripts, for one); they go once no such window is left.
 
 /** One file of the build, as the plugin lists it. */
 export interface PrecacheEntry {
@@ -18,6 +20,12 @@ export const CACHE_PREFIX = "ngne-sprite-editor-";
 
 /** The message the page sends a waiting worker to take over (the update toast's Reload). */
 export const SKIP_WAITING = "ngne-sprite-editor:skip-waiting";
+
+/**
+ * The message a page sends the worker that controls it once it has started: a page served by
+ * that worker runs its deployment, so the worker checks whether older caches can go.
+ */
+export const STARTED = "ngne-sprite-editor:started";
 
 /**
  * The entries with each URL once, the first kept: the plugin lists the manifest (and would list
@@ -50,6 +58,47 @@ export function staleCaches(names: readonly string[], current: string): string[]
     return names.filter((name) => name.startsWith(CACHE_PREFIX) && name !== current);
 }
 
+/**
+ * The caches the worker looks in for a file, in order: its own, then every older one of the
+ * app's (the newest first, as `caches.keys()` lists them oldest first), so a window that still
+ * runs an older deployment finds its files.
+ */
+export function searchOrder(names: readonly string[], current: string): string[] {
+    return [current, ...staleCaches(names, current).reverse()];
+}
+
+/**
+ * Whether the older caches can go: no window of the app is one of `older`, the windows that
+ * were open when the current worker took over (they run an older deployment, or may).
+ */
+export function mayDeleteStale(windows: readonly string[], older: readonly string[]): boolean {
+    const kept = new Set(older);
+    return !windows.some((id) => kept.has(id));
+}
+
+/** The parts of a `Response` that `cacheable` reads. */
+export interface ResponseLike {
+    readonly redirected: boolean;
+    readonly status: number;
+    readonly statusText: string;
+    readonly headers: Headers;
+    blob(): Promise<Blob>;
+}
+
+/**
+ * A response as the worker caches it: a redirected one is rebuilt with the same status,
+ * headers and body (as Workbox does), because Chrome refuses a redirected response for a
+ * navigation, and the cached shell answers navigations. Any other is kept as it is.
+ */
+export async function cacheable<R extends ResponseLike>(response: R): Promise<R | Response> {
+    if (!response.redirected) return response;
+    return new Response(await response.blob(), {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+    });
+}
+
 /** What the worker answers a request with: the cached `url`, or nothing (the network). */
 export type Route = { cached: string } | null;
 
@@ -73,4 +122,21 @@ export function route(
         return isApp && precached.has(shell) ? { cached: shell } : null;
     }
     return precached.has(url.href) ? { cached: url.href } : null;
+}
+
+/**
+ * A request `route` leaves to the network that may still be a file of an older deployment: a
+ * GET, not a navigation, for a URL in the worker's scope. The worker looks for it in the older
+ * caches before the network (`searchOrder`); returns its URL, or null.
+ */
+export function olderFile(
+    request: { url: string; method: string; mode: string },
+    scope: string,
+    precached: ReadonlySet<string>,
+): string | null {
+    if (request.method !== "GET" || request.mode === "navigate") return null;
+    if (route(request, scope, precached)) return null;
+    const url = new URL(request.url);
+    url.hash = "";
+    return url.href.startsWith(scope) ? url.href : null;
 }

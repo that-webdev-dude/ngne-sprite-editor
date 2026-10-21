@@ -5,6 +5,10 @@ declare global {
     interface ImportMetaEnv {
         readonly DEV: boolean;
         readonly PROD: boolean;
+        /** Vite's `base`: where the app, its manifest and its service worker are served. */
+        readonly BASE_URL: string;
+        /** True in a build, which has the service worker beside it (vite.config.ts, SE-072). */
+        readonly SERVICE_WORKER: boolean;
     }
 
     interface ImportMeta {
