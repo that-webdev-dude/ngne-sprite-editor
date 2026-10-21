@@ -315,7 +315,9 @@ test("a renderer that fails is replaced by a fresh one, and its error is shown o
     const errors = collectErrors(page);
     const document = await openPainted(page);
     const failure = /WebGPU recovery failed/;
-    const toasts = page.getByRole("alert").filter({ hasText: failure });
+    // SE-071: the toast says what the viewport does, not NGNE's "Reload to create a new
+    // renderer"; the console keeps NGNE's own error.
+    const toasts = page.getByRole("alert").filter({ hasText: /could not recover/ });
 
     for (let round = 0; round < 2; round++) {
         const before = await counters(page);
@@ -341,8 +343,11 @@ test("a renderer that fails is replaced by a fresh one, and its error is shown o
         // same message and adds neither.
         await expect(toasts).toHaveCount(1);
         await expect(toasts).toHaveText(
-            "Viewport: WebGPU recovery failed. Reload to create a new renderer",
+            "Viewport: The renderer could not recover from a lost GPU device; the viewport replaces it with a new one.",
         );
+        // No toast shows NGNE's own text, and this is the only alert on the page.
+        await expect(page.getByRole("alert").filter({ hasText: failure })).toHaveCount(0);
+        await expect(page.getByRole("alert")).toHaveCount(1);
         expect(errors.filter((line) => failure.test(line))).toHaveLength(1);
         expect(errors).toHaveLength(1);
     }

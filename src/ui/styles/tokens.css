@@ -56,6 +56,9 @@
     --surface-fade: ui-fade-in var(--motion-surface) var(--motion-ease);
     --icon-size: 16px;
     --icon-stroke: 1.5px;
+
+    /* §4 Slider: the dot inside the 24 px hit area */
+    --slider-thumb-size: 10px;
 }
 
 [data-theme="light"] {

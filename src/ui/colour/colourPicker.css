@@ -11,7 +11,7 @@
 .colour-sv {
     position: relative;
     height: 120px;
-    margin-bottom: 1px;
+    margin-bottom: var(--border-width);
     border: var(--border-width) solid var(--border-strong);
     border-radius: var(--radius-control);
     cursor: crosshair;
@@ -59,7 +59,7 @@
     top: -3px;
     width: 4px;
     height: 14px;
-    margin-left: -2px;
+    margin-left: calc(-1 * var(--space-2));
     border: var(--border-width) solid var(--bg-workspace);
     border-radius: 2px;
     background: var(--text);

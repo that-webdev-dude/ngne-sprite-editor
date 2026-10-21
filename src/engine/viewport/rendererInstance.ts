@@ -1,6 +1,7 @@
 import { Camera, Frame, WebGPURenderer } from "@ngne/core";
 import type { RendererResourceInspection, RendererStatus } from "@ngne/core";
 import { bitmapFromPixels } from "../bitmaps";
+import { instanceDiagnostic } from "./diagnostics";
 import { QUAD_LAYER } from "./geometry";
 import type { PixelBuffer } from "../../core/model";
 import type { DeviceSize } from "./types";
@@ -105,9 +106,13 @@ export class RendererInstance {
         // Fills the viewport element: one backing pixel per device pixel while the sizes
         // match, stretched while a replacement for a new size is on its way.
         canvas.style.cssText = "position:absolute;inset:0;display:block;width:100%;height:100%";
+        // A renderer reports why it ended `failed` once it has; the viewport replaces it, so
+        // that report is passed on as `RendererReplaced` (SE-071).
+        const created: { renderer?: WebGPURenderer } = {};
         const renderer = await WebGPURenderer.create(canvas, size.width, size.height, (error) =>
-            hooks.onError(error),
+            hooks.onError(instanceDiagnostic(error, created.renderer?.status)),
         );
+        created.renderer = renderer;
         return new RendererInstance(canvas, renderer, scene, stage, hooks);
     }
 

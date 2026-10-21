@@ -19,6 +19,7 @@ import { setLayerLockedCommand, setLayerVisibleCommand } from "../../src/core/la
 import { createDocument, sequentialIds } from "../../src/core/model";
 import type { DocSession, ReferenceLayer } from "../../src/core/model";
 import { addReferenceLayerCommand } from "../../src/core/references";
+import { canvasSizeCommand, spriteSizeCommand } from "../../src/core/sprite";
 import { harness } from "./se-014-support";
 import type { Harness } from "./se-014-support";
 
@@ -119,6 +120,40 @@ function cornerOf(layer: ReferenceLayer, corner: ReferenceCorner) {
 }
 
 describe("the Move tool on a reference layer", () => {
+    it("a canvas or sprite resize cancels a reference drag without overwriting the operation (F75)", () => {
+        for (const resize of ["canvas", "sprite"] as const) {
+            for (const scale of [false, true]) {
+                const { h, preview, session, layer } = setUp();
+                const from = scale ? cornerOf(layer(), "se") : { x: 3, y: 4 };
+                press(h, from.x, from.y);
+                h.pipeline.move([point(from.x + 4, from.y + 2)]);
+                expect(preview.getState()).not.toBeNull();
+                const command =
+                    resize === "canvas"
+                        ? canvasSizeCommand(session, {
+                              width: 32,
+                              height: 24,
+                              anchor: { x: 1, y: 1 },
+                          })
+                        : spriteSizeCommand(session, { width: 32, height: 24, method: "nearest" });
+                h.document().history.execute(command!);
+                const resized = geometry(layer());
+                const steps = h.document().history.undoCount;
+                // The operation wins immediately, before another pointer event arrives.
+                expect(preview.getState()).toBeNull();
+                // Undoing the resize cannot revive a cancelled drag.
+                h.document().history.undo();
+                h.document().history.redo();
+                h.pipeline.move([point(from.x + 6, from.y + 3)]);
+                release(h, from.x + 6, from.y + 3);
+                expect(geometry(layer())).toEqual(resized);
+                expect(h.document().history.undoCount).toBe(steps);
+                expect(preview.getState()).toBeNull();
+                expect(h.errors).toEqual([]);
+            }
+        }
+    });
+
     it("drags it by whole document pixels: (10, 4) changes x and y by exactly that, one undo step, undo restores", () => {
         const { h, preview, session, layer } = setUp();
         const start = geometry(layer());

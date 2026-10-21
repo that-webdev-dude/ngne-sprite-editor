@@ -16,6 +16,7 @@ import {
 } from "./se-011-support";
 import type { FrameTimes, TestDocument } from "./se-011-support";
 import { cell, documentState, layerHeader, runCommands, viewport } from "./se-022-support";
+import { expectWithinBudget } from "./se-070-frame-budget";
 
 // SE-022: what the timeline does to the viewport — a layer's visibility, and the frame a click
 // or a key makes active, shown from the composite cache.
@@ -105,7 +106,7 @@ test("toggling a layer's visibility in the timeline changes the viewport image w
 
     const hidden = await toggleUpper(page, document, images, 0);
     expect(hidden).toBeGreaterThanOrEqual(1);
-    expect(hidden).toBeLessThanOrEqual(2);
+    expectWithinBudget(hidden, 2, "animation frames to show the hidden layer");
     expect((await documentState(page)).layers[1]?.visible).toBe(false);
     // Each toggle is caused once the frames of the one before it have been drawn.
     await settle(page);
@@ -113,7 +114,7 @@ test("toggling a layer's visibility in the timeline changes the viewport image w
 
     const shown = await toggleUpper(page, document, images, 1);
     expect(shown).toBeGreaterThanOrEqual(1);
-    expect(shown).toBeLessThanOrEqual(2);
+    expectWithinBudget(shown, 2, "animation frames to show the shown layer");
     await settle(page);
     await expectImage(page, document, VIEW, upper);
     expect(errors).toEqual([]);

@@ -1,0 +1,43 @@
+{
+    "id": "se-070-playback-checkpoint-e-intel-uhd-2026-10-21",
+    "ticket": "SE-024",
+    "measurement": "Editor playback from the ed:play grid of 64 frames of 256×256 (8 layers), 100 ms each, at 1× speed on the page's clock, 2 passes, Chrome on Intel UHD: entries of the sequence that the clock jumped over or that no submitted frame showed while they were the active frame.",
+    "statistic": "entries skipped of 128",
+    "unit": "count",
+    "budgetMs": 0,
+    "resultMs": 0,
+    "details": {
+        "entries": 128,
+        "skippedEntries": [],
+        "drawn": "onDrawn: frames submitted to NGNE, not known to be presented on screen",
+        "firstFrameAfterEntry": {
+            "count": 126,
+            "medianMs": 12.3,
+            "p95Ms": 22,
+            "maxMs": 27.3
+        },
+        "gapsBetweenPictureChanges": {
+            "count": 127,
+            "medianMs": 99.6,
+            "p95Ms": 112.8,
+            "maxMs": 117
+        },
+        "framesSubmittedPerSecond": 10,
+        "windowSeconds": 12.8,
+        "document": "256×256, 8 layers, 64 frames of 100 ms, at 2×",
+        "devicePixelRatio": 1,
+        "window": "1920×1080 CSS px",
+        "adapter": "intel / gen-12lp ()",
+        "chrome": "155.0.8059.85, new headless, --force-color-profile=srgb --force-low-power-gpu --force-device-scale-factor=1"
+    },
+    "benchmarkId": "se-024-playback-intel-uhd",
+    "pass": true,
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-10-21T18:18:44.850Z"
+}

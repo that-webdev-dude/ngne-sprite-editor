@@ -10,7 +10,7 @@ Exit: gate G3 ([README](README.md#gates)).
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | L                                                        |
-| Status       | Ready                                                    |
+| Status       | Done                                                     |
 | Depends on   | SE-023, SE-025, SE-033, SE-044, SE-052, SE-053, SE-054   |
 | Blocks       | SE-071, SE-072, SE-073                                   |
 | Blocked until | —                                                       |
@@ -46,7 +46,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Ready                                                    |
+| Status       | Done                                                     |
 | Depends on   | SE-064, SE-070                                           |
 | Blocks       | SE-073                                                   |
 | Blocked until | —                                                       |
@@ -86,7 +86,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Ready                                                    |
+| Status       | Done                                                     |
 | Depends on   | SE-042, SE-070                                           |
 | Blocks       | SE-073                                                   |
 | Blocked until | —                                                       |
@@ -116,7 +116,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | Ready                                                    |
+| Status       | Done                                                     |
 | Depends on   | SE-070, SE-071, SE-072                                   |
 | Blocks       | —                                                        |
 | Blocked until | Gate G3: every other v1 ticket Done, or descoped by the owner in writing in REVIEW.md |
@@ -141,3 +141,11 @@ Acceptance
 - All internal doc links resolve (link check in CI).
 - `npm run check` and the full E2E suite pass on the release commit.
 - The release tag and the deployment are created only after the owner approves in writing.
+
+Acceptance evidence (2026-10-21): [REVIEW.md, SE-073 acceptance evidence](../REVIEW.md#se-073-acceptance-evidence-2026-10-21).
+PR #1 CI run 39633966882 passed all nine jobs for release commit `d0a350a` (the tested merge
+ref has the same file tree). The subsequent `bbcf49e` CI run 39638870937 also passed all
+nine jobs. Checkpoint E is **Passed 2026-10-21 under delegated owner authority**, with the
+accepted RTX performance exception and the explicitly waived native PWA check; see the
+[checkpoint record](../audit/checkpoint-e-2026-10-21.md). The owner retains merging, tagging
+and deployment.

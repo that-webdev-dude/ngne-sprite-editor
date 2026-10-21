@@ -62,6 +62,12 @@ merge two runs into one. A run that does not fit one usage window is carried out
 | D  | Run 3 | Hand test of timeline, selection, save/open, import, export and preview. Every chord of SPEC §7.8 pressed by hand in Chrome, "Alt (hold)" and F6 first: the SE-007 E2E cannot see a chord the browser keeps for itself; a chord that does not arrive gets an alternate in SPEC §7.8. Ticket index: every W10–W13 ticket Done or its unmet acceptance items listed |
 | E  | Run 4 | SE-071 audit and SE-072 install record. The release tag and the deployment need written owner approval (SE-073 acceptance); the run stops before both |
 
+Checkpoint E: **Passed 2026-10-21 under delegated owner authority**, with the accepted
+RTX cel-opacity performance exception and the owner's explicit native PWA check waiver.
+The audit, measurements, decisions and evidence are in the
+[checkpoint record](../audit/checkpoint-e-2026-10-21.md) and REVIEW J12–J20. This closes the
+historical run-4 owner queue below. Merging, tagging and deployment remain the owner's actions.
+
 ## Orchestration
 
 - One worktree and one branch `se-0xx` per ticket, created from `main` after the previous wave

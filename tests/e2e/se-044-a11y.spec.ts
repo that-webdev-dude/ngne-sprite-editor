@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { collectErrors } from "./se-006-support";
+import { collectErrors, settleTimers } from "./se-006-support";
 import { openEditor, openSession } from "./se-007-support";
 import { audit, startInTheme, THEMES } from "./se-008-support";
 import {
@@ -54,6 +54,9 @@ for (const theme of THEMES) {
         await expectAccessible(page, ".ui-dialog", "grid, crop and message");
         await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
         await expect(dialog).toHaveCount(0);
+        // The closed dialog returns the focus one timer later; a chooser opened before that
+        // loses the focus to it and closes.
+        await settleTimers(page);
 
         expect(
             await dropFiles(page, [pngFile("photo.png", flat(8, 8, [9, 9, 9, 255]))], {

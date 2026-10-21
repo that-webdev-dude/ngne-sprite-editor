@@ -124,6 +124,15 @@ function Row({
  * focus going to the next row's Recover, or to Close when no row follows; the dialog closes
  * with the last row. Close and Escape keep the snapshots left for the next launch.
  */
+/**
+ * Where the focus goes when the dialog closes: it opens at launch, when nothing has the focus,
+ * so the viewport takes it, or the empty state's first control without a document, as when
+ * the last tab closes (SE-047); never the page's body (SE-071).
+ */
+function viewportFocus(): HTMLElement | null {
+    return document.querySelector<HTMLElement>("[data-viewport-focus], [data-empty-state] button");
+}
+
 export function RecoveryDialog({ request }: { request: RecoveryRequest }) {
     const [entries, setEntries] = useState(request.entries);
     const [busy, setBusy] = useState(false);
@@ -162,6 +171,7 @@ export function RecoveryDialog({ request }: { request: RecoveryRequest }) {
                 if (!open) request.answer(null);
             }}
             title="Recover unsaved work?"
+            fallbackFocus={viewportFocus}
             actions={
                 <Button ref={close} onClick={() => request.answer(null)}>
                     Close

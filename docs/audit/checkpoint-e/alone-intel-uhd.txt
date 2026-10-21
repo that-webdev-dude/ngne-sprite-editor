@@ -1,0 +1,20 @@
+[WebServer] (node:41192) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+REFERENCE_GPU_VERIFIED {"gpu":"intel-uhd","adapter":{"vendor":"intel","architecture":"gen-12lp"},"chrome":"155.0.8059.85","args":["--force-color-profile=srgb","--force-device-scale-factor=1","--force-low-power-gpu"],"ci":null,"date":"2026-10-21T18:24:50.403Z"}
+
+Running 10 tests using 1 worker
+
+(node:1248) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  1 [alone] › tests\e2e\se-011-updates.spec.ts:37:1 › a pixel patch command changes the image within two animation frames, and undo restores it within two @alone (3.0s)
+  ok  2 [alone] › tests\e2e\se-013-redraw.spec.ts:28:1 › with no view or cursor change for 2 s the overlay performs no redraw; each change redraws it once @alone (5.7s)
+  ok  3 [alone] › tests\e2e\se-014-stroke.spec.ts:88:1 › a stroke shows in the viewport while the button is held; after the release, undo removes it within two animation frames @alone (1.9s)
+  ok  4 [alone] › tests\e2e\se-022-viewport.spec.ts:100:1 › toggling a layer's visibility in the timeline changes the viewport image within two animation frames @alone (1.6s)
+  ok  5 [alone] › tests\e2e\se-030-motion.spec.ts:31:1 › the ants march 8 steps per second only while there is a selection and motion is allowed @alone (9.1s)
+  ok  6 [alone] › tests\e2e\se-054-preview.spec.ts:114:1 › drawing a pencil stroke updates the preview within 500 ms @alone (1.5s)
+  ok  7 [alone] › tests\e2e\se-054-preview.spec.ts:649:1 › frames run on demand: at each entry while playing, none while paused; paused time is not played @alone (4.2s)
+  ok  8 [alone] › tests\e2e\se-054-preview.spec.ts:704:1 › collapsing the panel stops the game loop: no frame for 1 s @alone (2.8s)
+  ok  9 [alone] › tests\e2e\se-061-viewport.spec.ts:75:1 › a blend mode chosen in the layer properties popover, and its undo, show in the viewport within two animation frames @alone (2.0s)
+  ok 10 [alone] › tests\e2e\se-061-viewport.spec.ts:117:1 › a cel opacity set in the cel properties popover, and its undo, show in the viewport within two animation frames @alone (1.8s)
+
+  10 passed (50.4s)

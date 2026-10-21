@@ -176,9 +176,9 @@ for (const theme of THEMES) {
         // With custom colours (two more fields), toggles pressed and other choices checked.
         await segment(section(dialog, "Checkerboard"), "Colours", "Custom").click();
         await expect(hexField(dialog, "Colour A")).toBeVisible();
-        await segment(section(dialog, "Onion skin defaults"), "Onion skin", "On").click();
+        await toggle(section(dialog, "Onion skin defaults"), "Onion skin").click();
         await toggle(dialog, "Tint").click();
-        await segment(section(dialog, "Autosave"), "Autosave", "Off").click();
+        await toggle(section(dialog, "Autosave"), "Autosave").click();
         await expectAccessible(page, "Preferences with custom colours", ".ui-dialog");
 
         // With a select open: its list is a layer of its own over the dialog.
@@ -286,7 +286,7 @@ for (const theme of THEMES) {
         await expectRingOnKeyboardOnly("toggle", toggle(dialog, "Within tag"));
         await expectRingOnKeyboardOnly(
             "segment",
-            segment(section(dialog, "Autosave"), "Autosave", "On"),
+            segment(section(dialog, "Onion skin defaults"), "Placement", "Behind"),
         );
         const width = field(section(dialog, "Default grid"), "Width");
         await expectRingOnKeyboardOnly(
@@ -359,9 +359,9 @@ test("pointer targets of the trigger, the palette, Preferences and the shortcut 
     const dialog = await openPreferences(page);
     await segment(section(dialog, "Checkerboard"), "Colours", "Custom").click();
     await expect(hexField(dialog, "Colour B")).toBeVisible();
-    // 11 number fields and 2 hex fields; 10 segments, 2 selects, 2 toggles and 2 actions.
+    // 11 number fields and 2 hex fields; 6 segments, 2 selects, 4 toggles and 2 actions.
     expect(await dialog.locator("input").count()).toBe(13);
-    expect(await dialog.locator("button").count()).toBe(16);
+    expect(await dialog.locator("button").count()).toBe(14);
     expect(await tooSmall()).toEqual([]);
     await dialog.getByRole("combobox", { name: "Resample" }).click();
     await expect(page.getByRole("option")).toHaveCount(3);

@@ -1,6 +1,6 @@
 {
     "name": "ngne-sprite-editor",
-    "version": "0.0.0",
+    "version": "1.0.0",
     "private": true,
     "description": "Browser pixel-art sprite editor rendered by the NGNE engine",
     "license": "MIT",
@@ -11,6 +11,7 @@
     "scripts": {
         "dev": "vite",
         "build": "vite build",
+        "preview": "vite preview",
         "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
         "lint": "eslint .",
         "format": "prettier --write .",
@@ -46,6 +47,7 @@
         "typescript": "5.9.3",
         "typescript-eslint": "8.71.1",
         "vite": "8.3.4",
+        "vite-plugin-pwa": "2.0.0",
         "vitest": "5.0.3"
     }
 }

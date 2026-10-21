@@ -1,7 +1,7 @@
 import type { RendererResourceInspection, RendererStatus } from "@ngne/core";
 import type { TiledMode } from "../core/model";
 import { readCanvas } from "./testing/readCanvas";
-import { oncePerMessage } from "./viewport/diagnostics";
+import { consoleError, oncePerMessage, viewportDiagnostic } from "./viewport/diagnostics";
 import { backingSize } from "./viewport/geometry";
 import { ReferenceSources } from "./viewport/referenceSources";
 import { createStage, RendererInstance } from "./viewport/rendererInstance";
@@ -167,10 +167,13 @@ export class NgneViewport implements ViewportPort {
     constructor(host: HTMLElement, options: NgneViewportOptions = {}) {
         this.#host = host;
         this.#options = options;
-        this.#report = oncePerMessage((message, error) => {
-            console.error("NGNE viewport:", error);
+        const once = oncePerMessage((message, error) => {
+            console.error("NGNE viewport:", consoleError(error));
             options.onError?.(message, error);
         });
+        // A failed renderer's error also rejects its uploads and frames: in the viewport's
+        // words wherever it arrives, so that it is shown once (SE-071).
+        this.#report = (error) => once(viewportDiagnostic(error));
         this.probe = this.#createProbe();
 
         this.#observer = new ResizeObserver((entries) => this.#observed(entries));

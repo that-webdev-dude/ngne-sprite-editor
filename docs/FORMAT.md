@@ -9,9 +9,9 @@ content of a file, this document governs.
 | NGNE sprite project | `<name>.ngsprite`    | 1       | [1](#1-sprite-project-ngsprite-version-1) |
 | NGNE sprite atlas   | `<name>.atlas.json`  | 1       | [2](#2-sprite-atlas-ngne-sprite-atlas-version-1) |
 
-Stability (SPEC §10): a format may still change until the 1.0.0 release of the editor. From that
-release on, any change to a format needs a new version number and a migration from the version
-before it.
+Stability (SPEC §10): `.ngsprite` v1 and `ngne-sprite-atlas` v1 are frozen from release 1.0.0
+of the editor. Any change to either format needs a new version number and a migration from
+the version before it.
 
 ## Conventions
 

@@ -1,0 +1,37 @@
+{
+    "id": "se-070-frame-switch-cached-cloud-swiftshader",
+    "ticket": "SE-070",
+    "measurement": "Frame switch to a frame in the viewport's slot cache (ArrowRight on the viewport) on the reference document (256×256, 8 layers, 8 frames), Chrome on SwiftShader: animation frames from the key to the submit of the frame showing the new frame (1: the next animation frame).",
+    "statistic": "largest of 70 switches, in animation frames",
+    "unit": "count",
+    "budgetMs": 1,
+    "resultMs": 1,
+    "details": {
+        "switches": 70,
+        "animationFramesToSubmit": {
+            "1": 70
+        },
+        "latency": {
+            "count": 70,
+            "medianMs": 12.4,
+            "p95Ms": 22.2,
+            "maxMs": 38.2
+        },
+        "submitted": "onDrawn: frames submitted to NGNE, not known to be presented on screen",
+        "document": "256×256, 8 layers, 8 frames, at 2×, preview expanded",
+        "devicePixelRatio": 1,
+        "window": "1920×1080 CSS px",
+        "adapter": "google / swiftshader ()",
+        "chrome": "156.0.8078.4, new headless, --force-color-profile=srgb --use-webgpu-adapter=swiftshader --enable-unsafe-webgpu --enable-unsafe-swiftshader --no-sandbox --enable-features=Vulkan --use-angle=vulkan --use-vulkan=swiftshader --disable-vulkan-surface --force-device-scale-factor=1"
+    },
+    "benchmarkId": "se-070-frame-switch-cached-swiftshader",
+    "pass": true,
+    "environment": {
+        "node": "v24.22.0",
+        "platform": "linux 6.18.44-fc-v139",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "cores": 4,
+        "memoryGb": 16
+    },
+    "date": "2026-10-21T01:38:07.883Z"
+}

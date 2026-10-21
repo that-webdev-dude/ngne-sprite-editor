@@ -726,19 +726,22 @@ composite:
 
 ### 6.8 Engine gaps and workarounds
 
-Recorded for the engine owner; none is required for v1.
+Recorded from runs 1–4 against NGNE 0.2.1; no engine change is required for this release.
+The [engine gap report](engine-gaps.md) gives the costs, evidence and proposed engine changes.
 
-| Gap in NGNE 0.2.1                           | Workaround here                             |
-| ------------------------------------------- | ------------------------------------------- |
-| No release for manual textures              | Fixed slot pool, 1×1 placeholders           |
-| No partial or synchronous texture update    | Whole-slot upload, single-flight queue      |
-| No blend modes or non-multiply tint         | CPU compositor, CPU onion tint              |
-| Fixed renderer size, no public create abort | Recreate on a new canvas, serialized        |
-| No repeat addressing, no linear filtering   | Checker texture; CPU pre-scaled references  |
-| No camera zoom                              | Scale sprite sizes when building frames     |
-| No readback                                 | CPU export; in-page canvas readback in tests |
-| Centre snapping misaligns odd-sized sprites | Even-sized export rects; snap off in editor |
-| No recovery event                           | Poll `status` on draw, focus, visibility and the `sprites` counter |
+| Gap in NGNE 0.2.1 | Workaround actually used | Evidence from runs 1–4 |
+| ----------------- | ------------------------ | ---------------------- |
+| No release for manual textures | Fixed slot pools; unused slots replaced by 1×1 placeholders | SE-002 Q11: texture estimate returned to 56 bytes above baseline on both reference GPUs |
+| Whole-image asynchronous uploads, superseded calls and GPU validation round trips | Single-flight latest-wins queue, whole-slot uploads, cached frames and playback grid; Canvas2D stroke echo until NGNE submits the change | SE-002 Q1–2; REVIEW E61/E69: RTX 4060 stroke p95 34.1 ms without echo, 20.2 ms with it. Run 4 upload frame switch: 80.8 ms p95 against 50 ms on cloud SwiftShader, **not reference hardware** (H11). Checkpoint E reference p95: Intel UHD 26.0 ms, RTX 4060 29.7 ms; both meet 50 ms ([record](perf/checkpoint-e-2026-10-21.md)) |
+| No blend modes or non-multiply tint | CPU layer/cel compositor and CPU onion tint | SE-010, SE-025 and SE-061; tint moves black toward red/blue, which a multiply cannot do (§7.5) |
+| Fixed renderer size, no public create abort; canvases share their WebGPU context | Serialized replacement on a new canvas, keep the old canvas until the new one draws | SE-002 Q4: replacement medians 34.3–50.5 ms on reference GPUs; REVIEW E6/E9: only a ready, drawn canvas is swapped in |
+| No repeat addressing or linear filtering | Finite checker texture; CPU resample reference display images after zoom settles | SE-011, SE-045; REVIEW F75: a whole-pixel reference move at fractional zoom can change rounded width by 1 px and cause a resample; accepted display trade-off at checkpoint E (J16) |
+| No camera zoom | Scale sprite sizes and positions while building frames | SE-002 Q3 and SE-012: device-pixel mapping checked at fractional DPR (§6.4) |
+| No texture readback | Export CPU composites; read the canvas in-page immediately after render for tests | SE-002 Q7, SE-053 conformance; opaque readback exact on both reference GPUs |
+| Centre snapping misaligns odd-sized sprites | Disable snapping in editor/preview; even-pad export rectangles and round generated-helper placement | SE-002 Q9: odd default-snapped sprite differed on RTX 4060; REVIEW D33/E13: exact quarter turns and alpha tolerance covered by conformance |
+| No recovery event | Poll `status` and `sprites` on draws/focus/visibility and an idle timer; rebuild after failed recovery | SE-002 Q8: status-only polling redrew 0/5 Intel UHD and 1/5 RTX 4060 losses; the adopted counter fallback redrew 5/5 on each (945/1047 ms slowest). REVIEW H20: user toast describes replacement |
+| Animation entries have neither direction nor repeat count | Expand reverse/ping-pong and finite repeats in exported entries, capped at 65 536 | REVIEW D31; SE-051/SE-053: generated lookup and consumer conformance |
+| BrowserGame exposes the renderer only after start; start/stop cannot overlap and a tick/render error fails the game | Host uploads after start, gate rendering on ready slots, serialize lifecycle and rebuild failures | SE-002 Q5–6 and SE-054; REVIEW F68: demand scheduler and sliced composite preparation keep preview work bounded |
 
 ## 7. Editor behaviour
 
@@ -1477,6 +1480,11 @@ Recorded by SE-046 (`app/references/referenceMove`, `referenceTransform`, `refer
   reason a press gets; another layer made active during the drag cancels it (shown as before,
   nothing recorded). The box stays while a held key or a tool key changes the active tool
   before the release.
+- A history step that changes the canvas dimensions cancels an active reference drag
+  immediately, removing its preview. Releasing afterward records nothing, including after
+  undo/redo of that size change. This preserves the reference geometry of Canvas Size,
+  Sprite Size, crop and trim instead of overwriting it with the drag's old coordinates
+  (checkpoint E, REVIEW J16).
 
 ### 7.7 Sprite operations
 
@@ -2061,8 +2069,9 @@ Export is accepted only when all three hold (SE-053):
   (`doc.json` plus raw image buffers keyed by image ID; only changed images are rewritten). On
   launch, unsaved snapshots are offered for recovery. Closing the browser tab or window with
   unsaved changes triggers the browser's unload confirmation.
-- Both formats (`.ngsprite` v1, `ngne-sprite-atlas` v1) may still change until release gate G3;
-  from the v1.0.0 release any change needs a version bump and a migration.
+- Both formats (`.ngsprite` v1, `ngne-sprite-atlas` v1) are frozen from release 1.0.0.
+  Any change to either format needs a new version number and a migration from the version
+  before it (release gate G3; [FORMAT.md](FORMAT.md)).
 
 ## 11. Quality
 
@@ -2072,6 +2081,12 @@ Export is accepted only when all three hold (SE-053):
 | E2E         | Draw-undo-redo, layer/frame/tag flows, selection and transform, import, save/open round trip, export conformance (§9.7), viewport readback and overlay screenshots at DPR 1 and 1.5 |
 | Performance | §6.6 budgets measured by a scripted benchmark page; recorded, not asserted in CI      |
 | Manual      | Interface review against DESIGN.md on reference hardware                              |
+
+Frame and time budgets inside E2E tests (a change "shown within two animation frames", the
+preview "within 500 ms") are performance assertions: they are enforced on the reference
+hardware (a run without `CI`) and only reported, as test annotations, under `CI`, where Chrome
+renders with SwiftShader at the runner's speed (owner decision of 2026-10-21, REVIEW.md H15;
+`tests/e2e/se-070-frame-budget.ts`). Everything else such a test checks stays an assertion.
 
 Definition of done for every ticket: acceptance criteria met; unit tests for `core/` changes;
 E2E for user-visible flows; typecheck, lint and format clean; no new runtime dependency beyond

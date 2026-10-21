@@ -1,0 +1,229 @@
+{
+    "id": "se-070-cold-load-cloud-swiftshader",
+    "ticket": "SE-070",
+    "measurement": "Cold load of the production build served locally to interactive (the New sprite dialog on screen after the empty state's first action), Chrome on SwiftShader, each load in a new browser with an empty profile.",
+    "statistic": "largest of 10 cold loads, from navigation start",
+    "budgetMs": 2000,
+    "resultMs": 434.30000000004657,
+    "details": {
+        "interactiveMs": [
+            380.9,
+            355.9,
+            363.2,
+            380.3,
+            393.5,
+            366.2,
+            434.3,
+            358.4,
+            371.9,
+            392
+        ],
+        "medianInteractiveMs": 371.9,
+        "shellMs": [
+            340.1,
+            323.8,
+            321.8,
+            345.8,
+            339.8,
+            328.9,
+            387.1,
+            322.8,
+            337.9,
+            343.8
+        ],
+        "clicksUntilAnswered": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+        ],
+        "domContentLoadedMs": [
+            224.3,
+            209.2,
+            200.4,
+            237.5,
+            216,
+            214.8,
+            270.6,
+            211.1,
+            229,
+            213.2
+        ],
+        "loadEventMs": [
+            224.5,
+            209.4,
+            200.6,
+            237.6,
+            216.4,
+            215,
+            270.7,
+            211.2,
+            229.1,
+            213.3
+        ],
+        "firstContentfulPaintMs": [
+            396,
+            380,
+            384,
+            400,
+            404,
+            392,
+            452,
+            380,
+            392,
+            416
+        ],
+        "longTasks": [
+            [
+                {
+                    "start": 130,
+                    "duration": 95
+                },
+                {
+                    "start": 249,
+                    "duration": 89
+                }
+            ],
+            [
+                {
+                    "start": 119,
+                    "duration": 91
+                },
+                {
+                    "start": 240,
+                    "duration": 81
+                }
+            ],
+            [
+                {
+                    "start": 110,
+                    "duration": 90
+                },
+                {
+                    "start": 232,
+                    "duration": 87
+                }
+            ],
+            [
+                {
+                    "start": 124,
+                    "duration": 114
+                },
+                {
+                    "start": 269,
+                    "duration": 75
+                }
+            ],
+            [
+                {
+                    "start": 114,
+                    "duration": 102
+                },
+                {
+                    "start": 238,
+                    "duration": 100
+                }
+            ],
+            [
+                {
+                    "start": 121,
+                    "duration": 94
+                },
+                {
+                    "start": 242,
+                    "duration": 85
+                }
+            ],
+            [
+                {
+                    "start": 128,
+                    "duration": 142
+                },
+                {
+                    "start": 304,
+                    "duration": 81
+                }
+            ],
+            [
+                {
+                    "start": 124,
+                    "duration": 87
+                },
+                {
+                    "start": 239,
+                    "duration": 81
+                }
+            ],
+            [
+                {
+                    "start": 124,
+                    "duration": 105
+                },
+                {
+                    "start": 260,
+                    "duration": 75
+                }
+            ],
+            [
+                {
+                    "start": 125,
+                    "duration": 88
+                },
+                {
+                    "start": 243,
+                    "duration": 98
+                }
+            ]
+        ],
+        "createToFirstViewportFrameMs": [
+            254.9,
+            257.4,
+            243,
+            241.8,
+            236.7,
+            245,
+            230.1,
+            215.8,
+            247.7,
+            246.5
+        ],
+        "medianCreateToFirstViewportFrameMs": 243,
+        "largestCreateToFirstViewportFrameMs": 257.4,
+        "createClicksUntilAnswered": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+        ],
+        "firstViewportFrameDefinition": "Create → first viewport frame on screen, not part of the result: from the first click on the New sprite dialog's Create button (at the animation frame after the dialog was seen, again every 50 ms while it stays) to the first animation frame in which the viewport's canvas is in the document with a box; the NGNE viewport inserts its canvas only after it has drawn",
+        "interactiveDefinition": "navigation start to the first animation frame showing the New sprite dialog, the empty state's New sprite button being clicked at every frame (at most every 50 ms) from the first frame it is on screen",
+        "server": "vite build (project configuration) served by vite preview on 127.0.0.1",
+        "cold": "a new Chrome with an empty profile for every load",
+        "devicePixelRatio": 1,
+        "window": "1920×1080 CSS px",
+        "adapter": "google / swiftshader ()",
+        "chrome": "156.0.8078.4, new headless, --force-color-profile=srgb --use-webgpu-adapter=swiftshader --enable-unsafe-webgpu --enable-unsafe-swiftshader --no-sandbox --enable-features=Vulkan --use-angle=vulkan --use-vulkan=swiftshader --disable-vulkan-surface --force-device-scale-factor=1"
+    },
+    "benchmarkId": "se-070-cold-load-swiftshader",
+    "pass": true,
+    "environment": {
+        "node": "v24.22.0",
+        "platform": "linux 6.18.44-fc-v139",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "cores": 4,
+        "memoryGb": 16
+    },
+    "date": "2026-10-21T01:39:41.939Z"
+}

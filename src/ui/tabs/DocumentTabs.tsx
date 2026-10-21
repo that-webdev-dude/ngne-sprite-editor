@@ -5,6 +5,7 @@ import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { isDirty, sessionsStore, useSessions } from "../../app/state/sessions";
 import { activateDocument, closeDocument, moveDocument } from "../../app/tabs/tabs";
 import { Icon } from "../primitives/Icon";
+import { Tooltip } from "../primitives/Tooltip";
 import "./tabs.css";
 
 // The document tabs in the centre of the menu bar (DESIGN §2, SE-047): one tab per open
@@ -265,17 +266,19 @@ export function DocumentTabs() {
             </div>
             {overflowing ? (
                 <DropdownMenu.Root modal={false}>
-                    <DropdownMenu.Trigger asChild>
-                        <button
-                            type="button"
-                            className="ui-icon-button document-tabs__overflow"
-                            aria-label="All documents"
-                            title="All documents"
-                            data-tabs-overflow=""
-                        >
-                            <Icon icon={ChevronDown} />
-                        </button>
-                    </DropdownMenu.Trigger>
+                    {/* An icon-only control has the app's tooltip (DESIGN §8; SE-071). */}
+                    <Tooltip label="All documents">
+                        <DropdownMenu.Trigger asChild>
+                            <button
+                                type="button"
+                                className="ui-icon-button document-tabs__overflow"
+                                aria-label="All documents"
+                                data-tabs-overflow=""
+                            >
+                                <Icon icon={ChevronDown} />
+                            </button>
+                        </DropdownMenu.Trigger>
+                    </Tooltip>
                     <DropdownMenu.Portal>
                         <DropdownMenu.Content
                             className="ui-menu"

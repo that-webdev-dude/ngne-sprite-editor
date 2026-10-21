@@ -26,6 +26,11 @@
     gap: var(--space-8);
 }
 
-.tool-rail__variant[data-state="checked"] {
+/*
+ * The shown variant: an accent icon, as on the active tool button (DESIGN §4). Its name stays
+ * in the text colour: accent text on the highlighted row's --bg-active is under 4.5:1 in the
+ * light theme (SE-071, axe color-contrast).
+ */
+.tool-rail__variant[data-state="checked"] svg.lucide {
     color: var(--accent);
 }

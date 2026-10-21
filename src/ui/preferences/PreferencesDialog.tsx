@@ -32,11 +32,6 @@ const CHECKER_SOURCES: readonly SegmentedOption<"theme" | "custom">[] = [
     { value: "theme", label: "Theme" },
     { value: "custom", label: "Custom" },
 ];
-/** An on/off preference as two segments: the state is readable without the pressed look. */
-const SWITCH: readonly SegmentedOption<"on" | "off">[] = [
-    { value: "on", label: "On" },
-    { value: "off", label: "Off" },
-];
 const PLACEMENTS: readonly SegmentedOption<OnionPreference["placement"]>[] = [
     { value: "behind", label: "Behind" },
     { value: "front", label: "In front" },
@@ -231,11 +226,11 @@ function OnionSection() {
     return (
         <Section label="Onion skin defaults">
             <Row>
-                <LabelledSegments
+                <Toggle
                     label="Onion skin"
-                    value={onion.enabled ? "on" : "off"}
-                    onChange={(state) => set({ enabled: state === "on" })}
-                    options={SWITCH}
+                    showLabel
+                    pressed={onion.enabled}
+                    onPressedChange={(enabled) => set({ enabled })}
                 />
                 <NumberField
                     label="Before"
@@ -348,11 +343,11 @@ function AutosaveSection() {
     return (
         <Section label="Autosave">
             <Row>
-                <SegmentedControl
+                <Toggle
                     label="Autosave"
-                    value={autosave.enabled ? "on" : "off"}
-                    onChange={(state) => preferences.set("autosave", { enabled: state === "on" })}
-                    options={SWITCH}
+                    showLabel
+                    pressed={autosave.enabled}
+                    onPressedChange={(enabled) => preferences.set("autosave", { enabled })}
                 />
             </Row>
         </Section>
@@ -363,7 +358,8 @@ function AutosaveSection() {
  * Preferences dialog (DESIGN §7): the theme and every value of the preference store. A change
  * applies at once: it is written to its store, which tells its subscribers and persists it.
  * There is nothing to confirm, so the dialog has Close, and Restore defaults to go back. The
- * theme belongs to the theme store (ui/theme), the rest to the preference store.
+ * theme belongs to the theme store (ui/theme), the rest to the preference store. Every on/off
+ * setting is a text toggle (`aria-pressed`), the one idiom of DESIGN §4 (SE-071).
  */
 export function PreferencesDialog() {
     const theme = useTheme();

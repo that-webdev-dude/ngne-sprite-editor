@@ -1,0 +1,30 @@
+{
+    "id": "se-070-dirty-rectangle-cloud-swiftshader",
+    "ticket": "SE-010",
+    "measurement": "compositeFrame with a 16×16 rect into an existing buffer, 256×256 document, 8 visible layers with every pixel half transparent (worst case), Node",
+    "statistic": "95th percentile of 5000 calls after 2000 warm-up calls",
+    "budgetMs": 2,
+    "resultMs": 0.05393200000003162,
+    "details": {
+        "samples": 5000,
+        "warmUpCalls": 2000,
+        "minMs": 0.0282280000000128,
+        "medianMs": 0.0333379999999579,
+        "meanMs": 0.03635365379999905,
+        "p95Ms": 0.05393200000003162,
+        "p99Ms": 0.08920200000000023,
+        "maxMs": 0.5804860000000645,
+        "fullFrameMedianMs": 6.947360000000003,
+        "fullFrameSamples": 50
+    },
+    "benchmarkId": "se-010-dirty-rectangle",
+    "pass": true,
+    "environment": {
+        "node": "v24.22.0",
+        "platform": "linux 6.18.44-fc-v139",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "cores": 4,
+        "memoryGb": 16
+    },
+    "date": "2026-10-21T01:37:53.526Z"
+}

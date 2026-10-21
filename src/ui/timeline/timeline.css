@@ -116,7 +116,7 @@
 .timeline__name {
     flex: 1;
     min-width: 0;
-    margin-left: 6px;
+    margin-left: var(--space-8);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

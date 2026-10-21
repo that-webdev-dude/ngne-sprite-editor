@@ -14,7 +14,7 @@ export const ATLAS_VERSION = 1;
  * `generator` of `<name>.atlas.json`, also named in the head of the generated modules: name
  * and version of this application, as in package.json (a test compares them).
  */
-export const ATLAS_GENERATOR = "ngne-sprite-editor 0.0.0";
+export const ATLAS_GENERATOR = "ngne-sprite-editor 1.0.0";
 
 /** Most frames of an atlas. Frames that share a rectangle count one each. */
 export const MAX_ATLAS_FRAMES = 65_536;

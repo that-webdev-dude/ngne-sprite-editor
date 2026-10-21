@@ -1,0 +1,44 @@
+[WebServer] (node:9644) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+REFERENCE_GPU_VERIFIED {"gpu":"intel-uhd","adapter":{"vendor":"intel","architecture":"gen-12lp"},"chrome":"155.0.8059.85","args":["--force-color-profile=srgb","--force-device-scale-factor=1","--force-low-power-gpu"],"ci":null,"date":"2026-10-21T18:29:41.834Z"}
+
+Running 9 tests using 1 worker
+
+(node:28408) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+se-070 soak heap: withoutCode 53403825 → 56203514 B (5.2%); code 5797124 → 13418864 B (131.5%); used 28884624 → 37778960 B (30.8%); start pixels 12582912 B
+  ok 1 [parallel] › tests\e2e\se-070-soak.spec.ts:324:1 › soak: 500 seeded commands of the registry keep every document valid with no error, and the heap returns within 10% once all are closed (1.4m)
+se-070: the page's main thread did not answer an evaluation for 3 s.
+Its JavaScript was paused here:
+at se070Spin :1:39
+    function se070Spin() { let turns = 0; for (;;) turns++; }
+at (anonymous) :1:1
+    se070Spin()
+  ok 2 [parallel] › tests\e2e\se-070-stall.spec.ts:7:1 › stall watch: a page stuck in a script fails the test with the script's stack (4.4s)
+  ok 3 [parallel] › tests\e2e\se-070-stall.spec.ts:36:1 › stall watch: a page that answers is not reported, and stop disables the debugger (2.5s)
+(node:42396) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+se-070 soak heap: withoutCode 53403280 → 56626121 B (6.0%); code 5775344 → 13188456 B (128.4%); used 28862028 → 38055900 B (31.9%); start pixels 12582912 B
+  ok 4 [parallel] › tests\e2e\se-070-soak.spec.ts:324:1 › soak: 500 seeded commands of the registry keep every document valid with no error, and the heap returns within 10% once all are closed (1.5m)
+se-070: the page's main thread did not answer an evaluation for 3 s.
+Its JavaScript was paused here:
+at se070Spin :1:39
+    function se070Spin() { let turns = 0; for (;;) turns++; }
+at (anonymous) :1:1
+    se070Spin()
+  ok 5 [parallel] › tests\e2e\se-070-stall.spec.ts:7:1 › stall watch: a page stuck in a script fails the test with the script's stack (4.2s)
+  ok 6 [parallel] › tests\e2e\se-070-stall.spec.ts:36:1 › stall watch: a page that answers is not reported, and stop disables the debugger (2.3s)
+(node:35608) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+se-070 soak heap: withoutCode 53577226 → 55992187 B (4.5%); code 5771780 → 13499724 B (133.9%); used 29032732 → 37711892 B (29.9%); start pixels 12582912 B
+  ok 7 [parallel] › tests\e2e\se-070-soak.spec.ts:324:1 › soak: 500 seeded commands of the registry keep every document valid with no error, and the heap returns within 10% once all are closed (50.8s)
+se-070: the page's main thread did not answer an evaluation for 3 s.
+Its JavaScript was paused here:
+at se070Spin :1:39
+    function se070Spin() { let turns = 0; for (;;) turns++; }
+at (anonymous) :1:1
+    se070Spin()
+  ok 8 [parallel] › tests\e2e\se-070-stall.spec.ts:7:1 › stall watch: a page stuck in a script fails the test with the script's stack (4.2s)
+  ok 9 [parallel] › tests\e2e\se-070-stall.spec.ts:36:1 › stall watch: a page that answers is not reported, and stop disables the debugger (2.2s)
+
+  9 passed (4.2m)

@@ -64,3 +64,32 @@ run is valid only with the usual number of frames submitted during the 6 s strok
 (`details.continuousStroke.framesSubmitted`: about 740 on Intel UHD, 650–700 on RTX 4060), and
 only when an unrecorded run right after it agrees within a few milliseconds: the machine can
 slow down for part of a run, which the frame count of the continuous stroke does not show (E70).
+
+## Cloud records (run 4, not reference hardware)
+
+SE-070's records from the cloud container of run 4: Linux, Chrome for Testing 156 with the
+SwiftShader adapter, 4 cores. They are no measurement on the reference hardware of SPEC §3 and
+do not meet SE-070's acceptance item for it; the dated page with method and notes is
+[`se-070-2026-10-21-cloud-swiftshader.md`](se-070-2026-10-21-cloud-swiftshader.md). Commands
+in `tests/perf/README.md`.
+
+| Record                                         | SPEC §6.6 row                    | Budget               | Result          | Date       |
+| ---------------------------------------------- | -------------------------------- | -------------------- | --------------- | ---------- |
+| `se-070-stroke-cloud-swiftshader`              | Stroke p95                       | 33 ms                | 28.1 ms (105 frames: invalid by the rule above) | 2026-10-21 |
+| `se-070-dirty-rectangle-cloud-swiftshader`     | Dirty rectangle, 16 px dab       | 2 ms                 | 0.054 ms        | 2026-10-21 |
+| `se-070-frame-switch-cached-cloud-swiftshader` | Frame switch, cached             | next animation frame | 1 frame         | 2026-10-21 |
+| `se-070-frame-switch-upload-cloud-swiftshader` | Frame switch with upload, p95    | 50 ms                | 80.8 ms (over)  | 2026-10-21 |
+| `se-070-playback-cloud-swiftshader`            | Playback from `ed:play`          | 0 skipped            | 0 of 128        | 2026-10-21 |
+| `se-070-idle-cloud-swiftshader`                | Idle editor, frames per second   | 0                    | 0               | 2026-10-21 |
+| `se-070-cold-load-cloud-swiftshader`           | Cold load to interactive         | 2 s                  | 434.3 ms        | 2026-10-21 |
+
+## Checkpoint E reference records — 2026-10-21
+
+All seven SPEC §6.6 benchmark budgets are met on the development machine's Intel UHD and
+RTX 4060 Laptop GPU. The [dated report](checkpoint-e-2026-10-21.md) links all thirteen raw
+records (the CPU-only benchmark runs once), documents the adapter/method and rejects the
+low-frame-count stroke attempts. Historical records above are unchanged.
+
+The separate `@alone` non-CI E2E run passed 10/10 on Intel and 9/10 on RTX: cel opacity took
+three frames against two. This accepted v1.0.0 exception is tracked in
+[issue #2](https://github.com/that-webdev-dude/ngne-sprite-editor/issues/2); the assertion stays.

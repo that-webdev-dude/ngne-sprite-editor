@@ -1,6 +1,7 @@
 import { Dialog as RadixDialog } from "radix-ui";
 import { useRef } from "react";
 import type { ReactNode } from "react";
+import { surfaceOpener } from "../focus/menuOpener";
 import { cx } from "./cx";
 import "./dialog.css";
 
@@ -15,12 +16,19 @@ export interface DialogProps {
     /** Buttons, right-aligned; the primary action is a `Button variant="primary"`. */
     actions?: ReactNode;
     className?: string;
+    /**
+     * Where the focus goes when the dialog closes and nothing had it when it opened (or that
+     * element has gone): the recovery dialog at launch (SE-071). Without it, the focus stays
+     * where the browser leaves it.
+     */
+    fallbackFocus?: () => HTMLElement | null;
 }
 
 /**
  * Modal dialog (DESIGN §4): centred, with title, body and right-aligned actions. Radix
  * supplies the role, focus trap and Escape. The dialog is opened by state, not by a Radix
- * trigger, so it returns focus itself to the element that had it when the dialog opened.
+ * trigger, so it returns focus itself to the element that had it when the dialog opened, or,
+ * when there was none, to `fallbackFocus`.
  */
 export function Dialog({
     open,
@@ -30,6 +38,7 @@ export function Dialog({
     children,
     actions,
     className,
+    fallbackFocus,
 }: DialogProps) {
     const opener = useRef<HTMLElement | null>(null);
     return (
@@ -40,8 +49,8 @@ export function Dialog({
                     className={cx("ui-dialog", `ui-dialog--${size}`, className)}
                     aria-describedby={undefined}
                     onOpenAutoFocus={() => {
-                        const active = document.activeElement;
-                        opener.current = active instanceof HTMLElement ? active : null;
+                        // Opened by a menu item: the element the menu was opened from.
+                        opener.current = surfaceOpener();
                     }}
                     onCloseAutoFocus={(event) => {
                         event.preventDefault();
@@ -49,6 +58,8 @@ export function Dialog({
                         // view (the timeline's active cell): giving it the focus moves nothing.
                         if (opener.current?.isConnected) {
                             opener.current.focus({ preventScroll: true });
+                        } else {
+                            fallbackFocus?.()?.focus({ preventScroll: true });
                         }
                         opener.current = null;
                     }}

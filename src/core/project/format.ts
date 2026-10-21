@@ -21,7 +21,7 @@ export const PROJECT_VERSION = 1;
  * `generator` of `manifest.json`: name and version of this application, as in package.json
  * (a test compares them).
  */
-export const PROJECT_GENERATOR = "ngne-sprite-editor 0.0.0";
+export const PROJECT_GENERATOR = "ngne-sprite-editor 1.0.0";
 
 export const MANIFEST_ENTRY = "manifest.json";
 export const DOC_ENTRY = "doc.json";

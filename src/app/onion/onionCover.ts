@@ -36,16 +36,17 @@ export function createOnionCover(
 ): OnionCover {
     /** The bounds of each ghost frame of `owner`'s document; null for one with no content. */
     const bounds = new Map<string, Rect | null>();
-    let owner: DocSession | null = null;
+    // Held weakly: a closed document's session must not stay reachable from here (SE-070 soak).
+    let owner: WeakRef<DocSession> | null = null;
     composites.subscribe((touched, session) => {
-        if (session !== owner) return;
+        if (session !== owner?.deref()) return;
         if (touched.structure) bounds.clear();
         else for (const frameId of touched.frameIds) bounds.delete(frameId);
     });
 
     const boundsOf = (session: DocSession, frameId: string): Rect | null => {
-        if (session !== owner) {
-            owner = session;
+        if (session !== owner?.deref()) {
+            owner = new WeakRef(session);
             bounds.clear();
         }
         const kept = bounds.get(frameId);

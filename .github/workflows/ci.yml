@@ -68,3 +68,54 @@ jobs:
                   name: e2e-results-${{ matrix.id }}
                   path: test-results
                   if-no-files-found: ignore
+
+    # SE-070: the golden path ten times in a row on a clean runner (its acceptance: 10
+    # consecutive runs in CI). It is in the e2e shards as well.
+    golden-path:
+        name: golden path (10 runs)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: npm
+            - run: npm ci
+            - name: Install software WebGPU presentation dependencies
+              run: sudo apt-get update && sudo apt-get install -y libvulkan1 mesa-vulkan-drivers xvfb xauth
+            - name: Golden path, 10 consecutive runs
+              env:
+                  E2E_HEADLESS: 0
+              run: xvfb-run -a -s "-screen 0 4096x2304x24" npx playwright test tests/e2e/se-070-golden-path.spec.ts --project=parallel --no-deps --repeat-each=10
+            - name: Upload end-to-end artifacts
+              if: failure()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: e2e-results-golden-path
+                  path: test-results
+                  if-no-files-found: ignore
+
+    readme-commands:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+            - name: Execute README commands verbatim
+              shell: bash
+              run: |
+                  commands=$(sed -n '/<!-- readme-commands:start -->/,/<!-- readme-commands:end -->/p' README.md | sed '/^<!--/d; /^```/d; /^[[:space:]]*$/d')
+                  test "$commands" = $'npm ci\nnpm run build\nnpm test'
+                  while IFS= read -r command; do
+                      bash -e -c "$command"
+                  done <<< "$commands"
+
+    links:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+            - run: node scripts/check-links.mjs

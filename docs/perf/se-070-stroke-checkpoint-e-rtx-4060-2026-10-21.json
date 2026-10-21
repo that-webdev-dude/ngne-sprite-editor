@@ -1,0 +1,118 @@
+{
+    "id": "se-070-stroke-checkpoint-e-rtx-4060-2026-10-21",
+    "ticket": "SE-015",
+    "measurement": "Pointer event to the frame containing that sample, for pencil strokes of real mouse input on a 256×256 document with 8 layers and the pixel grid shown, at 8× (SPEC §6.6), on RTX 4060, the earlier of NGNE's submit and the overlay draw of the stroke echo.",
+    "statistic": "the largest of four p95s: every sample of one continuous stroke of 6 s; of 40 short strokes, the first sample (the press), the second sample, and every sample after the press",
+    "budgetMs": 33,
+    "resultMs": 15.6,
+    "details": {
+        "continuousStroke": {
+            "count": 749,
+            "medianMs": 6.5,
+            "p95Ms": 7.6,
+            "maxMs": 9.3,
+            "longestPointerToSubmittedMs": 9.3,
+            "longestGapBetweenFramesShowingMoreMs": 28.5,
+            "durationMs": 6008,
+            "texels": 750,
+            "samples": 751,
+            "framesSubmitted": 674
+        },
+        "firstSample": {
+            "count": 40,
+            "medianMs": 8.8,
+            "p95Ms": 15.6,
+            "maxMs": 19.7
+        },
+        "secondSample": {
+            "count": 40,
+            "medianMs": 5.6,
+            "p95Ms": 12,
+            "maxMs": 17.3
+        },
+        "shortStrokeSamplesAfterThePress": {
+            "count": 240,
+            "medianMs": 6.3,
+            "p95Ms": 10,
+            "maxMs": 23.4
+        },
+        "allSamples": {
+            "count": 1029,
+            "medianMs": 6.5,
+            "p95Ms": 8.4,
+            "maxMs": 23.4
+        },
+        "echo": "on",
+        "ngnePath": {
+            "continuousStroke": {
+                "count": 749,
+                "medianMs": 13.4,
+                "p95Ms": 25.7,
+                "maxMs": 35.7
+            },
+            "firstSample": {
+                "count": 40,
+                "medianMs": 24,
+                "p95Ms": 34.6,
+                "maxMs": 58.7
+            },
+            "secondSample": {
+                "count": 40,
+                "medianMs": 23.6,
+                "p95Ms": 34.2,
+                "maxMs": 69.1
+            },
+            "shortStrokeSamplesAfterThePress": {
+                "count": 240,
+                "medianMs": 18.5,
+                "p95Ms": 31.7,
+                "maxMs": 69.1
+            }
+        },
+        "echoPath": {
+            "continuousStroke": {
+                "count": 749,
+                "medianMs": 6.5,
+                "p95Ms": 7.6,
+                "maxMs": 9.3
+            },
+            "firstSample": {
+                "count": 40,
+                "medianMs": 8.8,
+                "p95Ms": 15.6,
+                "maxMs": 19.7
+            },
+            "secondSample": {
+                "count": 40,
+                "medianMs": 5.6,
+                "p95Ms": 12,
+                "maxMs": 17.3
+            },
+            "shortStrokeSamplesAfterThePress": {
+                "count": 239,
+                "medianMs": 6.3,
+                "p95Ms": 10.3,
+                "maxMs": 23.4
+            }
+        },
+        "input": "mouse at 125 Hz, one texel (8 device px) per report, 1000 CSS px/s",
+        "document": "256×256, 8 layers with half-transparent content, pixel grid on",
+        "zoom": 8,
+        "devicePixelRatio": 1,
+        "window": "1920×1080 CSS px",
+        "viewportDevicePx": "1612×784",
+        "overlayRedraws": 1149,
+        "adapter": "nvidia / lovelace ()",
+        "chrome": "155.0.8059.85, new headless, --force-color-profile=srgb --force-high-performance-gpu --force-device-scale-factor=1"
+    },
+    "benchmarkId": "se-015-stroke-latency-rtx-4060",
+    "pass": true,
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-10-21T18:19:52.090Z"
+}

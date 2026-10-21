@@ -24,7 +24,7 @@
     gap: var(--space-2);
     min-width: 0;
     /* Room for the focus ring, which the scrolling box would cut off. */
-    padding: var(--space-4) 3px;
+    padding: var(--space-4) calc(var(--focus-ring-width) + var(--focus-ring-offset));
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;

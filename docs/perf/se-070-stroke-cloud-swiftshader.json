@@ -1,0 +1,118 @@
+{
+    "id": "se-070-stroke-cloud-swiftshader",
+    "ticket": "SE-015",
+    "measurement": "Pointer event to the frame containing that sample, for pencil strokes of real mouse input on a 256×256 document with 8 layers and the pixel grid shown, at 8× (SPEC §6.6), on SwiftShader, the earlier of NGNE's submit and the overlay draw of the stroke echo.",
+    "statistic": "the largest of four p95s: every sample of one continuous stroke of 6 s; of 40 short strokes, the first sample (the press), the second sample, and every sample after the press",
+    "budgetMs": 33,
+    "resultMs": 28.1,
+    "details": {
+        "continuousStroke": {
+            "count": 749,
+            "medianMs": 10.8,
+            "p95Ms": 19.8,
+            "maxMs": 31.7,
+            "longestPointerToSubmittedMs": 31.7,
+            "longestGapBetweenFramesShowingMoreMs": 99,
+            "durationMs": 6034,
+            "texels": 750,
+            "samples": 751,
+            "framesSubmitted": 105
+        },
+        "firstSample": {
+            "count": 40,
+            "medianMs": 12.9,
+            "p95Ms": 22.5,
+            "maxMs": 31.5
+        },
+        "secondSample": {
+            "count": 40,
+            "medianMs": 5.5,
+            "p95Ms": 15.4,
+            "maxMs": 25.7
+        },
+        "shortStrokeSamplesAfterThePress": {
+            "count": 240,
+            "medianMs": 10.4,
+            "p95Ms": 28.1,
+            "maxMs": 37.9
+        },
+        "allSamples": {
+            "count": 1029,
+            "medianMs": 11,
+            "p95Ms": 21.4,
+            "maxMs": 37.9
+        },
+        "echo": "on",
+        "ngnePath": {
+            "continuousStroke": {
+                "count": 749,
+                "medianMs": 69.1,
+                "p95Ms": 127,
+                "maxMs": 171.2
+            },
+            "firstSample": {
+                "count": 40,
+                "medianMs": 36.1,
+                "p95Ms": 95.9,
+                "maxMs": 103.9
+            },
+            "secondSample": {
+                "count": 40,
+                "medianMs": 31.2,
+                "p95Ms": 102,
+                "maxMs": 113
+            },
+            "shortStrokeSamplesAfterThePress": {
+                "count": 240,
+                "medianMs": 65.3,
+                "p95Ms": 105.9,
+                "maxMs": 135.3
+            }
+        },
+        "echoPath": {
+            "continuousStroke": {
+                "count": 749,
+                "medianMs": 10.8,
+                "p95Ms": 19.8,
+                "maxMs": 31.7
+            },
+            "firstSample": {
+                "count": 40,
+                "medianMs": 12.9,
+                "p95Ms": 22.5,
+                "maxMs": 31.5
+            },
+            "secondSample": {
+                "count": 40,
+                "medianMs": 5.5,
+                "p95Ms": 15.4,
+                "maxMs": 25.7
+            },
+            "shortStrokeSamplesAfterThePress": {
+                "count": 239,
+                "medianMs": 10.4,
+                "p95Ms": 28.1,
+                "maxMs": 37.9
+            }
+        },
+        "input": "mouse at 125 Hz, one texel (8 device px) per report, 1000 CSS px/s",
+        "document": "256×256, 8 layers with half-transparent content, pixel grid on",
+        "zoom": 8,
+        "devicePixelRatio": 1,
+        "window": "1920×1080 CSS px",
+        "viewportDevicePx": "1612×784",
+        "overlayRedraws": 614,
+        "adapter": "google / swiftshader ()",
+        "chrome": "156.0.8078.4, new headless, --force-color-profile=srgb --use-webgpu-adapter=swiftshader --enable-unsafe-webgpu --enable-unsafe-swiftshader --no-sandbox --enable-features=Vulkan --use-angle=vulkan --use-vulkan=swiftshader --disable-vulkan-surface --force-device-scale-factor=1"
+    },
+    "benchmarkId": "se-015-stroke-latency-swiftshader",
+    "pass": true,
+    "environment": {
+        "node": "v24.22.0",
+        "platform": "linux 6.18.44-fc-v139",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "cores": 4,
+        "memoryGb": 16
+    },
+    "date": "2026-10-21T01:40:05.245Z"
+}

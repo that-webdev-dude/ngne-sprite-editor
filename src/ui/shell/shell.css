@@ -111,11 +111,15 @@
     border-left: var(--border-width) solid var(--border);
 }
 
-/* The splitter's line lies on the region border: 4 px of hit area on either side. */
+/*
+ * The splitter's line lies on the region border: 4 px of hit area on either side. It stops
+ * where the timeline's splitter begins, so the two hit areas never meet at the corner
+ * (SE-071).
+ */
 .shell-dock__splitter {
     position: absolute;
     top: 0;
-    bottom: 0;
+    bottom: calc(var(--space-4) + var(--border-width));
     left: calc(-1 * (var(--space-4) + var(--border-width)));
 }
 
@@ -141,7 +145,16 @@
     left: 0;
 }
 
+/*
+ * The timeline's content lies above its splitter (z-index 5), whose 8 px hit area reaches
+ * 3 px past the border into the panel: there the transport bar takes the presses on its
+ * buttons' top edge (SE-071). The z-index has to be here: the timeline's scroller has
+ * `contain: strict`, a stacking context of its own, so no z-index inside it can lift the bar
+ * over the splitter. The splitter keeps its line and the 4 px above the border.
+ */
 .shell-timeline__content {
+    position: relative;
+    z-index: 6;
     height: 100%;
     overflow: hidden;
 }

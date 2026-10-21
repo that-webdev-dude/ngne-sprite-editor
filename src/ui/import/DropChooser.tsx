@@ -1,5 +1,7 @@
 import { Popover as RadixPopover } from "radix-ui";
+import { useRef } from "react";
 import type { DropChooserRequest } from "../../app/import/importDialog";
+import { surfaceOpener } from "../focus/menuOpener";
 import { Button } from "../primitives/Button";
 import "../primitives/popover.css";
 import "./import.css";
@@ -8,9 +10,11 @@ import "./import.css";
  * The drop chooser (DESIGN §7; SE-044): a popover at the point where one PNG image was dropped,
  * offering "Import as sprite" (the Import PNG dialog), "Add as reference" (a reference layer of
  * the active sprite; disabled while none is open) and "Both" (the dialog, with "Keep source as
- * reference" on). Escape or a click outside closes it without a choice.
+ * reference" on). Escape or a click outside closes it without a choice. It has no trigger,
+ * so it gives the focus back itself to the element that had it when it opened (SE-071).
  */
 export function DropChooser({ request }: { request: DropChooserRequest }) {
+    const opener = useRef<HTMLElement | null>(null);
     return (
         <RadixPopover.Root
             open
@@ -34,6 +38,16 @@ export function DropChooser({ request }: { request: DropChooserRequest }) {
                     sideOffset={4}
                     collisionPadding={8}
                     data-import-drop=""
+                    onOpenAutoFocus={() => {
+                        opener.current = surfaceOpener();
+                    }}
+                    onCloseAutoFocus={(event) => {
+                        event.preventDefault();
+                        if (opener.current?.isConnected) {
+                            opener.current.focus({ preventScroll: true });
+                        }
+                        opener.current = null;
+                    }}
                 >
                     <p className="import-drop__name">{request.fileName}</p>
                     <div className="import-drop__actions">

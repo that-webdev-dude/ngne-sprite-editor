@@ -39,6 +39,7 @@ import {
     setTagDirection,
 } from "./se-054-support";
 import type { PreviewRead, Rgb } from "./se-054-support";
+import { expectWithinBudget } from "./se-070-frame-budget";
 
 // SE-054: the preview panel (SPEC §6.5, DESIGN §5.5) as the user works with it: it follows
 // edits, repacks without pairing new metadata with an old texture, follows tag changes, keeps
@@ -147,7 +148,11 @@ test("drawing a pencil stroke updates the preview within 500 ms @alone", async (
     const up = await page.evaluate(() => (window as unknown as { __se054Up: number }).__se054Up);
     const first = frames.find((frame) => showsImage(frame, [composite(after)]) === 0);
     expect(first, "no frame of the preview showed the stroke").toBeDefined();
-    expect(first!.at - up).toBeLessThanOrEqual(500);
+    expectWithinBudget(
+        first!.at - up,
+        500,
+        "ms from the release to the preview showing the stroke",
+    );
     // Until then it showed the document before the stroke: the empty frame.
     const empty = solid(16, 16, [0, 0, 0, 0]);
     for (const frame of frames.filter((entry) => entry.at < first!.at)) {
