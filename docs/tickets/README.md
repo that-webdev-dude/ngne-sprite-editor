@@ -100,7 +100,7 @@ Dependencies are listed without the `SE-` prefix; "Blocked until" is abbreviated
 | SE-070 | End-to-end regression suite and performance record | L   | 023, 025, 033, 044, 052, 053, 054  | —             | Done   |
 | SE-071 | Accessibility and interface audit                 | M    | 064, 070                           | —             | Done   |
 | SE-072 | Installable PWA and offline use                   | M    | 042, 070                           | —             | Done   |
-| SE-073 | Documentation and release (gate G3)               | M    | 070, 071, 072                      | G3            | In progress |
+| SE-073 | Documentation and release (gate G3)               | M    | 070, 071, 072                      | G3            | Done |
 
 52 tickets: 31 M, 21 L; 122 dependency edges. From the size ranges: 146–219 developer-days for
 one developer. Tickets outside SE-073's dependency closure (026, 034, 046, 047, 060, 061, 062,

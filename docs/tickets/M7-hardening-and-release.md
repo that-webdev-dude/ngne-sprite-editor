@@ -116,7 +116,7 @@ Acceptance
 | Field        | Value                                                    |
 | ------------ | -------------------------------------------------------- |
 | Size         | M                                                        |
-| Status       | In progress                                              |
+| Status       | Done                                                     |
 | Depends on   | SE-070, SE-071, SE-072                                   |
 | Blocks       | —                                                        |
 | Blocked until | Gate G3: every other v1 ticket Done, or descoped by the owner in writing in REVIEW.md |
@@ -141,3 +141,8 @@ Acceptance
 - All internal doc links resolve (link check in CI).
 - `npm run check` and the full E2E suite pass on the release commit.
 - The release tag and the deployment are created only after the owner approves in writing.
+
+Acceptance evidence (2026-10-21): [REVIEW.md, SE-073 acceptance evidence](../REVIEW.md#se-073-acceptance-evidence-2026-10-21).
+PR #1 CI run 39633966882 passed all nine jobs for release commit `d0a350a` (the tested merge
+ref has the same file tree). The release tag and deployment remain deferred until written
+owner approval; checkpoint E is still Pending.

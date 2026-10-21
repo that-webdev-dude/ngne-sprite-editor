@@ -81,5 +81,6 @@ The open items from [REVIEW H25](docs/REVIEW.md#stop-checkpoint-e) remain open:
   reference (F75).
 - A seeded soak once stalled after `view.fit`; it was not reproduced in 18 further runs.
   The watchdog captures the stack if it recurs; no cause is claimed fixed (H8).
-- SE-073 remains In progress pending release-commit CI evidence. Checkpoint E is pending;
-  the release tag, deployment and release approval remain the owner's steps.
+- SE-073 acceptance checks passed in [PR #1 CI run 39633966882](https://github.com/that-webdev-dude/ngne-sprite-editor/actions/runs/39633966882)
+  and the ticket is Done. Checkpoint E is pending; the release tag, deployment and release
+  approval remain the owner's steps.
