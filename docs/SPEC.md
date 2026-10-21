@@ -2073,6 +2073,12 @@ Export is accepted only when all three hold (SE-053):
 | Performance | §6.6 budgets measured by a scripted benchmark page; recorded, not asserted in CI      |
 | Manual      | Interface review against DESIGN.md on reference hardware                              |
 
+Frame and time budgets inside E2E tests (a change "shown within two animation frames", the
+preview "within 500 ms") are performance assertions: they are enforced on the reference
+hardware (a run without `CI`) and only reported, as test annotations, under `CI`, where Chrome
+renders with SwiftShader at the runner's speed (owner decision of 2026-10-21, REVIEW.md H15;
+`tests/e2e/se-070-frame-budget.ts`). Everything else such a test checks stays an assertion.
+
 Definition of done for every ticket: acceptance criteria met; unit tests for `core/` changes;
 E2E for user-visible flows; typecheck, lint and format clean; no new runtime dependency beyond
 §4 without a recorded decision.

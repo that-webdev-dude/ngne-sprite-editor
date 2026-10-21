@@ -25,6 +25,7 @@ import {
 } from "./se-011-support";
 import type { FrameTimes } from "./se-011-support";
 import { collapsePreview } from "./se-054-support";
+import { expectWithinBudget } from "./se-070-frame-budget";
 
 // SE-011: the viewport follows the stores — history steps, the active frame, the active
 // session — and never draws a frame's key with another frame's texture.
@@ -98,7 +99,7 @@ test("a pixel patch command changes the image within two animation frames, and u
     );
     const doFrames = await firstShowing(1, done);
     expect(doFrames).toBeGreaterThanOrEqual(1);
-    expect(doFrames).toBeLessThanOrEqual(2);
+    expectWithinBudget(doFrames, 2, "animation frames to show the patch");
     await settle(page);
     await expectImage(page, document, view, after);
 
@@ -110,7 +111,7 @@ test("a pixel patch command changes the image within two animation frames, and u
     }, rect);
     const undoFrames = await firstShowing(0, undone);
     expect(undoFrames).toBeGreaterThanOrEqual(1);
-    expect(undoFrames).toBeLessThanOrEqual(2);
+    expectWithinBudget(undoFrames, 2, "animation frames to show the undo");
     await settle(page);
     await expectImage(page, document, view, before);
 

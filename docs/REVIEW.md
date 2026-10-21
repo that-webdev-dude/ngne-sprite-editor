@@ -700,6 +700,12 @@ the branch `run-4`; nothing is merged into `main`, tagged or deployed.
 | H11 | Measurement, issue (not reference) | **Frame switch needing an upload: 80.8 ms p95 against SPEC §6.6's 50 ms, on SwiftShader.** Medians 61.2 ms; most switches submit at the fourth animation frame | Not reference hardware: whether the budget is missed there is unknown. Open for the owner: measure `se-070-frame-switch-upload` on Intel UHD and RTX 4060; a miss there needs a ticket (the upload path is SE-011's single-flight whole-slot upload, SPEC §6.8) | — |
 | H12 | SE-070 acceptance | "Every budget in SPEC §6.6 is recorded on reference hardware" cannot be met in the container | SE-070 is Done with that item open for the owner, as the run's brief states. The owner runs, on Windows 11 Chrome, the reference block of `tests/perf/README.md` ("Commands") with `PERF_GPU=intel-uhd` and with `PERF_GPU=rtx-4060`: the seven §6.6 rows (14 runs, the dirty rectangle once), and files any miss | Ticket index |
 
+### Frame budgets in CI (owner decision)
+
+| #   | Source | Finding | Decision | Applied in |
+| --- | ------ | ------- | -------- | ---------- |
+| H15 | Owner, 2026-10-21, during the run | Every red CI run of `run-4` after d08f293 failed the `e2e (alone)` job only, at `se-061-viewport`'s cel opacity test (4 and 5 frames against 2), a test no run 4 change reaches; it fails on `main` in the container too (3 of 5 on Chrome for Testing 156, 1 of 5 on Chromium 141). 20 findings of runs 1–4 concern these frame counts (E5, E67, E97, F13, F31, F49, F60, F64, F68, F78, F80–F82, F98, F102, F103, F107, H3, H5, H9): a budget asserted on SwiftShader follows the runner's speed, while SPEC §11 records performance and does not assert it in CI | The owner decided: the "≤ N frames" and "≤ N ms" part of the E2E tests is report-only under `CI` (SwiftShader) and enforced on the reference hardware (a run without `CI`). `expectWithinBudget` in `tests/e2e/se-070-frame-budget.ts` asserts the budget without `CI` and otherwise adds a `budget` annotation (and a log line when over); the images seen, the lower bounds and every other assertion are unchanged. Applied to `se-011-updates`, `se-014-stroke`, `se-022-viewport`, `se-061-viewport` (two frames) and `se-054-preview` (500 ms); counts that are behaviour, not speed (no frame while idle, one frame per entry, the ants' step count), stay assertions. SPEC §11 says so | `tests/e2e/se-070-frame-budget.ts`, the five specs, SPEC §11 |
+
 ## Descoped tickets
 
 None.

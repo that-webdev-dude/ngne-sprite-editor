@@ -15,6 +15,7 @@ import {
     normalOver,
     openTwoLayers,
 } from "./se-061-support";
+import { expectWithinBudget } from "./se-070-frame-budget";
 
 // SE-061 acceptance: changing a blend mode or a cel opacity, and undoing it, updates the
 // viewport within two animation frames. Each change is caused at the start of an animation
@@ -97,7 +98,7 @@ test("a blend mode chosen in the layer properties popover, and its undo, show in
     // Closing the popover applies it (Apply Layer Properties).
     const applied = await runAndCount(page, document, "layer.applyProperties", images, 1);
     expect(applied).toBeGreaterThanOrEqual(1);
-    expect(applied).toBeLessThanOrEqual(2);
+    expectWithinBudget(applied, 2, "animation frames to show the applied change");
     await expect(popover).toBeHidden();
     expect(await layerBlend(page, 1)).toBe("difference");
     expect((await documentState(page)).undoLabel).toBe("Blend Mode");
@@ -106,7 +107,7 @@ test("a blend mode chosen in the layer properties popover, and its undo, show in
 
     const undone = await runAndCount(page, document, "edit.undo", images, 0);
     expect(undone).toBeGreaterThanOrEqual(1);
-    expect(undone).toBeLessThanOrEqual(2);
+    expectWithinBudget(undone, 2, "animation frames to show the undo");
     expect(await layerBlend(page, 1)).toBe("normal");
     await settle(page);
     await expectImage(page, document, VIEW, upper);
@@ -133,7 +134,7 @@ test("a cel opacity set in the cel properties popover, and its undo, show in the
 
     const applied = await runAndCount(page, document, "cel.applyProperties", images, 1);
     expect(applied).toBeGreaterThanOrEqual(1);
-    expect(applied).toBeLessThanOrEqual(2);
+    expectWithinBudget(applied, 2, "animation frames to show the applied change");
     await expect(popover).toBeHidden();
     expect((await documentState(page)).undoLabel).toBe("Cel Opacity");
     await settle(page);
@@ -141,7 +142,7 @@ test("a cel opacity set in the cel properties popover, and its undo, show in the
 
     const undone = await runAndCount(page, document, "edit.undo", images, 0);
     expect(undone).toBeGreaterThanOrEqual(1);
-    expect(undone).toBeLessThanOrEqual(2);
+    expectWithinBudget(undone, 2, "animation frames to show the undo");
     await settle(page);
     await expectImage(page, document, VIEW, upper);
     expect(errors).toEqual([]);

@@ -26,6 +26,7 @@ import {
     toolsState,
     withTexels,
 } from "./se-014-support";
+import { expectWithinBudget } from "./se-070-frame-budget";
 
 // SE-014: strokes of a one-pixel-per-sample tool (the tests' own) through the pointer
 // pipeline, as the user makes them: a stroke shows in the viewport while the button is held,
@@ -129,7 +130,7 @@ test("a stroke shows in the viewport while the button is held; after the release
     expect(at).toBeGreaterThanOrEqual(0);
     const undoFrames = framesUntil(times, frames[at]?.stamp ?? Infinity);
     expect(undoFrames).toBeGreaterThanOrEqual(1);
-    expect(undoFrames).toBeLessThanOrEqual(2);
+    expectWithinBudget(undoFrames, 2, "animation frames to show the undo");
     await settle(page);
     await expectImage(page, document, VIEW, before);
     expect(await historyOf(page, document.id)).toEqual({ undo: 1, open: false });
