@@ -9,6 +9,7 @@ import { collectErrors, settleTimers } from "./se-006-support";
 import { openEditor } from "./se-007-support";
 import { stubFileSystemAccess } from "./se-041-support";
 import { stubExportFolders } from "./se-052-support";
+import { watchStalls } from "./se-070-stall-support";
 
 // SE-070: the soak. 500 commands of the registry, each picked at random from a fixed seed
 // among those a user can reach at that moment: registered (not planned), enabled, and bound in
@@ -350,6 +351,8 @@ test("soak: 500 seeded commands of the registry keep every document valid with n
     await new Promise((resolve) => setTimeout(resolve, 1000));
     const baseline = await heapAfterGc(cdp);
 
+    // A stuck main thread fails the run with the page's stack (fix round 2: a run hung).
+    const watch = await watchStalls(page, cdp, testInfo);
     const pixelBytes = await openStart(page);
     // Review A: a closed document kept reachable would hold more than the margin.
     expect(
@@ -451,6 +454,8 @@ test("soak: 500 seeded commands of the registry keep every document valid with n
         expect(
             await page.evaluate(() => window.__ngneTest!.sessions.getState().documents.length),
         ).toBe(0);
+        // The debugger the watch enabled holds every script the page parsed: let go first.
+        await watch.stop();
         await new Promise((resolve) => setTimeout(resolve, 2000));
         const after = await heapAfterGc(cdp);
         const change = (key: keyof Heap) =>
@@ -470,7 +475,10 @@ test("soak: 500 seeded commands of the registry keep every document valid with n
         // Review B: the code has a ceiling of its own.
         expect(after.code - baseline.code, description).toBeLessThanOrEqual(CODE_CEILING);
         expect(errors).toEqual([]);
+    } catch (error) {
+        watch.rethrow(error);
     } finally {
+        await watch.stop();
         await testInfo.attach("soak-sequence.json", {
             body: JSON.stringify({ seed: SEED, executed, sequence, steps }, null, 4),
             contentType: "application/json",
