@@ -1,6 +1,7 @@
 import { Dialog as RadixDialog } from "radix-ui";
 import { useRef } from "react";
 import type { ReactNode } from "react";
+import { surfaceOpener } from "../focus/menuOpener";
 import { cx } from "./cx";
 import "./dialog.css";
 
@@ -40,8 +41,8 @@ export function Dialog({
                     className={cx("ui-dialog", `ui-dialog--${size}`, className)}
                     aria-describedby={undefined}
                     onOpenAutoFocus={() => {
-                        const active = document.activeElement;
-                        opener.current = active instanceof HTMLElement ? active : null;
+                        // Opened by a menu item: the element the menu was opened from.
+                        opener.current = surfaceOpener();
                     }}
                     onCloseAutoFocus={(event) => {
                         event.preventDefault();

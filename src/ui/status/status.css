@@ -1,7 +1,27 @@
-/* Status bar fields (DESIGN §5.7); the region itself is laid out by shell.css. */
+/* Status bar fields (DESIGN §5.7); the region itself is laid out by shell.css. The fields are
+   numeric readouts (DESIGN §3.2). */
 .status-field {
     flex: none;
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
+}
+
+/*
+ * The cursor field keeps its place (SE-071): it is as wide as the widest position of the
+ * largest document, "1023, 1023" (tabular digits are 1ch wide, ", " less than 2ch), and while
+ * the pointer is off the document — the field is not rendered then — an empty box of that
+ * width stands in for it, so the fields after it never move.
+ */
+.status-field[data-status="cursor"] {
+    min-width: 10ch;
+}
+
+.shell-status:has(> .status-field[data-status="size"]):not(
+        :has(> .status-field[data-status="cursor"])
+    )::before {
+    content: "";
+    flex: none;
+    width: 10ch;
 }
 
 .status-message {

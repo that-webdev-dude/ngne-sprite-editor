@@ -124,7 +124,7 @@ tokens only. Dark is the default; light is a full second set under `[data-theme=
 | -------------- | --------------------------------------- |
 | Spacing scale  | 2, 4, 8, 12, 16, 24 px                  |
 | Control height | 24 px (inputs, buttons), 28 px (tool buttons, rows) |
-| Radius         | 4 px controls, 6 px popovers and dialogs, 0 for regions |
+| Radius         | 4 px controls, 6 px popovers and dialogs, 0 for regions. Small marks inside a control (the colour chips, a strip's thumb, the preview's background chip) 2 px, as in the mockup; a fill inside a 4 px control with a 1 px border 3 px, so its corner follows the border (SE-071) |
 | Border         | 1 px                                    |
 | Focus ring     | 2 px `--accent`, 1 px offset, keyboard focus only |
 | Elevation      | Popovers and dialogs only: `0 8px 24px rgb(0 0 0 / 0.4)` |
@@ -143,13 +143,13 @@ tokens only. Dark is the default; light is a full second set under `[data-theme=
 | Icon button      | 24 px; hover `--bg-raised`; `aria-label` required                                       |
 | Number field     | Scrub by dragging the label; arrow keys ±1, Shift ±10; unit suffix muted                |
 | Slider           | 2 px track, 10 px thumb inside a 24 px hit area; value in an adjacent number field      |
-| Toggle           | Icon button with `aria-pressed`; no switches                                            |
+| Toggle           | Icon button with `aria-pressed`; no switches. The one idiom for every on/off setting (SE-071): an icon toggle in bars and rows, a text toggle (its name as text, `--bg-active` while pressed) in forms — the context bar's mode toggles, Preferences (Onion skin, Tint, Within tag, Autosave), Export, the onion skin popover. A segmented control is for a choice between named values, never for On/Off |
 | Select           | Radix Select; same metrics as number field                                              |
 | Dialog           | Centred. Standard: max 560 px. Large (Import PNG, Export): max 960 px, max 86% of window height, body scrolls. Title, body, right-aligned actions; primary action accent-filled |
 | Popover          | Colour picker, layer properties, onion-skin settings; closes on Escape and outside click |
 | Context menu     | Right-click on layers, frames, cels and tags. Not on the canvas or on swatches, where the right button means background colour; swatch actions live in the palette's overflow menu and on the Menu key |
 | Toast            | Bottom-centre, one line, 4 s (errors stay until dismissed)                              |
-| Splitter         | 8 px hit area, 1 px visible line; double-click resets                                   |
+| Splitter         | 8 px hit area, 1 px visible line; double-click resets. A control beside a splitter takes the presses where the hit area meets it (the timeline's transport bar lies over the lower half of its splitter), and the dock's splitter stops where the timeline's begins, so no press lands on two (SE-071) |
 
 Message channels: a **toast** reports the result of an explicit command (saved, exported,
 import failed) and asynchronous failures; the **status bar** shows transient tool feedback
@@ -297,7 +297,8 @@ disabled.
 ### 5.6 Timeline
 
 - Left column (200 px): per layer — visibility, lock, name (double-click renames), opacity on
-  hover. Reference layers sit in a separate bottom group labelled "Reference".
+  hover. Reference layers sit in a separate bottom group labelled "Reference". The name sits
+  8 px after the lock, on the spacing scale, where the mockup has 6 px (SE-071).
 - Header row: frame numbers; the tag bar sits above it with coloured spans and tag names.
 - Cells: 24 px wide in 28 px rows. Empty cel = small hollow dot; filled cel = solid dot; linked
   cels are joined by a line. Active cell has an accent outline; the active frame column and

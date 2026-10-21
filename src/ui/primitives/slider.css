@@ -21,7 +21,7 @@
     position: relative;
     flex: 1;
     height: 2px;
-    margin: 0 7px;
+    margin: 0 calc((var(--control-height) - var(--slider-thumb-size)) / 2);
     background: var(--border-input);
 }
 
@@ -42,8 +42,8 @@
 
 .ui-slider__thumb::after {
     content: "";
-    width: 10px;
-    height: 10px;
+    width: var(--slider-thumb-size);
+    height: var(--slider-thumb-size);
     border-radius: 50%;
     background: var(--text);
 }

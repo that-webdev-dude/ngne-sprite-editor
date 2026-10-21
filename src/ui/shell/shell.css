@@ -111,11 +111,15 @@
     border-left: var(--border-width) solid var(--border);
 }
 
-/* The splitter's line lies on the region border: 4 px of hit area on either side. */
+/*
+ * The splitter's line lies on the region border: 4 px of hit area on either side. It stops
+ * where the timeline's splitter begins, so the two hit areas never meet at the corner
+ * (SE-071).
+ */
 .shell-dock__splitter {
     position: absolute;
     top: 0;
-    bottom: 0;
+    bottom: calc(var(--space-4) + var(--border-width));
     left: calc(-1 * (var(--space-4) + var(--border-width)));
 }
 

@@ -128,7 +128,7 @@ test("the Edit menu opens Preferences: the theme and every value of the preferen
     await expect(dialog.getByRole("textbox")).toHaveCount(0);
     await expect(field(grid(dialog), "Width")).toHaveValue("16");
     await expect(field(grid(dialog), "Height")).toHaveValue("16");
-    await expect(segment(onion(dialog), "Onion skin", "Off")).toBeChecked();
+    await expect(toggle(onion(dialog), "Onion skin")).toHaveAttribute("aria-pressed", "false");
     await expect(field(onion(dialog), "Before")).toHaveValue("1");
     await expect(field(onion(dialog), "After")).toHaveValue("1");
     await expect(field(onion(dialog), "Opacity")).toHaveValue("128");
@@ -142,7 +142,7 @@ test("the Edit menu opens Preferences: the theme and every value of the preferen
     await expect(field(importDefaults(dialog), "Alpha threshold")).toHaveValue("128");
     await expect(field(importDefaults(dialog), "Colours")).toHaveValue("16");
     await expect(select(importDefaults(dialog), "Dither")).toHaveText("None");
-    await expect(segment(autosave(dialog), "Autosave", "On")).toBeChecked();
+    await expect(toggle(autosave(dialog), "Autosave")).toHaveAttribute("aria-pressed", "true");
 
     // Close and Escape close it; nothing was stored by looking.
     await dialogButton(dialog, "Close").click();
@@ -204,7 +204,7 @@ test("changing a preference updates the store and notifies a test subscriber, fo
         ],
         [
             "onion.enabled",
-            () => segment(onion(dialog), "Onion skin", "On").click(),
+            () => toggle(onion(dialog), "Onion skin").click(),
             (draft) => void (draft.onion.enabled = true),
         ],
         [
@@ -274,7 +274,7 @@ test("changing a preference updates the store and notifies a test subscriber, fo
         ],
         [
             "autosave.enabled",
-            () => segment(autosave(dialog), "Autosave", "Off").click(),
+            () => toggle(autosave(dialog), "Autosave").click(),
             (draft) => void (draft.autosave.enabled = false),
         ],
     ];
@@ -321,7 +321,7 @@ test("changing a preference updates the store and notifies a test subscriber, fo
     await expect(field(checkerboard(reopened), "Size")).toHaveValue("16");
     await expect(field(grid(reopened), "Width")).toHaveValue("8");
     await expect(field(grid(reopened), "Height")).toHaveValue("24");
-    await expect(segment(onion(reopened), "Onion skin", "On")).toBeChecked();
+    await expect(toggle(onion(reopened), "Onion skin")).toHaveAttribute("aria-pressed", "true");
     await expect(field(onion(reopened), "Before")).toHaveValue("3");
     await expect(field(onion(reopened), "After")).toHaveValue("0");
     await expect(field(onion(reopened), "Opacity")).toHaveValue("64");
@@ -335,7 +335,7 @@ test("changing a preference updates the store and notifies a test subscriber, fo
     await expect(field(importDefaults(reopened), "Alpha threshold")).toHaveValue("200");
     await expect(field(importDefaults(reopened), "Colours")).toHaveValue("32");
     await expect(select(importDefaults(reopened), "Dither")).toHaveText("Floyd–Steinberg");
-    await expect(segment(autosave(reopened), "Autosave", "Off")).toBeChecked();
+    await expect(toggle(autosave(reopened), "Autosave")).toHaveAttribute("aria-pressed", "false");
     expect(errors).toEqual([]);
 });
 
@@ -533,7 +533,7 @@ test("Restore defaults returns every preference and the theme to the default", a
     await segment(checkerboard(dialog), "Colours", "Custom").click();
     await toggle(onion(dialog), "Tint").click();
     await choose(page, importDefaults(dialog), "Dither", "Ordered (Bayer 4×4)");
-    await segment(autosave(dialog), "Autosave", "Off").click();
+    await toggle(autosave(dialog), "Autosave").click();
     expect(await storedPreferences(page)).toMatchObject({
         grid: { width: 8 },
         onion: { tint: true },
@@ -551,7 +551,7 @@ test("Restore defaults returns every preference and the theme to the default", a
     await expect(segment(checkerboard(dialog), "Colours", "Theme")).toBeChecked();
     await expect(toggle(onion(dialog), "Tint")).toHaveAttribute("aria-pressed", "false");
     await expect(select(importDefaults(dialog), "Dither")).toHaveText("None");
-    await expect(segment(autosave(dialog), "Autosave", "On")).toBeChecked();
+    await expect(toggle(autosave(dialog), "Autosave")).toHaveAttribute("aria-pressed", "true");
     expect(await storedPreferences(page)).toEqual(defaults);
 
     // And they are what a reload finds.
@@ -614,8 +614,11 @@ test("the dialog works from the keyboard and returns focus to the Edit menu", as
     await toggle(onion(dialog), "Tint").focus();
     await page.keyboard.press("Space");
     await expect(toggle(onion(dialog), "Tint")).toHaveAttribute("aria-pressed", "true");
-    await segment(autosave(dialog), "Autosave", "On").focus();
-    await arrowTo(page, "ArrowRight", segment(autosave(dialog), "Autosave", "Off"));
+    await toggle(autosave(dialog), "Autosave").focus();
+    await page.keyboard.press("Space");
+    await expect(toggle(autosave(dialog), "Autosave")).toHaveAttribute("aria-pressed", "false");
+    await segment(onion(dialog), "Placement", "Behind").focus();
+    await arrowTo(page, "ArrowRight", segment(onion(dialog), "Placement", "In front"));
     await select(importDefaults(dialog), "Resample").focus();
     await page.keyboard.press("Enter");
     await expect(page.getByRole("option", { name: "Area average" })).toBeFocused();
@@ -625,7 +628,7 @@ test("the dialog works from the keyboard and returns focus to the Edit menu", as
     await expect(page.getByRole("listbox")).toBeHidden();
     await expect(select(importDefaults(dialog), "Resample")).toHaveText("Dominant colour");
     expect(await storedPreferences(page)).toMatchObject({
-        onion: { tint: true },
+        onion: { tint: true, placement: "front" },
         autosave: { enabled: false },
         import: { resample: "dominant" },
     });
