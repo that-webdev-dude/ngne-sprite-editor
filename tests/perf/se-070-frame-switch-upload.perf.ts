@@ -1,6 +1,12 @@
 import { it } from "vitest";
 import { record } from "./record";
-import { showFrame, slotKeys, switchOnce, withReferenceDocument } from "./se-070-frame-switch";
+import {
+    expectFramesCounted,
+    showFrame,
+    slotKeys,
+    switchOnce,
+    withReferenceDocument,
+} from "./se-070-frame-switch";
 import type { SwitchSample } from "./se-070-frame-switch";
 import { LAYERS, SIDE, percentile, selectedGpu, summary } from "./se-070-harness";
 
@@ -16,7 +22,8 @@ import { LAYERS, SIDE, percentile, selectedGpu, summary } from "./se-070-harness
 // switches each; the way back to frame 1 is not measured), each switch recorded as
 // `se-070-frame-switch.ts` describes: from the key's `timeStamp` to the submit of the frame
 // that shows the new frame. A frame stepped to was last shown 63 switches before, so it is
-// never in the cache: every switch must make a `texture()` call, or the run fails. The first
+// never in the cache: every switch must make a `texture()` call and count at least 1
+// animation frame, and the preview panel must be expanded and playing, or the run fails. The first
 // sweep also builds each frame's composite (none was asked for before); the later sweeps find
 // it in the composite cache and upload only. The result is the larger of the two p95s (first
 // sweep; later sweeps) against SPEC §6.6's 50 ms.
@@ -47,6 +54,7 @@ it.skipIf(!gpu)(
                         "Nothing was measured.",
                 );
             }
+            expectFramesCounted(all);
             const p95 = (samples: readonly SwitchSample[]) =>
                 percentile(
                     samples.map((sample) => sample.latencyMs).sort((a, b) => a - b),

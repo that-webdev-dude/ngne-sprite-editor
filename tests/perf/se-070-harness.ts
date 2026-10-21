@@ -305,9 +305,50 @@ export async function viewportSettled(page: Page): Promise<void> {
     });
 }
 
-/** Throws unless the preview panel is expanded with a game (the default layout). */
+/**
+ * Throws unless the preview panel is expanded and playing (the default layout, REVIEW.md F68
+ * M): its dock section's toggle says expanded, its game has a canvas with a box, and the
+ * game renders frames — at least 3 more within 10 s (it plays 100 ms entries).
+ */
 export async function expectPreviewExpanded(page: Page): Promise<void> {
-    await page.waitForFunction(() => window.__ngneTest?.preview?.lifecycle != null, undefined, {
-        timeout: 30_000,
-    });
+    const toggle = await page.evaluate(
+        () =>
+            document
+                .querySelector('[data-dock-panel="preview"] .dock-section__toggle')
+                ?.getAttribute("aria-expanded") ?? null,
+    );
+    if (toggle !== "true") {
+        throw new Error(
+            `se-070: the preview panel is not expanded (aria-expanded: ${toggle}). Nothing was measured.`,
+        );
+    }
+    try {
+        await page.waitForFunction(
+            () => {
+                const canvas = document.querySelector(
+                    '[data-dock-panel="preview"] [data-preview-canvas] canvas',
+                );
+                const box = canvas?.getBoundingClientRect();
+                return (
+                    window.__ngneTest?.preview?.lifecycle != null &&
+                    box !== undefined &&
+                    box.width > 0 &&
+                    box.height > 0
+                );
+            },
+            undefined,
+            { timeout: 30_000 },
+        );
+        const start = await page.evaluate(() => window.__ngneTest!.preview!.frames);
+        await page.waitForFunction(
+            (start) => (window.__ngneTest?.preview?.frames ?? 0) >= start + 3,
+            start,
+            { timeout: 10_000, polling: 50 },
+        );
+    } catch (error) {
+        throw new Error(
+            `se-070: the expanded preview shows no playing game (${String(error)}). Nothing was measured.`,
+            { cause: error },
+        );
+    }
 }

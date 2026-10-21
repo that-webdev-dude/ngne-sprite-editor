@@ -54,7 +54,7 @@ import type { DocumentSummary, Rgba } from "./se-070-support";
 // Every image is held against one painted here by hand from the strokes, the source and the
 // transform, not against what the app computes: the cels after each step, the documents after
 // the open, the exported atlas and each frame the consumer game draws (exact, every pixel of
-// its canvas: the art is opaque, so nothing is blended).
+// its canvas: each pixel of the art is opaque or transparent, so nothing is blended).
 
 const WIDTH = 32;
 const HEIGHT = 24;
@@ -92,7 +92,39 @@ const SOURCE = imageOf(64, 48, (x, y) => TILES[((x >> 3) + (y >> 3)) % 4]!);
 const FITTED = imageOf(WIDTH, HEIGHT, (x, y) => TILES[((x >> 2) + (y >> 2)) % 4]!);
 /** The marquee's rectangle in the imported sprite, from (2, 3) to (13, 10). */
 const SELECTED = { x: 2, y: 3, width: 12, height: 8 };
-const PHOTO_FRAME = mirroredIn(FITTED, SELECTED);
+/** Texels the flipped selection is nudged to the right before it is applied. */
+const NUDGE = 3;
+
+/**
+ * `image` with `rect` lifted (transparent underneath, SPEC §7.2), mirrored left to right and
+ * put back `dx` texels to the right: the columns it leaves are transparent. The reference
+ * layer lies behind the whole sprite, so a reference wrongly left in the export would show
+ * there.
+ */
+function flippedAndMoved(
+    image: PixelBuffer,
+    rect: { x: number; y: number; width: number; height: number },
+    dx: number,
+): PixelBuffer {
+    const mirrored = mirroredIn(image, rect);
+    const out = { width: image.width, height: image.height, data: image.data.slice() };
+    for (let y = rect.y; y < rect.y + rect.height; y++) {
+        out.data.fill(
+            0,
+            (y * image.width + rect.x) * 4,
+            (y * image.width + rect.x + rect.width) * 4,
+        );
+    }
+    for (let y = rect.y; y < rect.y + rect.height; y++) {
+        for (let x = rect.x; x < rect.x + rect.width; x++) {
+            if (x + dx >= image.width) continue;
+            const from = (y * image.width + x) * 4;
+            out.data.set(mirrored.data.subarray(from, from + 4), (y * image.width + x + dx) * 4);
+        }
+    }
+    return out;
+}
+const PHOTO_FRAME = flippedAndMoved(FITTED, SELECTED, NUDGE);
 
 const bytesOf = (image: PixelBuffer | null) => (image ? Array.from(image.data) : null);
 
@@ -319,7 +351,9 @@ test("golden path: new sprite → two layers → frames → tag → PNG imported
     expect(importedState.sources).toHaveLength(1);
     expect(importedState.composites).toEqual([bytesOf(FITTED)]);
 
-    // 6. Select with the rectangular marquee, then Edit → Flip Horizontal and Enter.
+    // 6. Select with the rectangular marquee, Edit → Flip Horizontal, nudge it three texels to
+    // the right with the arrow key and apply it with Enter: the columns it leaves are
+    // transparent, with the reference layer behind them.
     await pressToolKey(page, "KeyM", "marquee");
     await strokeThrough(page, [
         { x: SELECTED.x, y: SELECTED.y },
@@ -330,12 +364,16 @@ test("golden path: new sprite → two layers → frames → tag → PNG imported
     await expect.poll(() => floating(page)).toBe(true);
     await viewportArea(page).focus();
     await expect(viewportArea(page)).toBeFocused();
+    for (let step = 0; step < NUDGE; step++) await page.keyboard.press("ArrowRight");
+    expect(await floating(page)).toBe(true);
     await page.keyboard.press("Enter");
     await expect.poll(() => floating(page)).toBe(false);
     expect((await toolsState(page)).selected).toBe("move");
     const photoBefore = await documentSummary(page, photo);
     expect(photoBefore.cels[1]).toEqual([bytesOf(PHOTO_FRAME)]);
+    // The composite leaves the reference out: the columns left are transparent in it too.
     expect(photoBefore.composites).toEqual([bytesOf(PHOTO_FRAME)]);
+    expect(PHOTO_FRAME.data[((SELECTED.y + 1) * WIDTH + SELECTED.x) * 4 + 3]).toBe(0);
 
     // 7. Save both: the imported sprite, then the hero after a click on its tab.
     await save(page, "photo.ngsprite");
@@ -365,7 +403,8 @@ test("golden path: new sprite → two layers → frames → tag → PNG imported
     expect(errors).toEqual([]);
 
     // 11. The consumer game imports each generated module and draws every frame, and the
-    // hero's tag plays as its animation. The reference layer is not in the photo's frame.
+    // hero's tag plays as its animation. The reference layer is not in the photo's frame: its
+    // transparent columns show the game's clear colour.
     const consumer = await page.context().newPage();
     const consumerErrors = collectErrors(consumer);
     await expectConsumerDraws(

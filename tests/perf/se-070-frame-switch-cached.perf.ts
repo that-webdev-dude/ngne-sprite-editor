@@ -1,6 +1,12 @@
 import { it } from "vitest";
 import { record } from "./record";
-import { showFrame, slotKeys, switchOnce, withReferenceDocument } from "./se-070-frame-switch";
+import {
+    expectFramesCounted,
+    showFrame,
+    slotKeys,
+    switchOnce,
+    withReferenceDocument,
+} from "./se-070-frame-switch";
 import type { SwitchSample } from "./se-070-frame-switch";
 import { LAYERS, SIDE, selectedGpu, summary } from "./se-070-harness";
 
@@ -17,8 +23,10 @@ import { LAYERS, SIDE, selectedGpu, summary } from "./se-070-harness";
 // way back to frame 1 is not measured), each recorded as `se-070-frame-switch.ts` describes.
 // A switch counts the animation frames from the key to the submit of the frame that shows
 // the new frame: 1 is the next animation frame. The result is the largest count (`unit:
-// count`) against a budget of 1. A switch that made a `texture()` call, or a cache that does
-// not hold all 8 frames before the sweeps, fails the run: nothing was measured.
+// count`) against a budget of 1. A switch that made a `texture()` call, a switch that counted
+// fewer than 1 animation frame (the counter out of order with the submit), a cache that does
+// not hold all 8 frames before the sweeps, or a preview panel that is not expanded and playing,
+// fails the run: nothing was measured.
 
 const FRAMES = 8;
 const SWEEPS = 10;
@@ -50,6 +58,7 @@ it.skipIf(!gpu)(
                         `${uploaded[0]!.to}): the frames were not all cached. Nothing was measured.`,
                 );
             }
+            expectFramesCounted(samples);
             const frames = samples.map((sample) => sample.frames);
             const counts: Record<string, number> = {};
             for (const count of frames) counts[count] = (counts[count] ?? 0) + 1;

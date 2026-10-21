@@ -36,7 +36,18 @@ import type { AdapterInfo } from "./se-070-harness";
 // - `interactive`: the first animation frame in which the New sprite dialog
 //   (`role="dialog"`, named "New sprite") is in the document with a box. That frame paints it.
 // The result is the largest `interactive` of the 10 loads against 2000 ms; the median, the
-// shell times, the navigation timings and the long tasks are in the details. A load whose
+// shell times, the navigation timings and the long tasks are in the details.
+//
+// Beside it, not part of the result (SE-070 review D): the first draw of the editor, which
+// "interactive" does not include, since nothing starts the viewport's NGNE device, pipelines
+// and shaders before a document is open. In the same load, at the animation frame after the
+// dialog was seen, the probe clicks its Create button (again every 50 ms while the dialog
+// stays), and records "Create → first viewport frame on screen": from that first click to the
+// first animation frame in which the viewport's canvas is in the document with a box. The
+// production build has no test hook, so the signal is one the DOM shows: the NGNE viewport
+// puts its canvas into the document only once that canvas has drawn its first frame
+// (`NgneViewport`: "a canvas that has not drawn does not go on screen"), and the animation
+// frame that finds it there paints it. A load whose
 // page has the development test hook or Vite's client is no production build and fails the
 // run, as does a wrong WebGPU adapter (checked in each load's page after it was measured).
 
@@ -48,6 +59,9 @@ interface LoadTimes {
     shell: number | null;
     interactive: number | null;
     clicks: number;
+    created: number | null;
+    firstViewportFrame: number | null;
+    createClicks: number;
     domContentLoaded: number;
     load: number;
     firstContentfulPaint: number | null;
@@ -61,6 +75,11 @@ declare global {
             shell: number | null;
             interactive: number | null;
             clicks: number;
+            /** The first click on the dialog's Create button. */
+            created: number | null;
+            /** The first animation frame with the viewport's canvas in the document. */
+            firstViewportFrame: number | null;
+            createClicks: number;
             longTasks: { start: number; duration: number }[];
         };
     }
@@ -72,6 +91,9 @@ function installLoadProbe(): void {
         shell: null as number | null,
         interactive: null as number | null,
         clicks: 0,
+        created: null as number | null,
+        firstViewportFrame: null as number | null,
+        createClicks: 0,
         longTasks: [] as { start: number; duration: number }[],
     };
     window.__se070load = state;
@@ -104,10 +126,34 @@ function installLoadProbe(): void {
             const label = labelId ? document.getElementById(labelId)?.textContent : null;
             return (label ?? dialog.getAttribute("aria-label"))?.trim() === "New sprite";
         }) ?? null;
+    const createButton = (dialog: Element) =>
+        Array.from(dialog.querySelectorAll<HTMLButtonElement>("button")).find(
+            (button) => button.textContent?.trim() === "Create",
+        ) ?? null;
+    const viewportCanvas = () =>
+        document.querySelector('[data-region="viewport"] [data-viewport-canvas] canvas');
     let lastClick = -Infinity;
+    let lastCreate = -Infinity;
+    // After "interactive": Create, then the first frame of the viewport (review D).
+    const afterInteractive = (time: number) => {
+        if (hasBox(viewportCanvas())) {
+            state.firstViewportFrame = performance.now();
+            return;
+        }
+        const dialog = newSpriteDialog();
+        const create = dialog && createButton(dialog);
+        if (create && time - lastCreate >= 50) {
+            lastCreate = time;
+            state.created ??= performance.now();
+            state.createClicks++;
+            create.click();
+        }
+        requestAnimationFrame(afterInteractive);
+    };
     const frame = (time: number) => {
         if (newSpriteDialog() && hasBox(newSpriteDialog())) {
             state.interactive = performance.now();
+            requestAnimationFrame(afterInteractive);
             return;
         }
         const button = newSpriteButton();
@@ -137,10 +183,11 @@ async function coldLoad(
         const pageErrors: string[] = [];
         page.on("pageerror", (error) => void pageErrors.push(String(error)));
         await page.goto(url);
-        await page.waitForFunction(() => window.__se070load?.interactive != null, undefined, {
-            polling: 50,
-            timeout: 60_000,
-        });
+        await page.waitForFunction(
+            () => window.__se070load?.firstViewportFrame != null,
+            undefined,
+            { polling: 50, timeout: 60_000 },
+        );
         const times = await page.evaluate((): LoadTimes => {
             const probe = window.__se070load!;
             const navigation = performance.getEntriesByType(
@@ -153,6 +200,9 @@ async function coldLoad(
                 shell: probe.shell,
                 interactive: probe.interactive,
                 clicks: probe.clicks,
+                created: probe.created,
+                firstViewportFrame: probe.firstViewportFrame,
+                createClicks: probe.createClicks,
                 domContentLoaded: navigation.domContentLoadedEventEnd,
                 load: navigation.loadEventEnd,
                 firstContentfulPaint: paint?.startTime ?? null,
@@ -194,6 +244,8 @@ it.skipIf(!gpu)(
             const interactive = loads.map((load) => load.interactive!);
             const sorted = [...interactive].sort((a, b) => a - b);
             const round = (value: number) => Math.round(value * 10) / 10;
+            const firstFrame = loads.map((load) => load.firstViewportFrame! - load.created!);
+            const firstFrameSorted = [...firstFrame].sort((a, b) => a - b);
             const details = {
                 interactiveMs: interactive.map(round),
                 medianInteractiveMs: round(percentile(sorted, 0.5)),
@@ -205,6 +257,16 @@ it.skipIf(!gpu)(
                     load.firstContentfulPaint === null ? null : round(load.firstContentfulPaint),
                 ),
                 longTasks: loads.map((load) => load.longTasks),
+                createToFirstViewportFrameMs: firstFrame.map(round),
+                medianCreateToFirstViewportFrameMs: round(percentile(firstFrameSorted, 0.5)),
+                largestCreateToFirstViewportFrameMs: round(firstFrameSorted.at(-1)!),
+                createClicksUntilAnswered: loads.map((load) => load.createClicks),
+                firstViewportFrameDefinition:
+                    "Create → first viewport frame on screen, not part of the result: from the " +
+                    "first click on the New sprite dialog's Create button (at the animation " +
+                    "frame after the dialog was seen, again every 50 ms while it stays) to the " +
+                    "first animation frame in which the viewport's canvas is in the document " +
+                    "with a box; the NGNE viewport inserts its canvas only after it has drawn",
                 interactiveDefinition:
                     "navigation start to the first animation frame showing the New sprite " +
                     "dialog, the empty state's New sprite button being clicked at every frame " +

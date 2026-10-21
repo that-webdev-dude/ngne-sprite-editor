@@ -55,6 +55,26 @@ async function openPainted(page: Page): Promise<Painted> {
     return { document, before };
 }
 
+/**
+ * Waits until the timeline has drawn the setup's last change and the page is idle: three
+ * animation frames (the panel draws two frames and an idle callback after a change, SE-022),
+ * then an idle callback. The measured undo then does not share its frames with work the
+ * stroke's release left behind (REVIEW.md F49, as F31 steadied `se-022-viewport`).
+ */
+function setupDrawn(page: Page): Promise<void> {
+    return page.evaluate(
+        () =>
+            new Promise<void>((resolve) => {
+                let left = 3;
+                const next = () => {
+                    if (--left > 0) requestAnimationFrame(next);
+                    else requestIdleCallback(() => resolve());
+                };
+                requestAnimationFrame(next);
+            }),
+    );
+}
+
 /** Moves the mouse onto the centre of each texel in turn (one move each). */
 async function moveOver(page: Page, texels: readonly Point[]): Promise<void> {
     const layout = await geometry(page);
@@ -92,7 +112,9 @@ test("a stroke shows in the viewport while the button is held; after the release
     await settle(page);
     await expectImage(page, document, VIEW, stroked);
 
-    // Undo, through the registered command, at the start of an animation frame.
+    // Undo, through the registered command, at the start of an animation frame, once the
+    // setup's work is drawn.
+    await setupDrawn(page);
     const rect = documentRect(document, VIEW);
     const times: FrameTimes = await page.evaluate((rect) => {
         const undo = window.__ngneTest!.commands.get("edit.undo")!;

@@ -23,18 +23,36 @@ import { stubExportFolders } from "./se-052-support";
 // SE-041 and SE-052, which cancel, and a file input's chooser is cancelled the same way.
 //
 // After every command: `assertInvariants` on every open document (SPEC §5.1), a command that
-// threw or rejected, and the page's console errors and uncaught errors; any of them fails the
-// run, with the seed and the commands so far. At the end every document is closed with the
-// File menu's Close (Discard where asked), the garbage collector is run several times through
-// the DevTools protocol, and the heap is within 10% of the baseline taken the same way after
-// the app had loaded, before the first document. The heap compared is a heap snapshot's
-// nodes but V8's compiled code: the code of every function the commands ran for the first
-// time (machine code, bytecode, feedback) is V8's, not held by the app, and a collection does
-// not take it back. `Runtime.getHeapUsage`, which counts it, is reported beside it.
+// threw or rejected, a command whose promise is still unsettled once its surfaces were answered,
+// a navigation of the main frame, and the page's console errors and uncaught errors; any of
+// them fails the run, with the seed and the commands so far. A step with nothing reachable
+// runs no command: the loop goes on until exactly 500 have run. At the end every document is
+// closed with the File menu's Close (Discard where asked), the garbage collector is run
+// several times through the DevTools protocol, and the heap is within 10% of the baseline
+// taken the same way after the app had loaded, before the first document. The heap compared
+// is a heap snapshot's nodes but V8's compiled code: the code of every function the commands
+// ran for the first time (machine code, bytecode, feedback) is V8's, not held by the app, and a
+// collection does not take it back. That code has a fixed ceiling of its own, and
+// `Runtime.getHeapUsage`, which counts it, is reported beside both.
+//
+// The check can see a leak: the start document holds more pixel bytes than the 10% margin
+// (asserted), and keeps more than the margin even flattened, so a closed document left
+// reachable fails it (SE-070 review A: a control run that kept the closed start session in a
+// global failed the check at +20%).
 
 const SEED = 0x5e070;
 const COMMANDS = 500;
 const HEAP_MARGIN = 0.1;
+/**
+ * The most V8's compiled code (`code` nodes) may grow over the soak. Measured growth: about
+ * 6.6 MB in SE-070's first runs, 6.3 to 7.0 MB in 18 runs of the review fix round (SwiftShader,
+ * cloud). The ceiling is more than twice the largest, so a slower tier of the compiler or a
+ * later command's code does not reach it, while code that keeps growing with the commands
+ * (functions made anew and compiled each time) does.
+ */
+const CODE_CEILING = 16 * 1024 * 1024;
+/** A step with nothing reachable runs no command; the loop gives up after this many steps. */
+const MAX_STEPS = 2 * COMMANDS;
 
 /** A small fast generator of numbers in [0, 1) from a seed (mulberry32). */
 function generator(seed: number): () => number {
@@ -49,7 +67,7 @@ function generator(seed: number): () => number {
 }
 
 interface SoakPage {
-    /** The command picked last and whether its promise has settled. */
+    /** Whether the promise of the command picked last has settled. */
     settled: boolean;
     /** Commands that threw or rejected. */
     failures: string[];
@@ -61,29 +79,34 @@ declare global {
     }
 }
 
-/** Opens the document the soak starts from: 24 × 16, 3 layers, 4 frames, a tag, pixels. */
-function openStart(page: Page): Promise<void> {
+/**
+ * Opens the document the soak starts from: 256 × 256, 2 layers, 32 frames, a tag, pixels in 48
+ * of its 64 cels (about 12.6 MB). Every frame has pixels, so a flatten still leaves 32 cels
+ * (about 8.4 MB), more than the heap margin. Returns the bytes of its pixels.
+ */
+function openStart(page: Page): Promise<number> {
     return page.evaluate(async () => {
         const path = "/src/core/model/index.ts";
         const core = (await import(/* @vite-ignore */ path)) as typeof CoreModel;
-        const width = 24;
-        const height = 16;
+        const width = 256;
+        const height = 256;
         const session = core.createDocument({ name: "soak", width, height });
         const { doc } = session;
         const base = doc.layers[0]!;
-        doc.layers = [0, 1, 2].map((index) => ({
+        doc.layers = Array.from({ length: 2 }, (_, index) => ({
             ...base,
             id: index === 0 ? base.id : `layer-${index + 1}`,
             name: `Layer ${index + 1}`,
         }));
         const first = doc.frames[0]!;
-        doc.frames = [0, 1, 2, 3].map((index) => ({
+        doc.frames = Array.from({ length: 32 }, (_, index) => ({
             id: index === 0 ? first.id : `frame-${index + 1}`,
             durationMs: 100,
         }));
+        let pixelBytes = 0;
         doc.layers.forEach((layer, l) => {
             doc.frames.forEach((frame, f) => {
-                if ((l + f) % 3 === 2) return;
+                if ((l + f) % 4 === 3) return;
                 const data = new Uint8ClampedArray(width * height * 4);
                 for (let y = 0; y < height; y++) {
                     for (let x = 0; x < width; x++) {
@@ -96,6 +119,7 @@ function openStart(page: Page): Promise<void> {
                 }
                 const imageId = `image-${l}-${f}`;
                 doc.images.set(imageId, { width, height, data });
+                pixelBytes += data.byteLength;
                 doc.cels.set(core.celKey(layer.id, frame.id), { imageId, opacity: 255 });
             });
         });
@@ -105,7 +129,7 @@ function openStart(page: Page): Promise<void> {
                 name: "walk",
                 color: 0x73bed3ff,
                 fromFrameId: doc.frames[1]!.id,
-                toFrameId: doc.frames[3]!.id,
+                toFrameId: doc.frames[5]!.id,
                 direction: "forward",
                 repeat: 0,
             },
@@ -114,6 +138,7 @@ function openStart(page: Page): Promise<void> {
         session.activeFrameId = first.id;
         window.__ngneTest!.sessions.getState().open(session);
         window.__ngneTest!.assertInvariants();
+        return pixelBytes;
     });
 }
 
@@ -124,11 +149,17 @@ function installSoak(page: Page): Promise<void> {
     });
 }
 
+/** A command the soak picked, and how many were reachable when it was picked. */
+interface Picked {
+    id: string | null;
+    candidates: number;
+}
+
 /**
  * Picks the next command among those reachable now, with `pick` in [0, 1), and runs it as a
- * menu does. Returns its id, or null when no command is reachable.
+ * menu does. Returns its id (null when no command is reachable) and the number of candidates.
  */
-function runPicked(page: Page, pick: number): Promise<string | null> {
+function runPicked(page: Page, pick: number): Promise<Picked> {
     return page.evaluate(async (pick) => {
         const load = (path: string) => import(/* @vite-ignore */ path);
         const { appCommands } = (await load(
@@ -154,7 +185,7 @@ function runPicked(page: Page, pick: number): Promise<string | null> {
                 command.shortcuts.length > 0 && command.contexts.some((c) => contexts.includes(c));
             return bound || command.menuPath !== null || command.contextMenus.length > 0;
         });
-        if (candidates.length === 0) return null;
+        if (candidates.length === 0) return { id: null, candidates: 0 };
         const command =
             candidates[Math.min(candidates.length - 1, Math.floor(pick * candidates.length))]!;
         soak.settled = false;
@@ -181,7 +212,7 @@ function runPicked(page: Page, pick: number): Promise<string | null> {
             fail(error);
             soak.settled = true;
         }
-        return command.id;
+        return { id: command.id, candidates: candidates.length };
     }, pick);
 }
 
@@ -245,6 +276,11 @@ async function commandSettled(page: Page, ms: number): Promise<boolean> {
     }
 }
 
+/** Whether the last command's promise has settled. */
+function isSettled(page: Page): Promise<boolean> {
+    return page.evaluate(() => window.__se070soak!.settled);
+}
+
 /** The page's heap after the collector has run five times. */
 interface Heap {
     /** `Runtime.getHeapUsage`: everything V8 holds, compiled code included. */
@@ -294,36 +330,84 @@ test("soak: 500 seeded commands of the registry keep every document valid with n
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await stubFileSystemAccess(page);
     await stubExportFolders(page);
-    // A file input's chooser is taken by the test, and left unanswered: cancelled.
-    page.on("filechooser", () => undefined);
+    // A file input's chooser is taken by the test and cancelled: the input gets the `cancel`
+    // event Chrome sends when the user closes the chooser, so the command that asked settles.
+    page.on("filechooser", (chooser) => {
+        void chooser
+            .element()
+            .evaluate((input) => input.dispatchEvent(new Event("cancel", { bubbles: true })))
+            .catch(() => undefined);
+    });
     await openEditor(page);
     await installSoak(page);
+    // A command that navigates or reloads the page fails the run with its id (review J).
+    const navigations: string[] = [];
+    page.on("framenavigated", (frame) => {
+        if (frame === page.mainFrame()) navigations.push(frame.url());
+    });
     const cdp = await context.newCDPSession(page);
     await cdp.send("HeapProfiler.enable");
     await new Promise((resolve) => setTimeout(resolve, 1000));
     const baseline = await heapAfterGc(cdp);
 
-    await openStart(page);
+    const pixelBytes = await openStart(page);
+    // Review A: a closed document kept reachable would hold more than the margin.
+    expect(
+        pixelBytes,
+        `start pixels against the margin of ${baseline.withoutCode} B`,
+    ).toBeGreaterThan(HEAP_MARGIN * baseline.withoutCode);
     const random = generator(SEED);
     const sequence: string[] = [];
+    /** Each step: the command run (null: nothing reachable) and the candidates it was one of. */
+    const steps: Picked[] = [];
+    let executed = 0;
     const report = () =>
-        `seed ${SEED}, after ${sequence.length} commands; the last: ${sequence.slice(-12).join(" → ")}`;
+        `seed ${SEED}, after ${executed} commands; the last: ${sequence.slice(-12).join(" → ")}`;
+    const expectNoNavigation = (id: string | null) =>
+        expect(
+            navigations,
+            `${id ?? "(nothing reachable)"} navigated the main frame; ${report()}`,
+        ).toEqual([]);
     try {
-        for (let step = 0; step < COMMANDS; step++) {
-            const id = await runPicked(page, random());
+        for (let step = 0; executed < COMMANDS && step < MAX_STEPS; step++) {
+            let picked: Picked;
+            try {
+                picked = await runPicked(page, random());
+            } catch (error) {
+                expectNoNavigation("the command being picked");
+                throw error;
+            }
+            steps.push(picked);
+            const { id } = picked;
             if (id === null) {
                 // Nothing to do (no document, a surface in the way): start a new sprite.
                 sequence.push("(nothing reachable)");
                 await answerSurfaces(page, random);
+                expectNoNavigation(id);
                 continue;
             }
+            executed++;
             sequence.push(id);
             await commandSettled(page, 10_000);
-            const answered = await answerSurfaces(page, random);
-            if (answered.length > 0) {
-                sequence.push(`[${answered.join("; ")}]`);
-                await commandSettled(page, 3_000);
+            expectNoNavigation(id);
+            // A surface answered may open the next (Discard, then New sprite): answered until
+            // the command settles or no surface opens.
+            const answers: string[] = [];
+            for (let round = 0; round < 4; round++) {
+                const answered = await answerSurfaces(page, random);
+                expectNoNavigation(id);
+                if (answered.length === 0) break;
+                answers.push(...answered);
+                await commandSettled(page, 10_000);
+                expectNoNavigation(id);
             }
+            if (answers.length > 0) sequence.push(`[${answers.join("; ")}]`);
+            // Review F: still pending once its surfaces were answered and the second wait is
+            // over, the command fails the run.
+            expect(
+                (await isSettled(page)) ? null : `${id}: its promise did not settle`,
+                report(),
+            ).toBeNull();
             const state = await page.evaluate(() => {
                 let invariant: string | null = null;
                 try {
@@ -337,6 +421,8 @@ test("soak: 500 seeded commands of the registry keep every document valid with n
             expect(state.failures, report()).toEqual([]);
             expect(errors, report()).toEqual([]);
         }
+        // Review E: exactly 500 commands ran.
+        expect(executed, report()).toBe(COMMANDS);
 
         // Close everything with File → Close, answering Discard.
         for (let tries = 0; tries < 50; tries++) {
@@ -369,7 +455,10 @@ test("soak: 500 seeded commands of the registry keep every document valid with n
         const after = await heapAfterGc(cdp);
         const change = (key: keyof Heap) =>
             `${key} ${baseline[key]} → ${after[key]} B (${(((after[key] - baseline[key]) / baseline[key]) * 100).toFixed(1)}%)`;
-        const description = (["withoutCode", "code", "used"] as const).map(change).join("; ");
+        const description = [
+            ...(["withoutCode", "code", "used"] as const).map(change),
+            `start pixels ${pixelBytes} B`,
+        ].join("; ");
         testInfo.annotations.push({ type: "heap", description });
         console.log(`se-070 soak heap: ${description}`);
         // The code V8 compiled for the functions the commands ran for the first time stays
@@ -378,10 +467,12 @@ test("soak: 500 seeded commands of the registry keep every document valid with n
         expect(Math.abs(after.withoutCode - baseline.withoutCode), description).toBeLessThanOrEqual(
             HEAP_MARGIN * baseline.withoutCode,
         );
+        // Review B: the code has a ceiling of its own.
+        expect(after.code - baseline.code, description).toBeLessThanOrEqual(CODE_CEILING);
         expect(errors).toEqual([]);
     } finally {
         await testInfo.attach("soak-sequence.json", {
-            body: JSON.stringify({ seed: SEED, sequence }, null, 4),
+            body: JSON.stringify({ seed: SEED, executed, sequence, steps }, null, 4),
             contentType: "application/json",
         });
     }

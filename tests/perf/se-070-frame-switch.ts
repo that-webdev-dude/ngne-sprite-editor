@@ -132,6 +132,21 @@ export async function switchOnce(page: Page): Promise<SwitchSample> {
     return page.evaluate((index) => window.__se070switch!.samples[index]!, before);
 }
 
+/**
+ * Throws unless every sample counted at least one animation frame from its key to its submit:
+ * a count below 1 means the page's frame counter and the submit were out of order, and the
+ * sample measured nothing (SE-070 review G).
+ */
+export function expectFramesCounted(samples: readonly SwitchSample[]): void {
+    const uncounted = samples.filter((sample) => sample.frames < 1);
+    if (uncounted.length > 0) {
+        throw new Error(
+            `se-070: ${uncounted.length} switches counted fewer than 1 animation frame (first ` +
+                `to frame ${uncounted[0]!.to}: ${uncounted[0]!.frames}). Nothing was measured.`,
+        );
+    }
+}
+
 /** Makes frame `number` (from 1) active, as the timeline does; not measured. */
 export async function showFrame(page: Page, number: number): Promise<void> {
     await page.evaluate((number) => {
