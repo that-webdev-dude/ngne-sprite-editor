@@ -1,0 +1,48 @@
+{
+    "id": "se-070-frame-switch-upload-cloud-swiftshader",
+    "ticket": "SE-070",
+    "measurement": "Frame switch to a frame not in the viewport's slot cache (ArrowRight on the viewport) on the reference document (256×256, 8 layers, 64 frames), Chrome on SwiftShader: the key's timeStamp to the submit of the frame showing the new frame.",
+    "statistic": "larger of two p95s: the first sweep (63 switches, composites built) and the later sweeps (126, composites cached)",
+    "budgetMs": 50,
+    "resultMs": 80.80000000004657,
+    "details": {
+        "firstSweep": {
+            "count": 63,
+            "medianMs": 61.2,
+            "p95Ms": 80.8,
+            "maxMs": 111.8
+        },
+        "laterSweeps": {
+            "count": 126,
+            "medianMs": 61.2,
+            "p95Ms": 80.6,
+            "maxMs": 86.4
+        },
+        "animationFramesToSubmit": {
+            "1": 7,
+            "2": 13,
+            "3": 42,
+            "4": 104,
+            "5": 23
+        },
+        "uploadsPerSwitch": {
+            "1": 189
+        },
+        "submitted": "onDrawn: frames submitted to NGNE, not known to be presented on screen",
+        "document": "256×256, 8 layers, 64 frames, at 2×, preview expanded",
+        "devicePixelRatio": 1,
+        "window": "1920×1080 CSS px",
+        "adapter": "google / swiftshader ()",
+        "chrome": "156.0.8078.4, new headless, --force-color-profile=srgb --use-webgpu-adapter=swiftshader --enable-unsafe-webgpu --enable-unsafe-swiftshader --no-sandbox --enable-features=Vulkan --use-angle=vulkan --use-vulkan=swiftshader --disable-vulkan-surface --force-device-scale-factor=1"
+    },
+    "benchmarkId": "se-070-frame-switch-upload-swiftshader",
+    "pass": false,
+    "environment": {
+        "node": "v24.22.0",
+        "platform": "linux 6.18.44-fc-v139",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "cores": 4,
+        "memoryGb": 16
+    },
+    "date": "2026-10-21T01:38:36.572Z"
+}

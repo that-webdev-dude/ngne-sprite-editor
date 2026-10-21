@@ -1,0 +1,43 @@
+{
+    "id": "se-070-playback-cloud-swiftshader",
+    "ticket": "SE-024",
+    "measurement": "Editor playback from the ed:play grid of 64 frames of 256×256 (8 layers), 100 ms each, at 1× speed on the page's clock, 2 passes, Chrome on SwiftShader: entries of the sequence that the clock jumped over or that no submitted frame showed while they were the active frame.",
+    "statistic": "entries skipped of 128",
+    "unit": "count",
+    "budgetMs": 0,
+    "resultMs": 0,
+    "details": {
+        "entries": 128,
+        "skippedEntries": [],
+        "drawn": "onDrawn: frames submitted to NGNE, not known to be presented on screen",
+        "firstFrameAfterEntry": {
+            "count": 126,
+            "medianMs": 17.8,
+            "p95Ms": 35.7,
+            "maxMs": 49.8
+        },
+        "gapsBetweenPictureChanges": {
+            "count": 127,
+            "medianMs": 99.9,
+            "p95Ms": 113.4,
+            "maxMs": 121.9
+        },
+        "framesSubmittedPerSecond": 10,
+        "windowSeconds": 12.81,
+        "document": "256×256, 8 layers, 64 frames of 100 ms, at 2×",
+        "devicePixelRatio": 1,
+        "window": "1920×1080 CSS px",
+        "adapter": "google / swiftshader ()",
+        "chrome": "156.0.8078.4, new headless, --force-color-profile=srgb --use-webgpu-adapter=swiftshader --enable-unsafe-webgpu --enable-unsafe-swiftshader --no-sandbox --enable-features=Vulkan --use-angle=vulkan --use-vulkan=swiftshader --disable-vulkan-surface --force-device-scale-factor=1"
+    },
+    "benchmarkId": "se-024-playback-swiftshader",
+    "pass": true,
+    "environment": {
+        "node": "v24.22.0",
+        "platform": "linux 6.18.44-fc-v139",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "cores": 4,
+        "memoryGb": 16
+    },
+    "date": "2026-10-21T01:38:57.588Z"
+}
