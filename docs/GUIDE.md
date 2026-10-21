@@ -90,13 +90,15 @@ Select the reference's timeline row and open Layer Properties to change X/Y, uni
 opacity, visibility, lock and behind/front placement. With Move selected, drag the image to
 move it by whole document pixels or drag a corner to scale it uniformly about the opposite
 corner. Escape cancels; release records one undo step. Reset Reference to Fit centres it again.
-Unlock before moving, scaling or changing placement.
+Unlock before moving, scaling or changing placement. Changing the canvas dimensions during
+a drag cancels it and preserves the size operation's reference geometry.
 
 A reference sits behind or in front of **all** pixel layers, never between them. It cannot be
 painted on and appears in neither the CPU composite, the preview panel nor any export. The
 display source is limited to 4096 pixels per side and resampled after zoom settles, with a
 16 MP total display budget; enlarging beyond the display source uses nearest sampling.
-Moving at a fractional zoom can change its rounded display width by a pixel (open finding F75).
+Moving at a fractional zoom can change its rounded display width by a pixel and resample it
+after 100 ms; this accepted display trade-off changes neither the source PNG nor exports (F75).
 See [SPEC §7.6](SPEC.md#76-reference-layers-c3).
 
 ## Export

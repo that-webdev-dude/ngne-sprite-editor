@@ -1,0 +1,28 @@
+import { writeFileSync } from "node:fs";
+import { chromium } from "@playwright/test";
+import type { FullConfig } from "@playwright/test";
+
+export default async function probe(config: FullConfig): Promise<void> {
+    const use = config.projects[0]!.use;
+    const browser = await chromium.launch({ channel: "chrome", headless: true, ...use.launchOptions });
+    try {
+        const page = await browser.newPage();
+        await page.goto(use.baseURL!);
+        const adapter = await page.evaluate(`(async () => {
+            const a = await navigator.gpu?.requestAdapter();
+            return a ? { vendor: a.info.vendor, architecture: a.info.architecture } : null;
+        })()`);
+        const gpu = process.env.REFERENCE_GPU;
+        const expected = gpu === "intel-uhd" ? "intel" : "nvidia";
+        if (!adapter || adapter.vendor !== expected ||
+            !(gpu === "intel-uhd" ? /^gen-12/ : /^lovelace$/).test(adapter.architecture)) {
+            throw new Error(`Wrong adapter: ${JSON.stringify(adapter)}`);
+        }
+        const record = { gpu, adapter, chrome: browser.version(), args: use.launchOptions?.args,
+            ci: process.env.CI ?? null, date: new Date().toISOString() };
+        writeFileSync(new URL(`./reference-${gpu}.json`, import.meta.url), JSON.stringify(record, null, 4));
+        console.log(`REFERENCE_GPU_VERIFIED ${JSON.stringify(record)}`);
+    } finally {
+        await browser.close();
+    }
+}

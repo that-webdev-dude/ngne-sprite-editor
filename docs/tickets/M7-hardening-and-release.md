@@ -144,5 +144,8 @@ Acceptance
 
 Acceptance evidence (2026-10-21): [REVIEW.md, SE-073 acceptance evidence](../REVIEW.md#se-073-acceptance-evidence-2026-10-21).
 PR #1 CI run 39633966882 passed all nine jobs for release commit `d0a350a` (the tested merge
-ref has the same file tree). The release tag and deployment remain deferred until written
-owner approval; checkpoint E is still Pending.
+ref has the same file tree). The subsequent `bbcf49e` CI run 39638870937 also passed all
+nine jobs. Checkpoint E is **Passed 2026-10-21 under delegated owner authority**, with the
+accepted RTX performance exception and the explicitly waived native PWA check; see the
+[checkpoint record](../audit/checkpoint-e-2026-10-21.md). The owner retains merging, tagging
+and deployment.

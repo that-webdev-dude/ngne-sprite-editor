@@ -82,3 +82,14 @@ in `tests/perf/README.md`.
 | `se-070-playback-cloud-swiftshader`            | Playback from `ed:play`          | 0 skipped            | 0 of 128        | 2026-10-21 |
 | `se-070-idle-cloud-swiftshader`                | Idle editor, frames per second   | 0                    | 0               | 2026-10-21 |
 | `se-070-cold-load-cloud-swiftshader`           | Cold load to interactive         | 2 s                  | 434.3 ms        | 2026-10-21 |
+
+## Checkpoint E reference records — 2026-10-21
+
+All seven SPEC §6.6 benchmark budgets are met on the development machine's Intel UHD and
+RTX 4060 Laptop GPU. The [dated report](checkpoint-e-2026-10-21.md) links all thirteen raw
+records (the CPU-only benchmark runs once), documents the adapter/method and rejects the
+low-frame-count stroke attempts. Historical records above are unchanged.
+
+The separate `@alone` non-CI E2E run passed 10/10 on Intel and 9/10 on RTX: cel opacity took
+three frames against two. This accepted v1.0.0 exception is tracked in
+[issue #2](https://github.com/that-webdev-dude/ngne-sprite-editor/issues/2); the assertion stays.

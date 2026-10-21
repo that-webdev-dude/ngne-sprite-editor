@@ -90,10 +90,11 @@ from assistive technology. The [accessibility audit](docs/audit/a11y.md) records
 - [Changelog](CHANGELOG.md): features and known limitations.
 - [Engine gap report](docs/engine-gaps.md): workarounds and possible NGNE improvements.
 
-This branch is a release candidate. The owner must review and merge the PR and record written
-release approval in [REVIEW.md](docs/REVIEW.md#run-5-decisions) before creating and pushing
-`v1.0.0`. The tag triggers the Pages workflow; branch pushes do not deploy. The owner then
-checks the Pages site and handles the open items recorded in REVIEW H25. Checkpoint E
-remains pending.
+This branch is a release candidate. Checkpoint E passed on 2026-10-21 under delegated owner
+authority, with an accepted RTX performance exception and the owner's explicit native PWA
+check waiver; [evidence and decisions](docs/audit/checkpoint-e-2026-10-21.md). The owner retains
+PR review/merge, creating and pushing `v1.0.0`, and deployment/site verification. The tag
+triggers the Pages workflow; branch pushes do not deploy. The native PWA check remains for
+the owner to perform personally using the [manual steps](docs/audit/pwa.md#manual-install-owner-to-do).
 
 Licensed under [MIT](LICENSE).

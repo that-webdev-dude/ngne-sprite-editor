@@ -1,0 +1,47 @@
+{
+    "id": "se-070-idle-checkpoint-e-intel-uhd-2026-10-21",
+    "ticket": "SE-070",
+    "measurement": "Frames the editor viewport submits per second while idle, reference document (256×256, 8 layers, 8 frames), default layout, Chrome on Intel UHD: two windows of 10 s, pointer outside the viewport and resting on the canvas.",
+    "statistic": "larger of the two windows' viewport frames per second",
+    "unit": "count",
+    "budgetMs": 0,
+    "resultMs": 0,
+    "details": {
+        "pointerOutside": {
+            "seconds": 10,
+            "viewportFrames": 0,
+            "viewportUploads": 0,
+            "previewFrames": 110,
+            "pageAnimationFrames": 1441,
+            "viewportFramesPerSecond": 0,
+            "previewFramesPerSecond": 11
+        },
+        "pointerOnCanvas": {
+            "seconds": 10.01,
+            "viewportFrames": 0,
+            "viewportUploads": 0,
+            "previewFrames": 112,
+            "pageAnimationFrames": 1442,
+            "viewportFramesPerSecond": 0,
+            "previewFramesPerSecond": 11.2
+        },
+        "controlFramesAfterViewChange": 1,
+        "submitted": "probe.submittedFrames: frames the viewport submitted to NGNE",
+        "preview": "the expanded preview plays the 8 entries of 100 ms (SPEC §6.6)",
+        "document": "256×256, 8 layers, 8 frames, at 2×, preview expanded",
+        "devicePixelRatio": 1,
+        "window": "1920×1080 CSS px",
+        "adapter": "intel / gen-12lp ()",
+        "chrome": "155.0.8059.85, new headless, --force-color-profile=srgb --force-low-power-gpu --force-device-scale-factor=1"
+    },
+    "benchmarkId": "se-070-idle-intel-uhd",
+    "pass": true,
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-10-21T18:19:15.102Z"
+}

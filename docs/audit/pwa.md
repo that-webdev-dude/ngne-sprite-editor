@@ -68,10 +68,10 @@ Every spec builds on demand into a temporary folder; no `npm run build` is neede
 
 ## Manual install: owner to do
 
-Not possible in the cloud container (no desktop to install into). Once, on Windows 11 with
-Chrome (current stable):
+The native check is **waived for checkpoint E by the owner on 2026-10-21**, not passed.
+The owner will perform it personally. Once, on Windows 11 with Chrome:
 
-1. `npm ci`, then `npm run build`, then `npx vite preview --host 127.0.0.1 --port 4173`.
+1. `npm ci`, then `npm run build`, then `npm run preview -- --host 127.0.0.1 --port 4173`.
 2. Open `http://127.0.0.1:4173/` in Chrome. Wait until DevTools → Application → Service
    workers shows `sw.js` "activated and is running", and Application → Manifest shows no
    installability error.
@@ -94,4 +94,10 @@ Chrome (current stable):
 
 ## Manual install record
 
-- Not yet done (owner).
+- 2026-10-21: **Waived, not performed.** Computer Use was not approved to use Google Chrome
+  in this chat; no native install, standalone-window observation or shortcut result was
+  obtained. The owner explicitly replied: "waive the native PWA check and tell me how to do
+  it instead. I'll make it myself". Automated installability/offline evidence is separate
+  from this manual check. See the [checkpoint record](checkpoint-e-2026-10-21.md).
+- Owner's later manual result: date, Chrome version, standalone launch, Ctrl+N, Ctrl+W,
+  Ctrl+T, and any optional file/offline observations to be recorded here.

@@ -1,0 +1,15 @@
+{
+    "gpu": "rtx-4060",
+    "adapter": {
+        "vendor": "nvidia",
+        "architecture": "lovelace"
+    },
+    "chrome": "155.0.8059.85",
+    "args": [
+        "--force-color-profile=srgb",
+        "--force-device-scale-factor=1",
+        "--force-high-performance-gpu"
+    ],
+    "ci": null,
+    "date": "2026-10-21T18:25:43.039Z"
+}

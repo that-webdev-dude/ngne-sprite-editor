@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
+import type * as SpriteCore from "../../src/core/sprite";
 import { collectErrors } from "./se-006-support";
 import {
     checkerAt,
@@ -52,6 +53,40 @@ async function reference(page: Page) {
     if (!layer) throw new Error("se-046: no reference layer");
     return layer;
 }
+
+test("a resize during a reference drag keeps the resize geometry after release (F75)", async ({
+    page,
+}) => {
+    for (const operation of ["canvas", "sprite"] as const) {
+        const { document } = await setUp(page);
+        await pressAndMove(page, { x: 3.5, y: 5.5 }, [{ x: 7.5, y: 7.5 }]);
+        await page.evaluate(async (operation) => {
+            const path = "/src/core/sprite/index.ts";
+            const core = (await import(/* @vite-ignore */ path)) as typeof SpriteCore;
+            const state = window.__ngneTest!.sessions.getState();
+            const active = state.documents.find((entry) => entry.id === state.activeId)!;
+            const command =
+                operation === "canvas"
+                    ? core.canvasSizeCommand(active.session, {
+                          width: 32,
+                          height: 24,
+                          anchor: { x: 1, y: 1 },
+                      })
+                    : core.spriteSizeCommand(active.session, {
+                          width: 32,
+                          height: 24,
+                          method: "nearest",
+                      });
+            active.history.execute(command!);
+        }, operation);
+        const resized = await reference(page);
+        const steps = await historyOf(page, document.id);
+        await page.mouse.up();
+        await settle(page);
+        expect(await reference(page)).toEqual(resized);
+        expect(await historyOf(page, document.id)).toEqual(steps);
+    }
+});
 
 /** Presses at document position `from` and moves through `through`, the button still held. */
 async function pressAndMove(page: Page, from: Point, through: readonly Point[]): Promise<void> {

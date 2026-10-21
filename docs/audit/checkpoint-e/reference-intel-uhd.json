@@ -1,0 +1,15 @@
+{
+    "gpu": "intel-uhd",
+    "adapter": {
+        "vendor": "intel",
+        "architecture": "gen-12lp"
+    },
+    "chrome": "155.0.8059.85",
+    "args": [
+        "--force-color-profile=srgb",
+        "--force-device-scale-factor=1",
+        "--force-low-power-gpu"
+    ],
+    "ci": null,
+    "date": "2026-10-21T18:29:41.834Z"
+}

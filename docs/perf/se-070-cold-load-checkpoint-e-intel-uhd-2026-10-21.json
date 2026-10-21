@@ -1,0 +1,193 @@
+{
+    "id": "se-070-cold-load-checkpoint-e-intel-uhd-2026-10-21",
+    "ticket": "SE-070",
+    "measurement": "Cold load of the production build served locally to interactive (the New sprite dialog on screen after the empty state's first action), Chrome on Intel UHD, each load in a new browser with an empty profile.",
+    "statistic": "largest of 10 cold loads, from navigation start",
+    "budgetMs": 2000,
+    "resultMs": 273.6999999284744,
+    "details": {
+        "interactiveMs": [
+            273.7,
+            265.1,
+            268.9,
+            254.3,
+            253.3,
+            254.8,
+            245.8,
+            251.4,
+            240.7,
+            254.5
+        ],
+        "medianInteractiveMs": 254.3,
+        "shellMs": [
+            255.1,
+            247.2,
+            251.2,
+            235.2,
+            235.1,
+            237.2,
+            228.5,
+            233.4,
+            222.9,
+            237
+        ],
+        "clicksUntilAnswered": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+        ],
+        "domContentLoadedMs": [
+            149,
+            129.9,
+            143.3,
+            132.4,
+            126.2,
+            126.3,
+            129.6,
+            125.8,
+            124.7,
+            135.9
+        ],
+        "loadEventMs": [
+            149.3,
+            130.3,
+            143.6,
+            132.8,
+            126.6,
+            126.8,
+            129.9,
+            126.1,
+            125,
+            136.3
+        ],
+        "firstContentfulPaintMs": [
+            424,
+            412,
+            412,
+            404,
+            404,
+            400,
+            392,
+            396,
+            384,
+            396
+        ],
+        "longTasks": [
+            [
+                {
+                    "start": 97,
+                    "duration": 52
+                },
+                {
+                    "start": 204,
+                    "duration": 50
+                }
+            ],
+            [
+                {
+                    "start": 79,
+                    "duration": 51
+                }
+            ],
+            [
+                {
+                    "start": 90,
+                    "duration": 54
+                }
+            ],
+            [
+                {
+                    "start": 82,
+                    "duration": 51
+                }
+            ],
+            [
+                {
+                    "start": 74,
+                    "duration": 52
+                }
+            ],
+            [
+                {
+                    "start": 75,
+                    "duration": 52
+                }
+            ],
+            [
+                {
+                    "start": 78,
+                    "duration": 52
+                }
+            ],
+            [
+                {
+                    "start": 76,
+                    "duration": 50
+                }
+            ],
+            [
+                {
+                    "start": 73,
+                    "duration": 52
+                }
+            ],
+            [
+                {
+                    "start": 83,
+                    "duration": 53
+                }
+            ]
+        ],
+        "createToFirstViewportFrameMs": [
+            265.3,
+            255.2,
+            256.6,
+            257.2,
+            263.5,
+            251.3,
+            251.1,
+            257.4,
+            207.1,
+            255.7
+        ],
+        "medianCreateToFirstViewportFrameMs": 255.7,
+        "largestCreateToFirstViewportFrameMs": 265.3,
+        "createClicksUntilAnswered": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+        ],
+        "firstViewportFrameDefinition": "Create → first viewport frame on screen, not part of the result: from the first click on the New sprite dialog's Create button (at the animation frame after the dialog was seen, again every 50 ms while it stays) to the first animation frame in which the viewport's canvas is in the document with a box; the NGNE viewport inserts its canvas only after it has drawn",
+        "interactiveDefinition": "navigation start to the first animation frame showing the New sprite dialog, the empty state's New sprite button being clicked at every frame (at most every 50 ms) from the first frame it is on screen",
+        "server": "vite build (project configuration) served by vite preview on 127.0.0.1",
+        "cold": "a new Chrome with an empty profile for every load",
+        "devicePixelRatio": 1,
+        "window": "1920×1080 CSS px",
+        "adapter": "intel / gen-12lp ()",
+        "chrome": "155.0.8059.85, new headless, --force-color-profile=srgb --force-low-power-gpu --force-device-scale-factor=1"
+    },
+    "benchmarkId": "se-070-cold-load-intel-uhd",
+    "pass": true,
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-10-21T18:19:31.524Z"
+}

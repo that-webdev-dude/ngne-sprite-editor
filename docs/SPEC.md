@@ -732,10 +732,10 @@ The [engine gap report](engine-gaps.md) gives the costs, evidence and proposed e
 | Gap in NGNE 0.2.1 | Workaround actually used | Evidence from runs 1–4 |
 | ----------------- | ------------------------ | ---------------------- |
 | No release for manual textures | Fixed slot pools; unused slots replaced by 1×1 placeholders | SE-002 Q11: texture estimate returned to 56 bytes above baseline on both reference GPUs |
-| Whole-image asynchronous uploads, superseded calls and GPU validation round trips | Single-flight latest-wins queue, whole-slot uploads, cached frames and playback grid; Canvas2D stroke echo until NGNE submits the change | SE-002 Q1–2; REVIEW E61/E69: RTX 4060 stroke p95 34.1 ms without echo, 20.2 ms with it. Run 4 upload frame switch: 80.8 ms p95 against 50 ms on cloud SwiftShader, **not reference hardware** (H11); reference result still open |
+| Whole-image asynchronous uploads, superseded calls and GPU validation round trips | Single-flight latest-wins queue, whole-slot uploads, cached frames and playback grid; Canvas2D stroke echo until NGNE submits the change | SE-002 Q1–2; REVIEW E61/E69: RTX 4060 stroke p95 34.1 ms without echo, 20.2 ms with it. Run 4 upload frame switch: 80.8 ms p95 against 50 ms on cloud SwiftShader, **not reference hardware** (H11). Checkpoint E reference p95: Intel UHD 26.0 ms, RTX 4060 29.7 ms; both meet 50 ms ([record](perf/checkpoint-e-2026-10-21.md)) |
 | No blend modes or non-multiply tint | CPU layer/cel compositor and CPU onion tint | SE-010, SE-025 and SE-061; tint moves black toward red/blue, which a multiply cannot do (§7.5) |
 | Fixed renderer size, no public create abort; canvases share their WebGPU context | Serialized replacement on a new canvas, keep the old canvas until the new one draws | SE-002 Q4: replacement medians 34.3–50.5 ms on reference GPUs; REVIEW E6/E9: only a ready, drawn canvas is swapped in |
-| No repeat addressing or linear filtering | Finite checker texture; CPU resample reference display images after zoom settles | SE-011, SE-045; REVIEW F75: a whole-pixel reference move at fractional zoom can change rounded width by 1 px and cause a resample; remains open |
+| No repeat addressing or linear filtering | Finite checker texture; CPU resample reference display images after zoom settles | SE-011, SE-045; REVIEW F75: a whole-pixel reference move at fractional zoom can change rounded width by 1 px and cause a resample; accepted display trade-off at checkpoint E (J16) |
 | No camera zoom | Scale sprite sizes and positions while building frames | SE-002 Q3 and SE-012: device-pixel mapping checked at fractional DPR (§6.4) |
 | No texture readback | Export CPU composites; read the canvas in-page immediately after render for tests | SE-002 Q7, SE-053 conformance; opaque readback exact on both reference GPUs |
 | Centre snapping misaligns odd-sized sprites | Disable snapping in editor/preview; even-pad export rectangles and round generated-helper placement | SE-002 Q9: odd default-snapped sprite differed on RTX 4060; REVIEW D33/E13: exact quarter turns and alpha tolerance covered by conformance |
@@ -1480,6 +1480,11 @@ Recorded by SE-046 (`app/references/referenceMove`, `referenceTransform`, `refer
   reason a press gets; another layer made active during the drag cancels it (shown as before,
   nothing recorded). The box stays while a held key or a tool key changes the active tool
   before the release.
+- A history step that changes the canvas dimensions cancels an active reference drag
+  immediately, removing its preview. Releasing afterward records nothing, including after
+  undo/redo of that size change. This preserves the reference geometry of Canvas Size,
+  Sprite Size, crop and trim instead of overwriting it with the drag's old coordinates
+  (checkpoint E, REVIEW J16).
 
 ### 7.7 Sprite operations
 

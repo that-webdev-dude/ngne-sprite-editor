@@ -1,0 +1,48 @@
+{
+    "id": "se-070-frame-switch-upload-checkpoint-e-intel-uhd-2026-10-21",
+    "ticket": "SE-070",
+    "measurement": "Frame switch to a frame not in the viewport's slot cache (ArrowRight on the viewport) on the reference document (256×256, 8 layers, 64 frames), Chrome on Intel UHD: the key's timeStamp to the submit of the frame showing the new frame.",
+    "statistic": "larger of two p95s: the first sweep (63 switches, composites built) and the later sweeps (126, composites cached)",
+    "budgetMs": 50,
+    "resultMs": 26,
+    "details": {
+        "firstSweep": {
+            "count": 63,
+            "medianMs": 12,
+            "p95Ms": 26,
+            "maxMs": 41
+        },
+        "laterSweeps": {
+            "count": 126,
+            "medianMs": 11.8,
+            "p95Ms": 24,
+            "maxMs": 29
+        },
+        "animationFramesToSubmit": {
+            "1": 37,
+            "2": 114,
+            "3": 26,
+            "4": 11,
+            "5": 1
+        },
+        "uploadsPerSwitch": {
+            "1": 189
+        },
+        "submitted": "onDrawn: frames submitted to NGNE, not known to be presented on screen",
+        "document": "256×256, 8 layers, 64 frames, at 2×, preview expanded",
+        "devicePixelRatio": 1,
+        "window": "1920×1080 CSS px",
+        "adapter": "intel / gen-12lp ()",
+        "chrome": "155.0.8059.85, new headless, --force-color-profile=srgb --force-low-power-gpu --force-device-scale-factor=1"
+    },
+    "benchmarkId": "se-070-frame-switch-upload-intel-uhd",
+    "pass": true,
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-10-21T18:18:23.389Z"
+}

@@ -1,0 +1,26 @@
+import { fileURLToPath } from "node:url";
+import { defineConfig } from "@playwright/test";
+import base from "../../playwright.config";
+
+const gpu = process.env.REFERENCE_GPU;
+if (gpu !== "intel-uhd" && gpu !== "rtx-4060") throw new Error("Set REFERENCE_GPU");
+if (process.env.CI) throw new Error("Reference budgets must run without CI");
+
+export default defineConfig({
+    ...base,
+    testDir: fileURLToPath(new URL("../../tests/e2e/", import.meta.url)),
+    outputDir: fileURLToPath(new URL(`../../test-results/checkpoint-e/${gpu}/`, import.meta.url)),
+    globalSetup: fileURLToPath(new URL("./reference-probe.ts", import.meta.url)),
+    workers: 1,
+    reporter: "list",
+    use: {
+        ...base.use,
+        launchOptions: {
+            ...base.use?.launchOptions,
+            args: [
+                ...(base.use?.launchOptions?.args ?? []),
+                gpu === "intel-uhd" ? "--force-low-power-gpu" : "--force-high-performance-gpu",
+            ],
+        },
+    },
+});

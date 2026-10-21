@@ -1,0 +1,15 @@
+[WebServer] (node:24640) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+REFERENCE_GPU_VERIFIED {"gpu":"intel-uhd","adapter":{"vendor":"intel","architecture":"gen-12lp"},"chrome":"155.0.8059.85","args":["--force-color-profile=srgb","--force-device-scale-factor=1","--force-low-power-gpu"],"ci":null,"date":"2026-10-21T18:29:06.186Z"}
+
+Running 5 tests using 1 worker
+
+(node:51860) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 [parallel] › tests\e2e\se-046-reference-move.spec.ts:57:1 › a resize during a reference drag keeps the resize geometry after release (F75) (5.8s)
+  ok 2 [parallel] › tests\e2e\se-046-reference-move.spec.ts:116:1 › a drag by (10, 4) document pixels moves the reference by exactly that, shown while it lasts; one step, undo restores (4.5s)
+  ok 3 [parallel] › tests\e2e\se-046-reference-move.spec.ts:159:1 › a corner drag scales the reference and keeps the opposite corner within 0.01 document pixels; the box shows its corner handles (2.7s)
+  ok 4 [parallel] › tests\e2e\se-046-reference-move.spec.ts:194:1 › a locked reference layer does not move, the status bar says so, and its box has no handles (2.5s)
+  ok 5 [parallel] › tests\e2e\se-046-reference-move.spec.ts:221:1 › Escape during a drag shows the reference where it was and records nothing (3.3s)
+
+  5 passed (24.7s)

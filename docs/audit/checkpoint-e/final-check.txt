@@ -1,0 +1,82 @@
+
+> ngne-sprite-editor@1.0.0 check
+> npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build
+
+
+> ngne-sprite-editor@1.0.0 typecheck
+> tsc -p tsconfig.json && tsc -p tsconfig.node.json
+
+
+> ngne-sprite-editor@1.0.0 lint
+> eslint .
+
+
+> ngne-sprite-editor@1.0.0 format:check
+> prettier --check .
+
+Checking formatting...
+All matched files use Prettier code style!
+
+> ngne-sprite-editor@1.0.0 test
+> vitest run
+
+
+ RUN  v5.0.3 C:/Users/jfabi/Documents/Projects/tests/ngne-sprite-editor
+
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/a (b).md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/a_(b).md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'other.md', LF will be replaced by CRLF the next time Git touches it
+
+ Test Files  224 passed (224)
+      Tests  4577 passed (4577)
+   Start at  19:44:17
+   Duration  33.34s (tests 64%, import 28%, transform 8%, worker 1%)
+
+    Isolate  224 workers spawned · ~272ms startup each (spawn + environment, per file)
+             at least ~3.79s faster with isolate: false — reuses workers across files instead of one per file
+
+
+> ngne-sprite-editor@1.0.0 build
+> vite build
+
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 2590 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                   0.70 kB │ gzip:   0.38 kB
+dist/manifest.webmanifest                         0.75 kB
+dist/assets/previewPack.worker-CHkL_Cof.js       17.72 kB
+dist/assets/importPreview.worker-CPLRIHVq.js     20.73 kB
+dist/assets/index-4k4tl1AE.css                   49.45 kB │ gzip:   8.05 kB
+dist/assets/index-p_5If1eb.js                 1,088.21 kB │ gzip: 354.71 kB
+
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 575ms
+
+PWA v2.0.0
+Building src/app/pwa/sw.ts service worker ("es" format)...
+vite v8.3.4 building client environment for production...
+
+ WARN  inlineDynamicImports option is deprecated, please use codeSplitting: false instead.
+
+transforming...
+✓ 3 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/sw.mjs  2.41 kB │ gzip: 1.10 kB
+
+✓ built in 17ms
+
+PWA v2.0.0
+mode      injectManifest
+format:   es
+precache  11 entries (1165.56 KiB)
+files generated
+  dist/sw.js

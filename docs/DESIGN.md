@@ -148,7 +148,7 @@ tokens only. Dark is the default; light is a full second set under `[data-theme=
 | Dialog           | Centred. Standard: max 560 px. Large (Import PNG, Export): max 960 px, max 86% of window height, body scrolls. Title, body, right-aligned actions; primary action accent-filled |
 | Popover          | Colour picker, layer properties, onion-skin settings; closes on Escape and outside click |
 | Context menu     | Right-click on layers, frames, cels and tags. Not on the canvas or on swatches, where the right button means background colour; swatch actions live in the palette's overflow menu and on the Menu key |
-| Toast            | Bottom-centre, one line, 4 s (errors stay until dismissed)                              |
+| Toast            | Bottom-centre, one line, 4 s; errors and information with an action (such as Reload for an update) stay until dismissed (checkpoint E, REVIEW J15) |
 | Splitter         | 8 px hit area, 1 px visible line; double-click resets. A control beside a splitter takes the presses where the hit area meets it: the timeline's content lies above the part of its splitter's hit area inside the panel (the 3 px below the border), so the transport buttons take the presses on their top edge, and the splitter keeps its line and the 4 px above it; the dock's splitter stops where the timeline's begins, so no press lands on two (SE-071) |
 
 Message channels: a **toast** reports the result of an explicit command (saved, exported,

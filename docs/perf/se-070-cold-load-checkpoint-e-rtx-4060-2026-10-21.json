@@ -1,0 +1,201 @@
+{
+    "id": "se-070-cold-load-checkpoint-e-rtx-4060-2026-10-21",
+    "ticket": "SE-070",
+    "measurement": "Cold load of the production build served locally to interactive (the New sprite dialog on screen after the empty state's first action), Chrome on RTX 4060, each load in a new browser with an empty profile.",
+    "statistic": "largest of 10 cold loads, from navigation start",
+    "budgetMs": 2000,
+    "resultMs": 1687.5,
+    "details": {
+        "interactiveMs": [
+            1687.5,
+            818.1,
+            808.2,
+            838.3,
+            802.6,
+            904,
+            1549.8,
+            842.9,
+            875.5,
+            936.9
+        ],
+        "medianInteractiveMs": 842.9,
+        "shellMs": [
+            1670.2,
+            801.1,
+            790.6,
+            821.6,
+            784.6,
+            887.1,
+            1531.2,
+            825.6,
+            856.2,
+            919.6
+        ],
+        "clicksUntilAnswered": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+        ],
+        "domContentLoadedMs": [
+            147.5,
+            126.5,
+            125.3,
+            131.1,
+            127.2,
+            128.7,
+            140.5,
+            135.9,
+            140.9,
+            144.2
+        ],
+        "loadEventMs": [
+            148.4,
+            127.4,
+            126.2,
+            131.9,
+            128,
+            129.6,
+            141.4,
+            136.9,
+            141.8,
+            145.5
+        ],
+        "firstContentfulPaintMs": [
+            1844,
+            952,
+            952,
+            980,
+            948,
+            1052,
+            1700,
+            996,
+            1020,
+            1080
+        ],
+        "longTasks": [
+            [
+                {
+                    "start": 95,
+                    "duration": 53
+                }
+            ],
+            [
+                {
+                    "start": 74,
+                    "duration": 54
+                }
+            ],
+            [
+                {
+                    "start": 75,
+                    "duration": 50
+                }
+            ],
+            [
+                {
+                    "start": 78,
+                    "duration": 54
+                }
+            ],
+            [
+                {
+                    "start": 77,
+                    "duration": 51
+                }
+            ],
+            [
+                {
+                    "start": 78,
+                    "duration": 51
+                },
+                {
+                    "start": 660,
+                    "duration": 50
+                }
+            ],
+            [
+                {
+                    "start": 81,
+                    "duration": 60
+                }
+            ],
+            [
+                {
+                    "start": 79,
+                    "duration": 57
+                },
+                {
+                    "start": 590,
+                    "duration": 50
+                }
+            ],
+            [
+                {
+                    "start": 81,
+                    "duration": 60
+                },
+                {
+                    "start": 629,
+                    "duration": 51
+                }
+            ],
+            [
+                {
+                    "start": 85,
+                    "duration": 60
+                }
+            ]
+        ],
+        "createToFirstViewportFrameMs": [
+            298.2,
+            276.6,
+            284.2,
+            285.3,
+            297.8,
+            285.7,
+            300.2,
+            317.8,
+            298,
+            289.7
+        ],
+        "medianCreateToFirstViewportFrameMs": 289.7,
+        "largestCreateToFirstViewportFrameMs": 317.8,
+        "createClicksUntilAnswered": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+        ],
+        "firstViewportFrameDefinition": "Create → first viewport frame on screen, not part of the result: from the first click on the New sprite dialog's Create button (at the animation frame after the dialog was seen, again every 50 ms while it stays) to the first animation frame in which the viewport's canvas is in the document with a box; the NGNE viewport inserts its canvas only after it has drawn",
+        "interactiveDefinition": "navigation start to the first animation frame showing the New sprite dialog, the empty state's New sprite button being clicked at every frame (at most every 50 ms) from the first frame it is on screen",
+        "server": "vite build (project configuration) served by vite preview on 127.0.0.1",
+        "cold": "a new Chrome with an empty profile for every load",
+        "devicePixelRatio": 1,
+        "window": "1920×1080 CSS px",
+        "adapter": "nvidia / lovelace ()",
+        "chrome": "155.0.8059.85, new headless, --force-color-profile=srgb --force-high-performance-gpu --force-device-scale-factor=1"
+    },
+    "benchmarkId": "se-070-cold-load-rtx-4060",
+    "pass": true,
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-10-21T18:21:53.686Z"
+}

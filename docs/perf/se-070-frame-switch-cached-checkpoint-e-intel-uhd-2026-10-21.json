@@ -1,0 +1,37 @@
+{
+    "id": "se-070-frame-switch-cached-checkpoint-e-intel-uhd-2026-10-21",
+    "ticket": "SE-070",
+    "measurement": "Frame switch to a frame in the viewport's slot cache (ArrowRight on the viewport) on the reference document (256×256, 8 layers, 8 frames), Chrome on Intel UHD: animation frames from the key to the submit of the frame showing the new frame (1: the next animation frame).",
+    "statistic": "largest of 70 switches, in animation frames",
+    "unit": "count",
+    "budgetMs": 1,
+    "resultMs": 1,
+    "details": {
+        "switches": 70,
+        "animationFramesToSubmit": {
+            "1": 70
+        },
+        "latency": {
+            "count": 70,
+            "medianMs": 4.6,
+            "p95Ms": 10.4,
+            "maxMs": 26
+        },
+        "submitted": "onDrawn: frames submitted to NGNE, not known to be presented on screen",
+        "document": "256×256, 8 layers, 8 frames, at 2×, preview expanded",
+        "devicePixelRatio": 1,
+        "window": "1920×1080 CSS px",
+        "adapter": "intel / gen-12lp ()",
+        "chrome": "155.0.8059.85, new headless, --force-color-profile=srgb --force-low-power-gpu --force-device-scale-factor=1"
+    },
+    "benchmarkId": "se-070-frame-switch-cached-intel-uhd",
+    "pass": true,
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-10-21T18:18:08.495Z"
+}

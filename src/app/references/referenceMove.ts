@@ -80,6 +80,8 @@ interface ReferenceDrag {
     readonly from: Point;
     /** The placement the drag gives now. */
     now: ReferencePlacement;
+    /** Stop observing canvas changes once the drag ends. */
+    stopWatching?: () => void;
 }
 
 /** The part of the Move tool that acts on reference layers. */
@@ -130,6 +132,7 @@ export function createReferenceMove(sources: ReferenceMoveSources = {}): Referen
         if (!drag) return null;
         if (context.session.activeLayerId === drag.layerId) return drag;
         drags.delete(context);
+        drag.stopWatching?.();
         hide(context, drag);
         return null;
     };
@@ -202,6 +205,16 @@ export function createReferenceMove(sources: ReferenceMoveSources = {}): Referen
                 now: start,
             };
             drags.set(context, drag);
+            // A sprite operation can run while this non-painting gesture is held. Its
+            // coordinates supersede the drag's old canvas space; never write that stale
+            // geometry over the resize, even if the resize is undone before release.
+            const { width, height } = session.doc;
+            drag.stopWatching = context.history.subscribe(() => {
+                if (session.doc.width === width && session.doc.height === height) return;
+                drags.delete(context);
+                drag.stopWatching?.();
+                hide(context, drag);
+            });
             show(context, drag);
             return true;
         },
@@ -211,6 +224,7 @@ export function createReferenceMove(sources: ReferenceMoveSources = {}): Referen
             const drag = dragOf(context);
             if (!drag) return;
             drags.delete(context);
+            drag.stopWatching?.();
             const { start, now } = drag;
             const moved = now.x !== start.x || now.y !== start.y || now.scale !== start.scale;
             let result: ReferenceChangeResult = { changed: false };
@@ -243,6 +257,7 @@ export function createReferenceMove(sources: ReferenceMoveSources = {}): Referen
             const drag = dragOf(context);
             if (!drag) return;
             drags.delete(context);
+            drag.stopWatching?.();
             hide(context, drag);
         },
     };

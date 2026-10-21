@@ -1,0 +1,48 @@
+{
+    "id": "se-070-frame-switch-upload-checkpoint-e-rtx-4060-2026-10-21",
+    "ticket": "SE-070",
+    "measurement": "Frame switch to a frame not in the viewport's slot cache (ArrowRight on the viewport) on the reference document (256×256, 8 layers, 64 frames), Chrome on RTX 4060: the key's timeStamp to the submit of the frame showing the new frame.",
+    "statistic": "larger of two p95s: the first sweep (63 switches, composites built) and the later sweeps (126, composites cached)",
+    "budgetMs": 50,
+    "resultMs": 29.699999928474426,
+    "details": {
+        "firstSweep": {
+            "count": 63,
+            "medianMs": 11.8,
+            "p95Ms": 29.7,
+            "maxMs": 44.5
+        },
+        "laterSweeps": {
+            "count": 126,
+            "medianMs": 11.6,
+            "p95Ms": 28.3,
+            "maxMs": 33.7
+        },
+        "animationFramesToSubmit": {
+            "1": 6,
+            "2": 136,
+            "3": 24,
+            "4": 22,
+            "5": 1
+        },
+        "uploadsPerSwitch": {
+            "1": 189
+        },
+        "submitted": "onDrawn: frames submitted to NGNE, not known to be presented on screen",
+        "document": "256×256, 8 layers, 64 frames, at 2×, preview expanded",
+        "devicePixelRatio": 1,
+        "window": "1920×1080 CSS px",
+        "adapter": "nvidia / lovelace ()",
+        "chrome": "155.0.8059.85, new headless, --force-color-profile=srgb --force-high-performance-gpu --force-device-scale-factor=1"
+    },
+    "benchmarkId": "se-070-frame-switch-upload-rtx-4060",
+    "pass": true,
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-10-21T18:20:37.859Z"
+}

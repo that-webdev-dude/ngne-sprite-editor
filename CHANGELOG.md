@@ -2,8 +2,9 @@
 
 ## 1.0.0 – 2026-10-21
 
-Release candidate. Publication and deployment await the owner's written approval in
-[REVIEW.md](docs/REVIEW.md#run-5-decisions).
+Release candidate. Checkpoint E passed under delegated owner authority, with the qualifications
+below. Merging, tagging and deployment remain the owner's actions; see
+[REVIEW.md](docs/REVIEW.md#checkpoint-e-delegated-owner-resolution-2026-10-21).
 
 ### M0 — Foundation
 
@@ -64,23 +65,26 @@ Milestone scope: [ticket index](docs/tickets/README.md).
 
 ### Known limitations
 
-The open items from [REVIEW H25](docs/REVIEW.md#stop-checkpoint-e) remain open:
+Disposition of [REVIEW H25](docs/REVIEW.md#stop-checkpoint-e), recorded at
+[checkpoint E](docs/audit/checkpoint-e-2026-10-21.md):
 
-- Reference-hardware performance acceptance is incomplete (H11/H12). The frame switch with
-  an upload took 80.8 ms p95 against 50 ms on cloud SwiftShader; this is not a reference GPU
-  measurement. Intel UHD and RTX 4060 results are still required. Frame/time budgets are
-  report-only in CI; the `@alone` tests still need a reference run without `CI` (H15).
-- A person must install the PWA in Chrome on Windows 11 and record standalone launch and
-  browser-reserved shortcut behaviour (H18, [steps](docs/audit/pwa.md#manual-install-owner-to-do)).
-- The update toast with Reload stays until dismissed; the DESIGN §4 amendment remains for
-  the owner to accept or refuse (H16).
-- A proposed change to keep the page modal until a closing opacity popover's pixels are
-  drawn is unmerged. Its interaction trade-off remains for the owner (H23).
-- Reference dragging has unresolved interactions with sprite operations; at fractional
-  zoom a whole-pixel move can change rounded display width by one pixel and resample the
-  reference (F75).
-- A seeded soak once stalled after `view.fit`; it was not reproduced in 18 further runs.
-  The watchdog captures the stack if it recurs; no cause is claimed fixed (H8).
-- SE-073 acceptance checks passed in [PR #1 CI run 39633966882](https://github.com/that-webdev-dude/ngne-sprite-editor/actions/runs/39633966882)
-  and the ticket is Done. Checkpoint E is pending; the release tag, deployment and release
-  approval remain the owner's steps.
+- All seven SPEC §6.6 benchmarks meet their budgets on Intel UHD and RTX 4060
+  ([reference measurements](docs/perf/checkpoint-e-2026-10-21.md), H11/H12). Separately, the
+  non-CI `@alone` E2E run passed 10/10 on Intel and 9/10 on RTX: cel opacity took three
+  frames against two. This v1.0.0 performance exception is accepted and tracked in
+  [issue #2](https://github.com/that-webdev-dude/ngne-sprite-editor/issues/2); its assertion
+  is unchanged. Frame/time budgets remain report-only under CI (H15).
+- The native Chrome PWA install/standalone/shortcut check was explicitly **waived by the
+  owner**, not passed. The owner will do it personally
+  ([steps](docs/audit/pwa.md#manual-install-owner-to-do), H18).
+- The update toast with Reload stays until dismissed; the DESIGN §4 amendment is accepted
+  (H16). Immediate interaction after a popover closes is retained (H23).
+- Changing the canvas dimensions during a reference drag now cancels it, preserving the
+  sprite operation's geometry. At fractional zoom, a whole-pixel move can still change the
+  rounded display width by one pixel and resample the reference; this display trade-off is
+  accepted and does not change its source PNG or exports (F75).
+- A seeded soak once stalled after `view.fit`; it was not reproduced in 18 further runs
+  or three additional checkpoint soaks. The watchdog and its control tests are retained;
+  no cause is claimed fixed (H8).
+- SE-073 is Done. Checkpoint E passed with the exception and waiver above. The owner retains
+  merging, tagging and deployment.
