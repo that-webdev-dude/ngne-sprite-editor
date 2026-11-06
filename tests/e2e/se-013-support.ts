@@ -140,49 +140,60 @@ declare global {
  * Starts looking at both canvases in every animation frame of the page until
  * `stopSampling`: their backing sizes, their boxes, and the overlay's pixel at `probe`
  * (overlay backing pixels). Each look reads everything in one task.
+ *
+ * Resolves once a look has recorded the element's device size: the samples then start
+ * before whatever the caller does next. On a slow runner the first animation frame can come
+ * after the caller's next step (a resize), and the samples would show only the size after it.
  */
 export function startSampling(page: Page, probe: { x: number; y: number }): Promise<void> {
-    return page.evaluate((probe) => {
-        const host = document.querySelector("[data-viewport-canvas]");
-        const overlay = document.querySelector<HTMLCanvasElement>("[data-viewport-overlay]");
-        const context = overlay?.getContext("2d");
-        if (!host || !overlay || !context) throw new Error("se-013: no canvases to sample");
-        let device: [number, number] = [0, 0];
-        const observer = new ResizeObserver(([entry]) => {
-            const box = entry?.devicePixelContentBoxSize[0];
-            if (box) device = [box.inlineSize, box.blockSize];
-        });
-        observer.observe(host, { box: "device-pixel-content-box" });
-        const samples: CanvasSample[] = [];
-        window.__se013Samples = samples;
-        window.__se013Sampling = true;
-        const look = () => {
-            if (!window.__se013Sampling) {
-                observer.disconnect();
-                return;
-            }
-            const ngne = host.querySelector("canvas");
-            const a = overlay.getBoundingClientRect();
-            const b = ngne?.getBoundingClientRect();
-            samples.push({
-                host: [...device],
-                ngne: ngne ? [ngne.width, ngne.height] : null,
-                overlay: [overlay.width, overlay.height],
-                sameBox:
-                    b !== undefined &&
-                    a.x === b.x &&
-                    a.y === b.y &&
-                    a.width === b.width &&
-                    a.height === b.height,
-                probe:
-                    overlay.width > probe.x && overlay.height > probe.y
-                        ? Array.from(context.getImageData(probe.x, probe.y, 1, 1).data)
-                        : [],
-            });
-            requestAnimationFrame(look);
-        };
-        requestAnimationFrame(look);
-    }, probe);
+    return page.evaluate(
+        (probe) =>
+            new Promise<void>((resolve) => {
+                const host = document.querySelector("[data-viewport-canvas]");
+                const overlay =
+                    document.querySelector<HTMLCanvasElement>("[data-viewport-overlay]");
+                const context = overlay?.getContext("2d");
+                if (!host || !overlay || !context) throw new Error("se-013: no canvases to sample");
+                let device: [number, number] = [0, 0];
+                const observer = new ResizeObserver(([entry]) => {
+                    const box = entry?.devicePixelContentBoxSize[0];
+                    if (box) device = [box.inlineSize, box.blockSize];
+                });
+                observer.observe(host, { box: "device-pixel-content-box" });
+                const samples: CanvasSample[] = [];
+                window.__se013Samples = samples;
+                window.__se013Sampling = true;
+                const look = () => {
+                    if (!window.__se013Sampling) {
+                        observer.disconnect();
+                        return;
+                    }
+                    const ngne = host.querySelector("canvas");
+                    const a = overlay.getBoundingClientRect();
+                    const b = ngne?.getBoundingClientRect();
+                    samples.push({
+                        host: [...device],
+                        ngne: ngne ? [ngne.width, ngne.height] : null,
+                        overlay: [overlay.width, overlay.height],
+                        sameBox:
+                            b !== undefined &&
+                            a.x === b.x &&
+                            a.y === b.y &&
+                            a.width === b.width &&
+                            a.height === b.height,
+                        probe:
+                            overlay.width > probe.x && overlay.height > probe.y
+                                ? Array.from(context.getImageData(probe.x, probe.y, 1, 1).data)
+                                : [],
+                    });
+                    // The observer reports the element's size after the first look's frame.
+                    if (device[0] > 0) resolve();
+                    requestAnimationFrame(look);
+                };
+                requestAnimationFrame(look);
+            }),
+        probe,
+    );
 }
 
 /** Stops the looks of `startSampling` and returns them. */
