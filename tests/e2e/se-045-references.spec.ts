@@ -351,12 +351,18 @@ test("after deleting every reference layer, texture bytes are within 1 MB of the
     const MB = 1024 * 1024;
     // The four slots hold their images: the comparison below is not vacuous.
     expect((await bytes()) - baseline).toBeGreaterThanOrEqual(16 * MB);
-    // A hidden reference's slot goes back to the 1×1 image.
+    // A hidden reference's slot is released (NGNE 0.3.0 `releaseTexture`): NGNE holds no
+    // texture of that ID any more.
     await setVisible(page, ids[0]!, false);
     await settle(page);
     const slots = await page.evaluate(() => window.__ngneTest!.viewport!.references);
     expect(slots.filter((slot) => slot === null)).toHaveLength(1);
     expect(slots.some((slot) => slot?.layerId === ids[0])).toBe(false);
+    const released = `ed:ref:${slots.findIndex((slot) => slot === null)}`;
+    const registered = await page.evaluate(() =>
+        window.__ngneTest!.viewport!.inspect()!.entries.map((entry) => entry.id),
+    );
+    expect(registered).not.toContain(released);
     expect((await bytes()) - baseline).toBeLessThanOrEqual(12 * MB + MB);
     await setVisible(page, ids[0]!, true);
     for (const id of ids) await deleteLayer(page, id);

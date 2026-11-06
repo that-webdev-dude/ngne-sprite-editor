@@ -22,8 +22,8 @@ import {
 import type { Checker } from "./se-011-support";
 import { collapsePreview } from "./se-054-support";
 
-// SE-011: the life of the renderer — sizing by replacement, drawing on demand, device loss,
-// a failed renderer — and the preferences and theme the viewport reads.
+// SE-011: the life of the renderer — sizing in place (NGNE 0.3.0 `resize`), drawing on demand,
+// device loss, a failed renderer — and the preferences and theme the viewport reads.
 
 const VIEW = { scale: 8, originX: 40, originY: 24 };
 const SIZE = { width: 5, height: 3 };
@@ -69,7 +69,7 @@ function canvases(page: Page) {
         );
 }
 
-test("resizing the window 20 times leaves exactly one live renderer and a correct image", async ({
+test("resizing the window 20 times keeps the one renderer, resized in place, with a correct image", async ({
     page,
 }) => {
     const errors = collectErrors(page);
@@ -82,8 +82,7 @@ test("resizing the window 20 times leaves exactly one live renderer and a correc
             width: 1280 + ((step * 74) % 420),
             height: 720 + ((step * 46) % 200),
         });
-        // Some resizes are left to settle; the others are overtaken by the next one, while
-        // the replacement for them is waiting or under way.
+        // Some resizes are left to settle; the others are overtaken by the next one.
         if (step % 3 === 0) {
             await settle(page);
             await expectImage(page, document, VIEW, IMAGE);
@@ -96,14 +95,13 @@ test("resizing the window 20 times leaves exactly one live renderer and a correc
 
     const end = await counters(page);
     expect(end).toMatchObject({ liveRenderers: 1, liveDevices: 1, status: "ready" });
-    // The renderer was replaced, not kept: each settled size made a new device.
-    expect(end.devicesCreated - start.devicesCreated).toBeGreaterThanOrEqual(7);
+    // The renderer was kept and resized: no size made a device.
+    expect(end.devicesCreated).toBe(start.devicesCreated);
     expect(await canvases(page)).toEqual([await hostDeviceSize(page)]);
     await expectImage(page, document, VIEW, IMAGE);
 
-    // One replacement at a time: never two devices being created at once, and never more
-    // than two alive, the old and the new. (Two viewports in a row: se-011-renderer.spec.)
-    expect(await page.evaluate(() => window.__se011.peaks())).toEqual({ creating: 1, live: 2 });
+    // One device was ever being made and one alive: the viewport's first.
+    expect(await page.evaluate(() => window.__se011.peaks())).toEqual({ creating: 1, live: 1 });
     expect(errors).toEqual([]);
 });
 
@@ -148,20 +146,28 @@ test("closing a document while its first uploads are in flight leaves the page a
     expect(errors).toEqual([]);
 });
 
-test("closing a document during a resize replacement leaves the page answering and no renderer", async ({
+test("closing a document during a renderer replacement leaves the page answering and no renderer", async ({
     page,
 }) => {
     const errors = collectErrors(page);
     const document = await openPainted(page);
-    await page.evaluate(() => window.__se011.closeUploadGate());
-    await page.setViewportSize({ width: 1400, height: 800 });
-    // The new renderer exists beside the old one and waits for its uploads.
+    // The renderer fails (its device lost, none to be had for its recovery): a new one is
+    // made beside it and waits for its uploads.
+    await page.evaluate(() => {
+        window.__se011.closeUploadGate();
+        window.__se011.refuseDevices(1);
+        window.__se011.loseDevice();
+    });
     await expect.poll(() => page.evaluate(() => window.__se011.liveRenderers())).toBe(2);
     await page.waitForTimeout(150);
-    expect(await page.evaluate(() => window.__se011.liveDevices())).toBe(2);
+    // The failed renderer's device is gone; the new renderer's is alive.
+    expect(await page.evaluate(() => window.__se011.liveDevices())).toBe(1);
+    expect(await page.evaluate(() => window.__se011.devicesCreated())).toBe(2);
 
     await closeAndExpectNothingLeft(page, document.id);
-    expect(errors).toEqual([]);
+    // The failure that started the replacement, reported once.
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/WebGPU recovery failed/);
 });
 
 /**
@@ -212,7 +218,7 @@ const twoFrames = (page: Page) =>
         () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
     );
 
-test("the window shows the image the new renderer drew before the swap, and still after the shell was hidden", async ({
+test("after a resize the window shows the image drawn at the new size, and still after the shell was hidden", async ({
     page,
 }) => {
     const errors = collectErrors(page);
@@ -236,12 +242,15 @@ test("the window shows the image the new renderer drew before the swap, and stil
     const rect = documentRect(document, view);
     const shown = async () => compare(await onScreen(page, rect), IMAGE, SIZE.width, view.scale);
     expect(await shown()).toEqual([]);
+    const initial = await counters(page);
 
-    // A new size: the new canvas draws once, off the page, and is swapped in. Nothing is
-    // drawn afterwards, so the screen shows that one frame.
+    // A new size: the renderer is resized and draws once, in the task the size is observed
+    // (NGNE 0.3.0 `resize`). Nothing is drawn afterwards, so the screen shows that one frame.
     await page.setViewportSize({ width: 1400, height: 800 });
     await settle(page);
     const swapped = await counters(page);
+    expect(swapped.devicesCreated).toBe(initial.devicesCreated);
+    expect(await canvases(page)).toEqual([await hostDeviceSize(page)]);
     await twoFrames(page);
     expect(await counters(page)).toEqual(swapped);
     expect(await shown()).toEqual([]);
@@ -353,16 +362,31 @@ test("a renderer that fails is replaced by a fresh one, and its error is shown o
     }
 });
 
+/** The checkerboard `holdReplacement` sets. */
+const HELD_CHECKER: Checker = { a: [0x10, 0x90, 0x30], b: [0xf0, 0xe0, 0x20], size: 3 };
+
 /**
- * Starts a replacement for a new window size and holds it while the new renderer waits for
- * its uploads: two renderers and two devices are alive, the old canvas is on screen.
+ * Starts a replacement and holds it while the new renderer waits for its uploads: the upload
+ * of a new checkerboard fails on the renderer on screen, whose checkerboard slot has no other,
+ * so it asks for a fresh renderer (a resize no longer makes one, NGNE 0.3.0). Two renderers
+ * and two devices are then alive, and the old canvas is on screen.
  */
 async function holdReplacement(page: Page): Promise<void> {
     await page.evaluate(() => {
         window.__se011.watchCanvases();
-        window.__se011.closeUploadGate();
+        window.__se011.holdDevices();
+        window.__se011.failCopies(1);
+        window.__ngneTest!.preferences.set("checkerboard", {
+            size: 3,
+            colors: { a: 0x109030, b: 0xf0e020 },
+        });
     });
-    await page.setViewportSize({ width: 1400, height: 800 });
+    // The replacement's device is asked for; its uploads are held before it has one.
+    await expect.poll(() => page.evaluate(() => window.__se011.creatingDevices())).toBe(1);
+    await page.evaluate(() => {
+        window.__se011.closeUploadGate();
+        window.__se011.releaseDevices();
+    });
     await expect.poll(() => page.evaluate(() => window.__se011.liveRenderers())).toBe(2);
     await page.waitForTimeout(150);
     expect(await page.evaluate(() => window.__se011.liveDevices())).toBe(2);
@@ -389,12 +413,14 @@ test("a device lost while a replacement loads: no canvas gets on screen before i
     // The replacement's device and the one NGNE recovered it on.
     expect(after.devicesCreated).toBe(before.devicesCreated + 2);
     expect(await canvases(page)).toEqual([await hostDeviceSize(page)]);
-    await expectImage(page, document, VIEW, IMAGE);
+    await expectImage(page, document, VIEW, IMAGE, HELD_CHECKER);
     // One canvas entered the viewport element, in place of the old one, and it had drawn.
     expect(await page.evaluate(() => window.__se011.canvasLog)).toEqual([
         { drawn: true, canvases: 1 },
     ]);
-    expect(errors).toEqual([]);
+    // The rejected checkerboard upload that asked for the replacement, reported once.
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/WebGPU resource validation failed/);
 });
 
 test("a replacement whose renderer fails is given up: the old canvas stays until the next one has drawn", async ({
@@ -423,7 +449,7 @@ test("a replacement whose renderer fails is given up: the old canvas stays until
             devices: window.__se011.liveDevices(),
         }));
     await expect.poll(alive).toEqual({ renderers: 1, devices: 1 });
-    // The status check tries the replacement again, within its second.
+    // The replacement is tried again, within a second (`RETRY_MS`).
     await expect
         .poll(() => page.evaluate(() => window.__se011.creatingDevices()), { timeout: 5000 })
         .toBe(1);
@@ -443,14 +469,15 @@ test("a replacement whose renderer fails is given up: the old canvas stays until
     });
     expect(await viewportHost(page).locator("canvas[data-old]").count()).toBe(0);
     expect(await canvases(page)).toEqual([await hostDeviceSize(page)]);
-    await expectImage(page, document, VIEW, IMAGE);
+    await expectImage(page, document, VIEW, IMAGE, HELD_CHECKER);
     // The failed renderer's canvas never entered the document; the one that did had drawn.
     expect(await page.evaluate(() => window.__se011.canvasLog)).toEqual([
         { drawn: true, canvases: 1 },
     ]);
-    // NGNE's diagnostic of the failure, once.
-    expect(errors).toHaveLength(1);
-    expect(errors[0]).toMatch(/WebGPU recovery failed/);
+    // The rejected checkerboard upload, and NGNE's diagnostic of the failure, once each.
+    expect(errors).toHaveLength(2);
+    expect(errors.filter((line) => /WebGPU resource validation failed/.test(line))).toHaveLength(1);
+    expect(errors.filter((line) => /WebGPU recovery failed/.test(line))).toHaveLength(1);
 });
 
 test("a checkerboard upload that fails gets a fresh renderer, once", async ({ page }) => {

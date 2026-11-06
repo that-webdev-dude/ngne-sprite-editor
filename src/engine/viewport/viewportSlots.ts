@@ -99,7 +99,7 @@ export function replaceSceneDocument(scene: Scene, document: ViewportDocument | 
 /** What an upload put into a slot. */
 interface SlotTag {
     epoch: number;
-    /** A frame key, the spec of a checker image, or null for the 1×1 placeholder. */
+    /** A frame key, the spec of a checker image, or null for none (the texture was released). */
     key: string | null;
     /** Size of the image, in document pixels. */
     width: number;
@@ -211,7 +211,6 @@ export class ViewportSlots {
                 if (!host.referenceBitmap) throw new Error("This viewport shows no references.");
                 return host.referenceBitmap(image, width, height);
             },
-            placeholder: () => host.bitmap({ width: 1, height: 1, data: new Uint8ClampedArray(4) }),
             gate: (slot) => host.gate(slot),
             onStuck: () => this.#reportStuck(),
         });
@@ -280,7 +279,7 @@ export class ViewportSlots {
     /**
      * The pixels behind `keys` changed. The keys on screen — the current frame and the onion
      * skins (SE-025) — are uploaded again into their slots, which show the previous pixels
-     * until then; every other key is given up and its slot replaced by the placeholder, to be
+     * until then; every other key is given up and its slot's texture released, to be
      * uploaded when it is needed again.
      */
     invalidate(keys: readonly string[] | "all"): void {
@@ -418,6 +417,11 @@ export class ViewportSlots {
         const spec = doc ? `${epoch}/${checkerSpec(doc.width, doc.height, checker)}` : null;
         if (spec === this.#checker) return;
         this.#checker = spec;
+        if (spec === null) {
+            // No document: nothing to show (SPEC §6.4, slots that become unused).
+            this.queue.release(CHECKER_SLOT);
+            return;
+        }
         this.queue.request(CHECKER_SLOT, () =>
             this.#build(CHECKER_SLOT, () => {
                 const { document: now, checker: colours } = this.#scene;
@@ -480,17 +484,15 @@ export class ViewportSlots {
         );
     }
 
-    /** Replaces the textures of freed frame slots by the 1×1 placeholder. */
+    /** Releases the textures of freed frame slots (NGNE `releaseTexture`). */
     #blank(slots: readonly number[]): void {
-        for (const slot of slots) {
-            const id = frameSlotId(slot);
-            this.queue.request(id, () => this.#build(id, () => null));
-        }
+        for (const slot of slots) this.queue.release(frameSlotId(slot));
     }
 
     /**
      * Makes an upload. `image` reads the CPU state when the upload starts; null means the
-     * slot has nothing to show and gets the placeholder.
+     * slot has nothing to show (the document has no such frame any more): its texture is
+     * released.
      */
     async #build(slot: string, image: () => SlotImageSource | null): Promise<Upload<SlotTag>> {
         await this.#host.gate(slot);
@@ -498,10 +500,9 @@ export class ViewportSlots {
         const { epoch } = this.#scene;
         const made = image();
         if (!made) {
-            const placeholder = { width: 1, height: 1, data: new Uint8ClampedArray(4) };
             return {
-                bitmap: await this.#host.bitmap(placeholder),
-                tag: { epoch, key: null, width: 1, height: 1 },
+                tag: { epoch, key: null, width: 0, height: 0 },
+                transfer: async () => this.#host.target.releaseTexture(slot),
             };
         }
         const { width, height } = made.pixels;
@@ -610,7 +611,7 @@ export class ViewportSlots {
 
     /**
      * Asks for the onion skins' keys, which stay in the frame cache as any key does. While no
-     * ghost is tinted, the tinted variants are of no use: their slots get the placeholder
+     * ghost is tinted, the tinted variants are of no use: their slots are released
      * (SPEC §6.4, slots that become unused). Playing only hides the ghosts.
      */
     #syncOnion(): void {
@@ -674,7 +675,7 @@ export class ViewportSlots {
             if (kept) return;
             this.#playSpec = null;
             this.#playShown = null;
-            this.queue.request(PLAY_SLOT, () => this.#build(PLAY_SLOT, () => null));
+            this.queue.release(PLAY_SLOT);
             return;
         }
         const spec = `${epoch}/${doc.width}x${doc.height}/${playing.join("\n")}`;

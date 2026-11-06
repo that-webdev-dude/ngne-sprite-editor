@@ -128,8 +128,8 @@ export class FrameSlots {
     }
 
     /**
-     * An upload into `slot` resolved: `image` is what its texture holds now, null for the 1×1
-     * placeholder. The slot shows the image when it is still reserved for that key and the
+     * An upload into `slot` resolved: `image` is what its texture holds now, null for nothing
+     * (released). The slot shows the image when it is still reserved for that key and the
      * image is not already out of date. An image is out of date when a newer upload of the
      * slot is waiting; it is shown all the same when it is the current frame or another key
      * on screen, which may lag its own pixels by an upload but not disappear.
@@ -148,7 +148,7 @@ export class FrameSlots {
 
     /**
      * Gives up every key `matches` accepts. Returns the slots that were reserved for such a
-     * key: they are free again, and the caller replaces their texture by the 1×1 placeholder
+     * key: they are free again, and the caller releases their texture
      * (SPEC §6.4). A slot that only still showed such a key while being re-keyed stops
      * showing it and keeps its reservation.
      */

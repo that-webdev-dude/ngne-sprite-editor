@@ -23,7 +23,7 @@ describe("package.json", () => {
             "react-dom",
             "zustand",
         ]);
-        expect(manifest.dependencies["@ngne/core"]).toBe("0.2.1");
+        expect(manifest.dependencies["@ngne/core"]).toBe("0.3.0");
     });
 
     it("pins every dependency to an exact version", () => {

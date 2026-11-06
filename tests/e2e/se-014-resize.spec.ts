@@ -14,12 +14,12 @@ import { clientAt, geometry } from "./se-012-support";
 import type { View } from "./se-012-support";
 import { celPixel, historyOf, selectDot, withTexels } from "./se-014-support";
 
-// SE-014 decides which texel a stroke paints during NGNE's resize quiet: after the viewport
-// element changes size NGNE keeps its old canvas on screen, stretched over the new box, until
-// the replacement has drawn (SPEC §6.4), and the overlay is stretched alike (SPEC §6.3). A
-// stroke then paints the texel shown under the pointer — the overlay's `cursor.pixel` — not
-// the one the element's box would put there. Here the replacement is held back (no WebGPU
-// device until released), so the stretch lasts as long as the test needs it.
+// SE-014 decides which texel a stroke paints right after the viewport element changes size.
+// With NGNE 0.3.0 the renderer is resized in the task the size is observed (SPEC §6.4): the
+// canvas and the overlay take the element's device size at once, nothing is stretched, and a
+// stroke paints the texel the element's box puts under the pointer — not the one a canvas
+// still at its old size would have shown there. WebGPU devices are held from before the
+// resize: the resize needs none, so nothing waits on them.
 
 const WIDTH = 32;
 const HEIGHT = 24;
@@ -47,7 +47,7 @@ async function laidOutDeviceSize(page: Page): Promise<{ width: number; height: n
     throw new Error("the viewport element kept changing size after the resize");
 }
 
-test("while NGNE stretches its old canvas after a resize, a stroke paints the texel shown under the pointer", async ({
+test("right after a resize the canvases have the new size, and a stroke paints the texel under the pointer", async ({
     page,
 }) => {
     const errors = collectErrors(page);
@@ -59,21 +59,22 @@ test("while NGNE stretches its old canvas after a resize, a stroke paints the te
     await selectDot(page);
     await settle(page);
 
-    // A larger window: the element grows, NGNE's replacement waits for its device.
+    // A larger window: the element grows. No device is to be had meanwhile.
+    const backing = await page.evaluate(() => window.__ngneTest!.overlay!.canvasSize);
+    const created = await page.evaluate(() => window.__se011.devicesCreated());
     await page.evaluate(() => window.__se011.holdDevices());
     await page.setViewportSize({ width: 1600, height: 900 });
     const box = await laidOutDeviceSize(page);
-    await expect
-        .poll(() => page.evaluate(() => window.__ngneTest!.overlay!.canvasSize))
-        .not.toEqual(box);
-    const backing = await page.evaluate(() => window.__ngneTest!.overlay!.canvasSize);
+    // At once: the overlay and NGNE's canvas have the element's device size.
+    expect(await page.evaluate(() => window.__ngneTest!.overlay!.canvasSize)).toEqual(box);
+    expect(await page.evaluate(() => window.__ngneTest!.viewport!.canvasSize)).toEqual(box);
     expect(backing.width).toBeLessThan(box.width);
     expect(backing.height).toBeLessThan(box.height);
     const layout = await geometry(page);
     expect(layout.device).toEqual(box);
 
-    // The centre of a device pixel of the element over the document, and the canvas pixel
-    // shown there.
+    // The centre of a device pixel of the element over the document, and the pixel a canvas
+    // still at the old size, stretched over the box, would have shown there.
     const device = { x: 250.5, y: 180.5 };
     const shown = {
         x: Math.floor((device.x * backing.width) / box.width),
@@ -94,13 +95,14 @@ test("while NGNE stretches its old canvas after a resize, a stroke paints the te
     await page.mouse.up();
 
     expect(await historyOf(page, document.id)).toEqual({ undo: 2, open: false });
-    expect(await celPixel(page, document.id, texelShown)).toEqual(BLACK);
-    expect(await celPixel(page, document.id, texelByBox)).not.toEqual(BLACK);
-    // Still stretched: the stroke was made in the quiet.
-    expect(await page.evaluate(() => window.__ngneTest!.overlay!.canvasSize)).toEqual(backing);
+    expect(await celPixel(page, document.id, texelByBox)).toEqual(BLACK);
+    expect(await celPixel(page, document.id, texelShown)).not.toEqual(BLACK);
+    // No device was asked for: the renderer was resized, not replaced.
+    expect(await page.evaluate(() => window.__se011.devicesCreated())).toBe(created);
+    expect(await page.evaluate(() => window.__se011.creatingDevices())).toBe(0);
 
-    await page.evaluate(() => window.__se011.releaseDevices());
     await settle(page);
-    await expectImage(page, document, VIEW, withTexels(pixels, WIDTH, [texelShown], BLACK));
+    await expectImage(page, document, VIEW, withTexels(pixels, WIDTH, [texelByBox], BLACK));
+    await page.evaluate(() => window.__se011.releaseDevices());
     expect(errors).toEqual([]);
 });

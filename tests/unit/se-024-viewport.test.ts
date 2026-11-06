@@ -324,12 +324,9 @@ describe("ViewportSlots: playback from the ed:play grid", () => {
         view.renderer.inFlight("ed:f:1").resolve();
         await view.land();
         expect(view.frameQuad()?.texture).toBe("ed:f:1");
-        // ed:play gets the 1×1 image (SPEC §6.4: slots that become unused).
-        expect(view.ids().slice(before)).toEqual(["ed:f:1", PLAY_SLOT]);
-        expect(view.uploaded(view.renderer.calls.length - 1)).toMatchObject({
-            width: 1,
-            height: 1,
-        });
+        // ed:play is released (SPEC §6.4: slots that become unused), with no upload.
+        expect(view.ids().slice(before)).toEqual(["ed:f:1"]);
+        expect(view.renderer.released).toEqual([PLAY_SLOT]);
         expect(view.slots.playGrid()).toBeNull();
     });
 

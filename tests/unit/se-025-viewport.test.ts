@@ -175,8 +175,9 @@ describe("ViewportSlots: onion skins", () => {
         await view.start();
         const ids = view.ids().slice(before);
         expect(ids).toContain(frameSlotId(slot));
-        // h is not on screen: its slot gets the placeholder.
-        expect(ids).toContain(frameSlotId(hSlot));
+        // h is not on screen: its slot is released, with no upload.
+        expect(ids).not.toContain(frameSlotId(hSlot));
+        expect(view.renderer.released).toContain(frameSlotId(hSlot));
         expect(view.slots.frames.reservedFor(plain("h"))).toBe(-1);
         // Until the upload resolves, the ghost stays on screen with its previous pixels.
         expect(view.ghostQuads()).toEqual([{ layer: 3, alpha: 0.5, texture: frameSlotId(slot) }]);
@@ -244,7 +245,9 @@ describe("ViewportSlots: onion skins", () => {
         view.show(plain("c"), []);
         await view.land();
         expect(view.slots.frames.reservedFor(frameKey("b", "before"))).toBe(-1);
-        expect(view.ids().slice(before)).toEqual([frameSlotId(tinted)]);
+        // Its slot is released (no upload); the plain ghost's slot is kept.
+        expect(view.ids().slice(before)).toEqual([]);
+        expect(view.renderer.released).toEqual([frameSlotId(tinted)]);
         expect(view.slots.frames.reservedFor(plain("d"))).toBeGreaterThanOrEqual(0);
         // While playing, a tinted ghost is only hidden.
         view.show(plain("c"), [behind(frameKey("b", "before"), 0.5)]);

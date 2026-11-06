@@ -176,7 +176,7 @@ describe("ViewportSlots: what is uploaded and what is drawn", () => {
     });
 
     it("draws nothing without a document and only the checkerboard without a frame", async () => {
-        const { slots, show, textures, uploads, land } = setup();
+        const { slots, renderer, show, textures, uploads, land } = setup();
         slots.sync();
         await land();
         expect(uploads()).toEqual([]);
@@ -188,15 +188,16 @@ describe("ViewportSlots: what is uploaded and what is drawn", () => {
         expect(uploads()).toEqual(["ed:checker<checker 4x4"]);
         expect(textures()).toEqual(["ed:checker"]);
 
-        // No document again: the checkerboard slot gets the 1×1 image and is not drawn.
+        // No document again: the checkerboard slot is released and not drawn.
         show(null, null);
         await land();
-        expect(uploads().slice(1)).toEqual(["ed:checker<blank"]);
+        expect(uploads().slice(1)).toEqual([]);
+        expect(renderer.released).toEqual(["ed:checker"]);
         expect(slots.quads()).toEqual([]);
     });
 
     it("refreshes the current frame in its slot and gives the other touched frames up", async () => {
-        const { scene, slots, uploads, show, textures, land } = setup();
+        const { scene, slots, renderer, uploads, show, textures, land } = setup();
         const a = testDocument("A", ["a1", "a2", "a3"]);
         show(a.document, "a1");
         await land();
@@ -212,18 +213,16 @@ describe("ViewportSlots: what is uploaded and what is drawn", () => {
         slots.invalidate(["a1", "a3"]);
         expect(slots.shownKeys().slice(0, 3)).toEqual([null, "a2", "a3"]);
         await land();
-        expect(uploads().slice(before).sort()).toEqual(["ed:f:0<blank", "ed:f:2<A/a3"]);
+        expect(uploads().slice(before)).toEqual(["ed:f:2<A/a3"]);
+        expect(renderer.released).toEqual(["ed:f:0"]);
         expect(slots.shownKeys().slice(0, 3)).toEqual([null, "a2", "a3"]);
         expect(textures()).toEqual(["ed:checker", "ed:f:2"]);
 
         // "all": every other frame is given up; the checkerboard is as it was.
         slots.invalidate("all");
         await land();
-        expect(
-            uploads()
-                .slice(before + 2)
-                .sort(),
-        ).toEqual(["ed:f:1<blank", "ed:f:2<A/a3"]);
+        expect(uploads().slice(before + 1)).toEqual(["ed:f:2<A/a3"]);
+        expect(renderer.released).toEqual(["ed:f:0", "ed:f:1"]);
         expect(slots.shownKeys().slice(0, 3)).toEqual([null, null, "a3"]);
     });
 

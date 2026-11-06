@@ -17,7 +17,7 @@ import { bitmap, FakeRenderer } from "./se-011-support";
 
 // SE-045: the reference slots `ed:ref:0..3` of one renderer (SPEC §6.4, §7.6) — the display
 // source cap, the size on screen each image is uploaded at, the 16 MP budget, the resample
-// 100 ms after the zoom settles, the 1×1 placeholder for a removed layer — and the quads they
+// 100 ms after the zoom settles, the release of a removed layer's slot — and the quads they
 // draw. No NGNE and no DOM: the renderer is a stand-in and the images are labels.
 
 function image(width: number, height: number): PixelBuffer {
@@ -53,7 +53,6 @@ function setup(view: ViewportView = { scale: 4, originX: 10, originY: 20 }) {
     const slots = new ReferenceSlots(scene, queue, {
         referenceBitmap: async (source, width, height) =>
             bitmap(`${source.width}x${source.height}@${width}x${height}`),
-        placeholder: async () => bitmap("placeholder"),
         gate: () => undefined,
         onStuck: () => events.push("stuck"),
     });
@@ -245,8 +244,8 @@ describe("ReferenceSlots", () => {
         expect(slots.waiting).toBe(false);
     });
 
-    it("gives a removed reference's slot the 1×1 placeholder, once, and never draws another layer's texture", async () => {
-        const { scene, slots, uploads, land } = setup();
+    it("releases a removed reference's slot, once, and never draws another layer's texture", async () => {
+        const { scene, slots, renderer, uploads, land } = setup();
         const first = reference("r1", image(4, 4));
         scene.references = [first];
         slots.sync();
@@ -255,7 +254,8 @@ describe("ReferenceSlots", () => {
         slots.sync();
         slots.sync();
         await land();
-        expect(uploads()).toEqual(["ed:ref:0<4x4@4x4", "ed:ref:0<placeholder"]);
+        expect(uploads()).toEqual(["ed:ref:0<4x4@4x4"]);
+        expect(renderer.released).toEqual(["ed:ref:0"]);
         expect(slots.shown()).toEqual([null, null, null, null]);
 
         // Another layer takes the slot: until its upload resolves, the slot is not drawn.

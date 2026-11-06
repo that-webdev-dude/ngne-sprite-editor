@@ -1,4 +1,8 @@
-import type { RendererResourceInspection, RendererStatus } from "@ngne/core";
+import type {
+    RendererLifecycleEvent,
+    RendererResourceInspection,
+    RendererStatus,
+} from "@ngne/core";
 import type { TiledMode } from "../core/model";
 import { readCanvas } from "./testing/readCanvas";
 import { consoleError, oncePerMessage, viewportDiagnostic } from "./viewport/diagnostics";
@@ -31,12 +35,11 @@ export type {
     ViewportView,
 } from "./viewport/types";
 
-/** A size change replaces the renderer after this long without another one (SPEC §6.4). */
-export const RESIZE_QUIET_MS = 120;
-/** Interval of the status check while the page is visible (SPEC §6.4). */
-export const STATUS_CHECK_MS = 1000;
-/** How often a replacement that waits for its device to be recovered looks again. */
-const RECOVERY_POLL_MS = 20;
+/**
+ * A replacement that left no healthy renderer on screen (none could be made, or the one made
+ * could not draw) is tried again after this long (SPEC §6.4).
+ */
+export const RETRY_MS = 1000;
 
 export interface NgneViewportOptions {
     /**
@@ -79,7 +82,7 @@ export interface ViewportProbe {
     readonly playGrid: { width: number; height: number; cells: number; keys: string[] } | null;
     /**
      * The reference slots `ed:ref:0..3` of the renderer on screen (SE-045): the layer each one's
-     * texture is of and the texture's size, or null for none or the placeholder.
+     * texture is of and the texture's size, or null for none (released).
      */
     readonly references: readonly ({ layerId: string; width: number; height: number } | null)[];
     /** Display sources of references the viewport keeps (SE-045): one per decoded image shown. */
@@ -106,14 +109,6 @@ export interface ViewportProbe {
     uploadGate: ((slot: string) => Promise<void>) | null;
 }
 
-/** Creates run one at a time, across every viewport of the page (SPEC §6.2 #12). */
-let creating: Promise<unknown> = Promise.resolve();
-function serialized<Result>(task: () => Promise<Result>): Promise<Result> {
-    const result = creating.then(task, task);
-    creating = result.catch(() => undefined);
-    return result;
-}
-
 /** Renderers created and not disposed, in the whole page. */
 let liveRenderers = 0;
 
@@ -123,12 +118,17 @@ let liveRenderers = 0;
  * current frame of a document, on demand; in tiled mode the checkerboard and the frame again
  * around it (SE-062).
  *
- * - The canvas backing size is the host's size in device pixels. A new size replaces the
- *   renderer after `RESIZE_QUIET_MS` of quiet: a new instance is created on a new canvas,
- *   every slot uploaded, one frame drawn, the canvases swapped, the old instance disposed.
+ * - The canvas backing size is the host's size in device pixels. A new size resizes the
+ *   renderer on screen (NGNE 0.3.0 `resize`) and draws it in the same `ResizeObserver` task,
+ *   so no cleared canvas is presented. A renderer is replaced (a new instance on a new canvas,
+ *   every slot uploaded, one frame drawn, the canvases swapped, the old instance disposed)
+ *   only when it failed or an upload failed for good on it.
  * - Nothing is drawn unless something changed: a dirty flag and one animation frame.
- * - NGNE signals neither a lost device nor its recovery, so the status and the sprite counter
- *   are read on window focus, on `visibilitychange` and once a second while visible.
+ * - NGNE's lifecycle events (`onLifecycle`) tell a device loss, its recovery and a failure:
+ *   a renderer back to `ready` draws the scene again, a failed one is replaced. Nothing is
+ *   polled.
+ * - Creation is cancelled when the viewport is disposed (NGNE's create signal); creates of
+ *   different viewports run side by side, each on its own canvas.
  */
 export class NgneViewport implements ViewportPort {
     readonly probe: ViewportProbe;
@@ -156,8 +156,9 @@ export class NgneViewport implements ViewportPort {
     #size: DeviceSize = { width: 0, height: 0 };
     #replacing = false;
     #replaceAgain = false;
-    #quiet: ReturnType<typeof setTimeout> | undefined;
-    #statusTimer: ReturnType<typeof setInterval> | undefined;
+    #retryTimer: ReturnType<typeof setTimeout> | undefined;
+    /** Aborted by `dispose`: cancels a create and the waits for a renderer to be ready. */
+    readonly #lifetime = new AbortController();
     #dirty = false;
     #frameRequest = 0;
     #submittedFrames = 0;
@@ -183,9 +184,6 @@ export class NgneViewport implements ViewportPort {
             // Not supported: the content box times the pixel ratio is used instead.
             this.#observer.observe(host);
         }
-        window.addEventListener("focus", this.#checkStatus);
-        document.addEventListener("visibilitychange", this.#visibilityChanged);
-        this.#watchStatus();
     }
 
     /** The viewport element's size in device pixels, which is the canvas backing size. */
@@ -306,10 +304,8 @@ export class NgneViewport implements ViewportPort {
         if (this.#disposed) return;
         this.#disposed = true;
         this.#observer.disconnect();
-        window.removeEventListener("focus", this.#checkStatus);
-        document.removeEventListener("visibilitychange", this.#visibilityChanged);
-        clearTimeout(this.#quiet);
-        clearInterval(this.#statusTimer);
+        this.#lifetime.abort(new DOMException("The viewport was disposed.", "AbortError"));
+        clearTimeout(this.#retryTimer);
         if (this.#frameRequest) cancelAnimationFrame(this.#frameRequest);
         const instances = this.#instances();
         this.#live = null;
@@ -342,28 +338,46 @@ export class NgneViewport implements ViewportPort {
         if (size.width === this.#size.width && size.height === this.#size.height) return;
         this.#size = size;
         this.#options.onResize?.({ ...size });
-        clearTimeout(this.#quiet);
-        this.#quiet = undefined;
-        if (!this.#live && !this.#replacing) {
-            // Nothing on screen yet: the first renderer is created at once.
-            void this.#replace();
+        const live = this.#live;
+        if (!live) {
+            // Nothing on screen yet: the first renderer is created at once. One being made
+            // takes the newest size once it is on screen.
+            if (!this.#replacing) void this.#replace();
             return;
         }
-        this.#quiet = setTimeout(() => {
-            this.#quiet = undefined;
-            void this.#replace();
-        }, RESIZE_QUIET_MS);
+        // In this task, before the browser presents: the resize clears the canvas, the draw
+        // fills it again.
+        if (this.#resize(live) && live.status === "ready") this.#submit(live);
     }
 
     /**
-     * True when the instance on screen fits the host, its renderer still works and none of
-     * its slots has failed for good.
+     * Gives `instance` the host's size (NGNE `resize`: device, pipelines and textures kept).
+     * Returns true when its size changed. NGNE throws while the device is being recovered and
+     * after a failure: the wanted size stays in `#size` and is applied again at the next
+     * draw, which `ready` asks for. A throw while ready (a size beyond the device's limit) is
+     * reported, once per message.
+     */
+    #resize(instance: RendererInstance): boolean {
+        const { width, height } = this.#size;
+        if (width === 0 || height === 0) return false;
+        if (instance.width === width && instance.height === height) return false;
+        try {
+            instance.renderer.resize(width, height);
+        } catch (error) {
+            if (instance.status === "ready") this.#report(error);
+            return false;
+        }
+        this.#dirty = true;
+        return true;
+    }
+
+    /**
+     * True when the instance on screen can show the scene: its renderer still works and none
+     * of its slots has failed for good. Its size is not judged: a size is applied by `resize`.
      */
     #fits(instance: RendererInstance | null): boolean {
         return (
             instance !== null &&
-            instance.width === this.#size.width &&
-            instance.height === this.#size.height &&
             instance.status !== "failed" &&
             instance.status !== "disposed" &&
             !instance.stuck
@@ -381,16 +395,18 @@ export class NgneViewport implements ViewportPort {
     }
 
     /**
-     * Brings the renderer in line with the host's size: one replacement at a time, and again
-     * when the size changed or the renderer failed while one was under way. An attempt that
-     * ends without a new renderer on screen is not repeated here: the status check does that,
-     * once a second at most.
+     * Puts a working renderer on screen: the first one, or a fresh one for a renderer that
+     * failed or got stuck. One replacement at a time, and again when the renderer failed
+     * while one was under way. An attempt that ends without a working renderer on screen is
+     * tried again after `RETRY_MS`.
      */
     async #replace(): Promise<void> {
         if (this.#replacing) {
             this.#replaceAgain = true;
             return;
         }
+        clearTimeout(this.#retryTimer);
+        this.#retryTimer = undefined;
         this.#replacing = true;
         try {
             do {
@@ -410,6 +426,21 @@ export class NgneViewport implements ViewportPort {
         } finally {
             this.#replacing = false;
         }
+        this.#retryLater();
+    }
+
+    /**
+     * Arms one more attempt after `RETRY_MS` when what is on screen does not fit: no renderer
+     * could be made, or the one made could not draw. Not a poll: nothing is read meanwhile.
+     */
+    #retryLater(): void {
+        const size = this.#size;
+        if (this.#disposed || this.#retryTimer !== undefined) return;
+        if (size.width === 0 || size.height === 0 || this.#fits(this.#live)) return;
+        this.#retryTimer = setTimeout(() => {
+            this.#retryTimer = undefined;
+            void this.#replace();
+        }, RETRY_MS);
     }
 
     /**
@@ -419,33 +450,33 @@ export class NgneViewport implements ViewportPort {
      * only after NGNE has submitted a frame on the new one.
      */
     async #replaceOnce(size: DeviceSize): Promise<boolean> {
-        let next: RendererInstance | null;
+        if (this.#disposed) return false;
+        let next: RendererInstance;
         try {
-            next = await serialized(async () => {
-                if (this.#disposed) return null;
-                const instance = await RendererInstance.create(size, this.#scene, this.#stage, {
+            next = await RendererInstance.create(
+                size,
+                this.#scene,
+                this.#stage,
+                {
                     onTexture: () => {
                         this.#textureCalls++;
                     },
                     onChange: () => this.#markDirty(),
-                    onError: (error) => this.#diagnostic(error),
+                    onError: (error) => this.#report(error),
                     onStuck: (stuck) => this.#stuck(stuck),
+                    onLifecycle: (instance, event) => this.#lifecycle(instance, event),
                     gate: (slot) => this.probe.uploadGate?.(slot),
                     referenceBitmap: (image, width, height) =>
                         this.#referenceSources.bitmap(image, width, height),
-                });
-                liveRenderers++;
-                return instance;
-            });
+                },
+                this.#lifetime.signal,
+            );
         } catch (error) {
-            this.#report(error);
+            // A create cancelled by `dispose` is not a failure.
+            if (!this.#disposed) this.#report(error);
             return false;
         }
-        if (!next) return false;
-        if (this.#disposed) {
-            this.#disposeInstance(next);
-            return false;
-        }
+        liveRenderers++;
 
         // From here on the new instance follows every scene change, as the one on screen
         // does, and uploads what the old one had cached.
@@ -462,8 +493,10 @@ export class NgneViewport implements ViewportPort {
         }
 
         // One task: the new canvas has drawn before it enters the document, and the old one
-        // leaves in the same step, so the viewport is never blank.
+        // leaves in the same step, so the viewport is never blank. It takes the size the host
+        // has now, which may have changed while it was made.
         const old = this.#live;
+        this.#resize(next);
         if (!this.#submit(next)) {
             // NGNE submitted nothing and has reported why: a canvas that has not drawn does
             // not go on screen. The scene is still to be drawn on the old one.
@@ -485,8 +518,9 @@ export class NgneViewport implements ViewportPort {
     /**
      * Waits until a new instance is loaded — no upload in flight or waiting, and no device
      * being recovered — and says what to do with it. A device lost while it loads is
-     * recovered by NGNE, slots included; until then the instance cannot draw, and the one on
-     * screen stays.
+     * recovered by NGNE, slots included; until `ready()` resolves the instance cannot draw,
+     * and the one on screen stays. A recovery that fails rejects `ready()`, and the instance
+     * is then abandoned.
      */
     async #loaded(next: RendererInstance): Promise<SwapDecision> {
         for (;;) {
@@ -494,7 +528,7 @@ export class NgneViewport implements ViewportPort {
             if (this.#disposed || next.disposed) return "abandon";
             const decision = swapDecision(next, this.#live);
             if (decision !== "wait") return decision;
-            await new Promise((resolve) => setTimeout(resolve, RECOVERY_POLL_MS));
+            await next.renderer.ready(this.#lifetime.signal).catch(() => undefined);
         }
     }
 
@@ -516,11 +550,9 @@ export class NgneViewport implements ViewportPort {
         // Before the first renderer the swap draws; the flag is kept for it.
         if (!this.#dirty || this.#disposed || !live) return;
         const status = live.status;
-        live.lastStatus = status;
         if (status === "recovering") {
-            // `render()` would be a silent no-op: the flag stays and the draw is tried again
-            // next animation frame (SPEC §6.2 #13).
-            this.#schedule();
+            // `render()` would be a silent no-op: the flag stays, and NGNE's `ready` event
+            // draws (SPEC §6.2 #13).
             return;
         }
         if (status !== "ready") {
@@ -528,6 +560,8 @@ export class NgneViewport implements ViewportPort {
             void this.#replace();
             return;
         }
+        // A size that could not be applied during a recovery is applied now.
+        this.#resize(live);
         this.#submit(live);
     };
 
@@ -546,60 +580,19 @@ export class NgneViewport implements ViewportPort {
         return true;
     }
 
-    // --- Status --------------------------------------------------------------------------
+    // --- Lifecycle -----------------------------------------------------------------------
 
     /**
-     * Reading the status submits no frame. A way back to `ready`, or a sprite counter that
-     * fell to 0 after a draw with sprites (NGNE zeroes it when the device is lost; recovery
-     * usually completes between two reads), marks the view dirty. `failed` asks for a fresh
-     * renderer.
+     * A transition of an instance's renderer (NGNE `onLifecycle`), delivered synchronously:
+     * only flags and requests here. `ready` (a recovered device) draws the instance on screen
+     * again; an instance being loaded is waited for by `#loaded`. `failed` asks for a fresh
+     * renderer, outside NGNE's own call. `recovering` needs nothing: a draw asked for meanwhile
+     * keeps its dirty flag until `ready`.
      */
-    readonly #checkStatus = (): void => {
-        if (this.#disposed) return;
-        const live = this.#live;
-        if (!live) {
-            // No renderer could be made earlier: try again.
-            if (!this.#replacing) void this.#replace();
-            return;
-        }
-        const status = live.status;
-        const before = live.lastStatus;
-        live.lastStatus = status;
-        if (status === "failed") {
-            void this.#replace();
-            return;
-        }
-        // A replacement for a new size that could not be made is tried again.
-        if (!this.#replacing && this.#quiet === undefined && !this.#fits(live)) {
-            void this.#replace();
-        }
-        if (status !== "ready") return;
-        if (before !== "ready" || (live.drewSprites > 0 && live.renderer.sprites === 0)) {
-            this.#markDirty();
-        }
-    };
-
-    readonly #visibilityChanged = (): void => {
-        this.#watchStatus();
-        this.#checkStatus();
-    };
-
-    /** Runs the status timer while the page is visible. */
-    #watchStatus(): void {
-        const visible = document.visibilityState === "visible";
-        if (visible && this.#statusTimer === undefined) {
-            this.#statusTimer = setInterval(this.#checkStatus, STATUS_CHECK_MS);
-        } else if (!visible && this.#statusTimer !== undefined) {
-            clearInterval(this.#statusTimer);
-            this.#statusTimer = undefined;
-        }
-    }
-
-    /** An NGNE diagnostic: shown once per message; `failed` arrives this way too. */
-    #diagnostic(error: unknown): void {
-        this.#report(error);
-        // Not inside NGNE's own call: the status is read once it has returned.
-        queueMicrotask(this.#checkStatus);
+    #lifecycle(instance: RendererInstance, event: RendererLifecycleEvent): void {
+        if (this.#disposed || instance.disposed || instance !== this.#live) return;
+        if (event.status === "ready") this.#markDirty();
+        else if (event.status === "failed") queueMicrotask(() => void this.#replace());
     }
 
     // --- Test hooks ----------------------------------------------------------------------
@@ -631,7 +624,6 @@ export class NgneViewport implements ViewportPort {
                         this.#live !== null &&
                         !this.#dirty &&
                         !this.#replacing &&
-                        this.#quiet === undefined &&
                         !this.#live.slots.queue.busy() &&
                         !this.#live.slots.references.waiting,
                 ),

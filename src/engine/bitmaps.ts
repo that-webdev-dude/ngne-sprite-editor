@@ -18,11 +18,3 @@ export function bitmapFromPixels(pixels: PixelBuffer): Promise<ImageBitmap> {
     const data = pixels.data as Uint8ClampedArray<ArrayBuffer>;
     return createImageBitmap(new ImageData(data, pixels.width, pixels.height), BITMAP_OPTIONS);
 }
-
-/**
- * The 1×1 transparent image that replaces the texture of a slot nothing uses any more
- * (SPEC §6.4): NGNE cannot release a manual texture, only replace it.
- */
-export function placeholderBitmap(): Promise<ImageBitmap> {
-    return bitmapFromPixels({ width: 1, height: 1, data: new Uint8ClampedArray(4) });
-}

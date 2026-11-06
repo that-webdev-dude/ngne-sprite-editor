@@ -3,12 +3,12 @@ import type { Point, ViewMapping } from "../view/coordinates";
 
 // The mapping of the image on screen while NGNE stretches its canvas (SE-013).
 //
-// After the viewport element changes size, NGNE keeps its old canvas on screen, CSS-stretched
-// over the element, until the replacement for the new size has drawn (SPEC §6.4). Meanwhile it
-// keeps drawing the current view on that old canvas: its quads are placed by the view alone
-// (`documentRect`), in the canvas's backing pixels, whatever the canvas's size. The overlay
-// takes the same backing size and the same CSS box, so it draws with the same document
-// rectangle and is stretched alike. Only client positions (the pointer) map differently: a
+// NGNE resizes its canvas in the task that observes a new size of the viewport element. While
+// that resize waits for a device recovery (SPEC §6.4), the canvas keeps its old size,
+// CSS-stretched over the element, and the current view is drawn on it: its quads are placed by
+// the view alone (`documentRect`), in the canvas's backing pixels, whatever the canvas's size.
+// The overlay takes the same backing size and the same CSS box, so it draws with the same
+// document rectangle and is stretched alike. Only client positions (the pointer) map differently: a
 // device pixel of the element is `backing / box` backing pixels along each axis.
 
 /**

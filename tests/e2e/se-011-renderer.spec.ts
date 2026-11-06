@@ -4,8 +4,9 @@ import { collectErrors } from "./se-006-support";
 import { harnessSettled, openHarness } from "./se-011-support";
 
 // SE-011: the life of the renderer, on the harness page (an `NgneViewport` without the app):
-// the quiet time before a resize replaces it, when its status is read, what a draw does while
-// the device is being recovered, and what a disposed viewport leaves behind.
+// a resize applied to the renderer in place, how a recovered device is drawn again (NGNE
+// 0.3.0 lifecycle events), what a draw does while the device is being recovered, and what a
+// disposed viewport leaves behind.
 
 /** Counters of the harness viewport and of the page's WebGPU devices. */
 function counters(page: Page) {
@@ -65,7 +66,7 @@ async function loseAndRecover(page: Page): Promise<void> {
         .toEqual({ devices: created + 1, status: "ready" });
 }
 
-test("creates are serialized: a viewport made while another's create is in flight waits for it", async ({
+test("a viewport disposed while its create is in flight cancels it, and the next viewport's create starts at once", async ({
     page,
 }) => {
     const errors = collectErrors(page);
@@ -78,84 +79,98 @@ test("creates are serialized: a viewport made while another's create is in fligh
     await expect.poll(() => page.evaluate(() => window.__se011.creatingDevices())).toBe(1);
 
     // That viewport goes and another is made at once, as when a document is closed and the
-    // next one opened. NGNE's create cannot be aborted, so the first one is still running.
+    // next one opened. The dispose cancels the first create (NGNE 0.3.0's create signal): it
+    // publishes no renderer, and the second create does not wait for it.
     await page.evaluate(() => {
         window.se011!.dispose();
         window.se011!.create();
         window.se011!.open(16, 8);
         window.se011!.show(3);
     });
+    await expect.poll(() => page.evaluate(() => window.__se011.creatingDevices())).toBe(2);
     await page.waitForTimeout(400);
-    // The second create has not begun: one device is being made, not two.
+    // Both device requests wait; no renderer exists and no canvas is in the host.
     expect(
         await page.evaluate(() => ({
             creating: window.__se011.creatingDevices(),
             peaks: window.__se011.peaks(),
             created: window.__se011.devicesCreated(),
+            renderers: window.__se011.liveRenderers(),
+            canvases: document.querySelectorAll("#host canvas").length,
         })),
-    ).toEqual({ creating: 1, peaks: { creating: 1, live: 0 }, created: 0 });
+    ).toEqual({
+        creating: 2,
+        peaks: { creating: 2, live: 0 },
+        created: 0,
+        renderers: 0,
+        canvases: 0,
+    });
 
-    // The first create ends, its renderer is disposed, and the second one runs.
+    // The devices arrive: the cancelled create's late device is given back by NGNE, and the
+    // second viewport's renderer is the only one.
     await page.evaluate(() => window.__se011.releaseDevices());
     await harnessSettled(page);
+    await expect.poll(async () => (await counters(page)).liveDevices).toBe(1);
     expect(await counters(page)).toMatchObject({
         liveRenderers: 1,
         liveDevices: 1,
         devicesCreated: 2,
         status: "ready",
     });
-    expect(await page.evaluate(() => window.__se011.peaks())).toEqual({ creating: 1, live: 1 });
+    expect(await page.evaluate(() => window.__se011.peaks().creating)).toBe(2);
+    expect(await page.evaluate(() => document.querySelectorAll("#host canvas").length)).toBe(1);
     expect(await topLeft(page)).toEqual([60, 255, 255, 255]);
     expect(await page.evaluate(() => window.se011!.errors)).toEqual([]);
     expect(errors).toEqual([]);
 });
 
-test("20 quick resizes replace the renderer once, after 120 ms of quiet", async ({ page }) => {
+test("20 quick resizes are each applied to the renderer in place, and no renderer is made for them", async ({
+    page,
+}) => {
     const errors = collectErrors(page);
     await openHarness(page);
     await showDocument(page);
     const before = await counters(page);
     expect(before).toMatchObject({ liveRenderers: 1, liveDevices: 1 });
 
-    // A new size every 25 ms: each one starts the quiet time again.
-    const { last, createdMeanwhile } = await page.evaluate(async () => {
-        let last = { width: 0, height: 0 };
+    // A new size every 25 ms. Each one is applied (NGNE 0.3.0 `resize`) and drawn in the
+    // `ResizeObserver` task it is observed in: two animation frames later the canvas has it.
+    const sizes = await page.evaluate(async () => {
+        const seen: { wanted: { width: number; height: number }; canvas: unknown }[] = [];
+        const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
         for (let step = 0; step < 20; step++) {
-            last = { width: 500 + step * 9, height: 380 + step * 5 };
-            window.se011!.resize(last.width, last.height);
+            const wanted = { width: 500 + step * 9, height: 380 + step * 5 };
+            window.se011!.resize(wanted.width, wanted.height);
+            await frame();
+            await frame();
+            seen.push({ wanted, canvas: window.se011!.probe!.canvasSize });
             await new Promise((resolve) => setTimeout(resolve, 25));
         }
-        return { last, createdMeanwhile: window.__se011.devicesCreated() };
+        return seen;
     });
-    // While the sizes keep coming, no renderer is made for any of them.
-    expect(createdMeanwhile).toBe(before.devicesCreated);
-    await page.waitForFunction(
-        (last) => {
-            const probe = window.se011!.probe!;
-            return probe.settled && probe.canvasSize?.width === last.width;
-        },
-        last,
-        { polling: 50 },
-    );
+    for (const { wanted, canvas } of sizes) expect(canvas).toEqual(wanted);
+    await harnessSettled(page);
 
     const after = await counters(page);
     expect(after).toMatchObject({ liveRenderers: 1, liveDevices: 1, status: "ready" });
-    expect(await page.evaluate(() => window.se011!.probe!.canvasSize)).toEqual(last);
-    // One replacement for the twenty sizes; far fewer than twenty in any case.
-    expect(after.devicesCreated - before.devicesCreated).toBeGreaterThanOrEqual(1);
-    expect(after.devicesCreated - before.devicesCreated).toBeLessThanOrEqual(2);
-    expect(await page.evaluate(() => window.__se011.peaks())).toEqual({ creating: 1, live: 2 });
+    expect(await page.evaluate(() => window.se011!.probe!.canvasSize)).toEqual(
+        sizes.at(-1)?.wanted,
+    );
+    // Not one replacement for the twenty sizes: the device is the one made at the start.
+    expect(after.devicesCreated).toBe(before.devicesCreated);
+    expect(await page.evaluate(() => window.__se011.peaks())).toEqual({ creating: 1, live: 1 });
+    expect(await page.evaluate(() => document.querySelectorAll("#host canvas").length)).toBe(1);
     expect(await topLeft(page)).toEqual([60, 255, 255, 255]);
     expect(await page.evaluate(() => window.se011!.errors)).toEqual([]);
     expect(errors).toEqual([]);
 });
 
-test("the status is read on window focus, on visibilitychange and by the timer, and the timer runs only while the page is visible", async ({
+test("a device lost and recovered is drawn again once, by NGNE's ready event, with no timer, focus or visibility listener of the viewport's", async ({
     page,
 }) => {
     const errors = collectErrors(page);
     await openHarness(page, { track: true, manual: true });
-    // The 1 s status timer is held: only what the test fires reads the status.
+    // Intervals are held: one the viewport made would run only when the test fires it.
     const baseline = await page.evaluate(() => {
         const alive = window.__se011.alive();
         window.__se011.holdIntervals();
@@ -163,40 +178,37 @@ test("the status is read on window focus, on visibilitychange and by the timer, 
         return alive;
     });
     await showDocument(page);
-    // The viewport's own: one timer, one listener of each kind, one observer.
-    expect(await page.evaluate(() => window.__se011.alive())).toMatchObject({
-        intervals: baseline.intervals + 1,
-        focusListeners: baseline.focusListeners + 1,
-        visibilityListeners: baseline.visibilityListeners + 1,
+    // The viewport's own: one observer, and nothing that polls.
+    const own = {
+        intervals: baseline.intervals,
+        focusListeners: baseline.focusListeners,
+        visibilityListeners: baseline.visibilityListeners,
         resizeObservers: baseline.resizeObservers + 1,
-    });
+    };
+    expect(await page.evaluate(() => window.__se011.alive())).toMatchObject(own);
 
-    const reads: [string, () => void][] = [
-        ["focus", () => window.dispatchEvent(new Event("focus"))],
-        ["visibilitychange", () => document.dispatchEvent(new Event("visibilitychange"))],
-        ["timer", () => window.__se011.fireIntervals()],
-    ];
-    for (const [name, read] of reads) {
+    for (let round = 0; round < 3; round++) {
+        const before = await counters(page);
         await loseAndRecover(page);
-        // NGNE is ready again and nobody has looked: nothing was drawn since the loss.
-        const lost = await counters(page);
-        await page.waitForTimeout(300);
-        expect(await counters(page), name).toEqual(lost);
-
-        // Reading the status finds the sprite counter at zero and draws the scene again.
-        await page.evaluate(read);
+        // Nothing reads the status: NGNE's `ready` event draws the scene again, once.
         await expect
-            .poll(async () => (await counters(page)).submittedFrames, { message: name })
-            .toBe(lost.submittedFrames + 1);
+            .poll(async () => (await counters(page)).submittedFrames, { message: `${round}` })
+            .toBe(before.submittedFrames + 1);
         await harnessSettled(page);
-        // And only once: a second read finds nothing to do.
-        await page.evaluate(read);
         await frames(page, 3);
-        expect((await counters(page)).submittedFrames, name).toBe(lost.submittedFrames + 1);
+        expect((await counters(page)).submittedFrames, `${round}`).toBe(before.submittedFrames + 1);
+        // Focus, visibility and held intervals change nothing.
+        await page.evaluate(() => {
+            window.dispatchEvent(new Event("focus"));
+            document.dispatchEvent(new Event("visibilitychange"));
+            window.__se011.fireIntervals();
+        });
+        await frames(page, 3);
+        expect((await counters(page)).submittedFrames, `${round}`).toBe(before.submittedFrames + 1);
     }
     expect(await topLeft(page)).toEqual([60, 255, 255, 255]);
 
-    // Hidden: the timer stops. Visible again: it runs.
+    // Hidden or visible, the viewport keeps no timer.
     const setVisibility = (state: "hidden" | "visible") =>
         page.evaluate((state) => {
             Object.defineProperty(document, "visibilityState", {
@@ -207,8 +219,8 @@ test("the status is read on window focus, on visibilitychange and by the timer, 
             return window.__se011.alive().intervals;
         }, state);
     expect(await setVisibility("hidden")).toBe(baseline.intervals);
-    expect(await setVisibility("visible")).toBe(baseline.intervals + 1);
-    expect(await setVisibility("visible")).toBe(baseline.intervals + 1);
+    expect(await setVisibility("visible")).toBe(baseline.intervals);
+    expect(await page.evaluate(() => window.__se011.alive())).toMatchObject(own);
     expect(await page.evaluate(() => window.se011!.errors)).toEqual([]);
     expect(errors).toEqual([]);
 });
@@ -286,10 +298,11 @@ test("a viewport disposed during a create, an upload or a replacement leaves no 
         window.__se011.liveRenderers();
     });
     await expect.poll(() => page.evaluate(() => window.__se011.creatingDevices())).toBe(1);
+    // The viewport's own: its observer; no timer and no focus or visibility listener.
     expect(await page.evaluate(() => window.__se011.alive())).toMatchObject({
-        intervals: baseline.intervals + 1,
-        focusListeners: baseline.focusListeners + 1,
-        visibilityListeners: baseline.visibilityListeners + 1,
+        intervals: baseline.intervals,
+        focusListeners: baseline.focusListeners,
+        visibilityListeners: baseline.visibilityListeners,
         resizeObservers: baseline.resizeObservers + 1,
     });
     await page.evaluate(() => {
@@ -319,7 +332,8 @@ test("a viewport disposed during a create, an upload or a replacement leaves no 
     });
     expect(await left()).toEqual(nothing);
 
-    // During a replacement: the new renderer waits for its uploads beside the old one.
+    // During a replacement: the renderer failed (its device lost, and none to be had for its
+    // recovery), and the new renderer waits for its uploads beside it.
     await page.evaluate(() => {
         window.se011!.create();
         window.__se011.liveRenderers();
@@ -327,7 +341,8 @@ test("a viewport disposed during a create, an upload or a replacement leaves no 
     await showDocument(page);
     await page.evaluate(() => {
         window.__se011.closeUploadGate();
-        window.se011!.resize(700, 500);
+        window.__se011.refuseDevices(1);
+        window.__se011.loseDevice();
     });
     await expect.poll(() => page.evaluate(() => window.__se011.liveRenderers())).toBe(2);
     await page.waitForTimeout(100);
@@ -348,6 +363,11 @@ test("a viewport disposed during a create, an upload or a replacement leaves no 
     await page.evaluate(() => window.se011!.create());
     await showDocument(page);
     expect(await topLeft(page)).toEqual([60, 255, 255, 255]);
-    expect(await page.evaluate(() => window.se011!.errors)).toEqual([]);
-    expect(errors).toEqual([]);
+    // The failure that started the replacement, reported once by the viewport and once by
+    // NGNE on the console.
+    const reported = await page.evaluate(() => window.se011!.errors);
+    expect(reported).toHaveLength(1);
+    expect(reported[0]).toMatch(/could not recover/);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/WebGPU recovery failed/);
 });
