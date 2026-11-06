@@ -12,7 +12,7 @@ import { activeDocument, sessionsStore } from "../state/sessions";
 /**
  * The change the onion skin popover hands to Apply Onion Skin Settings (`onion.commands.ts`):
  * `src/ui` changes a document only through registered commands (SPEC §5), fed through a store
- * as the timeline's apply commands are (REVIEW F8). Null while no change is being applied.
+ * as the timeline's apply commands are. Null while no change is being applied.
  */
 export const onionEdit = createStore<{ patch: Partial<OnionSettings> | null }>(() => ({
     patch: null,

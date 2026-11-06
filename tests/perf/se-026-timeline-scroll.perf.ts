@@ -42,7 +42,7 @@ import { record } from "./record";
 //
 // Budget (SE-026 acceptance): an average of at least 50 fps, i.e. an average frame interval of at
 // most 20 ms; `resultMs` is that average interval. The orchestrator records it with
-// PERF_RECORD=1 (docs/tickets/EXECUTION.md, Measurements): id `se-026-timeline-scroll-<gpu>`.
+// PERF_RECORD=1: id `se-026-timeline-scroll-<gpu>`.
 
 const WINDOW = { width: 1920, height: 1080 };
 const LAYERS = 30;

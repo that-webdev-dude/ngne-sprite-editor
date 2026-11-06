@@ -41,7 +41,7 @@ interface Entry {
  * first, and a composite larger than the whole budget is returned without being kept.
  *
  * A composite made outside the cache is handed to it with `adopt`, so that the frame is not
- * composited again (REVIEW.md D6). A stroke keeps the cache current that way while it is
+ * composited again. A stroke keeps the cache current that way while it is
  * drawn: its live composite is adopted, and the stroke goes on bringing it up to date in place
  * and reports each change itself (SE-014). That buffer is the one exception to "never a
  * rewritten one": a reader that keeps pixels of a frame while it is stroked copies them.

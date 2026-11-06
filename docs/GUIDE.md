@@ -371,5 +371,5 @@ directly. The scene lists the image in `assets`, so NGNE loads it before drawing
 the default camera snapping and advances animation age in its system's `dt` seconds.
 
 For offline installation and updates see the [PWA audit](audit/pwa.md); for remaining release
-checks and trade-offs see [REVIEW H25](REVIEW.md#stop-checkpoint-e) and the
+checks and trade-offs see the
 [known limitations](../CHANGELOG.md#known-limitations).

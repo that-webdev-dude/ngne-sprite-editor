@@ -467,8 +467,8 @@ test("soak: 500 seeded commands of the registry keep every document valid with n
         testInfo.annotations.push({ type: "heap", description });
         console.log(`se-070 soak heap: ${description}`);
         // The code V8 compiled for the functions the commands ran for the first time stays
-        // (about 6.6 MB of machine code, bytecode and feedback in the first runs, REVIEW
-        // decision of SE-070); everything the app holds is compared.
+        // (about 6.6 MB of machine code, bytecode and feedback in the first runs);
+        // everything the app holds is compared.
         expect(Math.abs(after.withoutCode - baseline.withoutCode), description).toBeLessThanOrEqual(
             HEAP_MARGIN * baseline.withoutCode,
         );

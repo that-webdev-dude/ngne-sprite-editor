@@ -2,8 +2,8 @@
 
 The scripted benchmarks of every budget in SPEC §6.6 (SE-070). They are measured and
 recorded, not asserted in CI (SPEC §11): `npm run check` does not run them. The dated results
-page `docs/perf/<date>.md` and the records under `docs/perf/` are written by the orchestrator
-(docs/tickets/EXECUTION.md, Measurements), never by an implementing agent.
+page `docs/perf/<date>.md` and the records under `docs/perf/` are written by the orchestrator,
+never by an implementing agent.
 
 ## Running
 
@@ -26,7 +26,7 @@ page `docs/perf/<date>.md` and the records under `docs/perf/` are written by the
 
 Browser benchmarks start installed Chrome (new headless) with `--force-color-profile=srgb`,
 the adapter's flags of SE-002 and a device pixel ratio of 1, in a 1920 × 1080 window, the app
-in its default layout with the preview panel expanded (REVIEW.md F68 M): the frame-switch and
+in its default layout with the preview panel expanded: the frame-switch and
 idle benchmarks check that its section is expanded and its game renders frames before they
 measure. Except the cold load,
 they run the app from a Vite dev server.

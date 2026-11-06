@@ -13,7 +13,7 @@ import type { SessionsState } from "./sessions";
 //
 // Each open document has a cache of its own (SPEC §5.3), but only the active document keeps
 // composites: when another document becomes active, the cache of the one left is cleared, so
-// the budget is not multiplied by the number of tabs (REVIEW.md D7, SE-047). It is filled
+// the budget is not multiplied by the number of tabs (SE-047). It is filled
 // again from the document when the document is active once more.
 
 /**

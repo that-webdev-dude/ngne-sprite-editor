@@ -45,8 +45,8 @@ import { record } from "./record";
 //
 // Neither the ticket nor SPEC §6.6 states a budget for the pan: the record is for information
 // (no `pass`). Its result is the 1024² document's p95; the 256² one's numbers are in its
-// details. The orchestrator records it with PERF_RECORD=1 (docs/tickets/EXECUTION.md,
-// Measurements): id `se-031-wand-pan-<gpu>`.
+// details. The orchestrator records it with PERF_RECORD=1:
+// id `se-031-wand-pan-<gpu>`.
 
 const WINDOW = { width: 1920, height: 1080 };
 const RATIO = 1;

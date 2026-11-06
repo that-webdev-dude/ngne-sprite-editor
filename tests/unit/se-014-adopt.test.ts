@@ -12,7 +12,7 @@ import {
     sprite,
 } from "./se-010-support";
 
-// SE-014: `CompositeCache.adopt` (REVIEW.md D6). A composite made outside the cache — the live
+// SE-014: `CompositeCache.adopt`. A composite made outside the cache — the live
 // composite of a stroke — is kept as the frame's composite only when the frame's layer stack is
 // the one it was composited from, so that a stroke's end does not composite the frame again.
 

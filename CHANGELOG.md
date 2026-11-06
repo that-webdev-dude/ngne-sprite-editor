@@ -2,9 +2,8 @@
 
 ## 1.0.0 – 2026-10-21
 
-Release candidate. Checkpoint E passed under delegated owner authority, with the qualifications
-below. Merging, tagging and deployment remain the owner's actions; see
-[REVIEW.md](docs/REVIEW.md#checkpoint-e-delegated-owner-resolution-2026-10-21).
+Release candidate. Checkpoint E passed with the qualifications below. Merging, tagging and
+deployment remain the owner's actions.
 
 ### M0 — Foundation
 
@@ -61,30 +60,27 @@ below. Merging, tagging and deployment remain the owner's actions; see
 - Installable production PWA, offline authoring, project launch queue and update/recovery flow.
 - User guide, frozen v1 file formats, documentation checks and a tag/manual Pages workflow.
 
-Milestone scope: [ticket index](docs/tickets/README.md).
-
 ### Known limitations
 
-Disposition of [REVIEW H25](docs/REVIEW.md#stop-checkpoint-e), recorded at
-[checkpoint E](docs/audit/checkpoint-e-2026-10-21.md):
+Known limitations at release:
 
 - All seven SPEC §6.6 benchmarks meet their budgets on Intel UHD and RTX 4060
-  ([reference measurements](docs/perf/checkpoint-e-2026-10-21.md), H11/H12). Separately, the
+  ([reference measurements](docs/perf/checkpoint-e-2026-10-21.md)). Separately, the
   non-CI `@alone` E2E run passed 10/10 on Intel and 9/10 on RTX: cel opacity took three
   frames against two. This v1.0.0 performance exception is accepted and tracked in
   [issue #2](https://github.com/that-webdev-dude/ngne-sprite-editor/issues/2); its assertion
-  is unchanged. Frame/time budgets remain report-only under CI (H15).
+  is unchanged. Frame/time budgets remain report-only under CI.
 - The native Chrome PWA install/standalone/shortcut check was explicitly **waived by the
   owner**, not passed. The owner will do it personally
-  ([steps](docs/audit/pwa.md#manual-install-owner-to-do), H18).
-- The update toast with Reload stays until dismissed; the DESIGN §4 amendment is accepted
-  (H16). Immediate interaction after a popover closes is retained (H23).
+  ([steps](docs/audit/pwa.md#manual-install-owner-to-do)).
+- The update toast with Reload stays until dismissed; the DESIGN §4 amendment is accepted.
+  Immediate interaction after a popover closes is retained.
 - Changing the canvas dimensions during a reference drag now cancels it, preserving the
   sprite operation's geometry. At fractional zoom, a whole-pixel move can still change the
   rounded display width by one pixel and resample the reference; this display trade-off is
-  accepted and does not change its source PNG or exports (F75).
+  accepted and does not change its source PNG or exports.
 - A seeded soak once stalled after `view.fit`; it was not reproduced in 18 further runs
   or three additional checkpoint soaks. The watchdog and its control tests are retained;
-  no cause is claimed fixed (H8).
+  no cause is claimed fixed.
 - SE-073 is Done. Checkpoint E passed with the exception and waiver above. The owner retains
   merging, tagging and deployment.

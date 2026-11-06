@@ -5,8 +5,7 @@ import type { OverlayLayer, OverlayLayerModule } from "./types";
 /**
  * Draw-layer registry of the overlay (SE-013). A feature adds chrome to the overlay by
  * creating a module named `*.overlay.ts` anywhere under `src` that exports `overlayLayers`;
- * this file finds it with a glob import, so no shared file is edited (AGENTS.md, Parallel
- * work):
+ * this file finds it with a glob import, so no shared file is edited:
  *
  *     // src/app/tools/brushCursor.overlay.ts
  *     export const overlayLayers: OverlayLayer[] = [

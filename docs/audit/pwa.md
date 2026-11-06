@@ -98,6 +98,6 @@ The owner will perform it personally. Once, on Windows 11 with Chrome:
   in this chat; no native install, standalone-window observation or shortcut result was
   obtained. The owner explicitly replied: "waive the native PWA check and tell me how to do
   it instead. I'll make it myself". Automated installability/offline evidence is separate
-  from this manual check. See the [checkpoint record](checkpoint-e-2026-10-21.md).
+  from this manual check.
 - Owner's later manual result: date, Chrome version, standalone launch, Ctrl+N, Ctrl+W,
   Ctrl+T, and any optional file/offline observations to be recorded here.

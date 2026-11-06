@@ -8,7 +8,7 @@ import type { ToolModule } from "./types";
  * The tool registry of the app (SE-014). It holds what every module named `*.tools.ts` or
  * `*.tools.tsx` under `src` exports as `tools` (and `plannedTools`); the glob import finds
  * those modules, so a feature adds a tool — its rail button, key, options and behaviour —
- * without an edit to a shared file (AGENTS.md, Parallel work):
+ * without an edit to a shared file:
  *
  *     // src/app/tools/pencil/pencil.tools.ts
  *     export const tools: ToolSpec[] = [

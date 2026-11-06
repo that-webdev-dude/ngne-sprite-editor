@@ -18,7 +18,7 @@ import type * as CoreModel from "../../src/core/model";
 // SE-002 chosen by PERF_GPU (`intel-uhd`, `rtx-4060` or `swiftshader`, which is no
 // reference); the WebGPU adapter is checked and a wrong one fails the run before anything is
 // measured; without PERF_GPU the benchmark is skipped. The app runs in the default layout,
-// the preview panel expanded (REVIEW.md F68 M).
+// the preview panel expanded.
 
 export const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -306,8 +306,8 @@ export async function viewportSettled(page: Page): Promise<void> {
 }
 
 /**
- * Throws unless the preview panel is expanded and playing (the default layout, REVIEW.md F68
- * M): its dock section's toggle says expanded, its game has a canvas with a box, and the
+ * Throws unless the preview panel is expanded and playing (the default layout):
+ * its dock section's toggle says expanded, its game has a canvas with a box, and the
  * game renders frames — at least 3 more within 10 s (it plays 100 ms entries).
  */
 export async function expectPreviewExpanded(page: Page): Promise<void> {

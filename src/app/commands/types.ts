@@ -37,8 +37,7 @@ export interface ContextMenuPlacement {
  *         { id: "layer.new", title: "New Layer", shortcut: "Shift+N", run: newLayer },
  *     ];
  *
- * `appCommands.ts` finds the module with a glob import, so no shared file is edited
- * (AGENTS.md, Parallel work).
+ * `appCommands.ts` finds the module with a glob import, so no shared file is edited.
  */
 export interface CommandSpec {
     /** Stable and unique: "edit.undo". The id of a planned command implements it. */

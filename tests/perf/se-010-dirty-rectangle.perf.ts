@@ -7,7 +7,7 @@ import { record } from "./record";
 
 // SE-010 acceptance and SPEC §6.6: the dirty-rectangle recomposite of a 16 px brush dab on a
 // 256×256 document with 8 layers takes at most 2 ms. The number is recorded by the
-// orchestrator (docs/tickets/EXECUTION.md, Measurements); nothing here asserts the budget.
+// orchestrator; nothing here asserts the budget.
 
 const SIDE = 256;
 const LAYERS = 8;

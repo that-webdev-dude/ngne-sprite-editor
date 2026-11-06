@@ -6,8 +6,8 @@ import type {} from "../../import-meta";
 /**
  * Registry of the dialogs commands ask for (app/dialogs/dialogRequests.ts). A feature adds a
  * dialog by creating a module named `*.dialog.tsx` anywhere under `src/ui` that exports
- * `commandDialogs`; this file finds it with a glob import, so no shared file is edited
- * (AGENTS.md, Parallel work). The dialog host shows the dialog of the open request's kind.
+ * `commandDialogs`; this file finds it with a glob import, so no shared file is edited.
+ * The dialog host shows the dialog of the open request's kind.
  *
  *     // src/ui/sprite/sprite.dialog.tsx
  *     export const commandDialogs = [

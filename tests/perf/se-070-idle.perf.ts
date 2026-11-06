@@ -19,7 +19,7 @@ import {
 } from "./se-070-harness";
 
 // SE-070, SPEC §6.6: "Idle editor: frames submitted per second — 0". The idle budget is the
-// editor viewport's (SPEC §6.6, REVIEW.md F68): the expanded preview plays its animation, one
+// editor viewport's (SPEC §6.6): the expanded preview plays its animation, one
 // frame per entry, and is reported beside it. Run alone, one GPU at a time
 // (tests/perf/README.md):
 //

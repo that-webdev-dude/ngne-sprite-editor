@@ -4,7 +4,7 @@
   "gpu": "intel-uhd",
   "recordedAt": "2026-10-12T11:59:33.278Z",
   "commit": "40bf676+changes",
-  "command": "node spikes/ngne/runner/run.ts --gpu=intel-uhd --only=2 --out=C:/Users/jfabi/AppData/Local/Temp/claude/C--Users-jfabi-Documents-Projects-tests-ngne-sprite-editor/557d003b-2724-46bf-8cbb-c8a95da317c4/scratchpad/q2-intel-4.json",
+  "command": "node spikes/ngne/runner/run.ts --gpu=intel-uhd --only=2 --out=<scratch>/q2-intel-4.json",
   "quick": false,
   "environment": {
     "os": "Windows_NT 10.0.26200",

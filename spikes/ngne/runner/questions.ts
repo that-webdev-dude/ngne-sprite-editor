@@ -1,4 +1,4 @@
-// The eleven questions of SE-002 (docs/tickets/M0-foundation.md). `method` and `threshold`
+// The eleven questions of SE-002. `method` and `threshold`
 // are the ticket's wording; `go` and `noGo` are the consequence for the spec shown in the
 // deliverable's summary table.
 
@@ -24,7 +24,7 @@ export const QUESTIONS: readonly QuestionMeta[] = [
         threshold:
             "256²: p95 ≤ 25 ms to submitted on Intel UHD and ≥ 30 completed replacements/s sustained. Other sizes recorded",
         go: "None. SPEC §6.6 keeps the echo as a fallback that SE-015 decides with its own measurement.",
-        noGo: "SPEC §6.6: the overlay stroke echo becomes required (SE-015 implements it); recorded in REVIEW.md.",
+        noGo: "SPEC §6.6: the overlay stroke echo becomes required (SE-015 implements it).",
     },
     {
         number: 2,

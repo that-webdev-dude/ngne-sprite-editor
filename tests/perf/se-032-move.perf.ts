@@ -34,8 +34,8 @@ import { record } from "./record";
 // selection (half the pixels, at random) (`noise1024`).
 //
 // Neither the ticket nor SPEC §6.6 states a budget for a move: the record is for information.
-// Run alone, without PERF_RECORD (the orchestrator records it, docs/tickets/EXECUTION.md,
-// Measurements): npx vitest run --config vitest.perf.config.ts tests/perf/se-032-move.perf.ts
+// Run alone, without PERF_RECORD (the orchestrator records it):
+// npx vitest run --config vitest.perf.config.ts tests/perf/se-032-move.perf.ts
 
 const LAYERS = 8;
 const EVENTS = 120;

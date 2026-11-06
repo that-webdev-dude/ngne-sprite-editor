@@ -7,7 +7,7 @@ import type { SymmetryMode, TiledMode } from "./symmetry";
 // tiled mode each have an axis per direction, X and Y, switched on and off on their own, so
 // "both" is the two toggles on (as Aseprite's two symmetry buttons). A menu item of the
 // registry has no checked state, so each title says what choosing it does, as the grid and
-// onion toggles' do (REVIEW E37). They change `DocSettings` with no history entry and do not
+// onion toggles' do. They change `DocSettings` with no history entry and do not
 // set the dirty flag (SPEC §5.2); being view preferences they are enabled during a stroke or a
 // floating selection, and a stroke under way keeps the symmetry it began with. No key is bound.
 

@@ -15,7 +15,7 @@ import {
 } from "./se-064-support";
 
 // SE-064: where the three surfaces are mounted — at the root of the app, outside every region
-// and inside an error boundary of their own (REVIEW.md, Checkpoint B decisions, B11).
+// and inside an error boundary of their own.
 
 declare global {
     interface Window {

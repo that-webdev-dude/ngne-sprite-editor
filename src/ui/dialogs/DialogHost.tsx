@@ -63,7 +63,7 @@ function requestKey(request: DialogRequestBase): number {
  * Shows the dialog a command has asked for (app/dialogs/dialogRequests.ts), from the dialogs
  * registered by `*.dialog.tsx` modules (ui/dialogs/registry.ts). Mounted once at the root of
  * the app (`UiRoot`), outside every region and inside a boundary of its own, so a failed
- * region does not take the dialogs with it (REVIEW.md B11). While it is mounted it is the
+ * region does not take the dialogs with it. While it is mounted it is the
  * host of the requests; without it a request is answered with null at once.
  */
 export function DialogHost() {

@@ -1,7 +1,7 @@
 # Performance records
 
 Measured on the reference hardware (SPEC §3) by the orchestrator, alone, after the ticket's
-wave was merged (docs/tickets/EXECUTION.md, Measurements). Recorded, not asserted in CI
+wave was merged. Recorded, not asserted in CI
 (SPEC §11). Each row is one JSON file in this directory with the samples and the environment.
 
 Node benchmarks: `PERF_RECORD=1 npx vitest run --config vitest.perf.config.ts tests/perf/<file>`.
@@ -34,32 +34,32 @@ Node benchmarks: `PERF_RECORD=1 npx vitest run --config vitest.perf.config.ts te
 `se-017-flood-fill` also gives, in `details`, the whole paint bucket press through the tool
 pipeline in Node (fill, live composite, commit comparison and undo patches; no viewport):
 68.8 ms, slowest of 10. An unrecorded run right after the record gave 27.3 ms for the fill and
-72.1 ms for the press (REVIEW.md E90).
+72.1 ms for the press.
 
 `se-031-wand-pan-*` have no budget: neither SE-031 nor SPEC §6.6 states one, and the record is
 informational (no `pass`). Before SE-031's review fix the same pan cost about 95 ms median and
-192 ms p95 per step at 1024², the ants ring being painted again at every view change (REVIEW.md
-F3). Unrecorded runs right after the records gave 21.4 ms for the wand and 4.4 and 4.1 ms for the
+192 ms p95 per step at 1024², the ants ring being painted again at every view change.
+Unrecorded runs right after the records gave 21.4 ms for the wand and 4.4 and 4.1 ms for the
 pan.
 
 `se-024-playback-*` count entries of the sequence that the clock jumped over or that no submitted
 frame showed while they were active; `resultMs` holds that count (`unit: count`), with a budget
 of 0. A frame counts as shown when it was submitted to NGNE (`onDrawn`), not when it was
 presented. First frame after an entry: median 13.4 / 12.3 ms, p95 26.3 / 30.9 ms (Intel UHD /
-RTX 4060). Unrecorded runs right after: 0 of 128 skipped on both GPUs (REVIEW.md F48).
+RTX 4060). Unrecorded runs right after: 0 of 128 skipped on both GPUs.
 
 `se-044-preview` is the acceptance item of SE-044 (a 1024×1024 source). `se-044-preview-1024-target`
-answers REVIEW.md D14 (`runImport` to a 1024² target with 256 colours): it misses 300 ms, its
+measures `runImport` to a 1024² target with 256 colours: it misses 300 ms, its
 slowest changes being Floyd–Steinberg dither over a million pixels (median of all changes
 194 ms). Both run in Chrome without `PERF_GPU`: the preview is CPU work in a worker.
 Two unrecorded runs just before the record gave 532.6 and 528.4 ms for the 1024² target and,
-in the second, 244.9 ms for the defaults (REVIEW.md F73).
+in the second, 244.9 ms for the defaults.
 
 Browser benchmark: `PERF_RECORD=1 PERF_GPU=<intel-uhd|rtx-4060> npx vitest run --config
 vitest.perf.config.ts tests/perf/se-015-stroke-latency.perf.ts`; `PERF_ECHO=off` measures
 without the stroke echo and writes the `-no-echo` record. The `-no-echo` records above were taken
 before the echo existed, and their result missed the budget on RTX 4060, which is why SE-015
-built the echo (REVIEW.md E61). The records with the echo met the budget on both GPUs (E69). A
+built the echo. The records with the echo met the budget on both GPUs. A
 run is valid only with the usual number of frames submitted during the 6 s stroke
 (`details.continuousStroke.framesSubmitted`: about 740 on Intel UHD, 650–700 on RTX 4060), and
 only when an unrecorded run right after it agrees within a few milliseconds: the machine can

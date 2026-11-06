@@ -6,7 +6,7 @@ import {
     stepNumber,
 } from "../../src/ui/primitives/numberMath";
 
-// SE-034 (REVIEW.md B12): the pivot fields keep four decimals on entry, and arrow keys still
+// SE-034: the pivot fields keep four decimals on entry, and arrow keys still
 // step by 0.01. The number field takes a `precision` beside its `step`.
 
 const PIVOT = { min: 0, max: 1, step: 0.01, precision: 4 };

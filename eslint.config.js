@@ -26,16 +26,8 @@ const ngne = {
 };
 
 export default tseslint.config(
-    // `.claude` holds agent worktrees: whole copies of the repository.
     {
-        ignores: [
-            "dist",
-            "node_modules",
-            "test-results",
-            "playwright-report",
-            "coverage",
-            ".claude",
-        ],
+        ignores: ["dist", "node_modules", "test-results", "playwright-report", "coverage"],
     },
     js.configs.recommended,
     tseslint.configs.recommended,

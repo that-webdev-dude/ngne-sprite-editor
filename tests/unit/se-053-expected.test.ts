@@ -530,7 +530,7 @@ describe("expectedAnimationState", () => {
 
 /**
  * The draw maths of SPEC §9.2 with the sine and the cosine as `Math` gives them: the runtime
- * as it was before a quarter turn was made exact (REVIEW.md, D33).
+ * as it was before a quarter turn was made exact.
  */
 function inexactSpriteAt(
     sink: SpriteSink,

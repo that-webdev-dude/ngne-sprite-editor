@@ -1,6 +1,6 @@
 name: Deploy to GitHub Pages
 
-# The owner records written release approval in docs/REVIEW.md before pushing a tag
+# The owner records written release approval before pushing a tag
 # or choosing Run workflow. SE-073 prepares this workflow without dispatching it.
 on:
     workflow_dispatch:

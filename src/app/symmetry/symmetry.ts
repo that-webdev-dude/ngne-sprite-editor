@@ -77,7 +77,7 @@ interface SeenAxes {
 
 /**
  * Keeps the symmetry axes of every open document of `sessions` where they were relative to
- * the canvas when its size changes (SE-062 review B; REVIEW E100: Canvas Size, Sprite Size,
+ * the canvas when its size changes (SE-062 review B: Canvas Size, Sprite Size,
  * Rotate, Crop, and their undo and redo): each axis keeps its share of its side, snapped to
  * half pixels and clamped to the canvas, through `setSymmetry` (no history entry, never
  * dirty). The share is that of the axes as last set, not of the snapped value, so a resize

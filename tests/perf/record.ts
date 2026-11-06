@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 // A benchmark measures and calls `record`. The result is always printed; the file under
 // docs/perf is written only with PERF_RECORD=1, which the orchestrator sets when it runs the
-// measurement alone on the reference hardware (docs/tickets/EXECUTION.md, Measurements).
+// measurement alone on the reference hardware.
 //
 // PERF_ID (SE-070) names one run's record: with it, the record is printed and written under
 // that id instead of the benchmark's own, which it keeps as `benchmarkId`. A run on other

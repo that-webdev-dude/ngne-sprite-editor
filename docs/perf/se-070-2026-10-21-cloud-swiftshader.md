@@ -1,10 +1,10 @@
 # SPEC §6.6 budgets, 2026-10-21, cloud SwiftShader (not reference hardware)
 
-SE-070's performance record of run 4 (docs/tickets/EXECUTION.md, Run 4 in the cloud). Every
+SE-070's performance record of run 4 (in the cloud). Every
 number here was measured on a Linux cloud container with Chrome's software WebGPU adapter
 (SwiftShader). **None of it is a measurement on the reference hardware of SPEC §3** (Windows 11,
 Chrome, Intel UHD and RTX 4060): SE-070's acceptance item "every budget in SPEC §6.6 is recorded
-on reference hardware" stays open for the owner (REVIEW.md, Run 4 decisions, H12).
+on reference hardware" stays open for the owner.
 
 ## Environment
 
@@ -39,7 +39,7 @@ Notes:
 - Frame switch with upload: medians 61.2 ms in both sweeps; 7 of 189 switches were submitted
   at the first animation frame, most at the fourth. It misses the budget on SwiftShader, where
   every upload and draw is CPU work; whether it misses on the reference GPUs is unknown until
-  the owner measures it (REVIEW.md H13).
+  the owner measures it.
 - Cold load: median 371.9 ms; "Create → first viewport frame" (details, not the result):
   median 243 ms, largest 257.4 ms. Definition of "interactive" in `tests/perf/README.md`.
 - Unrecorded runs before the record (the implementing and fixing agents', same container):

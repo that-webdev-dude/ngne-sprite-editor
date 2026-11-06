@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-// The frame and time budgets of the @alone tests (SPEC §11, owner decision of 2026-10-21,
-// REVIEW.md H15). A budget such as "shown within two animation frames" is a performance
+// The frame and time budgets of the @alone tests (SPEC §11, owner decision of 2026-10-21).
+// A budget such as "shown within two animation frames" is a performance
 // assertion: it is enforced where the GPU is real (a run without `CI`, on the reference
 // hardware of SPEC §3) and only reported where Chrome renders with SwiftShader (`CI`, see
 // playwright.config.ts), whose speed follows the runner. What the test checks besides the

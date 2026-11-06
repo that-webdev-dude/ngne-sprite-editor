@@ -46,7 +46,7 @@ class SurfaceBoundary extends Component<{ children: ReactNode }, SurfaceBoundary
  * Shows the surface a command has opened (app/surfaces/surfaces.ts): the command palette, the
  * Preferences dialog or the shortcut sheet. Mounted at the root of the app, outside every
  * region and inside a boundary of its own, so a failed region does not take the surfaces with
- * it (REVIEW.md, Checkpoint B decisions, B11).
+ * it.
  */
 export function AppSurfaces() {
     const open = useOpenSurface();

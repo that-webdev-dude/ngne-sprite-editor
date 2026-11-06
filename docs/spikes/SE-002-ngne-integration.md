@@ -1,6 +1,6 @@
 # SE-002 — NGNE integration feasibility (gate G0)
 
-Deliverable of ticket SE-002 ([M0-foundation.md](../tickets/M0-foundation.md)). Spike pages and
+Deliverable of ticket SE-002. Spike pages and
 runner: `spikes/ngne/`. Engine under test: `@ngne/core` 0.2.1.
 
 Status
@@ -13,12 +13,11 @@ Status
 <!-- generated:status:end -->
 
 - The SwiftShader run is made by the implementing agent. The Intel UHD and RTX 4060 runs are
-  made by the orchestrator, alone on the reference machine
-  ([EXECUTION.md](../tickets/EXECUTION.md), Measurements), with the commands of section 2.
+  made by the orchestrator, alone on the reference machine,
+  with the commands of section 2.
 - While a deciding result is missing, gate G0 stays Pending and SPEC §6.4 is not amended.
 
-Outcome (owner decisions of 2026-10-12, recorded in [REVIEW.md](../REVIEW.md), "SE-002
-amendments")
+Outcome (owner decisions of 2026-10-12)
 
 - Question 4: strategy (a), renderer replacement, is adopted and written into SPEC §6.4. The
   `detached` variant matches the replacement order already in §6.4, so its first Lifecycle
@@ -207,7 +206,7 @@ Consequence for the spec
 - Go: none. SPEC §6.6 keeps the stroke echo as a fallback that SE-015 decides with its own
   measurement of the whole stroke path.
 - No-go: SPEC §6.6 is amended so that the overlay stroke echo is required, SE-015 implements
-  it, and the amendment is recorded in REVIEW.md.
+  it, and the amendment is recorded.
 
 ### 4.2 Single-flight queue
 
@@ -254,7 +253,7 @@ single sample 0.6 ms under the limit:
   not of a queue that stops publishing: the queue published about 400 times a second in every
   run, with no stale render.
 - By the letter one run in six exceeds the limit, so the result is not robust. The decision
-  and its consequence are recorded under "Outcome" at the top and in REVIEW.md.
+  and its consequence are recorded under "Outcome" at the top.
 
 Consequence for the spec
 
@@ -603,7 +602,7 @@ Consequence for the spec
 
   The same sentence in SPEC §6.8 ("No recovery event | Poll `status` on draw, focus,
   visibility") would gain "and the `sprites` counter". This relies on an NGNE implementation
-  detail, so it needs the owner's decision and a REVIEW.md record.
+  detail, so it needs the owner's decision.
 - No-go on A (recovery time): no fallback is defined by the ticket or the SPEC.
 
 ### 4.9 Odd sizes through `BrowserGame` (S)

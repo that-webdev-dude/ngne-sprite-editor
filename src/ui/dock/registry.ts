@@ -5,7 +5,7 @@ import type {} from "../../import-meta";
 /**
  * Dock panel registry. A feature adds a section to the right dock by creating a module named
  * `*.dock.tsx` anywhere under `src/ui` that exports `dockPanel`; this file finds it with a
- * glob import, so no shared file is edited (AGENTS.md, Parallel work).
+ * glob import, so no shared file is edited.
  *
  *     // src/ui/panels/colour.dock.tsx
  *     export const dockPanel: DockPanel = { id: "colour", title: "Colour", order: 10, Body };

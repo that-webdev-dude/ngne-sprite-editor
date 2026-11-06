@@ -9,4 +9,3 @@ playwright-report/
 .DS_Store
 .env
 .env.*
-.claude/

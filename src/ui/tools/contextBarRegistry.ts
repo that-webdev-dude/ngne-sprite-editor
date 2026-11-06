@@ -6,8 +6,8 @@ import type {} from "../../import-meta";
  * Registry of content that takes the context bar's place of the tool options (DESIGN §5.2;
  * SE-033: the transform fields of a floating selection). A feature adds such content by
  * creating a module named `*.contextbar.tsx` anywhere under `src/ui` that exports
- * `contextBarContent`; this file finds it with a glob import, so no shared file is edited
- * (AGENTS.md, Parallel work). While an entry is shown, the context bar shows it after the
+ * `contextBarContent`; this file finds it with a glob import, so no shared file is edited.
+ * While an entry is shown, the context bar shows it after the
  * tool's name instead of the tool's options; the first shown entry by `order` wins.
  *
  *     // src/ui/tools/transform.contextbar.tsx

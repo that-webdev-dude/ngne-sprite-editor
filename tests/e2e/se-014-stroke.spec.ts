@@ -60,7 +60,7 @@ async function openPainted(page: Page): Promise<Painted> {
  * Waits until the timeline has drawn the setup's last change and the page is idle: three
  * animation frames (the panel draws two frames and an idle callback after a change, SE-022),
  * then an idle callback. The measured undo then does not share its frames with work the
- * stroke's release left behind (REVIEW.md F49, as F31 steadied `se-022-viewport`).
+ * stroke's release left behind.
  */
 function setupDrawn(page: Page): Promise<void> {
     return page.evaluate(

@@ -32,7 +32,7 @@ export type AlphaChoice = "smart" | "keep" | "threshold";
 /** Step 7: keep, reduce, map to the document palette, or to a preset (`preset:<id>`). */
 export type ColorsChoice = "smart" | "keep" | "reduce" | "document" | `preset:${string}`;
 
-/** The stored dither preference says "ordered" where `core/import` says "bayer" (REVIEW D36). */
+/** The stored dither preference says "ordered" where `core/import` says "bayer". */
 export type DitherChoice = "none" | "ordered" | "floyd-steinberg";
 
 export interface ImportForm {

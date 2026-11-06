@@ -23,8 +23,7 @@ import { record } from "./record";
 // animation frame (the statistic). For information, the same box at 0° (scaled only).
 //
 // Neither the ticket nor SPEC §6.6 states a budget for a transform: the record is for
-// information. Run alone, without PERF_RECORD (the orchestrator records it,
-// docs/tickets/EXECUTION.md, Measurements):
+// information. Run alone, without PERF_RECORD (the orchestrator records it):
 // npx vitest run --config vitest.perf.config.ts tests/perf/se-033-transform.perf.ts
 
 const SIDE = 1024;

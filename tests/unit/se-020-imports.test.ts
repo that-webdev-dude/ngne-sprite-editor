@@ -7,7 +7,7 @@ import * as layers from "../../src/core/layers";
 
 // `core/layers` builds on the public modules of `core` only: it reaches the model, the
 // history, the compositor and the pixel helpers through their index, and nothing else. It
-// shares no file with the frame, cel and tag commands of SE-021 (EXECUTION.md, Shared modules).
+// shares no file with the frame, cel and tag commands of SE-021.
 
 const layersDir = fileURLToPath(new URL("../../src/core/layers", import.meta.url));
 

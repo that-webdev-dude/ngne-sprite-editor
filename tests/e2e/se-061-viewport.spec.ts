@@ -71,7 +71,7 @@ async function runAndCount(
     return framesUntil(times, frames[at]?.stamp ?? Infinity);
 }
 
-// @alone: the frame counts are right only when no other worker takes the processor (REVIEW E5).
+// @alone: the frame counts are right only when no other worker takes the processor.
 test("a blend mode chosen in the layer properties popover, and its undo, show in the viewport within two animation frames @alone", async ({
     page,
 }) => {

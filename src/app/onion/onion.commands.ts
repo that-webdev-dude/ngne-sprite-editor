@@ -5,13 +5,13 @@ import { activeOnion, onionEdit, setOnionSettings } from "./onion";
 //
 // View → Show/Hide Onion Skin, F3 (global), and the transport's toggle. It takes the View item
 // planned for it. A menu item of the registry has no checked state, so the title says what
-// choosing it does, as the grid toggles' do (REVIEW E37). A `view.` command: it leaves playback
+// choosing it does, as the grid toggles' do. A `view.` command: it leaves playback
 // running (SPEC §7.5), and since `DocSettings` are not undoable it is enabled while a stroke or
 // a floating selection is open.
 //
 // Apply Onion Skin Settings: what the settings popover runs for each change, with the change in
 // `onionEdit` (`withOnionPatch`). Outside the menus and without a key, as the timeline's apply
-// commands (REVIEW F8); enabled only while a change is handed to it.
+// commands; enabled only while a change is handed to it.
 
 /** The id of the toggle; the transport's button runs it. */
 export const ONION_SKIN_COMMAND = "view.onionSkin";

@@ -18,7 +18,7 @@ import type { ImportSettings } from "./settings";
 
 // `runImport` in stages that keep their results (SE-044): the import dialog's live preview
 // computes the import again at every change of a setting, and most changes leave the earlier
-// steps as they were (REVIEW D14). `importSteps` gives the bytes `runImport` gives for the same
+// steps as they were. `importSteps` gives the bytes `runImport` gives for the same
 // sources and settings; it reuses what a cache holds for the same sources and the settings of
 // the steps up to it, and yields between steps so that a caller can give up a computation
 // that a newer setting has made useless.

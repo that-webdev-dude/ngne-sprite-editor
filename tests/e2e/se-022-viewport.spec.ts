@@ -96,7 +96,7 @@ async function toggleUpper(
     return framesUntil(times, frames[at]?.stamp ?? Infinity);
 }
 
-// @alone: the frame counts are right only when no other worker takes the processor (REVIEW E5).
+// @alone: the frame counts are right only when no other worker takes the processor.
 test("toggling a layer's visibility in the timeline changes the viewport image within two animation frames @alone", async ({
     page,
 }) => {

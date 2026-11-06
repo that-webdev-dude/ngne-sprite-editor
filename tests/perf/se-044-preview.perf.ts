@@ -20,8 +20,8 @@ import { record } from "./record";
 //
 // - `se-044-preview`: the dialog's defaults (32 × 32 contain, area average, smart alpha and
 //   colours: threshold, reduce to 16).
-// - `se-044-preview-1024-target`: target 1024 × 1024 contain, Reduce to 256 colours (REVIEW
-//   D14 left `runImport` at that size to this measurement).
+// - `se-044-preview-1024-target`: target 1024 × 1024 contain, Reduce to 256 colours
+//   (`runImport` at that size is left to this measurement).
 //
 // Controls are clicked or stepped (arrow keys of a number field) as a user does, one change at
 // a time, so that every kept result of the pipeline is made again at least once: dither (the

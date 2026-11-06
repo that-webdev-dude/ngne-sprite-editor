@@ -68,8 +68,8 @@ CI=1 E2E_HEADLESS=0 xvfb-run -a -s "-screen 0 4096x2304x24" npx playwright test 
 
 The separate `golden-path` job repeats the regression flow ten times. Frame and time budgets
 are **reported, not asserted, under CI**; image content and other correctness checks remain
-assertions. Budgets are enforced on reference hardware without `CI` ([SPEC §11](docs/SPEC.md#11-quality),
-[REVIEW H15](docs/REVIEW.md#frame-budgets-in-ci-owner-decision)). Scripted performance measurements
+assertions. Budgets are enforced on reference hardware without `CI` ([SPEC §11](docs/SPEC.md#11-quality)).
+Scripted performance measurements
 are separate from `npm run check`; see the [benchmark instructions](tests/perf/README.md) and
 [recorded results](docs/perf/README.md).
 
@@ -88,11 +88,9 @@ from assistive technology. The [accessibility audit](docs/audit/a11y.md) records
   1.0.0; any format change requires a new version number and a migration.
 - [Specification](docs/SPEC.md): behaviour, architecture and limits.
 - [Changelog](CHANGELOG.md): features and known limitations.
-- [Engine gap report](docs/engine-gaps.md): workarounds and possible NGNE improvements.
 
-This branch is a release candidate. Checkpoint E passed on 2026-10-21 under delegated owner
-authority, with an accepted RTX performance exception and the owner's explicit native PWA
-check waiver; [evidence and decisions](docs/audit/checkpoint-e-2026-10-21.md). The owner retains
+This branch is a release candidate. Checkpoint E passed on 2026-10-21, with an accepted RTX
+performance exception and the owner's explicit native PWA check waiver. The owner retains
 PR review/merge, creating and pushing `v1.0.0`, and deployment/site verification. The tag
 triggers the Pages workflow; branch pushes do not deploy. The native PWA check remains for
 the owner to perform personally using the [manual steps](docs/audit/pwa.md#manual-install-owner-to-do).

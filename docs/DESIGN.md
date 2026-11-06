@@ -1,6 +1,6 @@
 # NGNE Sprite Editor — Interface design
 
-Status: **Ready for implementation — owner acknowledgements A1–A9 recorded** ([REVIEW.md](REVIEW.md)) · 2026-10-11
+Status: **Ready for implementation — owner acknowledgements A1–A9 recorded** · 2026-10-11
 
 Related: [SPEC.md](SPEC.md) · static mockup: [design/mockup.html](design/mockup.html) (open in a
 browser). The mockup illustrates layout, tokens and density; where it omits a control described
@@ -148,7 +148,7 @@ tokens only. Dark is the default; light is a full second set under `[data-theme=
 | Dialog           | Centred. Standard: max 560 px. Large (Import PNG, Export): max 960 px, max 86% of window height, body scrolls. Title, body, right-aligned actions; primary action accent-filled |
 | Popover          | Colour picker, layer properties, onion-skin settings; closes on Escape and outside click |
 | Context menu     | Right-click on layers, frames, cels and tags. Not on the canvas or on swatches, where the right button means background colour; swatch actions live in the palette's overflow menu and on the Menu key |
-| Toast            | Bottom-centre, one line, 4 s; errors and information with an action (such as Reload for an update) stay until dismissed (checkpoint E, REVIEW J15) |
+| Toast            | Bottom-centre, one line, 4 s; errors and information with an action (such as Reload for an update) stay until dismissed (checkpoint E) |
 | Splitter         | 8 px hit area, 1 px visible line; double-click resets. A control beside a splitter takes the presses where the hit area meets it: the timeline's content lies above the part of its splitter's hit area inside the panel (the 3 px below the border), so the transport buttons take the presses on their top edge, and the splitter keeps its line and the 4 px above it; the dock's splitter stops where the timeline's begins, so no press lands on two (SE-071) |
 
 Message channels: a **toast** reports the result of an explicit command (saved, exported,
@@ -327,7 +327,7 @@ Behaviour (SE-022):
   it is below 255; it opens the layer properties popover beside the row. Layer → Layer
   Properties… opens it for the active layer. The popover applies its name and opacity when it
   closes (Enter, Escape or a press outside), in one undo step; an empty name is not applied.
-  Escape applies too, as in the swatch editor (§5.4, REVIEW E91): the popover has no Cancel,
+  Escape applies too, as in the swatch editor (§5.4): the popover has no Cancel,
   and nothing changes while it is open (no live opacity preview). A floating selection is
   applied first; while the layer's document cannot take the edit (a stroke), the popover stays
   open with its values.

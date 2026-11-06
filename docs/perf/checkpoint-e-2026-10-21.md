@@ -48,6 +48,3 @@ three animation frames against two. The assertion is unchanged. The owner delega
 decision: retain immediate page interaction after popovers close and accept this v1.0.0
 performance exception, tracked in [issue #2](https://github.com/that-webdev-dude/ngne-sprite-editor/issues/2).
 This is not a claim that the complete non-CI hardware E2E suite passed.
-
-The [checkpoint record](../audit/checkpoint-e-2026-10-21.md) contains the E2E logs, PWA check
-and the disposition of the earlier owner items.

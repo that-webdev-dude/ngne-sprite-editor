@@ -8,7 +8,7 @@ import { region } from "./se-006-support";
 import { openMenu } from "./se-007-support";
 import { dialogButton, nameField, newSpriteDialog, setNumber, field } from "./se-008-support";
 
-// SE-034 (REVIEW.md B11): the host of the command dialogs is at the root of the app, inside a
+// SE-034: the host of the command dialogs is at the root of the app, inside a
 // boundary of its own, so a failed menu-bar region no longer takes New sprite with it.
 
 const HARNESS = "/tests/e2e/harness/se-006-boundary.html";

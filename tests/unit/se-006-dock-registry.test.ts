@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { collectDockPanels, dockPanels } from "../../src/ui/dock/registry";
 import type { DockPanel } from "../../src/ui/dock/registry";
 
-// AGENTS.md, Parallel work: a dock panel registers from its own module and the registry
+// A dock panel registers from its own module and the registry
 // discovers it; no shared file is edited.
 
 const Body = () => null;

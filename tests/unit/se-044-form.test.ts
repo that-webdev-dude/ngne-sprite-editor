@@ -68,7 +68,7 @@ describe("the dialog's form", () => {
         expect(initialForm(preference, target, {})).toMatchObject({ width: 16, height: 16 });
     });
 
-    it('maps the stored dither "ordered" to core\'s "bayer" and back (REVIEW D36)', () => {
+    it('maps the stored dither "ordered" to core\'s "bayer" and back', () => {
         expect(ditherOf("ordered")).toBe("bayer");
         expect(ditherOf("none")).toBe("none");
         expect(ditherOf("floyd-steinberg")).toBe("floyd-steinberg");

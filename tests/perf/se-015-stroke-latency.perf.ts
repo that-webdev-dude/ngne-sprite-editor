@@ -53,8 +53,8 @@ import type { PerfEntry } from "./record";
 // (the press composites the frame in full and copies the image), their second (which can wait
 // for the press's frame) and every sample after the press. The result is the largest of the
 // four p95s. A sample on screen by neither path, or fewer samples than texels, fails the run.
-// Nothing here asserts the budget; the orchestrator records the number with PERF_RECORD=1
-// (docs/tickets/EXECUTION.md, Measurements): id `se-015-stroke-latency-<gpu>` with the echo,
+// Nothing here asserts the budget; the orchestrator records the number with PERF_RECORD=1:
+// id `se-015-stroke-latency-<gpu>` with the echo,
 // `se-015-stroke-latency-<gpu>-no-echo` with `PERF_ECHO=off`.
 
 const BUDGET_MS = 33;
