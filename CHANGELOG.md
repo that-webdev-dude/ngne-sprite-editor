@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.1 – 2026-11-06
 
 ### Engine: `@ngne/core` 0.3.0
 
