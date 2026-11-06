@@ -109,7 +109,7 @@ Runtime dependencies (the only ones allowed without a recorded decision):
 
 | Concern    | Choice                                             | Reason                                                |
 | ---------- | -------------------------------------------------- | ----------------------------------------------------- |
-| Engine     | `@ngne/core` **0.2.1**, exact pin (npm registry)   | Owner requirement; experimental API, pin per README   |
+| Engine     | `@ngne/core` **0.3.0**, exact pin (npm registry)   | Owner requirement; experimental API, pin per README   |
 | App        | `react`, `react-dom`                               | Owner's default stack                                 |
 | UI state   | `zustand`                                          | Small, usable outside React for tool code             |
 | Primitives | `radix-ui`                                         | Accessible menus, dialogs, popovers, sliders          |
@@ -356,7 +356,8 @@ Reference layers, onion skins, symmetry axes and tiled copies are never part of 
 ## 6. NGNE integration
 
 Facts below were read from `@ngne/core` 0.2.1 source and contracts and confirmed by the
-technical review. SE-002 measures the ones marked ⚠ before any ticket builds on them.
+technical review. SE-002 measures the ones marked ⚠ before any ticket builds on them. The
+migration to 0.3.0 changed the rows of §6.1 and §6.2 it names; the others hold for 0.3.0.
 
 ### 6.1 Engine surface used
 
@@ -364,10 +365,13 @@ All symbols are exported from the package root.
 
 | API                                                   | Use                                        |
 | ----------------------------------------------------- | ------------------------------------------ |
-| `WebGPURenderer.create(canvas, w, h, onError)`        | Editing viewport                           |
+| `WebGPURenderer.create(canvas, w, h, onError, signal?)` | Editing viewport; the signal cancels a create when the viewport is disposed (0.3.0) |
 | `renderer.texture(id, ImageBitmap, signal?)`          | Upload CPU buffers into fixed texture slots |
+| `renderer.releaseTexture(id)`                         | Free a slot that becomes unused (0.3.0)    |
+| `renderer.resize(w, h)`                               | Follow the viewport element's size in place (0.3.0) |
+| `renderer.onLifecycle(observer)`, `renderer.ready(signal?)` | Draw again after a recovery, replace a failed renderer, wait for a replacement (0.3.0) |
 | `Frame`, `frame.scene(camera, 1)`, `frame.sprite()`   | Build the viewport's quad list             |
-| `renderer.render(frame, clear)`, `renderer.status`, `renderer.inspect()` | Draw on demand, observe recovery and memory |
+| `renderer.render(frame, clear)`, `renderer.status`, `renderer.inspect()` | Draw on demand, read the state once after a create, memory |
 | `BrowserGame`, `SceneDefinition`, `scene.system/render` | Preview panel with fixed-step playback   |
 | `Camera`                                              | `pixelSnap = false`                        |
 
@@ -375,10 +379,10 @@ All symbols are exported from the package root.
 
 | #  | Behaviour                                                                 | Consequence                                                        |
 | -- | ------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| 1  | Renderer logical size is fixed at creation; callers own canvas backing size | Recreate the renderer on viewport size change, or use a fixed oversized canvas (SE-002 decides) |
+| 1  | 0.2.1: renderer logical size is fixed at creation; callers own canvas backing size. 0.3.0: `resize(w, h)` changes logical and backing size in place, keeping textures; it throws during recovery and above the device limit | 0.2.1: recreate the renderer on a viewport size change. 0.3.0: resize the renderer on screen and draw in the same `ResizeObserver` task (§6.4) |
 | 2  | `texture()` uploads a whole image asynchronously (bitmap snapshot, new GPU texture, validated copy) | At most one upload per changed slot per animation frame ⚠ latency |
 | 3  | A second `texture()` call for an ID rejects the first as superseded       | Single-flight, latest-wins upload queue per slot                   |
-| 4  | Manually registered textures cannot be released, only replaced; NGNE retains a bitmap copy per slot | Fixed, bounded slot IDs; unused slots are replaced by a 1×1 image |
+| 4  | 0.2.1: manually registered textures cannot be released, only replaced; NGNE retains a bitmap copy per slot. 0.3.0: `releaseTexture(id)` removes the registration and its copy at once and invalidates pending work for the ID | Fixed, bounded slot IDs; an unused slot is released (0.2.1: replaced by a 1×1 image) |
 | 5  | A frame referencing a texture that is not ready is skipped entirely and reported | Frame builders reference only slots whose first upload resolved |
 | 6  | Sampler is nearest, clamp-to-edge; one blend (premultiplied source-over); tint is a multiply | Blend modes, onion tint and smooth reference scaling happen on the CPU |
 | 7  | `Frame` rounds sprite **centres** when `camera.pixelSnap` is true (the default) | Viewport and preview disable snapping and place quads from an integer top-left; exported rects are even-sized (§9.2) ⚠ |
@@ -386,8 +390,8 @@ All symbols are exported from the package root.
 | 9  | Images are straight alpha, sRGB, decoded without conversion               | Build bitmaps from `ImageData` with `premultiplyAlpha: "none"`     |
 | 10 | No texture readback API                                                   | Exports come from the CPU compositor; tests read the canvas back in-page right after a render |
 | 11 | `maxTextureDimension2D` is the WebGPU default (8192)                      | Atlas textures are capped at 8192 per side                         |
-| 12 | All renderers on one canvas share its WebGPU context; `dispose()` unconfigures it; `create` has no public abort | One canvas element per renderer instance; lifecycle operations are serialized |
-| 13 | `render()` is a silent no-op while `status` is `recovering`; NGNE restores manual slots after device loss | Keep the dirty flag until a draw happens with `status === "ready"` |
+| 12 | All renderers on one canvas share its WebGPU context; `dispose()` unconfigures it. 0.2.1: `create` has no public abort. 0.3.0: `create` takes a signal; one pending or active renderer per canvas | One canvas element per renderer instance; a viewport's create is cancelled when it is disposed (0.2.1: creates were serialized page-wide) |
+| 13 | `render()` is a silent no-op while `status` is `recovering`; NGNE restores manual slots after device loss. 0.3.0: `onLifecycle` reports `recovering`, `ready` and `failed`; `ready(signal)` resolves once usable | Keep the dirty flag until a draw happens with `status === "ready"`; `ready` marks the view dirty (0.2.1: status and sprite counter were polled) |
 | 14 | `BrowserGame`: `renderer` is undefined until `start()` resolves; scenes cannot reach the renderer; `start`/`stop` reject while another is pending; `start` attaches input listeners to the canvas; a throw in tick/render fails the game | Host-side upload after start, gated render callback, serialized lifecycle, `pointer-events: none` on the preview canvas, rebuild on failure |
 
 ### 6.3 Division of rendering
@@ -400,9 +404,10 @@ All symbols are exported from the package root.
 - The overlay canvas is the second child of the viewport element, a sibling of the element NGNE
   owns. It stops no event and cancels no default; a pointer down with any button but the middle
   one focuses the viewport element.
-- Its backing size and box are those of the NGNE canvas on screen, also while NGNE stretches
-  its old canvas after a resize (§6.4). It then draws with the mapping NGNE drew with (the
-  view, in that canvas's pixels) and maps the pointer through the stretch.
+- Its backing size and box are those of the NGNE canvas on screen, also while NGNE's canvas is
+  stretched because a resize waits for a device recovery (§6.4). It then draws with the
+  mapping NGNE drew with (the view, in that canvas's pixels) and maps the pointer through the
+  stretch.
 - Draw layers register from their own module (`*.overlay.ts`, found by a glob) with an order:
   stroke echo 50 (§6.6), outline 100, pixel grid 200, tile grid 300, brush cursor 900. A layer
   asks for a redraw through its `watch`.
@@ -418,28 +423,35 @@ All symbols are exported from the package root.
 ### 6.4 Viewport (`NgneViewport`)
 
 Lifecycle
-- Each renderer instance gets its own `<canvas>` element. Creates are serialized (one in
-  flight). Replacement order: create on a new canvas, upload every slot, draw once, swap the
-  canvases, then dispose the old instance — so the viewport is never blank. A new instance
-  whose renderer is not `ready` at the swap is not swapped in: while it is `recovering` the old
-  canvas stays until it can draw; when it has `failed` it is disposed and the replacement is
-  made again.
+- Each renderer instance gets its own `<canvas>` element. A renderer is replaced only when it
+  failed or an upload failed on it for good (stuck). Replacement order: create on a new
+  canvas, upload every slot, draw once, swap the canvases, then dispose the old instance — so
+  the viewport is never blank. A new instance whose renderer is not `ready` at the swap is not
+  swapped in: the swap waits for `ready(signal)` while it is `recovering`, and the old canvas
+  stays until it can draw; when it has `failed` it is disposed and the replacement is made
+  again. A replacement that ends with no working renderer on screen is tried again once after
+  1 s (`RETRY_MS`; a one-shot timer, not a poll).
 - The viewport and its renderer exist only while a document is open; closing the last document
   disposes them. Dispose can therefore come at any moment of a create, an upload or a
-  replacement, and ends all three.
-- Sizing (decided by SE-002 question 4): canvas backing size = the viewport element's size in
-  device pixels (`devicePixelContentBoxSize`); a size or DPR change replaces the renderer
-  after 120 ms of quiet, with the old canvas CSS-stretched until the swap. The fixed
-  oversized canvas was evaluated and not adopted.
+  replacement, and ends all three: it aborts the viewport's signal, which cancels a create
+  (NGNE 0.3.0; a renderer whose create resolved after the abort is disposed) and every wait for
+  `ready`. Creates of different viewports run side by side, each on its own canvas.
+- Sizing (SE-002 question 4; NGNE 0.3.0): canvas backing size = the viewport element's size in
+  device pixels (`devicePixelContentBoxSize`). A size or DPR change resizes the renderer on
+  screen (`renderer.resize`) and draws it in the same `ResizeObserver` task, so no cleared
+  canvas is presented and no renderer is made. `resize` throws while NGNE recovers: the
+  wanted size is kept and applied once the renderer is `ready` (and before a replacement is
+  swapped in); the canvas is CSS-stretched meanwhile. A throw while `ready` (a size above the
+  device limit) is reported once. (0.2.1: a new renderer after 120 ms of quiet, the old canvas
+  stretched until the swap. The fixed oversized canvas was evaluated and not adopted.)
 - Rendering is on demand: a dirty flag schedules one `requestAnimationFrame`; an idle editor
-  submits no frames. If `renderer.status` is not `ready` at draw time the dirty flag is kept and
-  the draw is retried next animation frame. Because NGNE signals neither loss nor recovery, status is also
-  read on window focus, on `visibilitychange` and by a 1 s timer while the page is visible
-  (reading status submits no frame). Recovery usually completes between two reads (SE-002
-  question 8), so each read also compares `renderer.sprites` with the last draw: NGNE zeroes
-  it when the device is lost. A transition back to `ready`, or `renderer.sprites === 0` after
-  a draw that submitted sprites, marks the view dirty.
-  `failed` (also delivered through `onError`) triggers a fresh renderer.
+  submits no frames. If `renderer.status` is not `ready` at draw time the dirty flag is kept;
+  the draw is made when the renderer reports `ready`. NGNE's lifecycle events
+  (`onLifecycle`, 0.3.0) only set flags and mark the view dirty: `ready` draws the scene again,
+  `failed` (also delivered through `onError`) triggers a fresh renderer. `status` is read once
+  after a create; nothing is polled. (0.2.1: status was read on window focus, on
+  `visibilitychange` and by a 1 s timer, with a `renderer.sprites` check, because NGNE
+  signalled neither loss nor recovery; SE-002 question 8.)
 
 View
 - Zoom is the number of device pixels per sprite pixel: 1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24,
@@ -474,9 +486,14 @@ Texture slots (IDs are fixed for the life of a renderer)
   are drawn from whichever slots hold them, so switching to a frame already in the cache needs
   no upload.
 - A history step uploads the keys on screen again into their slots, which show the previous
-  pixels until then. Every other cached key the step touches is given up and its slot replaced
-  by the 1×1 image; a step that changes the structure gives up all of them. While a wanted key
-  loads, the frame drawn last stays on screen.
+  pixels until then. Every other cached key the step touches is given up and its slot's
+  texture released; a step that changes the structure gives up all of them. While a wanted
+  key loads, the frame drawn last stays on screen.
+- Frame slots are replaced whole with `texture()`. NGNE 0.3.0's editable textures
+  (`createTexture` + `updateTexture`) were evaluated and not adopted: `updateTexture` captures
+  its source through the browser's 2D readback, which under software 2D (SwiftShader, CI)
+  showed 3580 of 65 024 translucent texels beyond the ±1 contract of §6.7 / SE-011 (worst
+  1.47; `tests/e2e/se-011-translucency.spec.ts`).
 - Editor playback blits the playing range's composites into one grid image for `ed:play` (a
   plain grid local to the viewport, no padding; not the exporter's packer) when it fits
   8192×8192 and 64 MB, and draws UV sub-rectangles; otherwise it steps through the frame
@@ -487,7 +504,7 @@ Texture slots (IDs are fixed for the life of a renderer)
   change while it plays (until the grid is built again), playback steps through the frame
   cache, which uploads nothing for a frame the grid holds. An `ed:play` upload that fails
   leaves that renderer on the frame cache. After playback the grid stays until a frame slot
-  holds the current frame, then gets the 1×1 image; a cell whose frame changed stays on screen
+  holds the current frame, then is released; a cell whose frame changed stays on screen
   with its previous pixels until then, as a frame slot does during its upload. Through the frame cache playback draws the
   newest frame that is ready (the one made current last), never one played before the frame on
   screen. A frame is drawn only from a slot that is still reserved for it: a slot being
@@ -501,8 +518,8 @@ Reference slots (SE-045; §7.6):
   visible reference layers of the shown document whose opacity is above 0 and whose source is
   decoded (`NgneViewport.setReferences`); a layer at opacity 0 is treated as hidden, so it
   takes no slot and no share of the 16 MP. The viewport keeps a slot per layer while the layer
-  is given, and puts the 1×1 image in a slot when its layer goes (deleted, hidden, another
-  document). The display sources of images it no longer shows are closed once no upload is
+  is given, and releases the slot when its layer goes (deleted, hidden, another document). The
+  display sources of images it no longer shows are closed once no upload is
   being made from them, also when the next document has no reference at all.
 - Each decoded source becomes its display source once (≤ 4096 px per side, a high-quality
   downscale); an upload is the display source resampled to the reference's device rectangle,
@@ -535,13 +552,13 @@ Onion skins (SE-025; §7.5):
   no slot (every slot kept or being re-keyed, or its slot failed for good) is asked for again
   when a frame slot's upload resolves and when a slot is taken out (review A). Playing hides
   the ghosts and does not release their slots; once no ghost is tinted (tint or onion skin off),
-  the slots of tinted keys get the 1×1 image.
+  the slots of tinted keys are released.
 
 Quad order (NGNE `layer` value): 0 workspace colour · 1 checkerboard · 2 references placed
 behind · 3 onion skins behind · 4 current frame · 5 onion skins in front · 6 references placed
 in front. Tiled mode draws the current frame slot nine times. The workspace colour is a rect
-over the whole canvas, so every frame submits at least one sprite and the `sprites` check of
-the lifecycle can always tell a lost device from an empty frame.
+over the whole canvas, so every frame submits at least one sprite. A quad names only a slot
+whose upload resolved and that has not been released since.
 
 Upload queue (one per renderer instance)
 - One in-flight upload per slot; a newer request replaces the queued one. An upload starts no
@@ -556,8 +573,11 @@ Upload queue (one per renderer instance)
   close the slot: the key is asked for again when it is next needed.
 - A disposed queue is not busy and publishes nothing; uploads already in flight settle in the
   background and their bitmaps are still closed.
-- Slots that become unused (onion off, reference removed, playback stopped) are replaced by a
-  1×1 transparent image.
+- Slots that become unused (onion off, reference removed, playback stopped, no document) are
+  released (`releaseTexture`, NGNE 0.3.0), ordered with the work in flight: a waiting request
+  is forgotten, the upload in flight is aborted and publishes nothing even if NGNE resolved it,
+  and a later request for the slot starts once that upload has settled (one call in flight per
+  ID). A release on a failed or disposed renderer is ignored. (0.2.1: a 1×1 transparent image.)
 - A slot keeps showing its previous texture until a replacement is published. Therefore a
   slot's key and the size of its image (and, for `ed:play` and `pv:atlas`, the UV metadata used
   for drawing) change only when the matching upload resolves; frame builders never pair new
@@ -633,16 +653,18 @@ Recorded by SE-054:
 - Frames run on demand, through the game's `scheduler` option (`engine/preview/demandScheduler.ts`):
   at the next animation frame after a change (an atlas published or set to none, the
   animation, play/pause, speed, background), and at the tick the playing animation reaches its
-  next entry; a still image draws nothing. As the viewport does (§6.4), the renderer's status
-  and sprite counter are read once a second without drawing, and a renderer back to `ready`
-  or with its sprites zeroed draws again. A preview at the display's rate made the parallel
+  next entry; a still image draws nothing. As the viewport does (§6.4), the renderer's
+  lifecycle events (`onLifecycle`, NGNE 0.3.0, subscribed after the game's first start) wake
+  it: `ready` draws again, `failed` rebuilds the game; nothing is polled (0.2.1: status and
+  sprite counter read once a second). A preview at the display's rate made the parallel
   E2E suite time out (26 of 38 pointer and view tests at 8 workers, none without the
   preview). The game's clock comes from the scheduler: a change of play/pause, speed or
   animation first counts the time since the last frame at the old rate and has the clock skip
   it, so paused time is not played; `maxTicks` covers the longest entry at 0.25×.
 - The render callback draws the background rect at layer 0 and, from the published atlas
   only, the frame at layer 1; it never throws (a throw would fail the game). An atlas set to
-  none (another document) hides every atlas published before it. The diagnostics shown are
+  none (another document) hides every atlas published before it and releases `pv:atlas`
+  (NGNE 0.3.0). The diagnostics shown are
   NGNE's other than `{ type: "overload" }` notices, and failed uploads, creates and starts,
   each message once per mounted panel (the newest five).
 
@@ -725,21 +747,23 @@ composite:
 
 ### 6.8 Engine gaps and workarounds
 
-Recorded from runs 1–4 against NGNE 0.2.1; no engine change is required for this release.
+Recorded from runs 1–4 against NGNE 0.2.1; no engine change is required for this release. The
+last column records the migration to `@ngne/core` 0.3.0: resolved, partially resolved or still
+applicable. The 0.2.1 evidence is kept.
 
-| Gap in NGNE 0.2.1 | Workaround actually used | Evidence from runs 1–4 |
-| ----------------- | ------------------------ | ---------------------- |
-| No release for manual textures | Fixed slot pools; unused slots replaced by 1×1 placeholders | SE-002 Q11: texture estimate returned to 56 bytes above baseline on both reference GPUs |
-| Whole-image asynchronous uploads, superseded calls and GPU validation round trips | Single-flight latest-wins queue, whole-slot uploads, cached frames and playback grid; Canvas2D stroke echo until NGNE submits the change | SE-002 Q1–2; RTX 4060 stroke p95 34.1 ms without echo, 20.2 ms with it. Run 4 upload frame switch: 80.8 ms p95 against 50 ms on cloud SwiftShader, **not reference hardware**. Checkpoint E reference p95: Intel UHD 26.0 ms, RTX 4060 29.7 ms; both meet 50 ms ([record](perf/checkpoint-e-2026-10-21.md)) |
-| No blend modes or non-multiply tint | CPU layer/cel compositor and CPU onion tint | SE-010, SE-025 and SE-061; tint moves black toward red/blue, which a multiply cannot do (§7.5) |
-| Fixed renderer size, no public create abort; canvases share their WebGPU context | Serialized replacement on a new canvas, keep the old canvas until the new one draws | SE-002 Q4: replacement medians 34.3–50.5 ms on reference GPUs; only a ready, drawn canvas is swapped in |
-| No repeat addressing or linear filtering | Finite checker texture; CPU resample reference display images after zoom settles | SE-011, SE-045; a whole-pixel reference move at fractional zoom can change rounded width by 1 px and cause a resample; accepted display trade-off at checkpoint E |
-| No camera zoom | Scale sprite sizes and positions while building frames | SE-002 Q3 and SE-012: device-pixel mapping checked at fractional DPR (§6.4) |
-| No texture readback | Export CPU composites; read the canvas in-page immediately after render for tests | SE-002 Q7, SE-053 conformance; opaque readback exact on both reference GPUs |
-| Centre snapping misaligns odd-sized sprites | Disable snapping in editor/preview; even-pad export rectangles and round generated-helper placement | SE-002 Q9: odd default-snapped sprite differed on RTX 4060; exact quarter turns and alpha tolerance covered by conformance |
-| No recovery event | Poll `status` and `sprites` on draws/focus/visibility and an idle timer; rebuild after failed recovery | SE-002 Q8: status-only polling redrew 0/5 Intel UHD and 1/5 RTX 4060 losses; the adopted counter fallback redrew 5/5 on each (945/1047 ms slowest). A user toast describes replacement |
-| Animation entries have neither direction nor repeat count | Expand reverse/ping-pong and finite repeats in exported entries, capped at 65 536 | SE-051/SE-053: generated lookup and consumer conformance |
-| BrowserGame exposes the renderer only after start; start/stop cannot overlap and a tick/render error fails the game | Host uploads after start, gate rendering on ready slots, serialize lifecycle and rebuild failures | SE-002 Q5–6 and SE-054; demand scheduler and sliced composite preparation keep preview work bounded |
+| Gap in NGNE 0.2.1 | Workaround actually used | Evidence from runs 1–4 | Status with 0.3.0 |
+| ----------------- | ------------------------ | ---------------------- | ----------------- |
+| No release for manual textures | Fixed slot pools; unused slots replaced by 1×1 placeholders | SE-002 Q11: texture estimate returned to 56 bytes above baseline on both reference GPUs | **Resolved.** `releaseTexture` replaces the placeholders of the frame, checker, play and reference slots and of `pv:atlas`; the bounded slot pools and LRU eviction are kept (§6.4) |
+| Whole-image asynchronous uploads, superseded calls and GPU validation round trips | Single-flight latest-wins queue, whole-slot uploads, cached frames and playback grid; Canvas2D stroke echo until NGNE submits the change | SE-002 Q1–2; RTX 4060 stroke p95 34.1 ms without echo, 20.2 ms with it. Run 4 upload frame switch: 80.8 ms p95 against 50 ms on cloud SwiftShader, **not reference hardware**. Checkpoint E reference p95: Intel UHD 26.0 ms, RTX 4060 29.7 ms; both meet 50 ms ([record](perf/checkpoint-e-2026-10-21.md)) | **Still applicable.** 0.3.0's `createTexture` + `updateTexture` were not adopted: its 2D readback capture put 3580 of 65 024 translucent texels beyond ±1 under SwiftShader (worst 1.47; `texture()` 0, worst 0.50). Reported to NGNE as an engine gap. Queue, cache, grid and echo kept |
+| No blend modes or non-multiply tint | CPU layer/cel compositor and CPU onion tint | SE-010, SE-025 and SE-061; tint moves black toward red/blue, which a multiply cannot do (§7.5) | **Still applicable** |
+| Fixed renderer size, no public create abort; canvases share their WebGPU context | Serialized replacement on a new canvas, keep the old canvas until the new one draws | SE-002 Q4: replacement medians 34.3–50.5 ms on reference GPUs; only a ready, drawn canvas is swapped in | **Resolved.** `resize` in the `ResizeObserver` task, no replacement for a size change; `create` cancelled by the viewport's signal, creates no longer serialized. One canvas per renderer and the swap stay for failed or stuck renderers only |
+| No repeat addressing or linear filtering | Finite checker texture; CPU resample reference display images after zoom settles | SE-011, SE-045; a whole-pixel reference move at fractional zoom can change rounded width by 1 px and cause a resample; accepted display trade-off at checkpoint E | **Still applicable** |
+| No camera zoom | Scale sprite sizes and positions while building frames | SE-002 Q3 and SE-012: device-pixel mapping checked at fractional DPR (§6.4) | **Still applicable** |
+| No texture readback | Export CPU composites; read the canvas in-page immediately after render for tests | SE-002 Q7, SE-053 conformance; opaque readback exact on both reference GPUs | **Still applicable** |
+| Centre snapping misaligns odd-sized sprites | Disable snapping in editor/preview; even-pad export rectangles and round generated-helper placement | SE-002 Q9: odd default-snapped sprite differed on RTX 4060; exact quarter turns and alpha tolerance covered by conformance | **Still applicable** |
+| No recovery event | Poll `status` and `sprites` on draws/focus/visibility and an idle timer; rebuild after failed recovery | SE-002 Q8: status-only polling redrew 0/5 Intel UHD and 1/5 RTX 4060 losses; the adopted counter fallback redrew 5/5 on each (945/1047 ms slowest). A user toast describes replacement | **Resolved.** `onLifecycle` and `ready(signal)` in the viewport and the preview; the timer, focus/visibility reads and `sprites` checks are gone. Rebuild after a failed recovery kept |
+| Animation entries have neither direction nor repeat count | Expand reverse/ping-pong and finite repeats in exported entries, capped at 65 536 | SE-051/SE-053: generated lookup and consumer conformance | **Still applicable** |
+| BrowserGame exposes the renderer only after start; start/stop cannot overlap and a tick/render error fails the game | Host uploads after start, gate rendering on ready slots, serialize lifecycle and rebuild failures | SE-002 Q5–6 and SE-054; demand scheduler and sliced composite preparation keep preview work bounded | **Still applicable.** Its status polling moved to `onLifecycle` (row above); `pv:atlas` is released when the atlas is set to none |
 
 ## 7. Editor behaviour
 
@@ -2101,7 +2125,7 @@ that point is a change request.
 | A1 | v1 scope is the M0–M7 tier of §2.3; every "Later" row is out of v1; effort is roughly 145–215 developer-days | SE-001 |
 | A2 | "NGNE-ready" is the bundle and schema of §9, with Aseprite-format JSON as an optional extra file      | SE-050        |
 | A3 | "Quantize into sprites at the specified size" is cells → resample to W×H → reduce colours (§8)       | SE-043        |
-| A4 | The editor consumes the published `@ngne/core` 0.2.1 and does not modify the engine                   | SE-001        |
+| A4 | The editor consumes the published `@ngne/core` (0.2.1; 0.3.0 since the 0.3.0 migration) and does not modify the engine | SE-001 |
 | A5 | Runtime dependencies in §4 are approved                                                               | SE-001        |
 | A6 | Desktop Chrome/Edge only; no fallback renderer; minimum window 1280×720                               | SE-001        |
 | A7 | Reference images render behind or in front of all pixel layers, not at arbitrary stack positions      | SE-003        |
@@ -2116,6 +2140,6 @@ that point is a change request.
 | Pixel misalignment at fractional DPR or odd sizes           | Medium     | Integer device-pixel zoom, snap off, even export rects, readback tests |
 | NGNE 0.x API changes                                        | Medium     | Exact pin; all engine use isolated in `engine/`          |
 | Two WebGPU devices (viewport + preview) on weak GPUs        | Low        | SE-002 verifies; preview stops when hidden               |
-| Slot memory (NGNE keeps a bitmap per slot)                  | Medium     | Reference texel budget, 1×1 placeholders, `renderer.inspect()` checks |
+| Slot memory (NGNE keeps a bitmap per slot)                  | Medium     | Reference texel budget, slot release (`releaseTexture`), `renderer.inspect()` checks |
 | Scope creep toward full Aseprite parity                     | High       | §2.3 tiers; Later items need a new spec revision         |
 | Browser-reserved shortcuts break Aseprite muscle memory     | Certain    | §7.8 alternates, command palette, PWA window (SE-072)    |

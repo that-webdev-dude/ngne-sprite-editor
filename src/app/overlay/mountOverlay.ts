@@ -50,9 +50,10 @@ const MIDDLE_BUTTON = 1;
  * bubbling. In development builds its probe is put on `window.__ngneTest`.
  *
  * Its backing size is always that of the NGNE canvas on screen, and both fill the same box.
- * After a resize NGNE keeps its old canvas, stretched over the new box, until the replacement
- * has drawn (SPEC §6.4); the overlay keeps that canvas's size meanwhile, so the two stay
- * stretched alike, and takes the new size in the task NGNE swaps its canvases.
+ * NGNE resizes its canvas in the task that observes a new size (SPEC §6.4). While a resize
+ * waits for a device recovery, or a replacement renderer is being made, NGNE's canvas keeps
+ * its old size, stretched over the new box; the overlay keeps that canvas's size meanwhile,
+ * so the two stay stretched alike, and takes the new size when NGNE's canvas does.
  */
 export function mountOverlay(
     canvas: HTMLCanvasElement,

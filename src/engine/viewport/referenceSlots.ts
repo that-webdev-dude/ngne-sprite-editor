@@ -102,7 +102,7 @@ export function textureSizes(
 /** What an upload put into a reference slot: the key of its image and its size. */
 export interface ReferenceTag {
     epoch: number;
-    /** The layer and the source (`referenceKey`); null for the 1×1 placeholder. */
+    /** The layer and the source (`referenceKey`); null for none. */
     key: string | null;
     width: number;
     height: number;
@@ -112,8 +112,6 @@ export interface ReferenceTag {
 export interface ReferenceHost {
     /** Makes the image of a reference: `image` resampled to `width` × `height`. */
     referenceBitmap(image: PixelBuffer, width: number, height: number): Promise<ImageBitmap>;
-    /** Makes the 1×1 transparent placeholder. */
-    placeholder(): Promise<ImageBitmap>;
     /** Test hook: when it returns a promise, the upload of `slot` starts after it. */
     gate(slot: string): Promise<void> | undefined;
     /** Every slot failed for good: only a fresh renderer can show the references. */
@@ -131,11 +129,11 @@ export interface ReferenceScene {
 interface SlotState {
     /** The layer the slot is kept for; null while it is free. */
     layerId: string | null;
-    /** The image and size last asked for; null when the placeholder was, or nothing. */
+    /** The image and size last asked for; null when the slot was released, or nothing. */
     requested: string | null;
-    /** True once anything was asked for: a slot never used gets no placeholder. */
+    /** True once anything was asked for: a slot never used has nothing to release. */
     used: boolean;
-    /** The placeholder was asked for last. */
+    /** The slot was released last. */
     blanked: boolean;
     /** `texture()` failed here: the slot takes no more uploads on this renderer. */
     disabled: boolean;
@@ -204,7 +202,7 @@ export class ReferenceSlots {
     }
 
     /**
-     * Brings the slots in line with the scene: a slot for every reference, the placeholder for
+     * Brings the slots in line with the scene: a slot for every reference, a release for
      * a slot nothing uses any more, the image of a reference that has none of it yet at once,
      * and a new size on screen once it has held for `RESAMPLE_QUIET_MS`.
      */
@@ -367,20 +365,15 @@ export class ReferenceSlots {
         });
     }
 
-    /** The slot gets the 1×1 placeholder, once; a slot never used gets nothing. */
+    /**
+     * The slot's texture is released (NGNE `releaseTexture`), once; a slot never used has
+     * nothing to release.
+     */
     #blank(index: number): void {
         const state = this.#slots[index]!;
         if (!state.used || state.blanked || state.disabled) return;
         state.requested = null;
         state.blanked = true;
-        const slot = referenceSlotId(index);
-        const { epoch } = this.#scene;
-        this.#queue.request(slot, async () => {
-            await this.#host.gate(slot);
-            return {
-                bitmap: await this.#host.placeholder(),
-                tag: { epoch, key: null, width: 1, height: 1 },
-            };
-        });
+        this.#queue.release(referenceSlotId(index));
     }
 }

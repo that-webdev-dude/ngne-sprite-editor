@@ -519,3 +519,159 @@ describe("UploadQueue: callbacks that throw", () => {
         reported.mockRestore();
     });
 });
+
+describe("UploadQueue: release (NGNE 0.3.0 releaseTexture)", () => {
+    it("releases the texture at once: the waiting request is forgotten and the upload in flight is aborted and publishes nothing", async () => {
+        const { renderer, queue, image, published, errors, built } = harness();
+        queue.request("ed:f:0", image("a"));
+        await flush();
+        renderer.inFlight("ed:f:0").resolve();
+        await flush();
+        expect(queue.published("ed:f:0")).toBe("a");
+
+        queue.request("ed:f:0", image("b"));
+        await flush();
+        queue.request("ed:f:0", image("waiting"));
+        queue.release("ed:f:0");
+        // At once: nothing is drawn from the slot any more.
+        expect(renderer.released).toEqual(["ed:f:0"]);
+        expect(queue.published("ed:f:0")).toBeUndefined();
+        expect(queue.pending("ed:f:0")).toBe(false);
+        expect(queue.busy("ed:f:0")).toBe(false);
+        expect(renderer.inFlight("ed:f:0").signal?.aborted).toBe(true);
+        await flush();
+        expect(published).toEqual(["ed:f:0=a"]);
+        expect(errors).toEqual([]);
+        expect(built.map((source) => source.label)).toEqual(["a", "b"]);
+        expect(built[1]?.closed).toBe(true);
+        expect(queue.stats).toMatchObject({ released: 1, published: 1, failed: 0 });
+    });
+
+    it("ignores an upload that resolves after its slot was released", async () => {
+        // The renderer leaves aborted calls in flight: the call resolves as if NGNE had
+        // published it just before the release.
+        const { renderer, queue, image, published } = harness(
+            new FakeRenderer({ rejectsOnAbort: false }),
+        );
+        queue.request("ed:f:0", image("late"));
+        await flush();
+        queue.release("ed:f:0");
+        renderer.inFlight("ed:f:0").resolve();
+        await flush();
+        expect(published).toEqual([]);
+        expect(queue.published("ed:f:0")).toBeUndefined();
+        expect(queue.stats).toMatchObject({ published: 0, ignored: 1 });
+    });
+
+    it("starts a request made after the release once the released upload has settled", async () => {
+        const { renderer, queue, image, published } = harness(
+            new FakeRenderer({ rejectsOnAbort: false }),
+        );
+        queue.request("ed:f:0", image("old"));
+        await flush();
+        queue.release("ed:f:0");
+        queue.request("ed:f:0", image("new"));
+        expect(queue.busy("ed:f:0")).toBe(true);
+        await flush();
+        // One call in flight per ID: the new one waits for the released one.
+        expect(renderer.calls.map((call) => call.source.label)).toEqual(["old"]);
+        renderer.inFlight("ed:f:0").reject(new Error("Texture replacement superseded: ed:f:0"));
+        await flush();
+        expect(renderer.calls.map((call) => call.source.label)).toEqual(["old", "new"]);
+        renderer.inFlight("ed:f:0").resolve();
+        await flush();
+        expect(published).toEqual(["ed:f:0=new"]);
+    });
+
+    it("releases nothing for a slot never asked for, and nothing after dispose", () => {
+        const { renderer, queue } = harness();
+        queue.release("ed:f:3");
+        expect(renderer.released).toEqual([]);
+        queue.request("ed:f:3", () => {
+            throw new Error("not built");
+        });
+        queue.dispose();
+        queue.release("ed:f:3");
+        expect(renderer.released).toEqual([]);
+    });
+
+    it("resolves idle() when a release leaves nothing that can publish", async () => {
+        const { queue, image } = harness(new FakeRenderer({ rejectsOnAbort: false }));
+        queue.request("ed:f:0", image("a"));
+        await flush();
+        let idle = false;
+        void queue.idle().then(() => {
+            idle = true;
+        });
+        await flush();
+        expect(idle).toBe(false);
+        queue.release("ed:f:0");
+        await flush();
+        expect(idle).toBe(true);
+    });
+
+    it("keeps working when the renderer throws on release (it failed or was disposed)", async () => {
+        const renderer = new FakeRenderer();
+        renderer.releaseThrows = new Error(
+            "WebGPU recovery failed. Reload to create a new renderer",
+        );
+        const { queue, image, published } = harness(renderer);
+        queue.request("ed:f:0", image("a"));
+        await flush();
+        renderer.inFlight("ed:f:0").resolve();
+        await flush();
+        expect(() => queue.release("ed:f:0")).not.toThrow();
+        expect(queue.published("ed:f:0")).toBeUndefined();
+        expect(published).toEqual(["ed:f:0=a"]);
+    });
+});
+
+describe("UploadQueue: transfers", () => {
+    it("runs a transfer instead of texture() and publishes its tag when it resolves", async () => {
+        const { renderer, queue, published } = harness();
+        const transfers: { signal: AbortSignal; resolve(): void }[] = [];
+        queue.request("ed:f:0", () => ({
+            tag: "edited",
+            transfer: (signal) =>
+                new Promise<void>((resolve) => transfers.push({ signal, resolve })),
+        }));
+        await flush();
+        expect(renderer.calls).toEqual([]);
+        expect(transfers).toHaveLength(1);
+        expect(queue.busy("ed:f:0")).toBe(true);
+        transfers[0]?.resolve();
+        await flush();
+        expect(published).toEqual(["ed:f:0=edited"]);
+        expect(queue.busy("ed:f:0")).toBe(false);
+    });
+
+    it("aborts a transfer whose slot is released", async () => {
+        const { queue, published, errors } = harness();
+        let signal: AbortSignal | undefined;
+        queue.request("ed:f:0", () => ({
+            tag: "edited",
+            transfer: (given) =>
+                new Promise<void>((_, reject) => {
+                    signal = given;
+                    given.addEventListener("abort", () => reject(given.reason));
+                }),
+        }));
+        await flush();
+        queue.release("ed:f:0");
+        expect(signal?.aborted).toBe(true);
+        await flush();
+        expect(published).toEqual([]);
+        expect(errors).toEqual([]);
+    });
+
+    it("fails the slot when a transfer rejects", async () => {
+        const { queue, errors } = harness();
+        queue.request("ed:f:0", () => ({
+            tag: "x",
+            transfer: () => Promise.reject(new Error("WebGPU resource validation failed")),
+        }));
+        await flush();
+        expect(errors).toEqual(["ed:f:0: Error: WebGPU resource validation failed"]);
+        expect(queue.failed("ed:f:0")).toBe(true);
+    });
+});

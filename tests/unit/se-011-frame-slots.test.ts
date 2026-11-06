@@ -114,7 +114,7 @@ describe("FrameSlots: what a slot shows", () => {
         expect(slots.showing("other")).toBe(1);
     });
 
-    it("shows nothing after the placeholder was published", () => {
+    it("shows nothing after an upload of no image was published", () => {
         const slots = new FrameSlots(1);
         load(slots, "a");
         slots.publish(0, null, IDLE);
@@ -124,7 +124,7 @@ describe("FrameSlots: what a slot shows", () => {
 });
 
 describe("FrameSlots: giving keys up", () => {
-    it("frees the slots of released keys at once and names them for the placeholder", () => {
+    it("frees the slots of released keys at once and names them for release", () => {
         const slots = new FrameSlots(4);
         for (const key of ["a", "b", "c"]) load(slots, key);
         expect(slots.release((key) => key !== "b")).toEqual([0, 2]);
@@ -139,7 +139,7 @@ describe("FrameSlots: giving keys up", () => {
         const slots = new FrameSlots(2);
         const slot = slots.reserve("a");
         expect(slots.release(() => true)).toEqual([slot]);
-        // The upload of "a" was in flight; the placeholder follows it.
+        // The upload of "a" was in flight; an upload of no image follows it.
         slots.publish(slot, image("a"), { current: null, newerQueued: true });
         expect(slots.showing("a")).toBe(-1);
         slots.publish(slot, null, IDLE);

@@ -12,9 +12,9 @@ import type { OverlayCursor, OverlayFrame, OverlayLayer, OverlayTheme } from "./
 // are reported by `mountOverlay`, so the policy is unit-tested in Node.
 //
 // The canvas's backing size is that of the NGNE canvas on screen (`resize`), which may differ
-// from the device size of the element both fill (`setBox`) while NGNE stretches its old canvas
-// during a resize; the overlay is then stretched alike and maps the pointer accordingly
-// (`stretchedMapping`).
+// from the device size of the element both fill (`setBox`) while NGNE's canvas is stretched
+// (a resize waiting for a device recovery); the overlay is then stretched alike and maps the
+// pointer accordingly (`stretchedMapping`).
 //
 // A redraw clears the canvas and runs every draw layer bottom to top. It happens only when
 //

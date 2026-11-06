@@ -64,6 +64,16 @@ export class FakeRenderer implements TextureTarget {
         });
     }
 
+    /** IDs `releaseTexture` was called with, in order (NGNE 0.3.0). */
+    readonly released: string[] = [];
+    /** When set, `releaseTexture` throws it, as a failed or disposed renderer does. */
+    releaseThrows: unknown = null;
+
+    releaseTexture(id: string): void {
+        if (this.releaseThrows) throw this.releaseThrows;
+        this.released.push(id);
+    }
+
     /** The call in flight for a slot. */
     inFlight(id: string): TextureCall {
         const call = this.calls.filter((entry) => entry.id === id).pop();

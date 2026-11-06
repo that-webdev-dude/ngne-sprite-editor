@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Engine: `@ngne/core` 0.3.0
+
+- Pinned `@ngne/core` to 0.3.0 (was 0.2.1).
+- Unused viewport slots and the preview atlas are released with `releaseTexture` instead of
+  being replaced by 1×1 placeholder images.
+- A viewport size change resizes the renderer in place and draws it in the same task, so no
+  cleared canvas is shown. It no longer replaces the renderer after 120 ms of quiet. A renderer
+  is replaced only when it failed or got stuck.
+- Device loss and recovery come from NGNE's lifecycle events (`onLifecycle`, `ready`) in the
+  viewport and the preview. The status timers, focus and visibility reads and sprite-counter
+  checks are gone.
+- A viewport's renderer creation is cancelled when the viewport is disposed. Creates are no
+  longer serialized across the page.
+- Frame slots keep whole-image `texture()` uploads. NGNE 0.3.0's editable textures
+  (`updateTexture`) lose precision on translucent pixels under software 2D readback, which
+  breaks the ±1 pixel contract (new test `se-011-translucency`).
+
 ## 1.0.0 – 2026-10-21
 
 Release candidate. Checkpoint E passed with the qualifications below. Merging, tagging and

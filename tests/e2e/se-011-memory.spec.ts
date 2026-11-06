@@ -3,8 +3,8 @@ import type { Page } from "@playwright/test";
 import { collectErrors } from "./se-006-support";
 import { harnessSettled, openHarness } from "./se-011-support";
 
-// SE-011: slot memory. NGNE cannot release a manual texture, so a slot nothing uses any more
-// is replaced by a 1×1 image (SPEC §6.2 #4, §6.4); `renderer.inspect()` shows the effect.
+// SE-011: slot memory. A slot nothing uses any more is released (NGNE 0.3.0 `releaseTexture`,
+// SPEC §6.2 #4, §6.4); `renderer.inspect()` shows the effect.
 // The harness page runs an `NgneViewport` without the app, which can show a document with
 // no frame on screen: the checker-only baseline.
 
@@ -63,7 +63,7 @@ test("after filling and clearing the frame cache, texture bytes are within 1 MB 
         Array.from({ length: 8 }, (_, index) => `frame-${index + 1}:plain`).sort(),
     );
 
-    // Cleared: every slot holds the 1×1 image, and the estimate is back at the baseline.
+    // Cleared: every frame slot is released, and the estimate is back at the baseline.
     await page.evaluate(() => {
         window.se011!.show(null);
         window.se011!.clearFrames();
@@ -72,18 +72,19 @@ test("after filling and clearing the frame cache, texture bytes are within 1 MB 
     const cleared = await inspect(page);
     expect(cleared.shown).toEqual(FRAME_SLOTS.map(() => null));
     expect(Math.abs(cleared.textureBytes - baseline.textureBytes)).toBeLessThanOrEqual(MB);
-    // Slot by slot: each frame slot holds the placeholder of four bytes, the checkerboard
-    // its image.
-    expect(frameCacheBytes(cleared.slotBytes)).toEqual(FRAME_SLOTS.map(() => 4));
+    // Slot by slot: no frame slot is registered any more, so none reports bytes; the
+    // checkerboard holds its image.
+    expect(FRAME_SLOTS.filter((slot) => slot in cleared.slotBytes)).toEqual([]);
+    expect(frameCacheBytes(cleared.slotBytes)).toEqual(FRAME_SLOTS.map(() => 0));
     expect(cleared.slotBytes["ed:checker"]).toBe(FRAME_BYTES);
 
-    // A slot that held the placeholder takes a frame again.
+    // A released slot takes a frame again.
     await page.evaluate(() => window.se011!.show(3));
     await harnessSettled(page);
     const reused = await inspect(page);
     expect(reused.shown.filter((key) => key !== null)).toEqual(["frame-3:plain"]);
     expect(frameCacheBytes(reused.slotBytes).sort()).toEqual(
-        [4, 4, 4, 4, 4, 4, 4, FRAME_BYTES].sort(),
+        [0, 0, 0, 0, 0, 0, 0, FRAME_BYTES].sort(),
     );
     const image = await page.evaluate(() => {
         const read = window.se011!.probe!.readCanvas()!;

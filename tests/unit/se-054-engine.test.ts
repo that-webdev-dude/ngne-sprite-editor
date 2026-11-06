@@ -35,10 +35,25 @@ const lifecycle = { log: [] as string[], running: 0, most: 0 };
 class FakeRenderer {
     status = "ready";
     uploads: { id: string; signal: AbortSignal | undefined; done: Deferred }[] = [];
+    /** IDs released (NGNE 0.3.0 `releaseTexture`), in order. */
+    released: string[] = [];
+    readonly observers = new Set<(event: { status: string }) => void>();
     texture(id: string, _source: unknown, signal?: AbortSignal): Promise<void> {
         const done = deferred();
         this.uploads.push({ id, signal, done });
         return done.promise;
+    }
+    releaseTexture(id: string): void {
+        this.released.push(id);
+    }
+    onLifecycle(observer: (event: { status: string }) => void): () => void {
+        this.observers.add(observer);
+        return () => this.observers.delete(observer);
+    }
+    /** A lifecycle transition, delivered as NGNE does: synchronously, to every observer. */
+    emit(status: "recovering" | "ready" | "failed"): void {
+        this.status = status;
+        for (const observer of [...this.observers]) observer({ status });
     }
 }
 
@@ -589,5 +604,68 @@ describe("NgnePreview", () => {
         p.setAnimation("b");
         expect(p.probe.ageMs).toBe(0);
         await p.dispose();
+    });
+});
+
+describe("NgnePreview on NGNE 0.3.0: lifecycle events and release", () => {
+    it("releases pv:atlas when the atlas is set to none, and draws nothing from it until the next one is uploaded", async () => {
+        const p = await preview();
+        p.setAnimation("a");
+        p.setSize({ width: 4, height: 4 });
+        p.setRunning(true);
+        p.setAtlas(atlas(0));
+        await flush();
+        await flush();
+        const game = FakeGame.games[0]!;
+        game.renderer!.uploads[0]!.done.resolve();
+        await flush();
+        expect(sprites(game.frame())).toMatchObject([{ texture: "pv:atlas", u: 0 }]);
+        expect(game.renderer!.released).toEqual([]);
+
+        p.setAtlas(null);
+        expect(game.renderer!.released).toEqual(["pv:atlas"]);
+        expect(p.probe.published).toBeNull();
+        expect(sprites(game.frame())).toEqual([]);
+
+        p.setAtlas(atlas(32));
+        await flush();
+        expect(sprites(game.frame())).toEqual([]);
+        game.renderer!.uploads[1]!.done.resolve();
+        await flush();
+        expect(sprites(game.frame())).toMatchObject([{ texture: "pv:atlas", u: 0.5 }]);
+        expect(game.renderer!.released).toEqual(["pv:atlas"]);
+        await p.dispose();
+    });
+
+    it("asks for a frame when the renderer is ready again, rebuilds the game when it failed, and keeps no timer", async () => {
+        const intervals = vi.spyOn(globalThis, "setInterval");
+        const p = await preview();
+        p.setSize({ width: 4, height: 4 });
+        p.setRunning(true);
+        await flush();
+        await flush();
+        const game = FakeGame.games[0]!;
+        const renderer = game.renderer!;
+        expect(renderer.observers.size).toBe(1);
+        const scheduler = (game.options as unknown as { scheduler: { wake(): void } }).scheduler;
+        const wake = vi.spyOn(scheduler, "wake");
+
+        // A device lost and recovered: nothing on `recovering`, a frame on `ready`.
+        renderer.emit("recovering");
+        expect(wake).not.toHaveBeenCalled();
+        renderer.emit("ready");
+        expect(wake).toHaveBeenCalledTimes(1);
+
+        // A failed renderer: the game is disposed and made again, and the old renderer's
+        // observer is gone.
+        renderer.emit("failed");
+        await flush();
+        await flush();
+        expect(lifecycle.log).toEqual(["start 0", "dispose 0", "start 1"]);
+        expect(renderer.observers.size).toBe(0);
+        expect(intervals).not.toHaveBeenCalled();
+        intervals.mockRestore();
+        await p.dispose();
+        expect(FakeGame.games[1]!.renderer!.observers.size).toBe(0);
     });
 });

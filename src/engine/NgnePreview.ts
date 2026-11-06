@@ -25,7 +25,7 @@ import { oncePerMessage } from "./viewport/diagnostics";
 // - The queue of a game is disposed before the game.
 // - Frames run on demand (`preview/demandScheduler.ts`): after a change and when the playing
 //   animation reaches its next entry; not at the display's rate. A still preview draws nothing,
-//   and a device that was lost and recovered (status read once a second) draws again.
+//   and a device that was lost and recovered draws again (NGNE's `onLifecycle`).
 
 /** What runs the game's frames: NGNE's `FrameScheduler` (`requestAnimationFrame` by default). */
 export type PreviewScheduler = FrameScheduler;
@@ -42,9 +42,6 @@ const RETRY_MS = 1000;
  * age.
  */
 const MAX_TICKS = Math.ceil((4 * 65_535) / TICK_MS) + 1;
-
-/** Interval of the renderer's status read while a game runs (as the viewport's, SPEC §6.4). */
-const STATUS_CHECK_MS = 1000;
 
 /** Diagnostics the page keeps for the probe; older ones give way. */
 const PAGE_DIAGNOSTICS = 200;
@@ -205,9 +202,8 @@ interface Instance {
     drawnKey: string | null;
     /** Runs the game's frames on demand; null under a scheduler the options gave. */
     demand: DemandScheduler | null;
-    /** Sprites the last frame submitted, and the renderer's status at the last read. */
-    drewSprites: number;
-    lastStatus: string | null;
+    /** Ends the subscription to the renderer's lifecycle; null before the first start. */
+    unsubscribe: (() => void) | null;
 }
 
 /** NGNE reports dropped ticks through the diagnostic callback; they are not errors. */
@@ -256,7 +252,6 @@ export class NgnePreview implements PreviewPort {
     #failures = 0;
     #disposal: Promise<void> | null = null;
     #resolveDisposal: (() => void) | null = null;
-    readonly #statusTimer: ReturnType<typeof setInterval>;
 
     constructor(host: HTMLElement, options: NgnePreviewOptions = {}) {
         this.#host = host;
@@ -268,7 +263,6 @@ export class NgnePreview implements PreviewPort {
             options.onDiagnostic?.(message, error);
         });
         this.probe = this.#createProbe();
-        this.#statusTimer = setInterval(() => this.#checkStatus(), STATUS_CHECK_MS);
     }
 
     setSize(size: { width: number; height: number } | null): void {
@@ -297,6 +291,8 @@ export class NgnePreview implements PreviewPort {
         this.#atlas = atlas;
         if (!atlas) {
             this.#floor = this.#serial + 1;
+            // Nothing is drawn from it any more: its texture goes (NGNE `releaseTexture`).
+            this.#instance?.queue?.release(PREVIEW_ATLAS_SLOT);
             this.#wake();
             return;
         }
@@ -341,24 +337,6 @@ export class NgnePreview implements PreviewPort {
             this.#ageMs += Math.max(now - last, 0) * this.#speed;
         }
         demand.skip(now);
-    }
-
-    /**
-     * NGNE signals neither a lost device nor its recovery: as the viewport does, the status
-     * and the sprite counter are read (no frame is drawn for it), and a renderer back to
-     * `ready`, or one whose sprites were zeroed after a frame that had some, draws again.
-     */
-    #checkStatus(): void {
-        const instance = this.#instance;
-        const renderer = instance?.game.renderer;
-        if (!instance?.running || !renderer) return;
-        const status = renderer.status;
-        const before = instance.lastStatus;
-        instance.lastStatus = status;
-        if (status !== "ready") return;
-        if (before !== "ready" || (instance.drewSprites > 0 && renderer.sprites === 0)) {
-            this.#wake();
-        }
     }
 
     setBackground(colour: number): void {
@@ -415,7 +393,6 @@ export class NgnePreview implements PreviewPort {
         if (!this.#disposal) {
             this.#disposed = true;
             clearTimeout(this.#retryTimer);
-            clearInterval(this.#statusTimer);
             this.#disposal = new Promise((resolve) => {
                 this.#resolveDisposal = resolve;
             });
@@ -523,10 +500,9 @@ export class NgnePreview implements PreviewPort {
                     if (instance) this.#check(instance);
                 });
             },
-            afterFrame: (stats) => {
+            afterFrame: () => {
                 page.frames++;
                 if (!instance || instance !== this.#instance) return;
-                instance.drewSprites = stats.sprites;
                 const { onFrame } = this.probe;
                 if (!onFrame) return;
                 try {
@@ -548,8 +524,7 @@ export class NgnePreview implements PreviewPort {
             drawn: null,
             drawnKey: null,
             demand,
-            drewSprites: 0,
-            lastStatus: null,
+            unsubscribe: null,
         };
         page.liveGames++;
         page.gamesCreated++;
@@ -576,6 +551,13 @@ export class NgnePreview implements PreviewPort {
             // The renderer exists once `start()` has resolved (SPEC §6.2 #14).
             const renderer = instance.game.renderer;
             if (!renderer) throw new Error("The preview's renderer is missing after start().");
+            // A device lost and recovered draws again; a failed renderer rebuilds the game.
+            // Called synchronously by NGNE: only requests here.
+            instance.unsubscribe = renderer.onLifecycle((event) => {
+                if (instance !== this.#instance) return;
+                if (event.status === "ready") this.#wake();
+                else if (event.status === "failed") queueMicrotask(() => this.#check(instance));
+            });
             instance.queue = new UploadQueue<AtlasTag>({
                 target: renderer,
                 // The new atlas is drawn at the next animation frame.
@@ -604,6 +586,7 @@ export class NgnePreview implements PreviewPort {
     async #end(instance: Instance): Promise<void> {
         if (this.#instance === instance) this.#instance = null;
         instance.running = false;
+        instance.unsubscribe?.();
         instance.queue?.dispose();
         try {
             await instance.game.dispose();

@@ -25,6 +25,7 @@ import {
     wheelBy,
     wheels,
 } from "./se-012-support";
+import { collapsePreview } from "./se-054-support";
 
 // SE-012: the viewport element — the focusable container of the NGNE canvas, the F6 target of
 // the viewport region, and the place of the pointer listeners. NGNE replaces its canvas at
@@ -245,7 +246,7 @@ test("the keymap takes the element for the viewport: its native keys reach canva
     expect(await calls()).toEqual(["native", "native"]);
 });
 
-test("focus and listeners stay on the element when NGNE replaces its canvas at a resize", async ({
+test("focus and listeners stay on the element when NGNE resizes its canvas, and when it replaces a failed one", async ({
     page,
 }) => {
     const errors = collectErrors(page);
@@ -274,8 +275,35 @@ test("focus and listeners stay on the element when NGNE replaces its canvas at a
             canvases: host?.querySelectorAll("canvas").length,
         };
     });
-    // A new NGNE canvas in the same element, which still has the focus.
-    expect(after).toEqual({ sameElement: true, sameCanvas: false, canvases: 1 });
+    // NGNE 0.3.0 resizes its canvas in place: the same canvas in the same element, which
+    // still has the focus.
+    expect(after).toEqual({ sameElement: true, sameCanvas: true, canvases: 1 });
+    await expect(area).toBeFocused();
+
+    // A renderer that fails (its device lost, none to be had for its recovery) is replaced
+    // on a new canvas in the same element, which keeps the focus. The preview panel is
+    // collapsed first: the device lost must be the viewport's (SE-054).
+    await collapsePreview(page);
+    await area.focus();
+    await page.evaluate(() => {
+        window.__se011.refuseDevices(1);
+        window.__se011.loseDevice();
+    });
+    await expect
+        .poll(() =>
+            area.evaluate((element) => {
+                const kept = window as unknown as { __se012Canvas: unknown };
+                const host = element.querySelector("[data-viewport-canvas]");
+                return host?.querySelector("canvas") === kept.__se012Canvas;
+            }),
+        )
+        .toBe(false);
+    await settle(page);
+    expect(
+        await area.evaluate(
+            (element) => element.querySelectorAll("[data-viewport-canvas] canvas").length,
+        ),
+    ).toBe(1);
     await expect(area).toBeFocused();
 
     // The wheel, the middle button and the keys still navigate.
@@ -301,7 +329,9 @@ test("focus and listeners stay on the element when NGNE replaces its canvas at a
     await page.keyboard.press("2");
     await viewAtScale(page, 2);
     await expect(area).toBeFocused();
-    expect(errors).toEqual([]);
+    // The failure, reported once.
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/WebGPU recovery failed/);
 });
 
 test("the viewport element leaves with the last document and comes back with the next", async ({

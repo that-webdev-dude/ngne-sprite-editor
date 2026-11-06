@@ -1,5 +1,9 @@
 import { Camera, Frame, WebGPURenderer } from "@ngne/core";
-import type { RendererResourceInspection, RendererStatus } from "@ngne/core";
+import type {
+    RendererLifecycleEvent,
+    RendererResourceInspection,
+    RendererStatus,
+} from "@ngne/core";
 import { bitmapFromPixels } from "../bitmaps";
 import { instanceDiagnostic } from "./diagnostics";
 import { QUAD_LAYER } from "./geometry";
@@ -9,8 +13,8 @@ import { ViewportSlots } from "./viewportSlots";
 import type { Scene } from "./viewportSlots";
 
 // One renderer of the viewport with everything that lives and dies with it (SPEC §6.4): its
-// own canvas element and its texture slots. The viewport replaces the whole instance when
-// the size changes or the renderer fails. What is uploaded where is decided by
+// own canvas element and its texture slots. The viewport replaces the whole instance only when
+// the renderer failed or an upload failed for good on it. What is uploaded where is decided by
 // `ViewportSlots`; this file is the part that needs NGNE and a canvas.
 
 /**
@@ -40,6 +44,11 @@ export interface InstanceHooks {
     onError(error: unknown): void;
     /** The instance can no longer show the scene in full: it asks to be replaced, once. */
     onStuck(instance: RendererInstance): void;
+    /**
+     * A transition of the renderer's presentation (NGNE `onLifecycle`): `recovering`, `ready`
+     * or `failed`. Called synchronously by NGNE: set flags, ask for a draw, nothing more.
+     */
+    onLifecycle(instance: RendererInstance, event: RendererLifecycleEvent): void;
     /** Test hook: when it returns a promise, the upload of `slot` starts after it. */
     gate(slot: string): Promise<void> | undefined;
     /** Makes the upload source of a reference at a size (SE-045, `ReferenceSources`). */
@@ -51,13 +60,10 @@ export class RendererInstance {
     readonly canvas: HTMLCanvasElement;
     readonly renderer: WebGPURenderer;
     readonly slots: ViewportSlots;
-    /** `renderer.sprites` after the last draw; NGNE zeroes the counter on device loss. */
-    drewSprites = 0;
-    /** The status seen at the last read, to notice the way back to `ready`. */
-    lastStatus: RendererStatus = "ready";
     readonly #scene: Scene;
     readonly #stage: Stage;
     readonly #hooks: InstanceHooks;
+    readonly #unsubscribe: () => void;
     #disposed = false;
 
     private constructor(
@@ -78,6 +84,7 @@ export class RendererInstance {
                     hooks.onTexture(id);
                     return renderer.texture(id, source, signal);
                 },
+                releaseTexture: (id) => renderer.releaseTexture(id),
             },
             bitmap: bitmapFromPixels,
             rendererFailed: () => renderer.status === "failed",
@@ -87,31 +94,45 @@ export class RendererInstance {
             gate: (slot) => hooks.gate(slot),
             referenceBitmap: (image, width, height) => hooks.referenceBitmap(image, width, height),
         });
+        // Future transitions only: the viewport reads `status` for the present one.
+        this.#unsubscribe = renderer.onLifecycle((event) => hooks.onLifecycle(this, event));
     }
 
     /**
      * Creates a renderer on a new canvas element of `size` device pixels. The canvas is not
-     * in the document: the viewport inserts it once it has drawn.
+     * in the document: the viewport inserts it once it has drawn. `signal` cancels the
+     * creation: NGNE rejects with its reason, and a renderer created by the time it aborts is
+     * disposed and the reason thrown all the same.
      */
     static async create(
         size: DeviceSize,
         scene: Scene,
         stage: Stage,
         hooks: InstanceHooks,
+        signal: AbortSignal,
     ): Promise<RendererInstance> {
         const canvas = document.createElement("canvas");
-        // Callers own the backing size; the renderer's logical size is fixed (SPEC §6.2 #1).
+        // Callers own the backing size; NGNE's creation leaves it to them.
         canvas.width = size.width;
         canvas.height = size.height;
-        // Fills the viewport element: one backing pixel per device pixel while the sizes
-        // match, stretched while a replacement for a new size is on its way.
+        // Fills the viewport element: one backing pixel per device pixel.
         canvas.style.cssText = "position:absolute;inset:0;display:block;width:100%;height:100%";
         // A renderer reports why it ended `failed` once it has; the viewport replaces it, so
         // that report is passed on as `RendererReplaced` (SE-071).
         const created: { renderer?: WebGPURenderer } = {};
-        const renderer = await WebGPURenderer.create(canvas, size.width, size.height, (error) =>
-            hooks.onError(instanceDiagnostic(error, created.renderer?.status)),
+        const renderer = await WebGPURenderer.create(
+            canvas,
+            size.width,
+            size.height,
+            (error) => hooks.onError(instanceDiagnostic(error, created.renderer?.status)),
+            signal,
         );
+        // NGNE's cancellation ends with the creation; one that comes after it is the
+        // viewport's to honour.
+        if (signal.aborted) {
+            renderer.dispose();
+            throw signal.reason;
+        }
         created.renderer = renderer;
         return new RendererInstance(canvas, renderer, scene, stage, hooks);
     }
@@ -151,8 +172,8 @@ export class RendererInstance {
         const { frame, camera } = this.#stage;
         frame.reset();
         frame.scene(camera, 1);
-        // The workspace as a rect, so that every frame has at least one sprite: the sprite
-        // counter then tells a device loss from a frame that had nothing to draw.
+        // The workspace as a rect: every frame has at least one sprite, so a frame NGNE
+        // submitted is told from one it skipped by the sprite counter.
         frame.rect(
             this.width / 2,
             this.height / 2,
@@ -164,14 +185,14 @@ export class RendererInstance {
         );
         for (const quad of this.slots.quads()) frame.sprite(quad);
         this.renderer.render(frame, scene.background);
-        this.drewSprites = this.renderer.sprites;
-        return this.drewSprites > 0;
+        return this.renderer.sprites > 0;
     }
 
     /** Ends the instance: uploads aborted, renderer disposed, canvas out of the document. */
     dispose(): void {
         if (this.#disposed) return;
         this.#disposed = true;
+        this.#unsubscribe();
         this.slots.dispose();
         try {
             this.renderer.dispose();
