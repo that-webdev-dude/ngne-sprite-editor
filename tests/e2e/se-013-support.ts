@@ -133,6 +133,8 @@ declare global {
     interface Window {
         __se013Samples?: CanvasSample[];
         __se013Sampling?: boolean;
+        /** Set by `stopSampling`: the next look is the last. */
+        __se013Stop?: (() => void) | undefined;
     }
 }
 
@@ -186,6 +188,13 @@ export function startSampling(page: Page, probe: { x: number; y: number }): Prom
                                 ? Array.from(context.getImageData(probe.x, probe.y, 1, 1).data)
                                 : [],
                     });
+                    const stop = window.__se013Stop;
+                    if (stop) {
+                        window.__se013Sampling = false;
+                        observer.disconnect();
+                        stop();
+                        return;
+                    }
                     // The observer reports the element's size after the first look's frame.
                     if (device[0] > 0) resolve();
                     requestAnimationFrame(look);
@@ -196,10 +205,23 @@ export function startSampling(page: Page, probe: { x: number; y: number }): Prom
     );
 }
 
-/** Stops the looks of `startSampling` and returns them. */
+/**
+ * Stops the looks of `startSampling` and returns them, after one more look: the observer
+ * reports a size change after the animation frame's callbacks, so the size the caller waited
+ * for is recorded only by the look of the next frame.
+ */
 export function stopSampling(page: Page): Promise<CanvasSample[]> {
-    return page.evaluate(() => {
-        window.__se013Sampling = false;
-        return window.__se013Samples ?? [];
-    });
+    return page.evaluate(
+        () =>
+            new Promise<CanvasSample[]>((resolve) => {
+                if (!window.__se013Sampling) {
+                    resolve(window.__se013Samples ?? []);
+                    return;
+                }
+                window.__se013Stop = () => {
+                    window.__se013Stop = undefined;
+                    resolve(window.__se013Samples ?? []);
+                };
+            }),
+    );
 }

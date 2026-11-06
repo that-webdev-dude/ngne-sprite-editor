@@ -354,19 +354,30 @@ export function gridTests(ratio: number): void {
             // (1 device pixel left of the document), read together.
             await startSampling(page, { x: view.originX - 1, y: view.originY + 1 });
             await page.setViewportSize({ width: 1400, height: 800 });
-            await settle(page);
+            // The shell may lay out again a frame or more after the resize (the rail can
+            // change columns), so the sampling goes on until two reads of the element's size
+            // agree.
+            let after = await hostDeviceSize(page);
+            for (;;) {
+                await settle(page);
+                const now = await hostDeviceSize(page);
+                if (now.width === after.width && now.height === after.height) break;
+                after = now;
+            }
             const samples = await stopSampling(page);
-            const after = await hostDeviceSize(page);
             expect(after).not.toEqual(before);
 
             // NGNE 0.3.0 resizes its canvas in the observer task that reports the element's
             // new size, so no frame shows it stretched: in every frame its backing size is the
             // element's device size, the old one before the resize and the new one after.
+            const hosts = [...new Set(samples.map((sample) => sample.host.join()))].join(" → ");
             expect(
                 samples.some((sample) => sample.host.join() === `${before.width},${before.height}`),
+                `before ${before.width},${before.height}; sampled ${hosts}`,
             ).toBe(true);
             expect(
                 samples.some((sample) => sample.host.join() === `${after.width},${after.height}`),
+                `after ${after.width},${after.height}; sampled ${hosts}`,
             ).toBe(true);
             // In every frame the overlay had the backing size of the NGNE canvas on screen,
             // filled its box, and showed the outline where NGNE's canvas has the document's
