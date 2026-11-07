@@ -24,7 +24,7 @@ export function openRecentId(entry: Pick<RecentEntry, "key">): string {
 }
 
 /** How many files the list keeps; an older one makes way for a newer one. */
-export const RECENT_FILES_LIMIT = 10;
+export const RECENT_FILES_LIMIT = 5;
 
 /** One file of the list. */
 export interface RecentEntry {

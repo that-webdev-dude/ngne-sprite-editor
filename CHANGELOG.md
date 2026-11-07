@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Open Recent keeps up to 5 project files (was 10). A longer list kept by an earlier version
+  is cut to the 5 newest when it loads.
+- The user guide places the shortcut sheet in the Edit menu (it said View).
+
 ## 1.0.1 – 2026-11-06
 
 ### Engine: `@ngne/core` 0.3.0
