@@ -45,8 +45,8 @@
    recovery snapshot when a PWA update is reloaded.
 
 Multiple documents live in tabs, each with its own undo history and view. Open Recent lists
-up to ten project handles when File System Access is available. Ctrl+K opens the command
-palette; the shortcut sheet is in View. See [the shortcut specification](SPEC.md#78-keyboard)
+up to five project handles when File System Access is available. Ctrl+K opens the command
+palette; the shortcut sheet is in Edit. See [the shortcut specification](SPEC.md#78-keyboard)
 for the complete map.
 
 ## Import and quantize

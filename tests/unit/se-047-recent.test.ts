@@ -138,6 +138,34 @@ describe("the list", () => {
         expect(new Set(keys).size).toBe(keys.length);
     });
 
+    it("keeps five files: a longer stored list loads cut to five, and a new file drops the oldest", async () => {
+        expect(RECENT_FILES_LIMIT).toBe(5);
+        const disk = new MemoryDisk();
+        const storage = memoryStorage();
+        // Ten files kept by an earlier version, newest first.
+        storage.saved = Array.from({ length: 10 }, (_, index) => ({ file: `f${index}.ngsprite` }));
+        const recent = recentOver(storage, disk);
+        await recent.load();
+        expect(names(recent)).toEqual([
+            "f0.ngsprite",
+            "f1.ngsprite",
+            "f2.ngsprite",
+            "f3.ngsprite",
+            "f4.ngsprite",
+        ]);
+
+        await recent.add(diskHandle(disk, "new.ngsprite"));
+        const expected = [
+            "new.ngsprite",
+            "f0.ngsprite",
+            "f1.ngsprite",
+            "f2.ngsprite",
+            "f3.ngsprite",
+        ];
+        expect(names(recent)).toEqual(expected);
+        expect(storage.saved).toEqual(expected.map((file) => ({ file })));
+    });
+
     it("lists only handles that can be kept; removes an entry and empties the list", async () => {
         const disk = new MemoryDisk();
         const storage = memoryStorage();

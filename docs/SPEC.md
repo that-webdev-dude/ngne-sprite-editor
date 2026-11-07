@@ -2076,7 +2076,7 @@ Export is accepted only when all three hold (SE-053):
     unsaved changes; closing the last tab shows the empty state. After Delete the focus goes
     to the tab in the closed one's place (or the one before it), or with no tab left to the
     empty state's first action.
-- Recent files (SE-047): up to 10 project files, opened or saved with File System Access,
+- Recent files (SE-047): up to 5 project files, opened or saved with File System Access,
   newest first; a file listed already moves up. They are kept as their handles in IndexedDB
   (database `ngne-sprite-editor-recent`), best effort as the export folders (§9.6), and shown
   on the empty state (DESIGN §6) and in File → Open Recent, which ends with Clear Recent
