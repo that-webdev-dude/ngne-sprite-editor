@@ -95,4 +95,6 @@ PR review/merge, creating and pushing `v1.0.0`, and deployment/site verification
 triggers the Pages workflow; branch pushes do not deploy. The native PWA check remains for
 the owner to perform personally using the [manual steps](docs/audit/pwa.md#manual-install-owner-to-do).
 
-Licensed under [MIT](LICENSE).
+Licensed under [MIT](LICENSE). Code ported from Aseprite's MIT-licensed document library and
+from pixman is listed with its notices in [third-party notices](THIRD_PARTY_NOTICES.md). This
+project is not affiliated with or endorsed by Aseprite or Igara Studio S.A.

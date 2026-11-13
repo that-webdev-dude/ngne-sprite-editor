@@ -20,6 +20,8 @@
 // - The opacity of a cel in a composite is `MUL_UN8(cel opacity, layer opacity)` (Aseprite's
 //   renderer); the layers are blended bottom to top over a transparent canvas.
 //
+// Both sources are MIT-licensed; their notices are in THIRD_PARTY_NOTICES.md.
+//
 // C semantics kept: `int` arithmetic with shifts that keep the sign, integer division that
 // truncates toward zero, `uint8_t` conversion modulo 256, `int(double)` truncation.
 //

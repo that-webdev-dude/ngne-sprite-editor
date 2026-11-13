@@ -2,7 +2,8 @@ import type { BlendMode } from "../model";
 
 // Blend functions of the compositor (SPEC §5.3): straight-alpha RGBA8, integer math, after
 // the formulas of Aseprite (`rgba_blender_normal` and pixman's `MUL_UN8`). The normal blend
-// first; the other modes (SE-061) after it.
+// first; the other modes (SE-061) after it. Ported from MIT-licensed code of Aseprite and
+// pixman; their notices are in THIRD_PARTY_NOTICES.md.
 //
 // One pixel of the normal blend. B is the backdrop (Br, Bg, Bb, Ba), S the source
 // (Sr, Sg, Sb, Sa), o the opacity and R the result; every value is an integer 0..255.

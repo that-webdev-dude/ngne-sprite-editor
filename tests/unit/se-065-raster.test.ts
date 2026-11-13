@@ -110,6 +110,7 @@ function transparent(width: number, height: number): [PixelBuffer, PixelBuffer] 
 /**
  * Aseprite's `algo_spline` (src/doc/algo.cpp, after Allegro's `calc_spline`), ported line by
  * line: the samples it joins with lines. A reference to compare with, not the editor's code.
+ * `algo.cpp` is MIT-licensed; its notice is in THIRD_PARTY_NOTICES.md.
  */
 function asepriteSpline(points: readonly PixelPoint[]): PixelPoint[] {
     const [{ x: x0, y: y0 }, { x: x1, y: y1 }, { x: x2, y: y2 }, { x: x3, y: y3 }] = points;
