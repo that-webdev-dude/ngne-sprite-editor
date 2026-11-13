@@ -7,8 +7,10 @@ and the one check that needs a person: installing it and seeing it open in a win
 
 - `vite build` (vite.config.ts) adds, through `vite-plugin-pwa` 2.0.0 (`injectManifest`):
   - `manifest.webmanifest`, linked from `index.html`: name "NGNE Sprite Editor", short name
-    "NGNE Sprites", `display: standalone`, `id`/`start_url`/`scope` "./" (relative, so the app
-    works at any Vite `base`), `theme_color` `--bg-panel` and `background_color`
+    "NGNE Sprites", `display: standalone`, `id` "/ngne-sprite-editor/" (a relative `id` resolves
+    against the origin, so "./" would give the app the same identity as the tilemap editor on
+    the same GitHub Pages origin), `start_url`/`scope` "./" (relative, so the app works at any
+    Vite `base`), `theme_color` `--bg-panel` and `background_color`
     `--bg-workspace` of the default theme (read from `src/ui/styles/tokens.css`), icons 192 and
     512 px in "any" and "maskable" versions, a file handler for `.ngsprite`, and
     `launch_handler: focus-existing` (a file opened while the app runs opens in a tab of that

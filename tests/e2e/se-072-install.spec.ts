@@ -94,6 +94,10 @@ test("the production build is installable: Chrome fires beforeinstallprompt", as
             installabilityErrors: unknown[];
         };
         expect(installabilityErrors).toEqual([]);
+        // The app's identity is its own, not the origin's root: another app on the same origin
+        // (the tilemap editor on GitHub Pages) installs beside it.
+        const { appId } = (await cdp.send("Page.getAppId")) as { appId?: string };
+        expect(appId).toBe(new URL("/ngne-sprite-editor/", served.url).href);
         // Chrome's parser drops a malformed member (`file_handlers`, `launch_handler`) with an
         // error and installs the app all the same: the manifest parses without any.
         const answer = (await cdp.send("Page.getAppManifest", {})) as AppManifestAnswer;
@@ -132,7 +136,7 @@ test("the manifest names the app, opens it standalone, has its icons and its fil
     const manifestUrl = new URL(href!, served.url).href;
     const manifest = (await (await request.get(manifestUrl)).json()) as WebManifest;
     expect(manifest).toMatchObject({
-        id: "./",
+        id: "/ngne-sprite-editor/",
         name: "NGNE Sprite Editor",
         short_name: "NGNE Sprites",
         start_url: "./",
