@@ -1,7 +1,17 @@
 import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import type { PluginOption } from "vite";
+import type { Plugin, PluginOption } from "vite";
+import {
+    LICENCES_FILE,
+    LicenceError,
+    buildLicencesFile,
+    packageDirsOf,
+    runtimePackageDirs,
+    strayPackages,
+} from "./scripts/licences.ts";
 
 // SE-072: the PWA build plugin (vite-plugin-pwa, a development dependency). Its declarations
 // do not compile under this project's `skipLibCheck: false`: they import the types of an
@@ -55,9 +65,91 @@ const icons = readdirSync(new URL("public/icons/", import.meta.url))
         ];
     });
 
+const ROOT = fileURLToPath(new URL(".", import.meta.url));
+const TITLE = "NGNE Sprite Editor";
+
+/** The ids of the modules the build's chunks render, the web workers' included. */
+const bundledModules = new Set<string>();
+
+/** An output of a build, as far as `noteModules` reads it. */
+type BundleOutput =
+    { type: "chunk"; modules: Record<string, { renderedLength: number }> } | { type: "asset" };
+
+/** Notes the modules of every chunk of `bundle` that renders code. */
+function noteModules(bundle: Record<string, BundleOutput>): void {
+    for (const output of Object.values(bundle)) {
+        if (output.type !== "chunk") continue;
+        for (const [id, module] of Object.entries(output.modules)) {
+            if (module.renderedLength > 0) bundledModules.add(id);
+        }
+    }
+}
+
+/** Notes the modules of a web worker's build; the workers are built before the app's chunks. */
+function collectModules(): Plugin {
+    return {
+        name: "ngne-licences-collect",
+        apply: "build",
+        generateBundle: (_options, bundle) => noteModules(bundle),
+    };
+}
+
+/**
+ * The open-source licences file (scripts/licences.ts): `licences.txt` beside `index.html`,
+ * with the licence of every package whose code the build bundled, each of them a runtime
+ * dependency of package-lock.json. The development server answers the same address with the
+ * runtime dependencies' licences. A package without an allowed licence fails the build.
+ */
+function licencesFile(): Plugin {
+    const runtime = () =>
+        runtimePackageDirs(readFileSync(join(ROOT, "package-lock.json"), "utf8"), ROOT);
+    return {
+        name: "ngne-licences",
+        configureServer(server) {
+            server.middlewares.use((request, response, next) => {
+                const path = (request.url ?? "").split("?")[0];
+                if (path !== `${server.config.base}${LICENCES_FILE}`) return next();
+                try {
+                    const text = buildLicencesFile(ROOT, runtime(), TITLE);
+                    response.setHeader("Content-Type", "text/plain; charset=utf-8");
+                    response.end(text);
+                } catch (error) {
+                    next(error);
+                }
+            });
+        },
+        generateBundle: {
+            order: "post",
+            handler(_options, bundle) {
+                noteModules(bundle);
+                const dirs = packageDirsOf(bundledModules);
+                const strays = strayPackages(dirs, runtime());
+                if (strays.length > 0) {
+                    this.error(
+                        "The build bundles code of packages that are not runtime dependencies " +
+                            `in package-lock.json: ${strays.join(", ")}.`,
+                    );
+                }
+                try {
+                    this.emitFile({
+                        type: "asset",
+                        fileName: LICENCES_FILE,
+                        source: buildLicencesFile(ROOT, dirs, TITLE),
+                    });
+                } catch (error) {
+                    if (error instanceof LicenceError) this.error(error.message);
+                    throw error;
+                }
+            },
+        },
+    };
+}
+
 export default defineConfig(({ command }) => ({
     plugins: [
         react(),
+        // The open-source licences of what the build ships (licences.txt).
+        licencesFile(),
         // The colour of the browser's chrome around the page, as the installed window's.
         {
             name: "ngne-theme-color",
@@ -82,8 +174,9 @@ export default defineConfig(({ command }) => ({
             // The icons are among the files the patterns find.
             includeManifestIcons: false,
             injectManifest: {
-                // The whole build: the shell, every chunk, both web workers, the icons.
-                globPatterns: ["**/*.{html,js,css,png,webmanifest}"],
+                // The whole build: the shell, every chunk, both web workers, the icons and the
+                // licences file.
+                globPatterns: ["**/*.{html,js,css,png,webmanifest,txt}"],
                 // The main chunk holds NGNE and React; a build with the development test hooks
                 // (tests/e2e/se-072-support.ts) is several times larger.
                 maximumFileSizeToCacheInBytes: 32 * 1024 * 1024,
@@ -118,5 +211,13 @@ export default defineConfig(({ command }) => ({
         // Whether this is a build with the service worker beside it (src/main.tsx).
         "import.meta.env.SERVICE_WORKER": JSON.stringify(command === "build"),
     },
+    resolve: {
+        // gifenc's `main` and `browser` fields name its CommonJS build, which the bundler
+        // keeps whole, its colour quantizer included; its ES module build lets the bundler
+        // keep only the encoder that core/gif uses.
+        alias: [{ find: /^gifenc$/, replacement: "gifenc/dist/gifenc.esm.js" }],
+    },
+    // The web workers' builds note their modules for the licences file.
+    worker: { plugins: () => [collectModules()] },
     build: { target: "es2022" },
 }));

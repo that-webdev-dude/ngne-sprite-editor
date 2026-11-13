@@ -2,6 +2,7 @@
 // Zingl ("A Rasterizing Algorithm for Drawing Curves", 2012). The line runs from the first
 // point to the last, both included; each pixel after the first is one of the 8 neighbours of
 // the one before it, so a line has no gap. Integer arithmetic only.
+// Ported from Alois Zingl's MIT-licensed `bresenham.c`; its notice is in THIRD_PARTY_NOTICES.md.
 
 /** A pixel position: whole numbers, which may lie outside any image. */
 export interface PixelPoint {

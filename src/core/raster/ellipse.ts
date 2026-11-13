@@ -9,6 +9,8 @@
 // The filled ellipse is every pixel between a row's outline pixels: the same pixels as the
 // ellipse mask of the selection (`core/selection`, `ellipseRows`, SE-030), so the ellipse tool
 // and the elliptical marquee cover one shape. SE-015's circle brush keeps its own code.
+//
+// Ported from Alois Zingl's MIT-licensed `bresenham.c`; its notice is in THIRD_PARTY_NOTICES.md.
 
 import type { PixelPoint } from "./line";
 

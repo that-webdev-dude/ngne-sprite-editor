@@ -5,6 +5,12 @@
 - Open Recent keeps up to 5 project files (was 10). A longer list kept by an earlier version
   is cut to the 5 newest when it loads.
 - The user guide places the shortcut sheet in the Edit menu (it said View).
+- The build ships `licences.txt`: this project's licence, the third-party notices and the
+  licence of every bundled npm package. View → Open Source Licences opens it, offline too.
+- `THIRD_PARTY_NOTICES.md` adds the MIT notice of Alois Zingl's Bresenham algorithms (lines,
+  ellipses, the circle brush, the elliptical marquee) and corrects how Aseprite's licences are
+  described.
+- The bundle no longer includes gifenc's colour quantizer, which the GIF export never used.
 
 ## 1.0.1 – 2026-11-06
 

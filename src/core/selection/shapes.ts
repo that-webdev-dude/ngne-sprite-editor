@@ -35,7 +35,8 @@ export function rectMask(width: number, height: number, rect: Rect): BitMask {
  * `plotEllipseRect` ("A Rasterizing Algorithm for Drawing Curves", 2012) for the corners
  * (0, 0) and (w − 1, h − 1), with every pixel between the outline's two pixels of a row: the
  * shape of SE-015's circle brush for a square, here for any rectangle. Every value stays below
- * 2^53 up to `MAX_ELLIPSE_SIDE`, so the doubles hold them exactly.
+ * 2^53 up to `MAX_ELLIPSE_SIDE`, so the doubles hold them exactly. Ported from Alois Zingl's
+ * MIT-licensed `bresenham.c`; its notice is in THIRD_PARTY_NOTICES.md.
  */
 export function ellipseRows(w: number, h: number): { starts: Int32Array; ends: Int32Array } {
     const starts = new Int32Array(h).fill(w);
