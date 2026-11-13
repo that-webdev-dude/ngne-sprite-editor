@@ -41,7 +41,8 @@ function circleRows(size: number): { starts: Int32Array; ends: Int32Array } {
         ends[y] = Math.max(ends[y], x + 1);
     };
     // Zingl's `plotEllipseRect` for the rectangle (0, 0)–(size - 1, size - 1). Every value
-    // stays below 2^53, so the doubles hold them exactly.
+    // stays below 2^53, so the doubles hold them exactly. Ported from Alois Zingl's
+    // MIT-licensed `bresenham.c`; its notice is in THIRD_PARTY_NOTICES.md.
     let x0 = 0;
     let x1 = size - 1;
     let a = size - 1;

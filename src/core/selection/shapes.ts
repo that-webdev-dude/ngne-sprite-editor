@@ -35,7 +35,8 @@ export function rectMask(width: number, height: number, rect: Rect): BitMask {
  * `plotEllipseRect` ("A Rasterizing Algorithm for Drawing Curves", 2012) for the corners
  * (0, 0) and (w − 1, h − 1), with every pixel between the outline's two pixels of a row: the
  * shape of SE-015's circle brush for a square, here for any rectangle. Every value stays below
- * 2^53 up to `MAX_ELLIPSE_SIDE`, so the doubles hold them exactly.
+ * 2^53 up to `MAX_ELLIPSE_SIDE`, so the doubles hold them exactly. Ported from Alois Zingl's
+ * MIT-licensed `bresenham.c`; its notice is in THIRD_PARTY_NOTICES.md.
  */
 export function ellipseRows(w: number, h: number): { starts: Int32Array; ends: Int32Array } {
     const starts = new Int32Array(h).fill(w);
@@ -135,24 +136,38 @@ export function forEachLinePixelOn(
     height: number,
     visit: (x: number, y: number) => void,
 ): number {
-    const dx = Math.abs(x1 - x0);
-    const dy = Math.abs(y1 - y0);
-    const sx = x0 < x1 ? 1 : -1;
-    const sy = y0 < y1 ? 1 : -1;
-    const xMajor = dx >= dy;
-    const major = xMajor ? dx : dy;
-    const minor = xMajor ? dy : dx;
-    // The steps whose major coordinate lies on the canvas.
-    const start = xMajor ? x0 : y0;
-    const sign = xMajor ? sx : sy;
-    const extent = xMajor ? width : height;
-    const first = Math.max(0, sign > 0 ? -start : start - (extent - 1));
-    const last = Math.min(major, sign > 0 ? extent - 1 - start : start);
+    if (Math.abs(x1 - x0) >= Math.abs(y1 - y0)) {
+        return walkLineOn(x0, y0, x1, y1, width, height, visit);
+    }
+    // A steep line: walked with the axes exchanged, its pixels exchanged back.
+    return walkLineOn(y0, x0, y1, x1, height, width, (b, a) => visit(a, b));
+}
+
+/**
+ * `forEachLinePixelOn` for a line whose major axis is the first coordinate `a` (|a1 − a0| ≥
+ * |b1 − b0|) on a canvas `aSize` × `bSize`: one step per `a`, only the steps whose `a` lies on
+ * the canvas.
+ */
+function walkLineOn(
+    a0: number,
+    b0: number,
+    a1: number,
+    b1: number,
+    aSize: number,
+    bSize: number,
+    visit: (a: number, b: number) => void,
+): number {
+    const major = Math.abs(a1 - a0);
+    const minor = Math.abs(b1 - b0);
+    const sa = a0 < a1 ? 1 : -1;
+    const sb = b0 < b1 ? 1 : -1;
+    const first = Math.max(0, sa > 0 ? -a0 : a0 - (aSize - 1));
+    const last = Math.min(major, sa > 0 ? aSize - 1 - a0 : a0);
     for (let k = first; k <= last; k++) {
         const along = major === 0 ? 0 : Math.floor((2 * minor * k + major) / (2 * major));
-        const x = xMajor ? x0 + sx * k : x0 + sx * along;
-        const y = xMajor ? y0 + sy * along : y0 + sy * k;
-        if (x >= 0 && y >= 0 && x < width && y < height) visit(x, y);
+        const a = a0 + sa * k;
+        const b = b0 + sb * along;
+        if (a >= 0 && b >= 0 && a < aSize && b < bSize) visit(a, b);
     }
     return Math.max(0, last - first + 1);
 }
