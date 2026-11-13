@@ -99,5 +99,5 @@ Licensed under [MIT](LICENSE). Code ported from Aseprite's MIT-licensed document
 from pixman and from Alois Zingl's Bresenham algorithms is listed with its notices in
 [third-party notices](THIRD_PARTY_NOTICES.md). The build writes `licences.txt` beside
 `index.html`: this project's licence, those notices and the licence of every npm package the
-build bundles. The app opens it from View → Open Source Licences. This project is not
+build bundles. The app shows it in a dialog (View → Open Source Licences…). This project is not
 affiliated with or endorsed by Aseprite or Igara Studio S.A.

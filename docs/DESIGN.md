@@ -498,6 +498,7 @@ transient tool feedback in `--warn`.
 | Recovery        | Dialog on launch | Recoverable documents with name, time, thumbnail; Recover / Discard     |
 | Preferences     | Dialog   | Theme, checkerboard, grid, onion skin defaults, import defaults, autosave. A change applies at once; actions are Restore defaults and Close |
 | Shortcut sheet  | Dialog   | Generated from the command registry, grouped by menu; commands outside the menus under "Other" |
+| Open Source Licences | Large dialog | View → Open Source Licences…, the last item of the View menu. The text of `licences.txt` (SPEC §4) in a monospaced block that keeps its line breaks and scrolls; Close. When the file cannot be read, a line saying so with a link to its address. A dialog, not a tab: a tab the page opens holds the editor's heap |
 | WebGPU required | Full window | What is missing, supported browsers, how to enable acceleration              |
 
 Only actions that undo cannot reverse confirm once: closing or replacing an unsaved document,

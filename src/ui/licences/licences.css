@@ -1,0 +1,18 @@
+/* The licences text keeps the file's own line breaks; DESIGN §3.2 has no monospaced face, so
+   the system's is used. The text scrolls in its own box, which fits the dialog at the smallest
+   window (720 px high), so the whole box is always in view. */
+.licences__text {
+    max-height: 60vh;
+    margin: 0;
+    overflow: auto;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: var(--font-size-label);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--text);
+}
+
+.licences__missing {
+    margin: 0;
+}

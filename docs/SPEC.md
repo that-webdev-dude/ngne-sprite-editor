@@ -144,7 +144,7 @@ document library, pixman and Alois Zingl's Bresenham algorithms) and the licence
 npm package whose code the build bundles. The build fails when a bundled package is not a
 runtime dependency in `package-lock.json`, has no licence text, or has a licence other than
 MIT, ISC, 0BSD, BSD-2-Clause, BSD-3-Clause or Apache-2.0. The service worker precaches the
-file, and View → Open Source Licences (no key, also in the command palette) opens it. `gifenc`
+file, and View → Open Source Licences… (no key, also in the command palette) shows it in a dialog. `gifenc`
 resolves to its ES module build, so its unused quantizer is not bundled.
 
 ## 5. Architecture

@@ -3,8 +3,8 @@
 Parts of this repository are ported from third-party source code. Each part and its licence
 is listed below. Runtime dependencies installed through npm carry their own licences in
 `node_modules`; the build writes this file, the program's licence and the licence of every
-npm package it bundles to `licences.txt`, which the app opens from View → Open Source
-Licences.
+npm package it bundles to `licences.txt`, which the app shows in a dialog (View → Open Source
+Licences…).
 
 NGNE Sprite Editor is not affiliated with or endorsed by Aseprite or Igara Studio S.A.
 "Aseprite" is used only to name the program whose file formats and behaviour this editor

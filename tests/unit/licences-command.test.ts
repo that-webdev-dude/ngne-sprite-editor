@@ -3,11 +3,15 @@ import { appCommands } from "../../src/app/commands/appCommands";
 import { buildMenu } from "../../src/app/commands/menuModel";
 import type { MenuNode } from "../../src/app/commands/menuModel";
 import { LICENCES_COMMAND } from "../../src/app/licences/licences.commands";
-import { LICENCES_PATH, openLicences } from "../../src/app/licences/openLicences";
-import type { LicencesHost, LicencesTab } from "../../src/app/licences/openLicences";
+import {
+    LICENCES_PATH,
+    createLicencesDialogs,
+    openLicences,
+} from "../../src/app/licences/openLicences";
+import type { LicencesHost } from "../../src/app/licences/openLicences";
 
 // The Open Source Licences command (src/app/licences): where it is, and how it shows the
-// licences file the build writes.
+// licences file the build writes, in a dialog of the app.
 
 /** The ids of a menu's commands, with "---" for a separator. */
 function outline(nodes: readonly MenuNode[]): string[] {
@@ -15,28 +19,19 @@ function outline(nodes: readonly MenuNode[]): string[] {
 }
 
 /** A host that records what the command does; `text` is what the fetch gives. */
-function fakeHost(
-    text: string | null,
-    tab: LicencesTab | null = { location: { href: "" }, opener: {} },
-) {
+function fakeHost(text: string | null) {
     const log: string[] = [];
     const host: LicencesHost = {
         baseUrl: "https://example.test/sub/path/index.html?x=1",
-        openTab: () => {
-            log.push("open");
-            return tab;
-        },
         fetchText: async (url) => {
             log.push(`fetch ${url}`);
             return text;
         },
-        textUrl: (value) => {
-            log.push(`text ${value}`);
-            return "blob:https://example.test/1";
+        show: async (shown, address) => {
+            log.push(`show ${JSON.stringify(shown)} ${address}`);
         },
-        releaseLater: (url) => void log.push(`release ${url}`),
     };
-    return { host, log, tab };
+    return { host, log };
 }
 
 describe("the Open Source Licences command", () => {
@@ -48,7 +43,7 @@ describe("the Open Source Licences command", () => {
             shortcuts: [],
             source: "../licences/licences.commands.ts",
         });
-        expect(command?.title()).toBe("Open Source Licences");
+        expect(command?.title()).toBe("Open Source Licences…");
         // Always available: it needs no document.
         expect(command?.enabled()).toBe(true);
         expect(outline(buildMenu(appCommands.list(), ["View"])).slice(-2)).toEqual([
@@ -59,32 +54,45 @@ describe("the Open Source Licences command", () => {
 });
 
 describe("openLicences", () => {
-    it("opens a tab first, then shows the fetched file there as plain text", async () => {
-        const { host, log, tab } = fakeHost("Licences\n");
-        expect(await openLicences(host)).toBe(true);
-        // The tab before any wait, so the browser counts it as the user's.
+    it("fetches the file beside the app and shows its text in the dialog", async () => {
+        const { host, log } = fakeHost("Licences\n");
+        await openLicences(host);
         expect(log).toEqual([
-            "open",
             "fetch https://example.test/sub/path/licences.txt",
-            "text Licences\n",
-            "release blob:https://example.test/1",
+            'show "Licences\\n" https://example.test/sub/path/licences.txt',
         ]);
-        expect(tab?.location.href).toBe("blob:https://example.test/1");
-        // The file has no access to the editor's window.
-        expect(tab?.opener).toBeNull();
         expect(LICENCES_PATH).toBe("licences.txt");
     });
 
-    it("sends the tab to the file's address when the file cannot be fetched", async () => {
-        const { host, log, tab } = fakeHost(null);
-        expect(await openLicences(host)).toBe(true);
-        expect(log).toEqual(["open", "fetch https://example.test/sub/path/licences.txt"]);
-        expect(tab?.location.href).toBe("https://example.test/sub/path/licences.txt");
+    it("shows that the file could not be read, with its address, when the fetch fails", async () => {
+        const { host, log } = fakeHost(null);
+        await openLicences(host);
+        expect(log).toEqual([
+            "fetch https://example.test/sub/path/licences.txt",
+            "show null https://example.test/sub/path/licences.txt",
+        ]);
+    });
+});
+
+describe("the licences dialog", () => {
+    it("asks for a dialog of kind licences and resolves with null once it is closed", async () => {
+        const dialogs = createLicencesDialogs();
+        dialogs.attachHost();
+        const shown = dialogs.show({ text: "Licences\n", address: "https://example.test/l" });
+        const request = dialogs.store.getState().request;
+        expect(request).toMatchObject({
+            kind: "licences",
+            text: "Licences\n",
+            address: "https://example.test/l",
+        });
+        request?.answer(null);
+        await expect(shown).resolves.toBeNull();
+        expect(dialogs.store.getState().request).toBeNull();
     });
 
-    it("does nothing more when the browser refuses the tab", async () => {
-        const { host, log } = fakeHost("Licences\n", null);
-        expect(await openLicences(host)).toBe(false);
-        expect(log).toEqual(["open"]);
+    it("is answered with null at once while no host shows it", async () => {
+        const dialogs = createLicencesDialogs();
+        await expect(dialogs.show({ text: "x", address: "y" })).resolves.toBeNull();
+        expect(dialogs.store.getState().request).toBeNull();
     });
 });

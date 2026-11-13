@@ -8,7 +8,7 @@ export const LICENCES_COMMAND = "app.licences";
 export const commands: CommandSpec[] = [
     {
         id: LICENCES_COMMAND,
-        title: "Open Source Licences",
+        title: "Open Source Licences…",
         menuPath: ["View"],
         menuOrder: 700,
         run: async () => {
