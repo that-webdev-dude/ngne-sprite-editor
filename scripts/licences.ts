@@ -57,16 +57,15 @@ export interface PackageLicence {
  * of a package is that copy.
  */
 export function packageDirOf(moduleId: string): string | null {
-    const path = moduleId
-        .replace(/^\0/, "")
-        .replace(/[?#].*$/, "")
-        .replace(/\\/g, "/");
+    const id = moduleId.startsWith("\0") ? moduleId.slice(1) : moduleId;
+    const query = id.search(/[?#]/);
+    const path = (query < 0 ? id : id.slice(0, query)).replaceAll("\\", "/");
     const marker = "/node_modules/";
     const at = path.lastIndexOf(marker);
     if (at < 0) return null;
     const rest = path.slice(at + marker.length).split("/");
     const parts = rest[0]?.startsWith("@") ? rest.slice(0, 2) : rest.slice(0, 1);
-    if (parts.length === 0 || parts.some((part) => part === "")) return null;
+    if (parts.length === 0 || parts.includes("")) return null;
     return `${path.slice(0, at + marker.length)}${parts.join("/")}`;
 }
 
@@ -99,30 +98,63 @@ export function licenceAllowed(
         .replace(/^\((.*)\)$/, "$1")
         .trim();
     if (bare === "") return false;
-    const alternatives = bare.split(/\s+OR\s+/);
-    if (alternatives.length > 1) return alternatives.some((part) => licenceAllowed(part, allowed));
-    const parts = bare.split(/\s+AND\s+/);
+    const tokens = bare.split(/\s+/);
+    const alternatives = splitOn(tokens, "OR");
+    if (alternatives.length > 1) {
+        // An operator at an end or two in a row leave an empty operand: not an expression.
+        if (alternatives.includes("")) return false;
+        return alternatives.some((part) => licenceAllowed(part, allowed));
+    }
+    const parts = splitOn(tokens, "AND");
     if (parts.length > 1) return parts.every((part) => licenceAllowed(part, allowed));
     return allowed.includes(bare);
 }
 
-/** The licence of a `package.json`: `license`, or the older `licenses` list. */
-function licenceOf(manifest: Record<string, unknown>): string | null {
-    const { license, licenses } = manifest;
-    if (typeof license === "string") return license;
-    if (license && typeof license === "object" && "type" in license) {
-        return String((license as { type: unknown }).type);
+/** The operands of `operator` among `tokens`, each joined back with single spaces. */
+function splitOn(tokens: readonly string[], operator: string): string[] {
+    const operands: string[] = [];
+    let current: string[] = [];
+    for (const token of tokens) {
+        if (token === operator) {
+            operands.push(current.join(" "));
+            current = [];
+        } else {
+            current.push(token);
+        }
     }
-    if (Array.isArray(licenses) && licenses.length > 0) {
-        return licenses
-            .map((entry: unknown) =>
-                entry && typeof entry === "object" && "type" in entry
-                    ? String((entry as { type: unknown }).type)
-                    : String(entry),
-            )
-            .join(" OR ");
+    operands.push(current.join(" "));
+    return operands;
+}
+
+/** An SPDX identifier as `package.json` gives one: a string, or an object with a string `type`. */
+function spdxOf(value: unknown): string | null {
+    if (typeof value === "string") return value;
+    if (value && typeof value === "object" && "type" in value && typeof value.type === "string") {
+        return value.type;
     }
     return null;
+}
+
+/**
+ * The licence of a `package.json`: `license`, or the older `licenses` list (its entries as
+ * alternatives). Null when neither states one, or when an entry of the list is no identifier.
+ */
+function licenceOf(manifest: Record<string, unknown>): string | null {
+    const { license, licenses } = manifest;
+    const single = spdxOf(license);
+    if (single !== null) return single;
+    if (Array.isArray(licenses) && licenses.length > 0) {
+        const entries = licenses.map(spdxOf);
+        if (entries.includes(null)) return null;
+        return entries.join(" OR ");
+    }
+    return null;
+}
+
+/** Orders strings by UTF-16 code unit, as `Array.prototype.sort` does by default. */
+function byCodeUnit(a: string, b: string): number {
+    if (a === b) return 0;
+    return a < b ? -1 : 1;
 }
 
 /** The file of scripts/licence-texts/ that stands in for a package's missing licence file. */
@@ -144,8 +176,9 @@ export function readPackageLicence(
         string,
         unknown
     >;
-    const name = String(manifest.name ?? nameFromDir(dir.replace(/\\/g, "/")));
-    const version = String(manifest.version ?? "");
+    const name =
+        typeof manifest.name === "string" ? manifest.name : nameFromDir(dir.replaceAll("\\", "/"));
+    const version = typeof manifest.version === "string" ? manifest.version : "";
     const licence = licenceOf(manifest);
     if (licence === null) {
         throw new LicenceError(`${name}@${version} states no licence in its package.json.`);
@@ -158,7 +191,7 @@ export function readPackageLicence(
     let texts: LicenceText[] = readdirSync(dir, { withFileTypes: true })
         .filter((entry) => entry.isFile() && LICENCE_FILE_NAME.test(entry.name))
         .map((entry) => entry.name)
-        .sort()
+        .sort(byCodeUnit)
         .map((file) => ({ file, text: normalise(readFileSync(join(dir, file), "utf8")) }));
     if (texts.length === 0) {
         const fallback = join(fallbackDir, fallbackFileOf(name));
@@ -204,7 +237,7 @@ export function runtimePackageDirs(lockText: string, root: string): string[] {
     const dirs: string[] = [];
     for (const [path, entry] of Object.entries(lock.packages)) {
         if (path === "" || entry.dev || !path.includes("node_modules/")) continue;
-        const dir = `${root.replace(/\\/g, "/").replace(/\/$/, "")}/${path}`;
+        const dir = `${root.replaceAll("\\", "/").replace(/\/$/, "")}/${path}`;
         if (typesOnly(dir)) continue;
         dirs.push(dir);
     }
@@ -213,7 +246,7 @@ export function runtimePackageDirs(lockText: string, root: string): string[] {
 
 /** A package's place under the project: "node_modules/a" or "node_modules/a/node_modules/b". */
 function packageKey(dir: string): string {
-    const path = dir.replace(/\\/g, "/");
+    const path = dir.replaceAll("\\", "/");
     return path.slice(path.indexOf("/node_modules/") + 1);
 }
 

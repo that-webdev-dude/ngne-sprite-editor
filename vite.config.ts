@@ -36,7 +36,7 @@ const { VitePWA } = (await import(PWA_PLUGIN)) as {
 function tokenColour(name: string): string {
     const css = readFileSync(new URL("src/ui/styles/tokens.css", import.meta.url), "utf8");
     const root = /:root\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
-    const value = new RegExp(`${name}:\\s*(#[0-9a-f]{6})\\s*;`).exec(root)?.[1];
+    const value = new RegExp(String.raw`${name}:\s*(#[0-9a-f]{6})\s*;`).exec(root)?.[1];
     if (!value) throw new Error(`vite.config: no colour token ${name}`);
     return value;
 }
@@ -50,7 +50,8 @@ const colours = {
 
 /** The icons scripts/icons.ts draws: public/icons/{icon,maskable}-<size>.png. */
 const icons = readdirSync(new URL("public/icons/", import.meta.url))
-    .sort()
+    // By code unit, as the default sort: the order does not depend on the machine's locale.
+    .sort((a, b) => Number(a > b) - Number(a < b))
     .flatMap((file) => {
         const match = /^(icon|maskable)-(\d+)\.png$/.exec(file);
         if (!match) return [];

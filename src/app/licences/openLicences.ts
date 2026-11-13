@@ -49,7 +49,9 @@ function browserHost(): LicencesHost {
         },
         textUrl: (text) =>
             URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" })),
-        releaseLater: (url) => void setTimeout(() => URL.revokeObjectURL(url), RELEASE_AFTER_MS),
+        releaseLater: (url) => {
+            setTimeout(() => URL.revokeObjectURL(url), RELEASE_AFTER_MS);
+        },
     };
 }
 

@@ -53,6 +53,8 @@ export function forEachLinePixel(
 /** The pixels of the line from `from` to `to`, in order, both ends included. */
 export function linePixels(from: PixelPoint, to: PixelPoint): PixelPoint[] {
     const pixels: PixelPoint[] = [];
-    forEachLinePixel(from.x, from.y, to.x, to.y, (x, y) => void pixels.push({ x, y }));
+    forEachLinePixel(from.x, from.y, to.x, to.y, (x, y) => {
+        pixels.push({ x, y });
+    });
     return pixels;
 }
