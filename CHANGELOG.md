@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- `THIRD_PARTY_NOTICES.md` gives the upstream version of every ported part and adds Allegro's
+  giftware licence, which covers the spline Aseprite's `algo_spline` adapts.
+- The build fails when gifenc's colour quantizer is bundled again.
+- The exported `<name>.sprites.ts` and `<name>.preview.config.mjs` carry the 0BSD licence in their
+  head.
+
 ## 1.0.2 – 2026-11-13
 
 - Open Recent keeps up to 5 project files (was 10). A longer list kept by an earlier version

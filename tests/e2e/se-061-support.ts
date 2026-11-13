@@ -15,7 +15,8 @@ import { propertiesPopover, runCommands } from "./se-022-support";
 
 // Shared helpers of the SE-061 specs: the two popovers, the blend mode of a layer, and the
 // images a blend of two opaque images must give, computed here from the published formulas
-// (Aseprite's `blend_funcs.cpp`; SE-061), not by the editor.
+// (Aseprite's `blend_funcs.cpp`; SE-061), not by the editor. Ported from MIT-licensed code of
+// Aseprite and pixman; their notices are in THIRD_PARTY_NOTICES.md.
 
 export const VIEW = { scale: 8, originX: 64, originY: 40 };
 export const WIDTH = 5;

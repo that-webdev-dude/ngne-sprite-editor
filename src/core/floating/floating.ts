@@ -551,7 +551,7 @@ export class FloatingSelection {
 
     /**
      * Discards the float's content (Delete and Cut while pixels float, SPEC §7.2), as
-     * Aseprite's `PixelsMovement::discardImage` does: the image keeps what lies under the
+     * Aseprite's Delete and Cut do: the image keeps what lies under the
      * float — the place a lift took the pixels from transparent, the place they float over as
      * it was before them — and nothing is selected (a whole cel lifted leaves the selection
      * alone). Committed as one history entry labelled `label`, or none when nothing changed

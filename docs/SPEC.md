@@ -145,7 +145,7 @@ npm package whose code the build bundles. The build fails when a bundled package
 runtime dependency in `package-lock.json`, has no licence text, or has a licence other than
 MIT, ISC, 0BSD, BSD-2-Clause, BSD-3-Clause or Apache-2.0. The service worker precaches the
 file, and View → Open Source Licences… (no key, also in the command palette) shows it in a dialog. `gifenc`
-resolves to its ES module build, so its unused quantizer is not bundled.
+resolves to its ES module build, so its unused quantizer is not bundled; the build fails if it is.
 
 ## 5. Architecture
 
@@ -1058,8 +1058,8 @@ Selection tools (SE-031):
   Mode, Contiguous (on), Sample (Active layer by default, or Composite), Tolerance (0–255, 0).
   The wand passes no selection to the flood fill (`within`): its area is found in the whole
   image, contiguous or not, and the mode decides what the selection keeps of it — Intersect
-  keeps the part inside the selection. Aseprite's wand does the same: its selection inks fill
-  with no mask (`ToolLoopImpl` sets `m_useMask` false for them; checked in its source).
+  keeps the part inside the selection. Aseprite's wand does the same: it finds its area in the
+  whole image whatever is selected, and Intersect keeps the part inside the selection.
 - Live preview: while a gesture is in progress the overlay shows the pixels it would select as
   the ants show a selection, standing still (DESIGN §6): a marquee's shape from the first move
   off the pressed pixel, the lasso's polygon so far, the polygon lasso's polygon through its
@@ -1256,8 +1256,7 @@ Move, floating selection and clipboard (SE-032):
   selected pixels take the foreground colour, replaced, not blended) act on the selection, each
   one undo step that records nothing when it changes nothing; Delete on an empty cel creates
   none. While pixels float, Fill applies them first; Delete and Cut act on the float instead, as
-  Aseprite does (checked in its source: `MovingPixelsState::onBeforeCommandExecution`,
-  `PixelsMovement::discardImage`): Delete discards the floating pixels, Cut copies them (the
+  Aseprite does: Delete discards the floating pixels, Cut copies them (the
   floating content, whole) and discards them. The image keeps what lies under the float — where
   a lift took the pixels from, transparent; where they float, as it was before them — and
   nothing is selected, in one step labelled Delete or Cut that records nothing when the
@@ -1286,8 +1285,8 @@ Transforms (SE-033):
 - Flip Horizontal, Flip Vertical, Rotate 90° CW, Rotate 90° CCW and Rotate 180° (Edit menu; §7.8
   gives them no key): while pixels float they act on the float; with a selection they lift
   it into a float of the Move tool first and leave it floating, as Aseprite's Flip and Rotate
-  with a selection start its selection transformation (checked in its source: `FlipCommand`,
-  `RotateCommand`, `Editor::startSelectionTransformation`); with no selection they turn the
+  do with a selection (the pixels float, under the Move tool, until they are applied); with no
+  selection they turn the
   whole cel about the canvas's centre and apply it at once, one step named after the command,
   clipped to the canvas (a quarter turn of a cel that is not square loses what leaves it); an
   empty cel has nothing to turn. They permute the source exactly: a flip mirrors it and negates
@@ -1720,6 +1719,10 @@ runs collapse, edges trimmed). An empty result becomes `sprite`. Only the letter
 lowercased (no Unicode case mapping), the slug is cut to 64 characters, and a slug that is a
 device name of Windows (`con`, `nul`, `com1`, …) gets `-sprite` appended, since no file can
 have such a name there.
+
+The two code files, `<name>.sprites.ts` and `<name>.preview.config.mjs`, start with the 0BSD
+licence, its full text (`core/export/generatedLicence.ts`), so a game can ship them without
+carrying a notice. They hold no third-party code.
 
 ### 9.2 `ngne-sprite-atlas` version 1
 
