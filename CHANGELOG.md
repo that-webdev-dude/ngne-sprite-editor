@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.2 – 2026-11-13
 
 - Open Recent keeps up to 5 project files (was 10). A longer list kept by an earlier version
   is cut to the 5 newest when it loads.
