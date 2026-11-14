@@ -30,9 +30,9 @@ export interface ClosingPopover<Draft> {
  * idle, as the panel draws a change (`useShownTimeline`).
  *
  * But what the next key or press acts on follows at once (DESIGN §5.6). In the commit that
- * closes it the popover stops being modal by hand: the page's `aria-hidden` and `inert` marks
- * and the body's `pointer-events` lock that Radix set are taken off, and the focused field of
- * the popover lets go of the focus. Before the next key or press is handled (a capturing
+ * closes it the popover stops being modal by hand: the focused field of the popover lets go of
+ * the focus, then the page's `aria-hidden` and `inert` marks and the body's `pointer-events`
+ * lock that Radix set are taken off. Before the next key or press is handled (a capturing
  * listener on the window), or with the unmount, the content becomes `inert` and no longer an
  * open dialog for the keymap, and the focus goes back to the element that had it when the
  * popover opened, or to `fallback` when that is gone (a menu item). Radix's own clean-up at the
@@ -74,19 +74,24 @@ export function useClosingPopover<Draft>(
     // popover. Only what a press needs at once is done here (each change restyles the page,
     // and in the step's microtasks that costs the canvas its frame, measured in the review);
     // the rest waits for the next key or press, or for the unmount (`finish`).
+    // The field lets go of the focus first (issue #2): `blur()` brings the style up to date
+    // at once, and after the lift that meant restyling the whole page inside the step's task,
+    // ahead of the upload the canvas waits for. Before the lift it restyles what the commit
+    // changed only, and the page's restyle is left to the frame's rendering, which overlaps
+    // the GPU's work on the upload.
     const finishRef = useRef<(() => void) | null>(null);
     useLayoutEffect(() => {
         if (closed === null) return;
+        const content = contentRef.current;
+        const focused = document.activeElement;
+        // The next key goes to the page, not to a field of the closed popover.
+        if (focused instanceof HTMLElement && content?.contains(focused)) focused.blur();
         for (const node of document.querySelectorAll<HTMLElement>(`[${HIDDEN_MARK}]`)) {
             node.removeAttribute("aria-hidden");
             node.removeAttribute(HIDDEN_MARK);
             node.inert = false;
         }
         document.body.style.pointerEvents = "";
-        const content = contentRef.current;
-        const focused = document.activeElement;
-        // The next key goes to the page, not to a field of the closed popover.
-        if (focused instanceof HTMLElement && content?.contains(focused)) focused.blur();
         const target = returnToRef.current;
         returnToRef.current = null;
         const events = ["keydown", "pointerdown", "mousedown"] as const;
@@ -96,7 +101,7 @@ export function useClosingPopover<Draft>(
             for (const type of events) window.removeEventListener(type, finish, true);
             if (content) {
                 // No more an open dialog for the keymap (`OVERLAY_SELECTOR`), nor a target.
-                content.setAttribute("data-state", "closed");
+                content.dataset.state = "closed";
                 const layer = content.closest<HTMLElement>("[data-radix-popper-content-wrapper]");
                 (layer ?? content).inert = true;
             }

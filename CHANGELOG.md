@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Closing the layer or cel properties popover does less work in the step that applies it,
+  so the viewport shows the change about a millisecond sooner
+  ([issue #2](https://github.com/that-webdev-dude/ngne-sprite-editor/issues/2)). Keys and
+  presses still act on the page at once after the close.
 - An edit, an undo or a redo reaches the canvas sooner: the status bar, the palette header and
   the Commands button are no longer drawn again after every change of the document, only when
   what they show changes, and the preview panel no longer after every repack.
