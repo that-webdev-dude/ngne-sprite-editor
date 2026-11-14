@@ -80,8 +80,8 @@ The owner will perform it personally. Once, on Windows 11 with Chrome:
 3. Install: the install icon at the right of the address bar (or ⋮ → Cast, save and share →
    Install page as app…) → Install.
 4. Expected: the editor opens in a window of its own, without tabs or address bar, its title
-   bar in the panel colour, the app's "N" icon in the taskbar; Start menu lists "NGNE Sprite
-   Editor".
+   bar in the panel colour, the app's sprite icon (a pixel-art creature) in the taskbar; Start
+   menu lists "NGNE Sprite Editor".
 5. Optional, file handling: right-click a `.ngsprite` file in Explorer → Open with → NGNE
    Sprite Editor (Chrome asks once to allow it). Expected: the document opens in a tab.
 6. Optional, offline: stop the preview server, close and start the installed app again.
