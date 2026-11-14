@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The app icon shows a pixel-art sprite, a creature with two eyes and two legs, instead of an
+  "N". It keeps the same colours and frame, and matches the NGNE Tilemap Editor's tile-grid
+  icon.
 - A document tab shows its project file's name, without `.ngsprite`, once the document has a
   file, so Save As renames the tab. A document never saved keeps its sprite name. The tab's
   tooltip names the file and the sprite; the overflow menu uses the same labels. The sprite

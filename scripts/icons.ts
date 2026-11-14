@@ -21,7 +21,7 @@ export type Rgb = readonly [number, number, number];
 /** The value of a colour token in the default (dark) set of tokens.css, as `#rrggbb`. */
 export function tokenColour(name: string, css = readFileSync(TOKENS_FILE, "utf8")): string {
     const root = /:root\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
-    const value = new RegExp(`${name}:\\s*(#[0-9a-f]{6})\\s*;`).exec(root)?.[1];
+    const value = new RegExp(String.raw`${name}:\s*(#[0-9a-f]{6})\s*;`).exec(root)?.[1];
     if (!value) throw new Error(`icons: no colour token ${name} in tokens.css`);
     return value;
 }
@@ -42,8 +42,12 @@ export function pwaColours(css?: string) {
     };
 }
 
-/** The mark: a pixel-art "N" of 7 × 7 cells. */
-const MARK = ["X.....X", "XX....X", "X.X...X", "X..X..X", "X...X.X", "X....XX", "X.....X"];
+/**
+ * The mark: a pixel-art sprite of 7 × 7 cells, a creature with two 2 × 2 eyes and two legs. It
+ * pairs with the tilemap editor's 2 × 2 tile grid: the same grid, colour and weight, and its eye
+ * row is the tile grid's lower row.
+ */
+export const MARK = [".XXXXX.", "XXXXXXX", "X..X..X", "X..X..X", "XXXXXXX", "XXXXXXX", "XX...XX"];
 
 export interface IconSpec {
     /** File name in public/icons. */
@@ -68,10 +72,16 @@ export const ICONS: readonly IconSpec[] = [
 export function drawIcon(spec: IconSpec, css?: string): Uint8Array {
     const colours = pwaColours(css);
     const { size, purpose } = spec;
-    const back = rgb(purpose === "any" ? colours.theme : colours.background);
-    const mark = rgb(colours.accent);
     const data = new Uint8Array(size * size * 4);
-    const radius = purpose === "any" ? Math.round(size * 0.18) : 0;
+    const back = rgb(purpose === "any" ? colours.theme : colours.background);
+    fillRoundedSquare(data, size, purpose === "any" ? Math.round(size * 0.18) : 0, back);
+    const cell = Math.floor((size * (purpose === "any" ? 0.6 : 0.5)) / MARK.length);
+    drawMark(data, size, cell, rgb(colours.accent));
+    return data;
+}
+
+/** Fills the square of `size` with `colour`, leaving transparent the corners outside `radius`. */
+function fillRoundedSquare(data: Uint8Array, size: number, radius: number, colour: Rgb): void {
     const inside = (x: number, y: number) => {
         // Distance of the pixel's centre from the nearest corner circle's centre.
         const cx = Math.min(Math.max(x + 0.5, radius), size - radius);
@@ -80,23 +90,36 @@ export function drawIcon(spec: IconSpec, css?: string): Uint8Array {
     };
     for (let y = 0; y < size; y++) {
         for (let x = 0; x < size; x++) {
-            if (!inside(x, y)) continue;
-            data.set([...back, 255], (y * size + x) * 4);
+            if (inside(x, y)) data.set([...colour, 255], (y * size + x) * 4);
         }
     }
-    const cells = MARK.length;
-    const cell = Math.floor((size * (purpose === "any" ? 0.6 : 0.5)) / cells);
-    const origin = Math.floor((size - cell * cells) / 2);
+}
+
+/** Draws the mark centred in the square of `size`, each of its cells `cell` pixels wide. */
+function drawMark(data: Uint8Array, size: number, cell: number, colour: Rgb): void {
+    const origin = Math.floor((size - cell * MARK.length) / 2);
     for (const [row, line] of MARK.entries()) {
         for (const [column, char] of [...line].entries()) {
-            if (char !== "X") continue;
-            for (let y = 0; y < cell; y++) {
-                const at = ((origin + row * cell + y) * size + origin + column * cell) * 4;
-                for (let x = 0; x < cell; x++) data.set([...mark, 255], at + x * 4);
+            if (char === "X") {
+                fillBlock(data, size, origin + column * cell, origin + row * cell, cell, colour);
             }
         }
     }
-    return data;
+}
+
+/** Fills the `side` × `side` block whose top-left pixel is (`left`, `top`) with `colour`. */
+function fillBlock(
+    data: Uint8Array,
+    size: number,
+    left: number,
+    top: number,
+    side: number,
+    colour: Rgb,
+): void {
+    for (let y = 0; y < side; y++) {
+        const at = ((top + y) * size + left) * 4;
+        for (let x = 0; x < side; x++) data.set([...colour, 255], at + x * 4);
+    }
 }
 
 /** The PNG file of one icon. */
