@@ -501,8 +501,8 @@ describe("copy, delete and fill of the selected pixels", () => {
     });
 });
 
-// SE-032 review (H): Delete and Cut while pixels float discard them, as Aseprite's
-// `PixelsMovement::discardImage` does: the image keeps what lies under the float and nothing
+// SE-032 review (H): Delete and Cut while pixels float discard them, as Aseprite's Delete and
+// Cut do: the image keeps what lies under the float and nothing
 // is selected, in one step, or none when the document is as it was before the float.
 describe("discard (Delete and Cut while floating)", () => {
     it("keeps what lies under the float: the lifted place transparent, the place it floats over as it was; nothing selected; one step that undoes and redoes exactly", () => {

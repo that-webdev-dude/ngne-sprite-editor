@@ -17,10 +17,8 @@ import { takeTransformDraft } from "./transformDraft";
 //
 //   pixels float          → the float is transformed in place, still floating
 //   a selection, no float → its pixels are lifted, the Move tool selected, and the float
-//                           transformed: it floats on, as Aseprite's Flip and Rotate with a
-//                           selection start its selection transformation (checked in its source:
-//                           `FlipCommand`, `RotateCommand` → `startFlipTransformation`,
-//                           `startSelectionTransformation`); Enter applies it as one step
+//                           transformed: it floats on, as Aseprite's Flip and Rotate do with a
+//                           selection; Enter applies it as one step
 //   no selection          → the whole cel is transformed about the canvas's centre and applied
 //                           at once, one step labelled with the command (clipped to the canvas)
 //

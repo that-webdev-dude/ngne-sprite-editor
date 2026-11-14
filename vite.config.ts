@@ -8,6 +8,7 @@ import {
     LICENCES_FILE,
     LicenceError,
     buildLicencesFile,
+    excludedCodeIn,
     packageDirsOf,
     runtimePackageDirs,
     strayPackages,
@@ -72,9 +73,39 @@ const TITLE = "NGNE Sprite Editor";
 /** The ids of the modules the build's chunks render, the web workers' included. */
 const bundledModules = new Set<string>();
 
-/** An output of a build, as far as `noteModules` reads it. */
+/** An output of a build, as far as `noteModules` and `rejectExcluded` read it. */
 type BundleOutput =
-    { type: "chunk"; modules: Record<string, { renderedLength: number }> } | { type: "asset" };
+    | {
+          type: "chunk";
+          fileName: string;
+          code: string;
+          modules: Record<string, { renderedLength: number }>;
+      }
+    | { type: "asset"; fileName: string; source: string | Uint8Array };
+
+/**
+ * Fails the build when a JavaScript file of `bundle` holds code the build must leave out
+ * (`EXCLUDED_CODE` of scripts/licences.ts), such as gifenc's quantizer without the alias below.
+ */
+function rejectExcluded(
+    bundle: Record<string, BundleOutput>,
+    fail: (message: string) => never,
+): void {
+    for (const output of Object.values(bundle)) {
+        const code =
+            output.type === "chunk"
+                ? output.code
+                : output.fileName.endsWith(".js") && typeof output.source === "string"
+                  ? output.source
+                  : "";
+        const found = excludedCodeIn(code);
+        if (found.length > 0) {
+            fail(
+                `The build bundles code it must leave out, in ${output.fileName}: ${found.join("; ")}.`,
+            );
+        }
+    }
+}
 
 /** Notes the modules of every chunk of `bundle` that renders code. */
 function noteModules(bundle: Record<string, BundleOutput>): void {
@@ -91,7 +122,10 @@ function collectModules(): Plugin {
     return {
         name: "ngne-licences-collect",
         apply: "build",
-        generateBundle: (_options, bundle) => noteModules(bundle),
+        generateBundle(_options, bundle) {
+            noteModules(bundle);
+            rejectExcluded(bundle, (message) => this.error(message));
+        },
     };
 }
 
@@ -123,6 +157,7 @@ function licencesFile(): Plugin {
             order: "post",
             handler(_options, bundle) {
                 noteModules(bundle);
+                rejectExcluded(bundle, (message) => this.error(message));
                 const dirs = packageDirsOf(bundledModules);
                 const strays = strayPackages(dirs, runtime());
                 if (strays.length > 0) {
@@ -220,7 +255,8 @@ export default defineConfig(({ command }) => ({
     resolve: {
         // gifenc's `main` and `browser` fields name its CommonJS build, which the bundler
         // keeps whole, its colour quantizer included; its ES module build lets the bundler
-        // keep only the encoder that core/gif uses.
+        // keep only the encoder that core/gif uses. The build fails if the quantizer comes back
+        // (`rejectExcluded`).
         alias: [{ find: /^gifenc$/, replacement: "gifenc/dist/gifenc.esm.js" }],
     },
     // The web workers' builds note their modules for the licences file.

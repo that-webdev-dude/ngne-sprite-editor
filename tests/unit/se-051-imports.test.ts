@@ -37,6 +37,7 @@ describe("core/export imports", () => {
             "bundle.ts",
             "errors.ts",
             "exportPlan.ts",
+            "generatedLicence.ts",
             "index.ts",
             "names.ts",
             "pack.ts",

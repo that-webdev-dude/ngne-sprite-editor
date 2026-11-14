@@ -337,3 +337,38 @@ export function buildLicencesFile(root: string, dirs: readonly string[], title: 
         packages: dirs.map((dir) => readPackageLicence(dir, fallbackDir)),
     });
 }
+
+/**
+ * Code of a bundled package that the build must leave out: the program does not use it, and
+ * the package credits it to a source of its own. Each is found in the built JavaScript by
+ * string literals that survive minification.
+ */
+export interface ExcludedCode {
+    /** What the code is, as the build's error names it. */
+    what: string;
+    /** Patterns any of which, found in a built file, means the code is there. */
+    markers: readonly RegExp[];
+}
+
+/** The code the build must not ship (vite.config.ts fails the build when it finds it). */
+export const EXCLUDED_CODE: readonly ExcludedCode[] = [
+    {
+        // vite.config.ts aliases `gifenc` to its ES module build so that only the encoder is
+        // bundled. The colour formats are string literals of `src/pnnquant2.js` and
+        // `src/palettize.js` only, not of the encoder's modules.
+        what:
+            "gifenc's colour quantizer (src/pnnquant2.js, credited as based on a port of PnnQuant.js) " +
+            "or its palette functions (src/palettize.js)",
+        markers: [/["'`](?:rgb565|rgb444|rgba4444)["'`]/],
+    },
+];
+
+/** What of `EXCLUDED_CODE` the JavaScript `code` holds, each once. */
+export function excludedCodeIn(
+    code: string,
+    excluded: readonly ExcludedCode[] = EXCLUDED_CODE,
+): string[] {
+    return excluded
+        .filter(({ markers }) => markers.some((marker) => marker.test(code)))
+        .map(({ what }) => what);
+}
