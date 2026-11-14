@@ -139,6 +139,12 @@ function sameList(a: readonly string[], b: readonly string[]): boolean {
     return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
+/** Whether two statuses show the same: the same kind and, where there is one, message. */
+function sameStatus(a: PreviewStatus, b: PreviewStatus): boolean {
+    const message = (status: PreviewStatus) => ("message" in status ? status.message : null);
+    return a.kind === b.kind && message(a) === message(b);
+}
+
 /** A pack whose composites are being read, a slice per task. */
 interface Job {
     generation: number;
@@ -202,7 +208,9 @@ export function connectPreview(port: PreviewPort, sources: PreviewSources): Prev
     let disposed = false;
 
     const setStatus = (status: PreviewStatus) => {
-        state.setState({ status });
+        // An equal status keeps its object, so the panel does not render again after every
+        // pack of an edited document (each one ends "ready").
+        if (!sameStatus(status, state.getState().status)) state.setState({ status });
         applyRunning();
     };
 

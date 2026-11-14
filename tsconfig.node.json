@@ -4,6 +4,6 @@
         "types": ["node"],
         "allowImportingTsExtensions": true
     },
-    "include": ["*.config.ts", "tests", "src/raw.d.ts", "src/gifenc.d.ts"],
+    "include": ["*.config.ts", "tests", "src/raw.d.ts", "src/gifenc.d.ts", "src/import-meta.d.ts"],
     "exclude": ["tests/e2e/harness", "tests/fixtures"]
 }

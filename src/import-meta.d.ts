@@ -1,6 +1,6 @@
 // `types: []` leaves out Vite's client declarations; the parts of `import.meta` the app uses are
-// declared here. The app program includes this file through `src`. A module that is also
-// compiled outside it (imported by a unit test) adds `import type {} from ".../import-meta"`.
+// declared here. The app program includes this file through `src`, the tests' program
+// (tsconfig.node.json) by name, so a module the unit tests import needs no import of it.
 declare global {
     interface ImportMetaEnv {
         readonly DEV: boolean;

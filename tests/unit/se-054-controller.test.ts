@@ -241,6 +241,34 @@ describe("connectPreview: packing", () => {
         expect(first).not.toBe(second);
     });
 
+    it("a pack that ends as the one before keeps the status object, so the panel does not render again", async () => {
+        const { sessions, packer, timers, state } = setup();
+        const session = sprite("hero");
+        const document = sessions.getState().open(session);
+        timers.run();
+        await packer.answer(packed());
+        const ready = state.getState().status;
+        expect(ready).toEqual({ kind: "ready" });
+        const statuses: unknown[] = [];
+        const stop = state.subscribe((next, previous) => {
+            if (next.status !== previous.status) statuses.push(next.status);
+        });
+
+        paint(document, session.activeFrameId, 0xff0000ff);
+        timers.run();
+        await packer.answer(packed());
+        expect(packer.requests).toHaveLength(2);
+        expect(state.getState().status).toBe(ready);
+        expect(statuses).toEqual([]);
+
+        // A status that differs is still published.
+        paint(document, session.activeFrameId, 0x00ff00ff);
+        timers.run();
+        await packer.answer({ kind: "failed", message: "broken" });
+        expect(statuses).toEqual([{ kind: "error", message: "broken" }]);
+        stop();
+    });
+
     it("a change of the frame list sends every frame again", async () => {
         const { sessions, packer, timers } = setup();
         const session = sprite("hero");

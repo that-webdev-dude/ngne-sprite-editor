@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- An edit, an undo or a redo reaches the canvas sooner: the status bar, the palette header and
+  the Commands button are no longer drawn again after every change of the document, only when
+  what they show changes, and the preview panel no longer after every repack.
 - A document opened while the app starts, from a file launch for example, starts centred in
   the viewport. It could start a few pixels to the right of centre when it opened before the
   tool rail had switched to two columns.
