@@ -1,42 +1,45 @@
 import { ChevronDown, X } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
-import { isDirty, sessionsStore, useSessions } from "../../app/state/sessions";
+import { fileWorkflows } from "../../app/file/workflows";
+import { sessionsStore } from "../../app/state/sessions";
+import { documentTabs, subscribeDocumentTabs } from "../../app/tabs/tabLabel";
+import type { TabInfo } from "../../app/tabs/tabLabel";
 import { activateDocument, closeDocument, moveDocument } from "../../app/tabs/tabs";
 import { Icon } from "../primitives/Icon";
 import { Tooltip } from "../primitives/Tooltip";
 import "./tabs.css";
 
 // The document tabs in the centre of the menu bar (DESIGN §2, SE-047): one tab per open
-// document, the active one selected, each with its name, the unsaved marker and a close
-// control. A press selects a tab and a drag along the strip reorders it; a middle click or the
-// close control closes it (asking first when it has unsaved changes). From the keyboard the
-// strip is one tab stop: the arrow keys, Home and End move between tabs, Enter or Space
-// selects one, Delete closes it and Ctrl+Shift+← / → move it. Tabs shrink to 96 px; past that
-// the strip scrolls and an overflow menu lists every document.
-
-/** What the strip shows of an open document. */
-interface TabInfo {
-    readonly id: string;
-    readonly name: string;
-    readonly dirty: boolean;
-}
+// document, the active one selected, each with its label (its file's name once it has a file,
+// its sprite name until then; `tabLabel.ts`), the unsaved marker and a close control. A press
+// selects a tab and a drag along the strip reorders it; a middle click or the close control
+// closes it (asking first when it has unsaved changes). From the keyboard the strip is one tab
+// stop: the arrow keys, Home and End move between tabs, Enter or Space selects one, Delete
+// closes it and Ctrl+Shift+← / → move it. Tabs shrink to 96 px; past that the strip scrolls
+// and an overflow menu lists every document.
 
 /** How far a press moves along the strip before it is a drag, in CSS pixels. */
 const DRAG_THRESHOLD = 4;
 
-/** The tabs and the active document; renders again only when one of them changes. */
+const subscribe = (listener: () => void) =>
+    subscribeDocumentTabs(sessionsStore, fileWorkflows, listener);
+const snapshot = () => {
+    const state = sessionsStore.getState();
+    return JSON.stringify([state.activeId, documentTabs(state, fileWorkflows)]);
+};
+
+/**
+ * The tabs and the active document; renders again only when one of them changes. The files of
+ * the documents are not in the session store, so the strip follows the file workflows too: a
+ * save names the tab after its file as soon as it is done.
+ */
 function useTabs(): { tabs: readonly TabInfo[]; activeId: string | null } {
-    const key = useSessions((state) =>
-        JSON.stringify([
-            state.activeId,
-            state.documents.map((entry) => [entry.id, entry.session.doc.name, isDirty(entry)]),
-        ]),
-    );
+    const key = useSyncExternalStore(subscribe, snapshot);
     return useMemo(() => {
-        const [activeId, rows] = JSON.parse(key) as [string | null, [string, string, boolean][]];
-        return { activeId, tabs: rows.map(([id, name, dirty]) => ({ id, name, dirty })) };
+        const [activeId, tabs] = JSON.parse(key) as [string | null, TabInfo[]];
+        return { activeId, tabs };
     }, [key]);
 }
 
@@ -126,28 +129,47 @@ export function DocumentTabs() {
         });
     };
 
+    /**
+     * Ctrl+Shift+← / →: moves the tab `id`, at `index`, one place (not past either end).
+     * Returns whether `key` was one of them.
+     */
+    const reorderKey = (key: string, id: string, index: number): boolean => {
+        if (key !== "ArrowLeft" && key !== "ArrowRight") return false;
+        const to = index + (key === "ArrowLeft" ? -1 : 1);
+        if (to >= 0 && to < tabs.length) {
+            refocus.current = id;
+            setFocusId(id);
+            moveDocument(id, to);
+        }
+        return true;
+    };
+
+    /** What a key without modifiers does on the tab `id`, at `index`; undefined: nothing. */
+    const plainKeyAction = (key: string, id: string, index: number) => {
+        const at = (offset: number) => tabs[(index + offset + tabs.length) % tabs.length]!.id;
+        const actions = new Map<string, () => void>([
+            ["ArrowLeft", () => focusTab(at(-1))],
+            ["ArrowRight", () => focusTab(at(1))],
+            ["Home", () => focusTab(tabs[0]!.id)],
+            ["End", () => focusTab(tabs.at(-1)!.id)],
+            ["Enter", () => activateDocument(id)],
+            [" ", () => activateDocument(id)],
+            ["Delete", () => void closeFocused(id)],
+        ]);
+        return actions.get(key);
+    };
+
     const onKeyDown = (event: KeyboardEvent<HTMLElement>, id: string) => {
         const index = tabs.findIndex((tab) => tab.id === id);
-        const at = (offset: number) => tabs[(index + offset + tabs.length) % tabs.length]!.id;
-        const plain = !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
-        const reorder = event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey;
-        let handled = true;
-        if (reorder && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
-            const to = index + (event.key === "ArrowLeft" ? -1 : 1);
-            if (to >= 0 && to < tabs.length) {
-                refocus.current = id;
-                setFocusId(id);
-                moveDocument(id, to);
-            }
-        } else if (!plain) {
-            handled = false;
-        } else if (event.key === "ArrowLeft") focusTab(at(-1));
-        else if (event.key === "ArrowRight") focusTab(at(1));
-        else if (event.key === "Home") focusTab(tabs[0]!.id);
-        else if (event.key === "End") focusTab(tabs[tabs.length - 1]!.id);
-        else if (event.key === "Enter" || event.key === " ") activateDocument(id);
-        else if (event.key === "Delete") void closeFocused(id);
-        else handled = false;
+        const { altKey, ctrlKey, metaKey, shiftKey } = event;
+        let handled = false;
+        if (ctrlKey && shiftKey && !altKey && !metaKey) {
+            handled = reorderKey(event.key, id, index);
+        } else if (!altKey && !ctrlKey && !metaKey && !shiftKey) {
+            const action = plainKeyAction(event.key, id, index);
+            action?.();
+            handled = action !== undefined;
+        }
         // Taken here: the keymap leaves a key whose default was prevented alone.
         if (handled) event.preventDefault();
     };
@@ -235,9 +257,9 @@ export function DocumentTabs() {
                                 <span
                                     className="document-tab__name"
                                     data-document-name={active ? "" : undefined}
-                                    title={tab.name}
+                                    title={tab.tooltip}
                                 >
-                                    {tab.name}
+                                    {tab.label}
                                 </span>
                                 {tab.dirty ? (
                                     <span
@@ -254,7 +276,7 @@ export function DocumentTabs() {
                             <span
                                 className="document-tab__close"
                                 aria-hidden="true"
-                                title={`Close ${tab.name}`}
+                                title={`Close ${tab.label}`}
                                 data-tab-close=""
                                 onClick={() => void closeDocument(tab.id)}
                             >
@@ -299,7 +321,9 @@ export function DocumentTabs() {
                                         value={tab.id}
                                         data-tab-item={tab.id}
                                     >
-                                        <span className="document-tabs__item-name">{tab.name}</span>
+                                        <span className="document-tabs__item-name">
+                                            {tab.label}
+                                        </span>
                                         {tab.dirty ? (
                                             <span className="ui-menu__shortcut">
                                                 Unsaved changes

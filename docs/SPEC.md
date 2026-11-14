@@ -2074,6 +2074,15 @@ Export is accepted only when all three hold (SE-053):
     reference sources in the session store; the palette's current swatch is remembered per
     document as well. Open, a drop, Open Recent and New Sprite add a tab after the others and
     make it the active one.
+  - A tab is named after the document's file, without the `.ngsprite` extension, once the
+    document has one (it was opened from it or last saved to it: Open, Save, Save As,
+    Revert; without File System Access the downloaded name), and after its sprite name until
+    then. Save As renames the tab as soon as the file is written, also when it gives the
+    document a new id; a cancelled picker or a failed write leaves it as it was. The tab's
+    tooltip names the file and the sprite (`hero-v2.ngsprite — sprite: hero`), or the sprite
+    alone without a file; the close control and the overflow menu use the tab's label. The
+    sprite name stays the export identity (§9): naming the tab after the file changes neither
+    it nor the file's contents, and renaming the sprite renames only a tab without a file.
   - A file open already in any tab, the same file of the disk (`isSameEntry` of the two
     handles) whatever the id of its document, selects that tab ("hero.ngsprite is open
     already"). Another file holding a document of an open id (a copy made outside the editor,

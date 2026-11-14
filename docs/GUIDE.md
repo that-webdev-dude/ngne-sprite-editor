@@ -44,7 +44,10 @@
    before leaving unsaved work. An edit within the two-second delay may not yet be in the
    recovery snapshot when a PWA update is reloaded.
 
-Multiple documents live in tabs, each with its own undo history and view. Open Recent lists
+Multiple documents live in tabs, each with its own undo history and view. A tab shows the
+name of the document's project file once it has one (after Open, Save or Save As), and its
+sprite name until then; its tooltip shows both. The sprite name, set in Sprite properties,
+is still the name exports use. Open Recent lists
 up to five project handles when File System Access is available. Ctrl+K opens the command
 palette; ? or **Help → Keyboard Shortcuts…** opens the shortcut sheet. See [the shortcut specification](SPEC.md#78-keyboard)
 for the complete map. **Help → About NGNE Sprite Editor…** shows the app and engine versions;
