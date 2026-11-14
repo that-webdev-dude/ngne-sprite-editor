@@ -474,7 +474,9 @@ View
 - A document whose view was never set is fitted (the largest zoom step at which it lies inside
   the viewport) and centred, in the step that opens it: the viewport region is measured while
   the shell is on the page. Without a size the fit waits for the first one. A view that was
-  set is never fitted again.
+  set is never fitted again. The region's first size is already the settled one: the tool
+  rail has its column count from the shell's first layout (DESIGN §5.1), so a document opened
+  while the app starts is fitted to the viewport it is shown in (gh-003).
 - Panning and zooming keep `min(32, document side on screen, viewport side)` device pixels of
   the document visible on each axis. A change of the viewport's size and a document becoming
   the active one move the view back inside that limit; they never fit.
