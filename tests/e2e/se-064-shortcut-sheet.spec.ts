@@ -29,7 +29,7 @@ import type { Probe } from "./se-064-support";
 // registry, grouped by menu. The sheet is compared with the registry of the running app, so
 // the test keeps its meaning as later tickets register their shortcuts.
 
-const MENUS = ["File", "Edit", "Sprite", "Layer", "Frame", "Select", "View"];
+const MENUS = ["File", "Edit", "Sprite", "Layer", "Frame", "Select", "View", "Help"];
 
 /** Commands with shortcuts that only these tests have: in a menu, in a submenu, outside. */
 const PROBES: readonly Probe[] = [

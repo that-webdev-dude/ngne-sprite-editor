@@ -87,6 +87,7 @@ owner acknowledges under A1 (§12).
 | Edit       | Unlimited undo/redo within a memory budget                           | M0    |
 | Edit       | Command palette, preferences, shortcut sheet                         | M6    |
 | Edit       | History panel, customizable shortcuts                                | Later |
+| Help       | About dialog: app and `@ngne/core` versions, licence, repository and changelog links, Copy version info | Post-v1 |
 | Automation | Lua scripting, extensions, CLI                                       | Later |
 
 Known deviation: Aseprite keeps cel pixels moved off-canvas; v1 clips them when a move is applied.

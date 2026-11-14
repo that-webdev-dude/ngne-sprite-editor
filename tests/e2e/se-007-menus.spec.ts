@@ -19,7 +19,7 @@ import {
 // Commands these tests add are their own (ids "se007.…", at the end of View), so the tests
 // keep their meaning when later tickets implement the planned commands.
 
-const MENUS = ["File", "Edit", "Sprite", "Layer", "Frame", "Select", "View"];
+const MENUS = ["File", "Edit", "Sprite", "Layer", "Frame", "Select", "View", "Help"];
 
 interface RenderedItem {
     command: string | null;
@@ -87,7 +87,9 @@ function registryItems(page: Page): Promise<RegistryItem[]> {
 const calls = (page: Page) =>
     page.evaluate(() => (window as unknown as { se007Calls?: string[] }).se007Calls ?? []);
 
-test("the menu bar holds File, Edit, Sprite, Layer, Frame, Select and View", async ({ page }) => {
+test("the menu bar holds File, Edit, Sprite, Layer, Frame, Select, View and Help", async ({
+    page,
+}) => {
     await openEditor(page);
     const bar = region(page, "menu-bar").getByRole("menubar", { name: "Main menu" });
     await expect(bar.getByRole("menuitem")).toHaveText(MENUS);
@@ -270,7 +272,7 @@ test("the menus work from the keyboard", async ({ page }) => {
     await page.keyboard.press("ArrowLeft");
     await expect(menuTrigger(page, "File")).toBeFocused();
     await page.keyboard.press("ArrowLeft");
-    await expect(menuTrigger(page, "View")).toBeFocused();
+    await expect(menuTrigger(page, "Help")).toBeFocused();
     await page.keyboard.press("ArrowRight");
     await expect(menuTrigger(page, "File")).toBeFocused();
     await page.keyboard.press("ArrowRight");
@@ -387,8 +389,9 @@ test("a menu closed before its fade-in has started leaves the page at once and o
     await page.keyboard.press("Enter");
     await expect(menuItem(page, "file.new")).toBeFocused();
     await page.keyboard.press("Escape");
-    // Read once, not awaited: a closed menu that stayed would be gone two seconds later.
-    expect(await page.locator('[role="menu"]').count()).toBe(0);
+    // A closed menu that stayed would be gone two seconds later, so the check gives up well
+    // before that: a retry over the default timeout would wait for it and pass.
+    await expect(page.locator('[role="menu"]')).toHaveCount(0, { timeout: 500 });
     await expect(menuTrigger(page, "File")).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(menuItem(page, "file.new")).toBeFocused();
