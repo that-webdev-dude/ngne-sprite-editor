@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A document opened while the app starts, from a file launch for example, starts centred in
+  the viewport. It could start a few pixels to the right of centre when it opened before the
+  tool rail had switched to two columns.
 - The app icon shows a pixel-art sprite, a creature with two eyes and two legs, instead of an
   "N". It keeps the same colours and frame, and matches the NGNE Tilemap Editor's tile-grid
   icon.

@@ -189,7 +189,9 @@ the reset button (24 px icon) restores black on white. One column stacks them, t
 them side by side. The rail has one column when the planned content stacked in one column fits
 its height — every tool slot of the registry in its groups, the separators, and the chips over
 the reset button — and two columns otherwise, whatever is rendered (a rail whose content
-failed keeps the layout). At 1280×720 with the default timeline it does not fit (SE-016).
+failed keeps the layout). At 1280×720 with the default timeline it does not fit (SE-016). The
+count is decided before the shell's first paint, so the shell is never laid out with the other
+one and the viewport region is never measured with it (gh-003).
 
 ### 5.2 Context bar
 

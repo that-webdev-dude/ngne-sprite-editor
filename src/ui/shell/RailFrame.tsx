@@ -21,7 +21,7 @@ function plannedGroups(): readonly number[] {
  * whose content failed to render keeps the healthy layout, and the footer, which two columns
  * lay out side by side, cannot make the rail switch back and forth.
  */
-export function RailFrame({ children }: { children: ReactNode }) {
+export function RailFrame({ children }: Readonly<{ children: ReactNode }>) {
     const ref = useRef<HTMLElement>(null);
     const [height, setHeight] = useState<number | null>(null);
     // Renders again when the registry's slots change.
@@ -30,7 +30,12 @@ export function RailFrame({ children }: { children: ReactNode }) {
     useLayoutEffect(() => {
         const rail = ref.current;
         if (!rail) return;
-        // The resize observer reports once when it starts, before the first paint.
+        // Measured here, before the browser lays the page out again: what a layout effect sets
+        // is rendered at once, so the first layout that anyone observes already has the column
+        // count. The resize observer's first report comes later, and what it sets is rendered
+        // in a task of its own: until then the viewport region would be reported with the rail
+        // in one column, and a document opened then fitted to it (gh-003).
+        setHeight(rail.clientHeight);
         const resize = new ResizeObserver(() => setHeight(rail.clientHeight));
         resize.observe(rail);
         return () => resize.disconnect();
@@ -54,7 +59,7 @@ export function RailFrame({ children }: { children: ReactNode }) {
 }
 
 /** One group of tool buttons; its direct children are the buttons. */
-export function RailGroup({ children }: { children: ReactNode }) {
+export function RailGroup({ children }: Readonly<{ children: ReactNode }>) {
     return (
         <div className="shell-rail__group" data-rail-group="">
             {children}
@@ -66,7 +71,7 @@ export function RailGroup({ children }: { children: ReactNode }) {
  * Content pinned to the bottom of the rail (the colour chips of DESIGN §5.1). Its children
  * stack in one column and stand side by side in two.
  */
-export function RailFooter({ children }: { children: ReactNode }) {
+export function RailFooter({ children }: Readonly<{ children: ReactNode }>) {
     return (
         <div className="shell-rail__footer" data-rail-footer="">
             {children}
