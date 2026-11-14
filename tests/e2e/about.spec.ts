@@ -100,6 +100,43 @@ test("Copy version info copies the one-line summary and says so", async ({ page,
     expect(errors).toEqual([]);
 });
 
+test("Copy version info keeps the focus while a slow copy is pending, and copies once", async ({
+    page,
+    context,
+}) => {
+    const errors = collectErrors(page);
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await openEditor(page);
+    // A clipboard that answers several frames later, as on a slow machine.
+    await page.evaluate(() => {
+        const write = navigator.clipboard.writeText.bind(navigator.clipboard);
+        const calls: string[] = [];
+        (window as unknown as { copyCalls: string[] }).copyCalls = calls;
+        Object.defineProperty(navigator.clipboard, "writeText", {
+            configurable: true,
+            value: async (text: string) => {
+                calls.push(text);
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                return write(text);
+            },
+        });
+    });
+    const dialog = await openFromHelpMenu(page);
+    const copy = dialog.getByRole("button", { name: "Copy version info" });
+
+    await copy.click();
+    await expect(copy).toHaveAttribute("aria-disabled", "true");
+    await expect(copy).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(dialog.getByRole("status")).toHaveText("Version info copied.");
+    await expect(copy).not.toHaveAttribute("aria-disabled");
+    await expect(copy).toBeFocused();
+    expect(
+        await page.evaluate(() => (window as unknown as { copyCalls: string[] }).copyCalls),
+    ).toHaveLength(1);
+    expect(errors).toEqual([]);
+});
+
 test("Copy version info says so when the clipboard refuses, and throws nothing", async ({
     page,
 }) => {

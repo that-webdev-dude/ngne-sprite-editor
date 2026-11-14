@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { AboutRequest } from "../../app/about/openAbout";
 import { Button } from "../primitives/Button";
 import { Dialog } from "../primitives/Dialog";
@@ -22,9 +22,19 @@ const COPY_MESSAGES: Record<CopyState, string> = {
 export function AboutDialog({ request }: Readonly<{ request: AboutRequest }>) {
     const { info } = request;
     const [copy, setCopy] = useState<CopyState>("idle");
+    const copying = useRef(false);
     const copyLine = async () => {
+        // A second press while a copy is pending does nothing. The button is not `disabled`
+        // meanwhile: Chrome takes the focus off a focused button that becomes disabled, and
+        // with a clipboard slower than a frame it went to the page behind the modal dialog.
+        if (copying.current) return;
+        copying.current = true;
         setCopy("copying");
-        setCopy((await request.copy()) ? "copied" : "failed");
+        try {
+            setCopy((await request.copy()) ? "copied" : "failed");
+        } finally {
+            copying.current = false;
+        }
     };
     return (
         <Dialog
@@ -35,7 +45,10 @@ export function AboutDialog({ request }: Readonly<{ request: AboutRequest }>) {
             title={`About ${info.title}`}
             actions={
                 <>
-                    <Button disabled={copy === "copying"} onClick={() => void copyLine()}>
+                    <Button
+                        aria-disabled={copy === "copying" || undefined}
+                        onClick={() => void copyLine()}
+                    >
                         Copy version info
                     </Button>
                     <Button variant="primary" onClick={() => request.answer(null)}>
