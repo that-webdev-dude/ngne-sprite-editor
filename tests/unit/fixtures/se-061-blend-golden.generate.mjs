@@ -9,7 +9,7 @@
 // from its source, not from the editor's compositor (`src/core/composite`), which this file
 // does not import:
 //
-// - `src/doc/blend_funcs.cpp` of aseprite/aseprite (main, 2025): `rgba_blender_normal`,
+// - `src/doc/blend_funcs.cpp` of aseprite/aseprite (the version in docs/PROVENANCE.md): `rgba_blender_normal`,
 //   `rgba_blender_merge`, the separable `blend_*` macros and functions, the `rgba_blender_*`
 //   of each mode, the HSL helpers (`lum`, `sat`, `clip_color`, `set_lum`, `set_sat`) and the
 //   macro `RGBA_BLENDER_N`, the "new blending method" that `get_rgba_blender` returns while

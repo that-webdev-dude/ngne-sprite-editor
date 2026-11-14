@@ -89,11 +89,11 @@ from assistive technology. The [accessibility audit](docs/audit/a11y.md) records
 - [Specification](docs/SPEC.md): behaviour, architecture and limits.
 - [Changelog](CHANGELOG.md): features and known limitations.
 
-This branch is a release candidate. Checkpoint E passed on 2026-10-21, with an accepted RTX
-performance exception and the owner's explicit native PWA check waiver. The owner retains
-PR review/merge, creating and pushing `v1.0.0`, and deployment/site verification. The tag
-triggers the Pages workflow; branch pushes do not deploy. The native PWA check remains for
-the owner to perform personally using the [manual steps](docs/audit/pwa.md#manual-install-owner-to-do).
+Releases: a `v*` tag runs the Pages workflow (`.github/workflows/deploy.yml`), which deploys the
+site; branch pushes do not deploy. A release sets the version in `package.json`, the generator
+version (`ATLAS_GENERATOR`, `src/core/export/atlasFormat.ts`) and the changelog together, with
+`npm run check` passing. Installing the app as a PWA is checked by hand: see the
+[manual steps](docs/audit/pwa.md#manual-install-owner-to-do).
 
 Licensed under [MIT](LICENSE). Code ported from Aseprite's MIT-licensed document library,
 from pixman and from Alois Zingl's Bresenham algorithms is listed with its notices in
