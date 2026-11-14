@@ -113,7 +113,7 @@ describe("the app's facts", () => {
 });
 
 describe("the About command", () => {
-    it("is the one item of the Help menu, the last menu of the bar", () => {
+    it("is the last item of the Help menu, below Keyboard Shortcuts…", () => {
         const command = appCommands.get(ABOUT_COMMAND);
         expect(command).toMatchObject({
             planned: false,
@@ -125,7 +125,11 @@ describe("the About command", () => {
         expect(command?.title()).toBe("About NGNE Sprite Editor…");
         // Always available: it needs no document.
         expect(command?.enabled()).toBe(true);
-        expect(outline(buildMenu(appCommands.list(), ["Help"]))).toEqual([ABOUT_COMMAND]);
+        expect(outline(buildMenu(appCommands.list(), ["Help"]))).toEqual([
+            "edit.shortcuts",
+            "---",
+            ABOUT_COMMAND,
+        ]);
     });
 
     it("is listed by the command palette, under Help", () => {
@@ -137,11 +141,17 @@ describe("the About command", () => {
         expect(entries[0]?.command).toBe(appCommands.get(ABOUT_COMMAND));
     });
 
-    it("leaves Keyboard Shortcuts… in the Edit menu, on ?", () => {
+    it("has Keyboard Shortcuts… in the Help menu, on ?", () => {
         expect(appCommands.get("edit.shortcuts")).toMatchObject({
-            menuPath: ["Edit"],
+            menuPath: ["Help"],
             shortcuts: ["?"],
         });
+    });
+
+    it("lists Keyboard Shortcuts… in the command palette, under Help", () => {
+        const entries = paletteEntries(appCommands.list(), [], "keyboard shortcuts");
+        expect(entries[0]).toMatchObject({ title: "Keyboard Shortcuts…", group: "Help" });
+        expect(entries[0]?.command).toBe(appCommands.get("edit.shortcuts"));
     });
 });
 

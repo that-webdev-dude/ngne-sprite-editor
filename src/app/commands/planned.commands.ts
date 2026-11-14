@@ -61,7 +61,6 @@ export const plannedCommands: PlannedCommandSpec[] = [
         [["edit.replaceColour", "Replace Colour…"]],
         [
             ["edit.commandPalette", "Command Palette…"],
-            ["edit.shortcuts", "Keyboard Shortcuts…"],
             ["edit.preferences", "Preferences…"],
         ],
     ]),
@@ -137,6 +136,11 @@ export const plannedCommands: PlannedCommandSpec[] = [
         ],
         [["view.timeline", "Timeline"]],
     ]),
-    // About NGNE Sprite Editor… is implemented by about/about.commands.ts.
-    ...menu("Help", [[["help.about", "About NGNE Sprite Editor…"]]]),
+    // Keyboard Shortcuts… is implemented by shortcuts/shortcuts.commands.ts (its id keeps the
+    // edit. prefix of the Edit menu it started in), About NGNE Sprite Editor… by
+    // about/about.commands.ts.
+    ...menu("Help", [
+        [["edit.shortcuts", "Keyboard Shortcuts…"]],
+        [["help.about", "About NGNE Sprite Editor…"]],
+    ]),
 ];

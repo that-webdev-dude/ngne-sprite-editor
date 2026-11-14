@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
-// Declares `window.__ngneTest`, the development-only test hook of the app.
-import type {} from "../../src/app/testing/testHooks";
+// Declares `window.__ngneTest`, the development-only test hook of the app, and its type.
+import type { EditorTestHooks } from "../../src/app/testing/testHooks";
 import { region, settleTimers } from "./se-006-support";
 import { menuItem, openEditor, openMenu } from "./se-007-support";
 import { startInTheme } from "./se-008-support";
@@ -49,7 +49,7 @@ export async function openPalette(page: Page): Promise<Locator> {
 /** The command ids of the palette rows, in the order shown. */
 export function paletteIds(page: Page): Promise<string[]> {
     return paletteOptions(page).evaluateAll((options) =>
-        options.map((option) => option.getAttribute("data-command") ?? ""),
+        options.map((option) => option.dataset.command ?? ""),
     );
 }
 
@@ -74,13 +74,22 @@ export const shortcutSheet = (page: Page) =>
 export const shortcutList = (page: Page) =>
     shortcutSheet(page).getByRole("group", { name: "Shortcuts by menu" });
 
-/** Opens a surface from its item in the Edit menu. */
-export async function openFromEditMenu(page: Page, commandId: string, surface: Locator) {
-    await openMenu(page, "Edit");
+/** Opens a surface from its item in a menu of the menu bar. */
+export async function openFromMenu(
+    page: Page,
+    menu: string,
+    commandId: string,
+    surface: Locator,
+): Promise<Locator> {
+    await openMenu(page, menu);
     await menuItem(page, commandId).click();
     await expect(surface).toBeVisible();
     return surface;
 }
+
+/** Opens a surface from its item in the Edit menu. */
+export const openFromEditMenu = (page: Page, commandId: string, surface: Locator) =>
+    openFromMenu(page, "Edit", commandId, surface);
 
 export const openPreferences = (page: Page) =>
     openFromEditMenu(page, PREFERENCES_COMMAND, preferencesDialog(page));
@@ -165,6 +174,9 @@ declare global {
     }
 }
 
+/** A command of the app's registry, as `window.__ngneTest` hands it out. */
+type PageCommand = ReturnType<EditorTestHooks["commands"]["list"]>[number];
+
 /** The ids recorded by `spyOnCommands` and by the commands of `registerProbes`. */
 export const calls = (page: Page) => page.evaluate(() => window.se064Calls ?? []);
 
@@ -180,11 +192,14 @@ export function spyOnCommands(page: Page, keep: readonly string[] = []): Promise
         const ran = (window.se064Calls ??= []);
         for (const command of window.__ngneTest!.commands.list()) {
             if (keep.includes(command.id)) continue;
-            command.run = () => void ran.push(command.id);
+            command.run = () => {
+                ran.push(command.id);
+            };
             // A hold binding enabled in the palette (SE-016: Alt) is released after it ran.
             if (command.release) {
-                (command as { release: (() => void) | null }).release = () =>
-                    void ran.push(`${command.id}:release`);
+                (command as { release: PageCommand["release"] }).release = () => {
+                    ran.push(`${command.id}:release`);
+                };
             }
         }
     }, keep);
@@ -216,8 +231,14 @@ export function registerProbes(page: Page, probes: readonly Probe[]): Promise<vo
                 menuPath: probe.menuPath,
                 menuOrder: probe.menuOrder,
                 enabled: () => probe.enabled ?? true,
-                run: () => void ran.push(probe.id),
-                release: probe.hold ? () => void ran.push(`${probe.id}:release`) : undefined,
+                run: () => {
+                    ran.push(probe.id);
+                },
+                release: probe.hold
+                    ? () => {
+                          ran.push(`${probe.id}:release`);
+                      }
+                    : undefined,
             });
         }
     }, probes);

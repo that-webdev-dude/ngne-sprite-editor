@@ -19,6 +19,13 @@ const COMMANDS: Record<SurfaceId, string> = {
     "shortcut-sheet": "edit.shortcuts",
 };
 
+/** The menu each command's planned item is in: Keyboard Shortcuts… moved to Help (#8). */
+const MENUS: Record<SurfaceId, string> = {
+    "command-palette": "Edit",
+    preferences: "Edit",
+    "shortcut-sheet": "Help",
+};
+
 function command(id: string): Command {
     const found = appCommands.get(id);
     if (!found) throw new Error(`no command ${id}`);
@@ -58,24 +65,30 @@ afterEach(() => {
 });
 
 describe("the commands of SE-064 in the registry", () => {
-    it("take the menu items planned for them, at the end of Edit", () => {
-        for (const id of Object.values(COMMANDS)) {
+    it("take the menu items planned for them, at the end of Edit and at the head of Help", () => {
+        for (const surface of SURFACE_IDS) {
+            const id = COMMANDS[surface];
             const plan = plannedCommands.find((entry) => entry.id === id);
             expect(plan, id).toBeDefined();
             expect(command(id), id).toMatchObject({
                 planned: false,
-                menuPath: ["Edit"],
+                menuPath: [MENUS[surface]],
                 menuOrder: plan?.menuOrder,
             });
             expect(command(id).title(), id).toBe(plan?.title);
             // Always available: none of them needs a document.
             expect(command(id).enabled(), id).toBe(true);
         }
-        expect(outline(buildMenu(appCommands.list(), ["Edit"])).slice(-4)).toEqual([
+        expect(outline(buildMenu(appCommands.list(), ["Edit"])).slice(-3)).toEqual([
             "---",
             "edit.commandPalette",
-            "edit.shortcuts",
             "edit.preferences",
+        ]);
+        expect(outline(buildMenu(appCommands.list(), ["Edit"]))).not.toContain("edit.shortcuts");
+        expect(outline(buildMenu(appCommands.list(), ["Help"]))).toEqual([
+            "edit.shortcuts",
+            "---",
+            "help.about",
         ]);
     });
 

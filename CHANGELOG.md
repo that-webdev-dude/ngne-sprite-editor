@@ -5,6 +5,8 @@
 - A Help menu with About NGNE Sprite Editor…: the app's and `@ngne/core`'s versions, taken from
   `package.json` at build time, the licence, links to the repository and the changelog, and Copy
   version info, which copies one line for a bug report.
+- Keyboard Shortcuts… moves from the Edit menu to the Help menu, above About. It opens the same
+  shortcut sheet, still on `?`.
 - `THIRD_PARTY_NOTICES.md` gives the upstream version of every ported part and adds Allegro's
   giftware licence, which covers the spline Aseprite's `algo_spline` adapts.
 - The build fails when gifenc's colour quantizer is bundled again.
