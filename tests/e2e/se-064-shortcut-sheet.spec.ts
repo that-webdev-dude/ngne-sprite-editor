@@ -14,7 +14,7 @@ import {
 import { dialogButton, newSpriteButton, newSpriteDialog } from "./se-008-support";
 import {
     expectShellUsable,
-    openFromEditMenu,
+    openFromMenu,
     openShortcutSheet,
     registerProbes,
     registryCommands,
@@ -164,18 +164,21 @@ test("the sheet is grouped by menu, in the order of the menu bar and of each men
     const withShortcuts = (menu: string) =>
         registry.some((command) => command.menu === menu && command.shortcuts.length > 0);
     expect(groups).toEqual([...MENUS.filter(withShortcuts), "Other"]);
-    expect(groups).toEqual(expect.arrayContaining(["File", "Edit", "View"]));
+    expect(groups).toEqual(expect.arrayContaining(["File", "Edit", "View", "Help"]));
     await expect(sheet.getByRole("heading", { level: 3 })).toHaveText(groups);
     await expect(
         sheet.getByRole("heading", { name: "Keyboard shortcuts", level: 2 }),
     ).toBeVisible();
 
-    // Inside a menu, the order of the menu: Undo before Redo, the palette before the sheet.
+    // Inside a menu, the order of the menu: Undo before Redo, the palette after them.
     const inGroup = (group: string) =>
         rows.filter((row) => row.group === group).map((row) => row.id);
-    const known = ["edit.undo", "edit.redo", "edit.commandPalette", "edit.shortcuts"];
+    const known = ["edit.undo", "edit.redo", "edit.commandPalette"];
     expect(inGroup("File")).toContain("file.new");
     expect(inGroup("Edit").filter((id) => known.includes(id))).toEqual(known);
+    // The sheet's own command is in the Help menu (#8), and in no other group.
+    expect(inGroup("Help")).toContain(SHORTCUTS_COMMAND);
+    expect(rows.filter((row) => row.id === SHORTCUTS_COMMAND)).toHaveLength(1);
     // A command of a submenu belongs to its menu.
     expect(inGroup("View").slice(-2)).toEqual(["se064.viewKey", "se064.nested"]);
     // Outside the menus: by title.
@@ -187,16 +190,21 @@ test("the sheet is grouped by menu, in the order of the menu bar and of each men
         expect.arrayContaining(["focus.nextRegion", "focus.previousRegion", "se064.hold"]),
     );
 
-    // The same order as the Edit menu itself shows.
+    // The same order as the Edit and Help menus themselves show.
     await dialogButton(sheet, "Close").click();
     await expect(sheet).toBeHidden();
-    const menu = await openMenu(page, "Edit");
-    const withKey = await menu.evaluate((element) =>
-        Array.from(element.querySelectorAll<HTMLElement>('[role="menuitem"]'))
-            .filter((item) => item.querySelector(".ui-menu__shortcut"))
-            .map((item) => item.dataset.command),
-    );
-    expect(withKey).toEqual(inGroup("Edit"));
+    for (const name of ["Edit", "Help"]) {
+        const menu = await openMenu(page, name);
+        const withKey = await menu.evaluate((element) =>
+            Array.from(element.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+                .filter((item) => item.querySelector(".ui-menu__shortcut"))
+                .map((item) => item.dataset.command),
+        );
+        expect(withKey, name).toEqual(inGroup(name));
+        await page.keyboard.press("Escape");
+        await expect(menu).toBeHidden();
+        await settleTimers(page);
+    }
 });
 
 test("? opens the shortcut sheet in the canvas context; in a text field it is typed", async ({
@@ -249,22 +257,22 @@ test("? opens the shortcut sheet in the canvas context; in a text field it is ty
     expect(errors).toEqual([]);
 });
 
-test("the Edit menu opens the sheet and shows its key; focus returns to the menu", async ({
+test("the Help menu opens the sheet and shows its key; focus returns to the menu", async ({
     page,
 }) => {
     await openEditor(page);
-    await openMenu(page, "Edit");
+    await openMenu(page, "Help");
     await expect(menuItem(page, SHORTCUTS_COMMAND)).toHaveText("Keyboard Shortcuts…?");
     await page.keyboard.press("Escape");
-    const sheet = await openFromEditMenu(page, SHORTCUTS_COMMAND, shortcutSheet(page));
+    const sheet = await openFromMenu(page, "Help", SHORTCUTS_COMMAND, shortcutSheet(page));
     expect((await boxOf(sheet)).width).toBe(560);
     await dialogButton(sheet, "Close").click();
     await expect(sheet).toBeHidden();
-    await expect(menuTrigger(page, "Edit")).toBeFocused();
+    await expect(menuTrigger(page, "Help")).toBeFocused();
     await expectShellUsable(page);
 
     // A click outside closes it as well.
-    await openFromEditMenu(page, SHORTCUTS_COMMAND, shortcutSheet(page));
+    await openFromMenu(page, "Help", SHORTCUTS_COMMAND, shortcutSheet(page));
     await settleTimers(page);
     await page.mouse.click(8, 600);
     await expect(sheet).toBeHidden();

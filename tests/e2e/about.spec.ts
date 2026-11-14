@@ -59,6 +59,7 @@ test("Help → About shows the versions of package.json, the licence and the lin
     await openEditor(page);
     await openMenu(page, "Help");
     await expect(page.getByRole("menu", { name: "Help" }).getByRole("menuitem")).toHaveText([
+        "Keyboard Shortcuts…?",
         "About NGNE Sprite Editor…",
     ]);
     await page.keyboard.press("Escape");
@@ -172,11 +173,28 @@ test("the command palette lists About and opens the same dialog", async ({ page 
     expect(errors).toEqual([]);
 });
 
-test("Keyboard Shortcuts… stays in the Edit menu and ? still opens the sheet", async ({ page }) => {
+test("Keyboard Shortcuts… is in the Help menu above About, not in Edit; ? still opens the sheet", async ({
+    page,
+}) => {
     await openEditor(page);
-    await openMenu(page, "Edit");
+    const help = await openMenu(page, "Help");
     await expect(menuItem(page, SHORTCUTS_COMMAND)).toHaveText("Keyboard Shortcuts…?");
+    const items = () =>
+        help.evaluate((element) =>
+            Array.from(
+                element.querySelectorAll<HTMLElement>('[role="menuitem"], [role="separator"]'),
+                (item) => item.dataset.command ?? "---",
+            ),
+        );
+    expect(await items()).toEqual([SHORTCUTS_COMMAND, "---", ABOUT_COMMAND]);
     await page.keyboard.press("Escape");
+    await expect(help).toBeHidden();
+    await settleTimers(page);
+    const edit = await openMenu(page, "Edit");
+    await expect(edit.locator(`[data-command="${SHORTCUTS_COMMAND}"]`)).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(edit).toBeHidden();
+    await settleTimers(page);
     await openShortcutSheet(page);
     await expect(shortcutSheet(page)).toBeVisible();
 });

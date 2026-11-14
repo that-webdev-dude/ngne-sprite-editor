@@ -85,8 +85,9 @@ owner acknowledges under A1 (§12).
 | File       | Export split by layer or tag; chosen-layer export                    | Later |
 | File       | `.aseprite` import/export; open/save GIF, JPG, BMP, WebP             | Later |
 | Edit       | Unlimited undo/redo within a memory budget                           | M0    |
-| Edit       | Command palette, preferences, shortcut sheet                         | M6    |
+| Edit       | Command palette, preferences                                         | M6    |
 | Edit       | History panel, customizable shortcuts                                | Later |
+| Help       | Shortcut sheet (Help → Keyboard Shortcuts…)                         | M6    |
 | Help       | About dialog: app and `@ngne/core` versions, licence, repository and changelog links, Copy version info | Post-v1 |
 | Automation | Lua scripting, extensions, CLI                                       | Later |
 
