@@ -61,10 +61,12 @@ Overflow rules (the layout must hold at the minimum window, 1280×720):
 - **Context bar**: options that do not fit move into a trailing overflow menu.
 - **Document tabs**: shrink to 96 px, then scroll horizontally with an overflow menu.
   SE-047: a `tablist` centred in the space between the menus and the palette trigger; each
-  tab 28 px high and at most 200 px wide, its name centred between two 24 px columns (the
-  right one the close control, shown on the selected tab and under the pointer, and taking
-  no press while hidden; its hover is `--bg-raised` on the selected tab), the unsaved marker
-  after the name. The selected tab is `--bg-active` with `--text` and a 2 px `--accent` line
+  tab 28 px high and at most 200 px wide, its label (the file's name without `.ngsprite`
+  once the document has a file, the sprite name until then; the tooltip names both, as
+  `hero-v2.ngsprite — sprite: hero`) centred between two 24 px columns (the right one the
+  close control, shown on the selected tab and under the pointer, and taking no press while
+  hidden; its hover is `--bg-raised` on the selected tab), the unsaved marker after the
+  label. The selected tab is `--bg-active` with `--text` and a 2 px `--accent` line
   inside its bottom edge, in the same weight as the others (`--text-muted`), so selecting a
   tab never changes its width. A press selects a tab, a drag along the strip moves it, a
   middle click or the close control closes it. The strip is one tab stop
@@ -72,8 +74,8 @@ Overflow rules (the layout must hold at the minimum window, 1280×720):
   Delete closes (the focus goes to the tab in its place, or to the empty state's first
   action when none is left), Ctrl+Shift+← → move the tab. While the tabs do not
   fit, the strip scrolls (no scroll bar; the wheel scrolls it sideways) and a chevron button,
-  "All documents", opens a menu of every document with the selected one checked; the
-  selected tab is always scrolled into view.
+  "All documents", opens a menu of every document, by the tabs' labels, with the selected one
+  checked; the selected tab is always scrolled into view.
 - **Tag bar**: grows by one 18 px row per overlap level, up to three rows, then scrolls.
 - Below 1280×720 the app shows a "window too small" notice instead of a broken layout.
 

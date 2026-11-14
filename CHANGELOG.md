@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- A document tab shows its project file's name, without `.ngsprite`, once the document has a
+  file, so Save As renames the tab. A document never saved keeps its sprite name. The tab's
+  tooltip names the file and the sprite; the overflow menu uses the same labels. The sprite
+  name and exports are unchanged.
 - A Help menu with About NGNE Sprite Editor…: the app's and `@ngne/core`'s versions, taken from
   `package.json` at build time, the licence, links to the repository and the changelog, and Copy
   version info, which copies one line for a bug report.
