@@ -101,7 +101,7 @@ export function useClosingPopover<Draft>(
             for (const type of events) window.removeEventListener(type, finish, true);
             if (content) {
                 // No more an open dialog for the keymap (`OVERLAY_SELECTOR`), nor a target.
-                content.setAttribute("data-state", "closed");
+                content.dataset.state = "closed";
                 const layer = content.closest<HTMLElement>("[data-radix-popper-content-wrapper]");
                 (layer ?? content).inert = true;
             }
