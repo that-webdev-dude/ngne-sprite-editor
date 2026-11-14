@@ -16,7 +16,7 @@ import {
 import { currentSwatch, paletteStore } from "../../app/palette/paletteState";
 import { activeDocument, sessionsStore } from "../../app/state/sessions";
 import { reportCommandError, runCommand } from "../commands/runCommand";
-import { useCommands } from "../commands/useCommands";
+import { useCommandValue, useCommands } from "../commands/useCommands";
 import { Icon } from "../primitives/Icon";
 import { IconButton } from "../primitives/IconButton";
 import { Tooltip } from "../primitives/Tooltip";
@@ -38,19 +38,35 @@ import "./paletteHeader.css";
 // ticket adds an item without an edit here. The swatch editor popover lives here too, so it
 // opens whether or not the section is expanded.
 
-/** The items of a generated menu; `label` gives an item a text other than its title. */
+/**
+ * Each node of a menu with a stable key: a command's id; a separator, which always follows an
+ * item (`buildContextMenu`), the key of that item.
+ */
+function keyed(nodes: readonly MenuNode[]): [string, MenuNode][] {
+    const result: [string, MenuNode][] = [];
+    let previous = "";
+    for (const node of nodes) {
+        if (node.kind === "command") previous = node.command.id;
+        else if (node.kind === "submenu") previous = `submenu-${node.title}`;
+        result.push([node.kind === "separator" ? `separator-after-${previous}` : previous, node]);
+    }
+    return result;
+}
+
+/**
+ * The items of the generated menu `menu`; `label` gives an item a text other than its title.
+ * Rendered only while the menu is open, and then again at each change of the commands.
+ */
 function MenuItems({
-    nodes,
+    menu,
     label = (command) => command.title(),
 }: {
-    nodes: readonly MenuNode[];
+    menu: string;
     label?(command: Command): string;
 }) {
-    return nodes.map((node, index) => {
+    return keyed(buildContextMenu(useCommands(), menu)).map(([key, node]) => {
         if (node.kind === "separator") {
-            return (
-                <DropdownMenu.Separator key={`separator-${index}`} className="ui-menu__separator" />
-            );
+            return <DropdownMenu.Separator key={key} className="ui-menu__separator" />;
         }
         if (node.kind !== "command") return null;
         const { command } = node;
@@ -61,7 +77,9 @@ function MenuItems({
                 className="ui-menu__item"
                 data-command={command.id}
                 disabled={!command.enabled()}
-                onSelect={() => void invokeCommand(command, reportCommandError)}
+                onSelect={() => {
+                    invokeCommand(command, reportCommandError);
+                }}
             >
                 {label(command)}
                 {shortcut ? (
@@ -79,11 +97,12 @@ function paletteSize(): number {
 
 export function PaletteHeader() {
     const palette = useActivePalette();
-    const commands = useCommands();
+    // Only what the header itself shows: it renders again when that changes, not at every
+    // change of the commands (the open menus follow those themselves).
+    const canAdd = useCommandValue((registry) => registry.get(ADD_COLOUR)?.enabled() ?? false);
     const menu = useStore(paletteMenuStore);
     const overflow = useRef<HTMLButtonElement>(null);
     if (!palette) return null;
-    const add = commands.find((command) => command.id === ADD_COLOUR);
 
     return (
         <span className="palette-header" data-palette-header="">
@@ -108,7 +127,7 @@ export function PaletteHeader() {
                         onContextMenu={(event) => event.preventDefault()}
                     >
                         <MenuItems
-                            nodes={buildContextMenu(commands, PRESET_MENU)}
+                            menu={PRESET_MENU}
                             label={(command) =>
                                 presetOfCommand(command.id)?.name ?? command.title()
                             }
@@ -118,7 +137,7 @@ export function PaletteHeader() {
             </DropdownMenu.Root>
             <IconButton
                 label="Add current colour"
-                disabled={!add?.enabled()}
+                disabled={!canAdd}
                 data-palette-add=""
                 onClick={() => runCommand(ADD_COLOUR)}
             >
@@ -161,7 +180,7 @@ export function PaletteHeader() {
                             (swatch ?? overflow.current)?.focus();
                         }}
                     >
-                        <MenuItems nodes={buildContextMenu(commands, PALETTE_MENU)} />
+                        <MenuItems menu={PALETTE_MENU} />
                     </DropdownMenu.Content>
                 </DropdownMenu.Portal>
             </DropdownMenu.Root>

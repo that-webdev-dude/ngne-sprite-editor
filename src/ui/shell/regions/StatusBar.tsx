@@ -1,7 +1,8 @@
-import { useActiveDocument } from "../../../app/state/sessions";
+import { useShallow } from "zustand/react/shallow";
+import { activeDocument, useSessions } from "../../../app/state/sessions";
 import { useStatus } from "../../../app/state/status";
 import { runCommand } from "../../commands/runCommand";
-import { useCommands } from "../../commands/useCommands";
+import { useCommandValue } from "../../commands/useCommands";
 import { statusFields } from "../../status/statusFields";
 import "../../status/status.css";
 
@@ -18,12 +19,16 @@ const FIT_COMMAND = "view.fit";
  * (DESIGN §6); it is a control, not a field, so it carries no `data-status`.
  */
 export function StatusBar() {
-    const document = useActiveDocument();
     const cursor = useStatus((state) => state.cursor);
     const hint = useStatus((state) => state.hint);
     const feedback = useStatus((state) => state.feedback);
-    const fit = useCommands().find((command) => command.id === FIT_COMMAND);
-    const fields = statusFields(document, { cursor, hint, feedback });
+    // The texts, compared field by field: a change to the document that alters none of them
+    // (most edits) does not render the bar again.
+    const fields = useSessions(
+        useShallow((state) => statusFields(activeDocument(state), { cursor, hint, feedback })),
+    );
+    const fitTitle = useCommandValue((registry) => registry.get(FIT_COMMAND)?.title() ?? null);
+    const fitEnabled = useCommandValue((registry) => registry.get(FIT_COMMAND)?.enabled() ?? false);
     return (
         <>
             {FIELDS.flatMap((field) => {
@@ -33,17 +38,17 @@ export function StatusBar() {
                         {fields[field]}
                     </span>,
                 ];
-                if (field === "zoom" && fit) {
+                if (field === "zoom" && fitTitle !== null) {
                     shown.push(
                         <button
                             key={FIT_COMMAND}
                             type="button"
                             className="status-action"
                             data-status-action="fit"
-                            disabled={!fit.enabled()}
+                            disabled={!fitEnabled}
                             onClick={() => runCommand(FIT_COMMAND)}
                         >
-                            {fit.title()}
+                            {fitTitle}
                         </button>,
                     );
                 }

@@ -2,7 +2,7 @@ import { Search } from "lucide-react";
 import { chordKey, chordModifiers } from "../../app/commands/chord";
 import { Chord } from "../commands/Chord";
 import { runCommand } from "../commands/runCommand";
-import { useCommands } from "../commands/useCommands";
+import { useCommandValue } from "../commands/useCommands";
 import { Icon } from "../primitives/Icon";
 import "./commandPalette.css";
 
@@ -20,14 +20,19 @@ function ariaKeyShortcut(chord: string): string {
  * command and shows that command's shortcut, both read from the registry.
  */
 export function CommandPaletteTrigger() {
-    const command = useCommands().find((entry) => entry.id === COMMAND_PALETTE_COMMAND);
-    const shortcut = command?.shortcuts[0];
+    // The values it shows, not the command: it renders only when one of them changes.
+    const shortcut = useCommandValue(
+        (registry) => registry.get(COMMAND_PALETTE_COMMAND)?.shortcuts[0],
+    );
+    const enabled = useCommandValue(
+        (registry) => registry.get(COMMAND_PALETTE_COMMAND)?.enabled() ?? false,
+    );
     return (
         <button
             type="button"
             className="command-palette-trigger"
             aria-keyshortcuts={shortcut ? ariaKeyShortcut(shortcut) : undefined}
-            disabled={!command?.enabled()}
+            disabled={!enabled}
             onClick={() => runCommand(COMMAND_PALETTE_COMMAND)}
         >
             <Icon icon={Search} />

@@ -5,7 +5,6 @@ import { History } from "../../core/history";
 import type { HistoryOptions } from "../../core/history";
 import { assertInvariants } from "../../core/model";
 import type { DocSession, DocSettings, ExportSettings } from "../../core/model";
-import type {} from "../../import-meta";
 
 /** View state of one document (SPEC §6.4). */
 export interface ViewState {
@@ -391,9 +390,4 @@ export const sessionsStore = createSessionsStore();
 
 export function useSessions<Slice>(selector: (state: SessionsState) => Slice): Slice {
     return useStore(sessionsStore, selector);
-}
-
-/** The active document; the component renders again on every change to it. */
-export function useActiveDocument(): OpenDocument | null {
-    return useSessions(activeDocument);
 }
