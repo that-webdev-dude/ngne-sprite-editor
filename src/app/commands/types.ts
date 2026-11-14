@@ -13,7 +13,16 @@ export const KEY_CONTEXTS = [
 export type KeyContext = (typeof KEY_CONTEXTS)[number];
 
 /** The menus of the menu bar, in order (DESIGN §2). */
-export const MENU_BAR = ["File", "Edit", "Sprite", "Layer", "Frame", "Select", "View"] as const;
+export const MENU_BAR = [
+    "File",
+    "Edit",
+    "Sprite",
+    "Layer",
+    "Frame",
+    "Select",
+    "View",
+    "Help",
+] as const;
 export type MenuBarMenu = (typeof MENU_BAR)[number];
 
 /** Where a command appears in a context menu (right-click on a layer, frame, cel or tag). */

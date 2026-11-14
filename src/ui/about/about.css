@@ -1,0 +1,51 @@
+/* The facts can be selected and copied by hand too (the shell turns selection off). */
+.about {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-12);
+    user-select: text;
+}
+
+.about__name {
+    font-size: var(--font-size-title);
+    font-weight: var(--font-weight-strong);
+}
+
+/* Names in `--text-muted`, values in `--text`, in two columns. */
+.about__facts {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: var(--space-4) var(--space-12);
+    margin: 0;
+}
+
+.about__facts dt {
+    color: var(--text-muted);
+}
+
+.about__facts dd {
+    margin: 0;
+}
+
+.about__links {
+    display: flex;
+    gap: var(--space-16);
+    list-style: none;
+}
+
+/* Underlined, so a link is told from text by more than its colour. */
+.about__links a {
+    color: var(--text);
+    text-decoration: underline;
+}
+
+/* The line keeps its height while empty, so the dialog does not grow when the copy answers. */
+.about__status {
+    display: block;
+    min-height: var(--line-height);
+    color: var(--text-muted);
+}
+
+.about__status--failed {
+    color: var(--danger);
+}

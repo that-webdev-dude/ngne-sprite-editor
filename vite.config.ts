@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import type { Plugin, PluginOption } from "vite";
+import { appInfoDefines } from "./scripts/appInfo.ts";
 import {
     LICENCES_FILE,
     LicenceError,
@@ -83,6 +84,13 @@ type BundleOutput =
       }
     | { type: "asset"; fileName: string; source: string | Uint8Array };
 
+/** The JavaScript of an output of a build: a chunk's code, a `.js` asset's text, otherwise "". */
+function javaScriptOf(output: BundleOutput): string {
+    if (output.type === "chunk") return output.code;
+    if (output.fileName.endsWith(".js") && typeof output.source === "string") return output.source;
+    return "";
+}
+
 /**
  * Fails the build when a JavaScript file of `bundle` holds code the build must leave out
  * (`EXCLUDED_CODE` of scripts/licences.ts), such as gifenc's quantizer without the alias below.
@@ -92,13 +100,7 @@ function rejectExcluded(
     fail: (message: string) => never,
 ): void {
     for (const output of Object.values(bundle)) {
-        const code =
-            output.type === "chunk"
-                ? output.code
-                : output.fileName.endsWith(".js") && typeof output.source === "string"
-                  ? output.source
-                  : "";
-        const found = excludedCodeIn(code);
+        const found = excludedCodeIn(javaScriptOf(output));
         if (found.length > 0) {
             fail(
                 `The build bundles code it must leave out, in ${output.fileName}: ${found.join("; ")}.`,
@@ -251,6 +253,9 @@ export default defineConfig(({ command }) => ({
     define: {
         // Whether this is a build with the service worker beside it (src/main.tsx).
         "import.meta.env.SERVICE_WORKER": JSON.stringify(command === "build"),
+        // The app's name, version and licence and the engine's version, from package.json
+        // (the About dialog, src/app/about/appInfo.ts).
+        ...appInfoDefines(ROOT),
     },
     resolve: {
         // gifenc's `main` and `browser` fields name its CommonJS build, which the bundler

@@ -47,7 +47,8 @@
 Multiple documents live in tabs, each with its own undo history and view. Open Recent lists
 up to five project handles when File System Access is available. Ctrl+K opens the command
 palette; the shortcut sheet is in Edit. See [the shortcut specification](SPEC.md#78-keyboard)
-for the complete map.
+for the complete map. **Help → About NGNE Sprite Editor…** shows the app and engine versions;
+its **Copy version info** copies them in one line for a bug report.
 
 ## Import and quantize
 

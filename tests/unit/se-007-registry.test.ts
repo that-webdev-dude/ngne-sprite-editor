@@ -150,7 +150,7 @@ describe("command registry", () => {
         expect(register({ context: ["canvas", "canvas"] })).toThrow(/contexts/);
         expect(register({ context: "nowhere" as "canvas" })).toThrow(/unknown context/);
         expect(register({ menuPath: [] })).toThrow(/empty menu path/);
-        expect(register({ menuPath: ["Help"] })).toThrow(/names the menu "Help"/);
+        expect(register({ menuPath: ["Window"] })).toThrow(/names the menu "Window"/);
         expect(register({ menuPath: ["File", " "] })).toThrow(/empty menu path/);
         expect(register({ contextMenus: [{ menu: "" }] })).toThrow(/empty context menu/);
         expect(() => registry.register(spec(" "))).toThrow(/has no id/);
@@ -498,8 +498,17 @@ describe("menus generated from the registry", () => {
         ).toContain("recent-a");
     });
 
-    it("the menu bar has the seven menus of DESIGN §2, none of them empty", () => {
-        expect(MENU_BAR).toEqual(["File", "Edit", "Sprite", "Layer", "Frame", "Select", "View"]);
+    it("the menu bar has the eight menus of DESIGN §2, none of them empty", () => {
+        expect(MENU_BAR).toEqual([
+            "File",
+            "Edit",
+            "Sprite",
+            "Layer",
+            "Frame",
+            "Select",
+            "View",
+            "Help",
+        ]);
         for (const menu of MENU_BAR) {
             expect(buildMenu(appCommands.list(), [menu]).length, menu).toBeGreaterThan(0);
         }

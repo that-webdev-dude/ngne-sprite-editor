@@ -137,4 +137,6 @@ export const plannedCommands: PlannedCommandSpec[] = [
         ],
         [["view.timeline", "Timeline"]],
     ]),
+    // About NGNE Sprite Editor… is implemented by about/about.commands.ts.
+    ...menu("Help", [[["help.about", "About NGNE Sprite Editor…"]]]),
 ];
