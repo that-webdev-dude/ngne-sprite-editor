@@ -12,8 +12,8 @@
 // - `src/doc/blend_funcs.cpp` of aseprite/aseprite (the version in docs/PROVENANCE.md): `rgba_blender_normal`,
 //   `rgba_blender_merge`, the separable `blend_*` macros and functions, the `rgba_blender_*`
 //   of each mode, the HSL helpers (`lum`, `sat`, `clip_color`, `set_lum`, `set_sat`) and the
-//   macro `RGBA_BLENDER_N`, the "new blending method" that `get_rgba_blender` returns while
-//   the preference `experimental.new_blend` is true, its default.
+//   macro `RGBA_BLENDER_N`, the "new blending method" that `get_rgba_blender` returns when
+//   asked for it and that Aseprite uses by default.
 // - pixman's `MUL_UN8` and `DIV_UN8` (`pixman-combine32.h`), and the packing of `color_t` in
 //   `src/doc/color.h`: r in bits 0-7, g 8-15, b 16-23, a 24-31; `rgba()` takes `uint8_t`.
 // - Pixels are written "rrggbbaa", one string per row with the pixels separated by spaces.

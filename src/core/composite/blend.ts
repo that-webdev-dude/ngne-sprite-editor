@@ -80,9 +80,9 @@ const blendNormal: BlendFunction = (target, targetAt, source, sourceAt, count, o
 };
 
 // The other 18 modes (SE-061) follow Aseprite's "new blending method", `RGBA_BLENDER_N` in its
-// `doc/blend_funcs.cpp`, which Aseprite uses by default (preference `experimental.new_blend`,
-// default true). Each mode has a mixing function X that gives a colour from the backdrop's
-// colour and the source's colour (below). Then, with a, B, S and R as for the normal blend:
+// `doc/blend_funcs.cpp`, which Aseprite uses by default. Each mode has a mixing function X that
+// gives a colour from the backdrop's colour and the source's colour (below). Then, with a, B, S
+// and R as for the normal blend:
 //
 //     1. a = 0        R = B
 //     2. Ba = 0       R = (Sr, Sg, Sb, a)                 nothing below: the source, unmixed
