@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 – 2026-11-17
 
 - Closing the layer or cel properties popover does less work in the step that applies it,
   so the viewport shows the change about a millisecond sooner
@@ -34,6 +34,11 @@
   Aseprite's render library, of Björn Ottosson's Oklab conversions (the colour distance of the
   PNG import) and of Tommy Ettinger's mulberry32 (the spray's generator), and lists the flood
   fill's colour-match rule (Aseprite's document library).
+- `THIRD_PARTY_NOTICES.md` adds the notices of the Graphics Gems seed fill (the flood fill's
+  stack of row spans) and of github-slugger (the heading slugs of the documentation link
+  check). `licences.txt` lists Rolldown, whose runtime helpers the build writes into the bundle,
+  with the third-party notices Rolldown ships; the build no longer adds Vite's module-preload
+  polyfill.
 - The README notes which earlier files named parts of Aseprite's application source.
 - The pixel-perfect filter of the pencil and eraser is rewritten from a description of its
   behaviour; strokes keep exactly the same pixels.

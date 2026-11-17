@@ -90,15 +90,16 @@ from assistive technology. The [accessibility audit](docs/audit/a11y.md) records
 - [Changelog](CHANGELOG.md): features and known limitations.
 
 Releases: a `v*` tag runs the Pages workflow (`.github/workflows/deploy.yml`), which deploys the
-site; branch pushes do not deploy. A release sets the version in `package.json`, the generator
-version (`ATLAS_GENERATOR`, `src/core/export/atlasFormat.ts`) and the changelog together, with
+site; branch pushes do not deploy. A release sets the version in `package.json` and
+`package-lock.json`, the generator versions (`PROJECT_GENERATOR`, `src/core/project/format.ts`;
+`ATLAS_GENERATOR`, `src/core/export/atlasFormat.ts`) and the changelog together, with
 `npm run check` passing. Installing the app as a PWA is checked by hand: see the
 [manual steps](docs/audit/pwa.md#manual-install-owner-to-do).
 
 Licensed under [MIT](LICENSE). Code ported from Aseprite's MIT-licensed document and render
 libraries, pixman, Allegro, Alois Zingl's Bresenham algorithms, Björn Ottosson's Oklab and
-Tommy Ettinger's mulberry32, and the encoders the bundled `gifenc` credits (gif.js and
-gif-codec), is listed with its notices in [third-party notices](THIRD_PARTY_NOTICES.md). The build writes `licences.txt` beside
+Tommy Ettinger's mulberry32, the Graphics Gems seed fill, github-slugger (the documentation
+link check), and the encoders the bundled `gifenc` credits (gif.js and gif-codec), is listed with its notices in [third-party notices](THIRD_PARTY_NOTICES.md). The build writes `licences.txt` beside
 `index.html`: this project's licence, those notices and the licence of every npm package the
 build bundles. The app shows it in a dialog (View → Open Source Licences…). This project is not
 affiliated with or endorsed by Aseprite or Igara Studio S.A.

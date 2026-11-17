@@ -174,6 +174,7 @@ records are in the owner's private record.
 | 2026-11-17 | github-slugger is registered so that `scripts/check-links.mjs` can be compared with it; a notice and pointer follow if code was taken. |
 | 2026-11-17 | Names of classes, members, data files and preference keys of Aseprite's application source, and the step-by-step records of the earlier audit rounds, are kept in the owner's private record outside the repository. This file names the files, sections and dates in behaviour terms only (licenses.md §3). |
 | 2026-11-17 | The bundle's build-tool code is listed: Rolldown's runtime helpers in `licences.txt` (`vite.config.ts`, `BUILD_PACKAGES`); Vite's module-preload polyfill is turned off. |
+| 2026-11-17 | The release hold is lifted: the full audit at `ff66762` and its two verification audits leave no blocking finding open, and the audited revision is `a8a586f`. |
 
 ## Findings
 
@@ -201,6 +202,6 @@ licence texts at their registered commits; binary fixtures byte for byte.
 
 ## Open items
 
-- No blocking finding is open (second verification audit, 2026-11-17). The release hold lifts
-  when the owner lifts it.
+- No blocking finding is open (second verification audit, 2026-11-17). The owner lifted the
+  release hold on 2026-11-17 (Owner decisions).
 - Record gaps S-5 to S-7 and S-9.
