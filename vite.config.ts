@@ -71,6 +71,13 @@ const icons = readdirSync(new URL("public/icons/", import.meta.url))
 const ROOT = fileURLToPath(new URL(".", import.meta.url));
 const TITLE = "NGNE Sprite Editor";
 
+/**
+ * Build tools whose own code the bundle holds although no module imports it: Rolldown writes
+ * its runtime helpers into every build, so its licence is listed with the bundled packages.
+ * The module-preload polyfill is turned off (`build.modulePreload`), so Vite writes none.
+ */
+const BUILD_PACKAGES: readonly string[] = [join(ROOT, "node_modules", "rolldown")];
+
 /** The ids of the modules the build's chunks render, the web workers' included. */
 const bundledModules = new Set<string>();
 
@@ -172,7 +179,7 @@ function licencesFile(): Plugin {
                     this.emitFile({
                         type: "asset",
                         fileName: LICENCES_FILE,
-                        source: buildLicencesFile(ROOT, dirs, TITLE),
+                        source: buildLicencesFile(ROOT, [...dirs, ...BUILD_PACKAGES], TITLE),
                     });
                 } catch (error) {
                     if (error instanceof LicenceError) this.error(error.message);
@@ -266,5 +273,7 @@ export default defineConfig(({ command }) => ({
     },
     // The web workers' builds note their modules for the licences file.
     worker: { plugins: () => [collectModules()] },
-    build: { target: "es2022" },
+    // No module-preload polyfill: every browser with WebGPU preloads modules itself, and the
+    // bundle then holds no code of Vite's beyond Rolldown's runtime (BUILD_PACKAGES).
+    build: { target: "es2022", modulePreload: { polyfill: false } },
 }));

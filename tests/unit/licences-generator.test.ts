@@ -133,6 +133,19 @@ describe("readPackageLicence", () => {
         });
     });
 
+    it("reads a third-party licence file beside the licence", () => {
+        const dir = writePackage(
+            "read",
+            "bundler",
+            { license: "MIT" },
+            { LICENSE: MIT, "THIRD-PARTY-LICENSE": "Taken from elsewhere\n" },
+        );
+        expect(readPackageLicence(dir, fallbacks).texts).toEqual([
+            { file: "LICENSE", text: MIT },
+            { file: "THIRD-PARTY-LICENSE", text: "Taken from elsewhere\n" },
+        ]);
+    });
+
     it("reads the older `licenses` list and a `license` object", () => {
         const list = writePackage(
             "read",

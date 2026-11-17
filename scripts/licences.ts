@@ -27,8 +27,11 @@ export const ALLOWED_LICENCES: readonly string[] = [
     "Apache-2.0",
 ];
 
-/** Licence files, NOTICE files among them, as a package's top directory holds them. */
-const LICENCE_FILE_NAME = /^(licen[cs]e|copying|notice)([.-].*)?$/i;
+/**
+ * Licence files, NOTICE files and third-party licence files (the licences of code a package
+ * took from elsewhere, such as Rolldown's) among them, as a package's top directory holds them.
+ */
+const LICENCE_FILE_NAME = /^(licen[cs]e|copying|notice|third-party-licen[cs]e)([.-].*)?$/i;
 
 /** Why a package cannot be listed. */
 export class LicenceError extends Error {

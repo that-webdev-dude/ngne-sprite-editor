@@ -21,7 +21,9 @@ behaviour only, from public docs and use of the program), **derived and noticed*
 | Aseprite Render Library (`src/render`) | <https://github.com/aseprite/aseprite> | v1.3.18.6, commit `331e898ef405d919539c03fd1675691cfa16c3a3` | MIT (`src/render/LICENSE.txt`) | Permissive |
 | Oklab (Björn Ottosson, "A perceptual color space for image processing") | <https://bottosson.github.io/posts/oklab/> | The article as published on 23 December 2020 (modified 27 January 2021) | Public domain, or MIT (<https://bottosson.github.io/misc/License.txt>) | Permissive |
 | mulberry32 (Tommy Ettinger, `mulberry32.c`) | <https://gist.github.com/tommyettinger/46a874533244883189143505d203312c> | Gist revision `fc93b8ad259c09a3635d80ed12a05309120795dc` | CC0 1.0 | Permissive |
-| Graphics Gems (`gems/SeedFill.c`, Paul Heckbert) | <https://github.com/erich666/GraphicsGems> | Commit `75a9be5b7f` (the latest change to `SeedFill.c`, 2023-12-26) | The repository's own licence (`LICENSE.md`): use permitted in any program, credit not required | Unknown: not yet classified by the owner (licenses.md §1) |
+| Graphics Gems (`gems/SeedFill.c`, Paul Heckbert) | <https://github.com/erich666/GraphicsGems> | Commit `75a9be5b7f` (the latest change to `SeedFill.c`, 2023-12-26) | The repository's own licence (`LICENSE.md`): use permitted in any program, credit not required | Permissive (owner decision, 2026-11-17) |
+| NGNE (the owner's engine repository, `demo/`) | <https://github.com/that-webdev-dude/ngne> | Tag `v0.2.1`, commit `b0cc2ec` | MIT, Copyright (c) 2026 that-webdev-dude, the same holder as this project (owner decision, 2026-11-17) | Owner's own: registered, no notices entry (licenses.md §5) |
+| github-slugger (Dan Flettre) | <https://github.com/Flet/github-slugger> | 2.0.0, commit `3461c4350868329c8530904d170358bca1d31448` (the latest; which version was read is not recorded) | ISC, Copyright (c) 2015, Dan Flettre | Permissive |
 
 ## How each version was established
 
@@ -87,9 +89,11 @@ October 2026 without recording a version.
 | `tests/unit/fixtures/se-061-blend-golden.generate.mjs` (cel opacity) | Aseprite Render Library (`render.cpp`): the product of cel and layer opacity, rounded by `MUL_UN8` | Derived and noticed (listed 2026-11-17; whether `render.cpp` was read is not recorded) |
 | `src/core/color/oklab.ts` | Oklab: `linear_srgb_to_oklab` and `oklab_to_linear_srgb` | Derived and noticed (listed and pointer added 2026-11-17) |
 | `src/core/raster/spray.ts` (`createRandom`), `tests/unit/se-030-support.ts`, `tests/unit/se-032-floating.test.ts`, `tests/perf/se-032-move.perf.ts`, `tests/perf/se-033-transform.perf.ts`, `tests/e2e/se-070-soak.spec.ts`, `tests/unit/se-065-raster.test.ts` (a comment quoting its steps) | mulberry32 | Derived and noticed (listed and pointers added 2026-11-17) |
-| `src/core/raster/flood.ts` (the span fill) | Graphics Gems (`SeedFill.c`), the code published with Heckbert's "A Seed Fill Algorithm" (1990), which the file cites | Pending the owner's classification of the Graphics Gems licence. Whether `SeedFill.c` was read is not recorded; compared on 2026-11-17, both keep the algorithm's stack of row segments, and the seeding, the scan of a row and the loop are written differently |
+| `src/core/raster/flood.ts` (the span fill) | Graphics Gems (`SeedFill.c`), the code published with Heckbert's "A Seed Fill Algorithm" (1990), which the file cites | Derived and noticed (listed and pointer added 2026-11-17, after the owner classified the Graphics Gems licence permissive): both keep the algorithm's stack of row segments and its pushes toward the parent row; the seeding, the scan of a row and the loop are written differently |
+| `tests/unit/se-051-support.ts` (`demoDrawSprite`) | NGNE `demo/sprites.ts` at `v0.2.1`, statement for statement | Derived (owner's own code, same holder: no notices entry) |
+| `scripts/check-links.mjs` (heading slugs) | github-slugger (`script/generate-regex.js`, `index.js`): the characters a slug keeps and the numbering of repeated slugs | Derived and noticed (compared in the verification audit of 2026-11-17; listed and pointer added that day). A development script, not shipped |
 | `src/app/tools/curve/curve.tools.ts`, `docs/SPEC.md` §7.1 (the curve's three presses) | Aseprite application code: the flow was checked against its source (review record of 2026-10-17 in the history of `docs/REVIEW.md`) | Behaviour-dictated: the present text describes the flow by its behaviour, with no source identifier, file or line reference; comparison with the source not checked |
-| `docs/SPEC.md` §7.1 (rail and keys), `docs/DESIGN.md` §5.1 (tool groups) | Aseprite application data (`gui.xml`), named as the source of the tool groups in the history of `docs/REVIEW.md` | Behaviour-dictated: the groups as the program's toolbar shows them; comparison with the file not checked |
+| `docs/SPEC.md` §7.1 (rail and keys), `docs/DESIGN.md` §5.1 (tool groups) | Aseprite application data, named as the source of the tool groups in the history of `docs/REVIEW.md` | Behaviour-dictated: the groups as the program's toolbar shows them; comparison with the data not checked |
 | `tests/unit/se-010-support.ts` (`referencePixel`) | The normal blend as `blend.ts` states it, in floating point | Behaviour-dictated (the formula); no code in common |
 | `tests/unit/se-066-fixtures/db32-aseprite.gpl` | The DawnBringer 32 colours of `db32.hex` (Lospec) in the GIMP palette layout Aseprite writes (`#` header, entries `Untitled`) | Independent data: written out again from `db32.hex` on 2026-11-17 in that layout, byte for byte the same file |
 | `src/core/palettes/presets.ts`, `tests/unit/se-043-presets.test.ts`, `tests/unit/se-066-fixtures/` | Published palettes (DawnBringer, PICO-8, Sweetie 16, Endesga 32, AAP-64, Game Boy, 1-bit), with their Lospec addresses | Data: colour lists with their sources named |
@@ -146,6 +150,12 @@ the repository.
 | 2026-11-17 | Branch `chore/licence-audit` on `main` at `3c55bf993e84e1e32a9ad4e578b5526cb58611c1`, with its uncommitted changes (`CHANGELOG.md`, `README.md`, `THIRD_PARTY_NOTICES.md`, `docs/PROVENANCE.md`, `docs/SPEC.md`, `wand.ts`, `curve.ts`, `pixelPerfect.ts`, `se-015-pencil.spec.ts`, `se-017-support.ts`, `se-051-aseprite.test.ts`) | Third full audit (licenses.md §6) by another auditor, who had not worked on the code or read the earlier audits' reports: every tracked file that names or derives from a registered upstream, tests, fixtures, scripts, assets, docs, the build output (`npm run build`), the generated code, the bundled-dependency notices and the `gifenc` quantizer exclusion, the history note and the history of every ref for restricted-source names; permissive upstreams compared at the versions above, and gif-codec at commit `40456125`; Aseprite's application source not read (owner decision of 2026-11-17). | The first audit's four items and two of the second audit's three are closed in the audited state. Three blocking items open (Open items); the gif-codec notice was added to `THIRD_PARTY_NOTICES.md` during the audit. |
 | 2026-11-17 | Branch `chore/licence-audit` on `main` at `3c55bf993e84e1e32a9ad4e578b5526cb58611c1`, with its uncommitted changes (`CHANGELOG.md`, `README.md`, `THIRD_PARTY_NOTICES.md`, `docs/PROVENANCE.md`, `docs/SPEC.md`, `wand.ts`, `curve.ts`, `flood.ts`, `pixelPerfect.ts`, `se-015-pencil.spec.ts`, `se-017-support.ts`, `se-051-aseprite.test.ts`) | Fourth full audit (licenses.md §6) by another auditor, who had not worked on the code or read the earlier audits' reports: every tracked file that names or derives from a registered upstream or a credited origin, tests, fixtures, scripts, assets, docs, the build output (`npm run build`: `dist/licences.txt`, the service worker and the bundle), the generated code, the bundled-dependency notices and the `gifenc` quantizer exclusion, the history note, and the history of every ref and tags `v1.0.0` to `v1.0.2` for restricted-source names; permissive upstreams compared at the versions above (Document Library and Render Library at `331e898`, pixman 0.46.4, Allegro `spline.c` and `flood.c` at `8a386b2`, Zingl at `ce9002f`, gif.js at `92d27a0`, gif-codec at `40456125`), and the Graphics Gems seed fill; Aseprite's application source not read (owner decision of 2026-11-17). | The items of the earlier audits that were pending the next full audit are closed in the audited state. One blocking item open, an owner decision (Open items). |
 | 2026-11-17 | Branch `chore/licence-audit` on `main` at `3c55bf993e84e1e32a9ad4e578b5526cb58611c1`, with its uncommitted changes (`CHANGELOG.md`, `README.md`, `THIRD_PARTY_NOTICES.md`, `docs/PROVENANCE.md`, `docs/SPEC.md`, `wand.ts`, `curve.ts`, `flood.ts`, `pixelPerfect.ts`, `se-015-pencil.spec.ts`, `se-017-support.ts`, `se-051-aseprite.test.ts`) | Fifth full audit (licenses.md §6) by another auditor, who had not worked on the code or read the earlier audits' reports: every tracked file that names or derives from a registered upstream or a credited origin, every tracked file searched for code of published sources (credits, citations, known constants), tests, fixtures, scripts, assets, docs, the build output (`npm run build`: `dist/licences.txt` and the bundle, with the credits in the bundled packages' sources), the generated code, the history note, and the history of every ref and tags `v1.0.0` to `v1.0.2` for restricted-source names; permissive upstreams compared at the versions above (Document Library and Render Library at `331e898`, pixman 0.46.4, Allegro `spline.c` and `flood.c` at `8a386b2`, Zingl at `ce9002f`, gif.js at `92d27a0`, gif-codec at `40456125`), Graphics Gems `SeedFill.c` at `75a9be5`, the code of Ottosson's Oklab article and Tommy Ettinger's `mulberry32.c`; Aseprite's application source not read (owner decision of 2026-11-17). | The fourth audit's blocking item is closed by the owner decision of 2026-11-17. Three blocking items open (Open items); their notices were added to `THIRD_PARTY_NOTICES.md` during the audit. |
+| 2026-11-17 | `ff66762` (branch `chore/licence-audit`) | Full audit (licenses.md §6) by six auditors who had not worked on the code or read earlier reports, one per area: all 1,226 tracked files (full review of the 131 that name an upstream, a scan of the rest), `dist/` with `licences.txt`, and the code generated into users' projects; permissive upstreams read at their registered versions; Aseprite's application source and data not read (no approved comparison) | No file derived from a copyleft or restricted source. Blocking candidates S-1 to S-4, record gaps S-5 to S-9 (Findings). |
+| 2026-11-17 | `ff66762` with the fixes of S-1 to S-4 and S-8 (uncommitted) | First verification audit by another auditor: the fixes, the comparison of `scripts/check-links.mjs` with github-slugger, and the diff | S-2, S-3 and S-8 confirmed; S-1 partly fixed (Rolldown's third-party licence file not listed); S-4 code taken from github-slugger. Both fixed the same day (Findings). |
+| 2026-11-17 | `ff66762` with all fixes (the commit that adds this row) | Second verification audit by another auditor: the fixes of S-1 and S-4, the earlier fixes, and the diff | Nothing blocking: S-1 and S-4 confirmed fixed, S-2, S-3 and S-8 still hold, the diff adds no blocking finding. Audited revision: the commit that adds this row. |
+
+The "Open items" the first five rows name are summarised in Findings (S-0, S-9); their full
+records are in the owner's private record.
 
 ## Owner decisions
 
@@ -159,223 +169,38 @@ the repository.
 | 2026-11-17 | History note approved, as worded in `README.md` (after the licence paragraph): it names the files whose earlier versions held names and details from Aseprite's application source, and the rewrite of `pixelPerfect.ts`. The history is not rewritten. |
 | 2026-11-17 | `gifenc`'s LZW encoder, bundled in the GIF export, is kept: the licences of the ActionScript version and of the Poskanzer and Elliott versions in its credit chain are not established, and that is accepted as a known residual risk. The gif.js MIT notice (Copyright (c) 2013-2018 Johan Nordberg) is added to `THIRD_PARTY_NOTICES.md`. |
 | 2026-11-17 | The accepted residual risk of `gifenc`'s LZW encoder is extended to the other origins its header credits: "GIFCOMPR.C" with GIF modifications by David Rowley, `compress.c` by Spencer W. Thomas, Jim McKie, Steve Davies, Ken Turkowski, James A. Woods and Joe Orost, and the JS optimisations by Mathieu Henri. Their licences are not established. |
+| 2026-11-17 | The Graphics Gems licence (`LICENSE.md` at `75a9be5b7f`: use in any program, credit optional) is classified permissive. `flood.ts` is derived and noticed; its notice is added to `THIRD_PARTY_NOTICES.md`. |
+| 2026-11-17 | NGNE (`@ngne/core`, MIT, "that-webdev-dude") has the same copyright holder as this project: code copied from it is registered here and needs no notices entry (licenses.md §5). |
+| 2026-11-17 | github-slugger is registered so that `scripts/check-links.mjs` can be compared with it; a notice and pointer follow if code was taken. |
+| 2026-11-17 | Names of classes, members, data files and preference keys of Aseprite's application source, and the step-by-step records of the earlier audit rounds, are kept in the owner's private record outside the repository. This file names the files, sections and dates in behaviour terms only (licenses.md §3). |
+| 2026-11-17 | The bundle's build-tool code is listed: Rolldown's runtime helpers in `licences.txt` (`vite.config.ts`, `BUILD_PACKAGES`); Vite's module-preload polyfill is turned off. |
+
+## Findings
+
+The findings of the audits above, by the licenses.md §6 format: blocking candidates one row
+each, non-blocking findings one row per kind. The five rounds of 2026-11-17 before `ff66762`
+are summarised in S-0; their step-by-step records are in the owner's private record.
+
+| ID | Audit | Files | Blocking | Disposition |
+| --- | --- | --- | --- | --- |
+| S-0 | Rounds 1-5, 2026-11-17 | `pixelPerfect.ts` (clean-room rewrite); source references and internal-handling comments in `se-051-aseprite.test.ts`, `wand.ts`, `docs/SPEC.md` §7.1; notices and pointers for `curve.ts`, the E2E line helpers, `flood.ts` (colour rule), `se-061-blend.test.ts`, `oklab.ts`, mulberry32, gif.js, gif-codec; the Render Library and Document Library files used; the README history note; the credits of `gifenc`'s LZW encoder | Yes | Fixed by `ff66762`, confirmed by the full audit at `ff66762`; the LZW encoder's credited origins are an accepted risk (Owner decisions) |
+| S-1 | Full, `ff66762` | `dist/licences.txt`: Rolldown's runtime helpers and Vite's module-preload polyfill in the main chunk, not listed | Yes | Fixed 2026-11-17: Rolldown listed (`BUILD_PACKAGES` in `vite.config.ts`), the polyfill turned off; after the first verification audit, the collector also lists a package's third-party licence file (Rolldown's, with the Rollup and esbuild notices; `scripts/licences.ts`) |
+| S-2 | Full, `ff66762` | `src/core/raster/flood.ts`, `THIRD_PARTY_NOTICES.md`: the span fill against Graphics Gems `SeedFill.c`, an upstream of Unknown class with no notice | Yes | Fixed 2026-11-17: Graphics Gems classified permissive (owner), notice and pointer added |
+| S-3 | Full, `ff66762` | `tests/unit/se-051-support.ts`: code copied from NGNE `demo/sprites.ts`, not registered | Candidate | Rejected as a notice gap: same holder as this project (owner); NGNE registered (Upstreams, Files) |
+| S-4 | Full, `ff66762` | `scripts/check-links.mjs`: names github-slugger as the source of its character rules; not registered or compared | Candidate | Fixed 2026-11-17: the verification audit found the slug rules taken from github-slugger; notice and pointer added |
+| S-5 | Full, `ff66762` | Files rows missing or incomplete: `src/app/selection/clipboard.ts` (Delete and Cut on a float); the wand row covers all of `src/app/selection/tools/` while only the wand's area is tied; Deselect while floating (`selection.commands.ts`, `docs/SPEC.md` §7.2) has no row; the cel × layer opacity rule in `src/core/composite/compositeFrame.ts` and `tests/unit/se-061-blend.test.ts` (Render Library); `src/core/raster/contour.ts` and `src/app/tools/contour/contour.tools.ts` (contour default); `src/core/model/defaultPalette.ts` (DawnBringer 32); the flood test oracle in `tests/unit/se-017-flood.test.ts`; the LCG and hash constants in further tests, perf files and `spikes/ngne/runner/run.ts`; the credits inside bundled `aria-hidden` and `use-callback-ref` | No | Open |
+| S-6 | Full, `ff66762` | Wording: `curve.ts`, this file and the notices name Allegro's `calc_spline` where the sample count is in `_soft_spline`; `README.md` "ported from" list; the README history note against this file; the 0BSD header of generated code names no grantor (`generatedLicence.ts`); the shipped notices point to this file, which is not shipped; carried from rounds 1-5: the pixman notice leaves out the first line of `COPYING`, `CHANGELOG.md` does not mention the notices added on 2026-11-17, `docs/SPEC.md` §4 lists the notices incompletely, and `clipboard.ts` writes "as Aseprite does" beside this project's own `FloatingSelection.discard` | No | Open |
+| S-7 | Full, `ff66762` | Tooling: `sw.js` is built outside the licences collector (nothing missing today); `licenceAllowed` in `scripts/licences.ts` accepts some nested licence expressions | No | Open |
+| S-8 | Full, `ff66762` | This file named classes, members, data files and preference keys of Aseprite's application source, and RULES 4 sends contributors here | No | Fixed 2026-11-17: moved to the owner's private record (Owner decisions) |
+| S-9 | Rounds 1-5, 2026-11-17 | Tags `v1.0.0` and `v1.0.1` shipped without `THIRD_PARTY_NOTICES.md`; no release-page note for `v1.0.0` to `v1.0.2` (licenses.md §7) | No | Open |
+
+The full audit at `ff66762` found no file derived from a copyleft or restricted source. Not
+checked: the comparison with Aseprite's application source and data of every item confirmed
+from it; NGNE `demo/` against this repository beyond the copied function; gif.js and gif-codec
+licence texts at their registered commits; binary fixtures byte for byte.
 
 ## Open items
 
-From the audit of 2026-11-17. Release, deploy and tag stay on hold (licenses.md §7) until a
-second full audit, by another auditor, finds nothing blocking.
-
-- Pending the second full audit: the four blocking items of the 2026-11-17 audit, fixed on
-  2026-11-17. `src/core/raster/pixelPerfect.ts` named a class of Aseprite's application
-  source and described its rule step by step (added 2026-10-15): rewritten clean room.
-  `tests/unit/se-051-aseprite.test.ts` cited a file of that source (added 2026-10-13): the
-  comment now describes the exported format. `src/app/selection/tools/wand.ts` explained the
-  wand by the program's internal handling: reworded to its behaviour. `curve.ts` and two E2E
-  line helpers had no notice: listed in `THIRD_PARTY_NOTICES.md`, pointer lines added.
-- `tests/unit/fixtures/se-061-blend-golden.generate.mjs` also uses `src/doc/color.h` (Document
-  Library, MIT), which the record of files used does not list, and states the opacity of a cel
-  as "Aseprite's renderer" computes it. Which source that was is not recorded; Aseprite's
-  Render Library (`src/render`, MIT) is not registered.
-- `gifenc`'s README credits its encoder to gif.js and gif-codec (both MIT, per their
-  repositories' licence files); its LZW encoder's header credits Kevin Weiner's Java encoder
-  and `compress.c`. The bundled-dependencies note above records only the quantizer.
-- The history holds names, file references and details from Aseprite's application source
-  (no history note exists yet, licenses.md §7):
-  - `docs/SPEC.md` (the wand; Delete and Cut on a float; Flip and Rotate), `floating.ts` and
-    `se-032-floating.test.ts`: class and member names, 2026-10-17 to 2026-11-13;
-  - `transform.commands.ts`: `FlipCommand`, `RotateCommand`, `startFlipTransformation`,
-    `startSelectionTransformation`, 2026-10-19 to 2026-11-13;
-  - `docs/REVIEW.md`: `ToolLoopImpl`, `m_useMask`, `PixelsMovement`, `FourPointsController`,
-    `FlipCommand`, `RotateCommand`, `Editor::startSelectionTransformation`,
-    `MovingPixelsState` and the data file `gui.xml`, 2026-10-17 until it was untracked on
-    2026-11-06 (tag `v1.0.0`);
-  - `docs/SPEC.md`: `MovingPixelsState::onBeforeCommandExecution` (commit `2e5cdbd`), removed
-    with the other names on 2026-11-13;
-  - `blend.ts` and `se-061-blend-golden.generate.mjs`: the preference `experimental.new_blend`
-    and, in the generator, the file `data/pref.xml`, 2026-10-20 to 2026-11-16 (`v1.0.0` to
-    `v1.0.2`);
-  - `se-051-aseprite.test.ts`: a source file reference, 2026-10-13 to 2026-11-17;
-  - `pixelPerfect.ts`: a class name and the code rewritten clean room, 2026-10-15 to
-    2026-11-17 (`v1.0.0` to `v1.0.2`);
-  - `docs/SPEC.md` §7.1: the contour's preference key and Aseprite's spray rate, 2026-10-17 to
-    2026-11-17;
-  - `src/app/selection/tools/wand.ts`: a comment on the program's internal handling of the
-    wand, 2026-10-17 to 2026-11-17 (`v1.0.0` to `v1.0.2`).
-- Tags `v1.0.0` and `v1.0.1` shipped without `THIRD_PARTY_NOTICES.md`; `v1.0.2` shipped it.
-
-From the second audit of 2026-11-17. Blocking:
-
-- Pending the third full audit: `docs/SPEC.md` §7.1 named the contour's preference key
-  `filled_preview` and stated Aseprite's spray rate (both added 2026-10-17); removed on
-  2026-11-17, rows added to the Files table.
-- Pending the third full audit: the history note (licenses.md §7), approved by the owner and
-  added to `README.md` on 2026-11-17, names the files and the upstream of the history list
-  above.
-- Pending the third full audit: accepted by the owner on 2026-11-17 as a residual risk
-  (Owner decisions), the gif.js notice added: `gifenc`'s LZW encoder, which the build bundles, credits Kevin Weiner's Java encoder, an
-  ActionScript version by Thibault Imbert and gif.js. gif.js (MIT, Copyright (c) 2013-2018
-  Johan Nordberg) and gif-codec (MIT, Copyright (c) 2018 Giovanni Cappellotto) have licence
-  files; Kevin Weiner's page, archived on 2013-03-05, says his Java sources "may be freely
-  used for any purpose", and his `LZWEncoder.java` is adapted from Jef Poskanzer's Java port
-  by way of J. M. G. Elliott. The licences of the ActionScript version and of the Poskanzer
-  and Elliott versions are not established (licenses.md §5: Unknown, an owner decision).
-
-Not blocking:
-
-- Not recorded above: `src/doc/color.h` (Document Library), used by the blend golden
-  generator; which source gave the generator's cel opacity (`MUL_UN8` of cel and layer
-  opacity, "Aseprite's renderer").
-- The pixman notice leaves out the first line of `COPYING` and its comment marks; the
-  copyright lines and licence text are as in `COPYING`.
-- `src/app/selection/clipboard.ts` writes "as Aseprite does (`FloatingSelection.discard`)";
-  the identifier is this project's (`src/core/floating/floating.ts`).
-- `README.md` lists the ported upstreams without Allegro.
-- No release-page note exists for `v1.0.0` to `v1.0.2` (licenses.md §7).
-- Not checked: the comparison with Aseprite's application source of every item it confirmed;
-  the clean-room process of `pixelPerfect.ts` beyond its record; `@ngne/core`'s own sources
-  (adapted from the owner's `cluster-renderer`); the E2E suite.
-
-From the third audit of 2026-11-17. Blocking:
-
-- The bundled GIF encoder holds code of gif-codec (MIT, Copyright (c) 2018 Giovanni
-  Cappellotto), which `gifenc`'s README credits: `gifenc`'s `src/constants.js` is the same as
-  gif-codec's `src/constants.js` at commit `40456125`, its member names are in the built
-  bundle, and `gifenc`'s `src/index.js` has gif-codec's encoder function names. The shipped
-  notices had no gif-codec entry. Pending the next full audit: the notice was added to
-  `THIRD_PARTY_NOTICES.md` on 2026-11-17.
-- `src/core/raster/flood.ts` (added 2026-10-15) takes its match rule from `color_equal_32` of
-  the Document Library's `algorithm/floodfill.cpp`, which `docs/SPEC.md` §7.1 says was checked
-  against its source; `flood.ts` lines 81-90 follow that function's order, including its
-  separate case for tolerance 0 (`floodfill.cpp` lines 53-73). The file has no pointer to the
-  notices, `THIRD_PARTY_NOTICES.md` does not list it, and the Files table classifies it as
-  behaviour-dictated. Pending the next full audit: listed in `THIRD_PARTY_NOTICES.md`, pointer
-  added and reclassified derived and noticed on 2026-11-17.
-- The history note in `README.md` does not name `src/app/selection/tools/wand.ts`, whose
-  comment read "in Aseprite, whose selection inks fill with no mask" from 2026-10-17 (commit
-  `a35457f`, which also put `ToolLoopImpl` and `m_useMask` in `docs/SPEC.md` as checked in
-  Aseprite's source) to 2026-11-17, tags `v1.0.0` to `v1.0.2` included. The history list above
-  does not name it either. Pending the next full audit: added to the history note and the
-  history list on 2026-11-17.
-
-Not blocking:
-
-- `src/app/tools/curve/curve.tools.ts` and `docs/SPEC.md` §7.1 (the curve's three presses):
-  the review record of 2026-10-17 in the history of `docs/REVIEW.md` says the flow was checked
-  against Aseprite's `FourPointsController`. The Files table does not list them; their present
-  text describes the flow by its behaviour, with no source identifier, file or line reference.
-  The history list above names, for `docs/REVIEW.md`, neither `FourPointsController` nor
-  `FlipCommand`, `RotateCommand` and `Editor::startSelectionTransformation`.
-- `README.md` and `docs/SPEC.md` §4 list the notices without Allegro, gif.js and gif-codec.
-- Bundled dependencies whose READMEs credit other projects, with no code compared:
-  `aria-hidden` ("Based on smooth-ui modal dialogs") and `use-callback-ref` (`mergeRefs`
-  "based on" react-merge-refs).
-- `tests/unit/se-066-fixtures/db32-aseprite.gpl`: whether it was saved by Aseprite or written
-  by hand is not recorded.
-- Not checked: whether "keep selection after clear" (`docs/SPEC.md` §7.2) is the label
-  Aseprite's preferences show; the rest of `gifenc`'s `src/index.js` against gif-codec beyond
-  the constants and function names.
-
-From the fourth audit of 2026-11-17. The items above marked "pending the third full audit" or
-"pending the next full audit" are closed in the audited state. Release, deploy and tag stay on
-hold (licenses.md §7) while the blocking item below is open.
-
-Blocking:
-
-- `gifenc`'s LZW encoder (`src/lzwEncode.js`, bundled in the GIF export) also credits, in its
-  header, "GIFCOMPR.C - GIF Image compression routines" with GIF modifications by David Rowley,
-  `compress.c` (IEEE Computer, June 1984) by Spencer W. Thomas, Jim McKie, Steve Davies, Ken
-  Turkowski, James A. Woods and Joe Orost, and JS optimisations by Mathieu Henri. Their licences
-  are not recorded, and the owner decision of 2026-11-17 names only the ActionScript, Poskanzer
-  and Elliott versions (licenses.md §5, §8). Needs an owner decision: extend the accepted
-  residual risk to these origins, or record their licences from a primary source. Pending the
-  next full audit: the owner extended the accepted residual risk to these origins on
-  2026-11-17 (Owner decisions).
-
-Not blocking:
-
-- `docs/REVIEW.md` (history; tag `v1.0.0`) named Aseprite's `gui.xml`, a data file under its
-  EULA, as the source of the tool groups (review row F21, commit `3fb0151`, 2026-10-17). The
-  present text (`docs/SPEC.md` §7.1, rail and keys; `docs/DESIGN.md` §5.1) describes the groups
-  as the program's toolbar shows them, with no file name or identifier, and the rail does not
-  follow them: behaviour-dictated, comparison with the source not checked. The README history
-  note names `docs/REVIEW.md`; the history list above names neither `gui.xml` nor, for
-  `docs/REVIEW.md`, `FourPointsController`, `FlipCommand`, `RotateCommand`,
-  `Editor::startSelectionTransformation` and `MovingPixelsState`, nor, for `docs/SPEC.md`,
-  `MovingPixelsState::onBeforeCommandExecution` (commit `2e5cdbd`).
-- `src/core/raster/flood.ts` cites Heckbert's "A Seed Fill Algorithm" (Graphics Gems, 1990).
-  Whether the code published with it (Graphics Gems `SeedFill.c`, under the Graphics Gems
-  licence, which the owner has not classified) was read is not recorded (licenses.md §2). The
-  span loop of `flood.ts` keeps the algorithm's segment stack and its pushes toward the parent
-  row, in its own form.
-- `src/doc/algorithm/floodfill.cpp`, which `flood.ts`'s colour rule comes from, credits "The
-  floodfill routine. By Shawn Hargreaves" (Allegro). Allegro's `src/flood.c` at `8a386b2`
-  compares colours by equality only; the tolerance rule is not in it. Not recorded above.
-- How each version was established does not cover `floodfill.cpp` (blob `adabca8` at
-  `331e898`; last changed in July and August 2026, a formatting change).
-- `CHANGELOG.md` does not mention the gif-codec notice or the `flood.ts` notice added on
-  2026-11-17.
-- `THIRD_PARTY_NOTICES.md`, shipped in `licences.txt`, refers the reader to
-  `docs/PROVENANCE.md`, which is not shipped.
-- Not checked: whether Aseprite's shortcuts and menus (DESIGN §1, principle 4; SPEC §7.8) were
-  taken from its `gui.xml` or from its public documentation; `gifenc`'s `lzwEncode.js` against
-  its C and Java origins; Graphics Gems `SeedFill.c` was read at `master`, not a pinned
-  revision; the E2E suite.
-
-From the fifth audit of 2026-11-17. The fourth audit's blocking item is closed by the owner
-decision of 2026-11-17. Release, deploy and tag stay on hold (licenses.md §7) while the
-blocking items below are open.
-
-Blocking (licenses.md §1, §2, §5: code ported from a permissive or public-domain source with
-no notice; the notices were added to `THIRD_PARTY_NOTICES.md` during the audit, and what is
-left is listed with each item):
-
-- `tests/unit/se-061-blend.test.ts` lines 133-199 (`preTicketComposite`, added 2026-10-20,
-  commit `1b87d42`, tags `v1.0.0` to `v1.0.2`): a copy of the compositor's normal blend before
-  SE-061, pixman's `MUL_UN8` and the rules of the Document Library's `rgba_blender_normal`
-  (`blend_funcs.cpp` lines 203-245), line for line as `blend.ts` lines 37-80. Not listed in
-  the notices or the Files table; no pointer. Open: the pointer line and a Files row.
-- `src/core/color/oklab.ts` (added 2026-10-12, commit `0b3c64d`, tags `v1.0.0` to `v1.0.2`,
-  bundled): lines 44-49 and 69-75 are the code of `linear_srgb_to_oklab` and
-  `oklab_to_linear_srgb` in Björn Ottosson's "A perceptual color space for image processing"
-  (2020), with the same constants and one statement per line of it. The article makes that
-  code available in the public domain and under MIT (Copyright (c) 2020 Björn Ottosson). The
-  file cites the article; the upstream is not registered. Open: an Upstreams row, a Files row
-  and the pointer line.
-- mulberry32 (Tommy Ettinger, `mulberry32.c`, gist revision `fc93b8a`, CC0 1.0): its steps
-  and constants (lines 49-52) are in `src/core/raster/spray.ts` lines 45-54 (`createRandom`,
-  added 2026-10-17, commit `4555fad`, tags `v1.0.0` to `v1.0.2`, bundled), which credits it as
-  public domain, and in five test files: `tests/unit/se-030-support.ts`,
-  `tests/unit/se-032-floating.test.ts`, `tests/perf/se-032-move.perf.ts`,
-  `tests/perf/se-033-transform.perf.ts` and `tests/e2e/se-070-soak.spec.ts`. Not registered.
-  Open: an Upstreams row, Files rows and pointer lines.
-- Pending the next full audit: for the three items above, the Upstreams rows, the Files rows
-  and the pointer lines were added on 2026-11-17, also in `tests/unit/se-065-raster.test.ts`,
-  whose comment quotes mulberry32's steps.
-
-Not blocking:
-
-- `tests/unit/se-010-support.ts` (`referencePixel`) computes the normal blend from the rules
-  stated in `blend.ts`, in floating point; no code in common beyond the formula. Not listed
-  in the Files table (behaviour-dictated by the formula).
-- `src/core/raster/flood.ts` against Graphics Gems `SeedFill.c` (revision `75a9be5`): both keep
-  a stack of row segments with a direction and push the parent row where a span reaches past
-  its parent, the algorithm the paper describes; the seeding, the scan of a row and the loop
-  are written differently. Whether `SeedFill.c` was read is not recorded.
-- Textbook code with no source named: the CRC-32 table of `src/core/png/decode.ts` (the PNG
-  specification's algorithm), FNV-1a in `src/core/export/pack.ts` and
-  `src/app/pwa/precache.ts`, the 4 × 4 Bayer matrix and Floyd-Steinberg weights of
-  `src/core/import/mapToPalette.ts`, median cut and k-means in
-  `src/core/import/buildPalette.ts`.
-- `README.md` and `docs/SPEC.md` §4 list the ported upstreams without Allegro, gif.js,
-  gif-codec, Oklab and mulberry32.
-- The Upstreams table does not register Aseprite's Render Library (`src/render`, MIT), whose
-  `render.cpp` line 1071 holds the cel-opacity rule the blend golden generator states as
-  "Aseprite's renderer"; the record of files used does not list `src/doc/color.h` or
-  `src/doc/blend_internals.h` (the latter includes pixman's `pixman-combine32.h`).
-- `src/core/export/generatedLicence.ts`: the generated files hold this project's code only,
-  under 0BSD, as recorded.
-- Not checked: the StackOverflow and other JavaScript copies of mulberry32 (the form in
-  `spray.ts` is a direct translation of the C); `@ngne/core`'s sources against
-  `cluster-renderer`, which they credit; whether the E2E suite holds other expected-image
-  helpers beyond those searched by pattern; the comparison with Aseprite's application source
-  of every item it confirmed.
+- No blocking finding is open (second verification audit, 2026-11-17). The release hold lifts
+  when the owner lifts it.
+- Record gaps S-5 to S-7 and S-9.

@@ -287,6 +287,46 @@ worldwide. This software is distributed without any warranty.
 See <http://creativecommons.org/publicdomain/zero/1.0/>.
 ```
 
+## Graphics Gems (Graphics Gems licence)
+
+Source: `gems/SeedFill.c`, "A Seed Fill Algorithm" by Paul Heckbert, from "Graphics Gems",
+Academic Press, 1990 (<https://github.com/erich666/GraphicsGems>).
+
+Version: commit `75a9be5b7f`. The file carries no copyright line; its header credits it as above.
+
+Used in:
+
+- `src/core/raster/flood.ts`: the contiguous fill's stack of row spans.
+
+The repository's licence (`LICENSE.md` at `75a9be5b7f`):
+
+```text
+LICENSE
+
+This code repository predates the concept of Open Source, and predates most licenses along such lines. As such, the official license truly is:
+
+EULA: The Graphics Gems code is copyright-protected. In other words, you cannot claim the text of the code as your own and resell it. Using the code is permitted in any program, product, or library, non-commercial or commercial. Giving credit is not required, though is a nice gesture. The code comes as-is, and if there are any flaws or problems with any Gems code, nobody involved with Gems - authors, editors, publishers, or webmasters - are to be held responsible. Basically, don't be a jerk, and remember that anything free comes with no guarantee.
+```
+
+## github-slugger (ISC)
+
+Source: `index.js` and `script/generate-regex.js` of <https://github.com/Flet/github-slugger>.
+
+Version: 2.0.0 (commit `3461c4350868329c8530904d170358bca1d31448`).
+
+Used in:
+
+- `scripts/check-links.mjs`: the characters a heading slug keeps and the numbering of
+  repeated slugs (a development script; the app does not ship it).
+
+```text
+Copyright (c) 2015, Dan Flettre <fletd01@yahoo.com>
+
+Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+```
+
 ## gif.js (MIT)
 
 Source: <https://github.com/jnordberg/gif.js>, whose LZW encoder (`LZWEncoder.js`) the

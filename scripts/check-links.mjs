@@ -100,6 +100,7 @@ function headingIds(source) {
         // punctuation and '-', keep alphabetic Unicode, replace each ASCII space with '-'.
         // Category rules: github-slugger/script/generate-regex.js; duplicate slugs are
         // collision-aware ("a", "a", "a-1" => "a", "a-1", "a-1-1").
+        // Taken from github-slugger (ISC); its notice is in THIRD_PARTY_NOTICES.md.
         const base = [...headingText(text).toLowerCase()]
             .map((char) =>
                 char === " "

@@ -19,7 +19,8 @@ import type { PixelPoint } from "./line";
 // The contiguous fill is a scanline fill with an explicit stack of row spans (Heckbert, "A
 // Seed Fill Algorithm", Graphics Gems, 1990), never recursion: a span is filled to its ends
 // on its row, and the rows above and below are scanned under it, so a 1024 × 1024 maze runs
-// in memory proportional to its spans, not its pixels.
+// in memory proportional to its spans, not its pixels. The stack of row spans follows the
+// `SeedFill.c` published with that article; its notice is in THIRD_PARTY_NOTICES.md.
 //
 // The colour-match rule is taken from Aseprite's MIT-licensed `algorithm/floodfill.cpp`; its
 // notice is in THIRD_PARTY_NOTICES.md.
