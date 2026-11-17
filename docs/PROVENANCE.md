@@ -175,6 +175,7 @@ records are in the owner's private record.
 | 2026-11-17 | Names of classes, members, data files and preference keys of Aseprite's application source, and the step-by-step records of the earlier audit rounds, are kept in the owner's private record outside the repository. This file names the files, sections and dates in behaviour terms only (licenses.md §3). |
 | 2026-11-17 | The bundle's build-tool code is listed: Rolldown's runtime helpers in `licences.txt` (`vite.config.ts`, `BUILD_PACKAGES`); Vite's module-preload polyfill is turned off. |
 | 2026-11-17 | The release hold is lifted: the full audit at `ff66762` and its two verification audits leave no blocking finding open, and the audited revision is `a8a586f`. |
+| 2026-11-17 | Release-page notes on notices approved as worded on the `v1.0.1` and `v1.0.2` pages and in the `v1.1.0` notes. `v1.0.0` gets no release page of its own; the `v1.1.0` notes cover it. |
 
 ## Findings
 
@@ -193,7 +194,7 @@ are summarised in S-0; their step-by-step records are in the owner's private rec
 | S-6 | Full, `ff66762` | Wording: `curve.ts`, this file and the notices name Allegro's `calc_spline` where the sample count is in `_soft_spline`; `README.md` "ported from" list; the README history note against this file; the 0BSD header of generated code names no grantor (`generatedLicence.ts`); the shipped notices point to this file, which is not shipped; carried from rounds 1-5: the pixman notice leaves out the first line of `COPYING`, `CHANGELOG.md` does not mention the notices added on 2026-11-17, `docs/SPEC.md` §4 lists the notices incompletely, and `clipboard.ts` writes "as Aseprite does" beside this project's own `FloatingSelection.discard` | No | Open |
 | S-7 | Full, `ff66762` | Tooling: `sw.js` is built outside the licences collector (nothing missing today); `licenceAllowed` in `scripts/licences.ts` accepts some nested licence expressions | No | Open |
 | S-8 | Full, `ff66762` | This file named classes, members, data files and preference keys of Aseprite's application source, and RULES 4 sends contributors here | No | Fixed 2026-11-17: moved to the owner's private record (Owner decisions) |
-| S-9 | Rounds 1-5, 2026-11-17 | Tags `v1.0.0` and `v1.0.1` shipped without `THIRD_PARTY_NOTICES.md`; no release-page note for `v1.0.0` to `v1.0.2` (licenses.md §7) | No | Open |
+| S-9 | Rounds 1-5, 2026-11-17 | Tags `v1.0.0` and `v1.0.1` shipped without `THIRD_PARTY_NOTICES.md`; no release-page note for `v1.0.0` to `v1.0.2` (licenses.md §7) | No | Fixed 2026-11-17: release 1.1.0 (`978f942`) ships the notices of every upstream; the `v1.0.1` and `v1.0.2` release pages carry a note, and the `v1.1.0` notes cover `v1.0.0`, which has no release page (Owner decisions) |
 
 The full audit at `ff66762` found no file derived from a copyleft or restricted source. Not
 checked: the comparison with Aseprite's application source and data of every item confirmed
@@ -204,4 +205,4 @@ licence texts at their registered commits; binary fixtures byte for byte.
 
 - No blocking finding is open (second verification audit, 2026-11-17). The owner lifted the
   release hold on 2026-11-17 (Owner decisions).
-- Record gaps S-5 to S-7 and S-9.
+- Record gaps S-5 to S-7.
