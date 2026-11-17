@@ -31,8 +31,8 @@ import { floatRefusal } from "./move/floatTarget";
 //   when it is applied. It selects the Move tool, which holds the float.
 // - Delete and Fill act on the selection, Cut copies it and clears it, each one undo step.
 //   While pixels float, Fill applies them first; Delete discards them, and Cut copies them
-//   and discards them as Aseprite does (this project's `FloatingSelection.discard`): what
-//   lies under the float stays and nothing is selected. Copy copies the floating pixels as
+//   and discards them (`FloatingSelection.discard`). As in Aseprite, what lies under the
+//   float stays and nothing is selected. Copy copies the floating pixels as
 //   they are and leaves them floating. Fill writes the foreground colour. Cut and Copy need a
 //   selection or a float; Delete and Fill a selection. They write on the layers paint may go
 //   to (SPEC §7.1); Copy reads any pixel layer.

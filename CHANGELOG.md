@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- The exported `<name>.sprites.ts` and `<name>.preview.config.mjs` name their copyright holder
+  in the 0BSD licence at their head ("Copyright (C) Fabio Barracano").
+- `THIRD_PARTY_NOTICES.md` gives pixman's `COPYING` in full, its opening lines included, names
+  Allegro's `_soft_spline` as the source of the curve's sample count, lists the compositor's
+  cel opacity under Aseprite's render library, and links to the provenance record instead of
+  naming a file the app does not ship.
+- The build checks the service worker too: it fails when the worker bundles code of a package
+  that `licences.txt` does not list. A licence expression with nested parentheses is read
+  correctly, and one that is not well formed is refused.
+
 ## 1.1.0 – 2026-11-17
 
 - Closing the layer or cel properties popover does less work in the step that applies it,

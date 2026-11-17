@@ -90,43 +90,50 @@ function nameFromDir(dir: string): string {
 
 /**
  * Whether an SPDX expression is allowed: one identifier of `allowed`, or an expression of
- * them with OR (one allowed alternative suffices) and AND (every part must be allowed).
+ * them with OR (one allowed alternative suffices), AND (every part must be allowed, and AND
+ * binds tighter than OR) and parentheses, nested to any depth. An expression that is not well
+ * formed, or that uses WITH, is not allowed.
  */
 export function licenceAllowed(
     expression: string,
     allowed: readonly string[] = ALLOWED_LICENCES,
 ): boolean {
-    const bare = expression
-        .trim()
-        .replace(/^\((.*)\)$/, "$1")
-        .trim();
-    if (bare === "") return false;
-    const tokens = bare.split(/\s+/);
-    const alternatives = splitOn(tokens, "OR");
-    if (alternatives.length > 1) {
-        // An operator at an end or two in a row leave an empty operand: not an expression.
-        if (alternatives.includes("")) return false;
-        return alternatives.some((part) => licenceAllowed(part, allowed));
-    }
-    const parts = splitOn(tokens, "AND");
-    if (parts.length > 1) return parts.every((part) => licenceAllowed(part, allowed));
-    return allowed.includes(bare);
-}
+    const tokens = expression.match(/[()]|[^\s()]+/g) ?? [];
+    let at = 0;
+    const OPERATORS = new Set(["AND", "OR", "WITH"]);
 
-/** The operands of `operator` among `tokens`, each joined back with single spaces. */
-function splitOn(tokens: readonly string[], operator: string): string[] {
-    const operands: string[] = [];
-    let current: string[] = [];
-    for (const token of tokens) {
-        if (token === operator) {
-            operands.push(current.join(" "));
-            current = [];
-        } else {
-            current.push(token);
+    // Each reader returns whether its part is allowed, or null when the part is not well formed.
+    const either = (): boolean | null => {
+        let result = both();
+        while (result !== null && tokens[at] === "OR") {
+            at += 1;
+            const next = both();
+            result = next === null ? null : result || next;
         }
-    }
-    operands.push(current.join(" "));
-    return operands;
+        return result;
+    };
+    const both = (): boolean | null => {
+        let result = single();
+        while (result !== null && tokens[at] === "AND") {
+            at += 1;
+            const next = single();
+            result = next === null ? null : result && next;
+        }
+        return result;
+    };
+    const single = (): boolean | null => {
+        const token = tokens[at];
+        if (token === undefined || token === ")" || OPERATORS.has(token)) return null;
+        at += 1;
+        if (token !== "(") return allowed.includes(token);
+        const inner = either();
+        if (inner === null || tokens[at] !== ")") return null;
+        at += 1;
+        return inner;
+    };
+
+    const result = either();
+    return result === true && at === tokens.length;
 }
 
 /** An SPDX identifier as `package.json` gives one: a string, or an object with a string `type`. */
@@ -261,6 +268,19 @@ function packageKey(dir: string): string {
 export function strayPackages(dirs: readonly string[], runtimeDirs: readonly string[]): string[] {
     const runtime = new Set(runtimeDirs.map(packageKey));
     return dirs.map(packageKey).filter((key) => !runtime.has(key));
+}
+
+/**
+ * The packages of `moduleIds` that the licences file does not list, by their place under the
+ * project. For a build that runs after the licences file was made, such as the service
+ * worker's (vite.config.ts): `listedDirs` are the packages the file lists, or null while it has
+ * not been made, which leaves every package unlisted.
+ */
+export function unlistedPackages(
+    moduleIds: Iterable<string>,
+    listedDirs: readonly string[] | null,
+): string[] {
+    return strayPackages(packageDirsOf(moduleIds), listedDirs ?? []);
 }
 
 function typesOnly(dir: string): boolean {

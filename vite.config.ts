@@ -13,6 +13,7 @@ import {
     packageDirsOf,
     runtimePackageDirs,
     strayPackages,
+    unlistedPackages,
 } from "./scripts/licences.ts";
 
 // SE-072: the PWA build plugin (vite-plugin-pwa, a development dependency). Its declarations
@@ -26,7 +27,11 @@ interface PwaOptions {
     filename: string;
     injectRegister: false;
     includeManifestIcons: boolean;
-    injectManifest: { globPatterns: string[]; maximumFileSizeToCacheInBytes: number };
+    injectManifest: {
+        globPatterns: string[];
+        maximumFileSizeToCacheInBytes: number;
+        buildPlugins: { vite: Plugin[] };
+    };
     manifest: Record<string, unknown>;
 }
 const PWA_PLUGIN: string = "vite-plugin-pwa";
@@ -81,6 +86,9 @@ const BUILD_PACKAGES: readonly string[] = [join(ROOT, "node_modules", "rolldown"
 /** The ids of the modules the build's chunks render, the web workers' included. */
 const bundledModules = new Set<string>();
 
+/** The packages licences.txt lists, once the app's build has made it; null before. */
+let listedDirs: string[] | null = null;
+
 /** An output of a build, as far as `noteModules` and `rejectExcluded` read it. */
 type BundleOutput =
     | {
@@ -116,14 +124,20 @@ function rejectExcluded(
     }
 }
 
+/** The ids of the modules that the chunks of `bundle` render code of. */
+function renderedModules(bundle: Record<string, BundleOutput>): string[] {
+    return Object.values(bundle).flatMap((output) =>
+        output.type === "chunk"
+            ? Object.entries(output.modules)
+                  .filter(([, module]) => module.renderedLength > 0)
+                  .map(([id]) => id)
+            : [],
+    );
+}
+
 /** Notes the modules of every chunk of `bundle` that renders code. */
 function noteModules(bundle: Record<string, BundleOutput>): void {
-    for (const output of Object.values(bundle)) {
-        if (output.type !== "chunk") continue;
-        for (const [id, module] of Object.entries(output.modules)) {
-            if (module.renderedLength > 0) bundledModules.add(id);
-        }
-    }
+    for (const id of renderedModules(bundle)) bundledModules.add(id);
 }
 
 /** Notes the modules of a web worker's build; the workers are built before the app's chunks. */
@@ -176,16 +190,38 @@ function licencesFile(): Plugin {
                     );
                 }
                 try {
+                    listedDirs = [...dirs, ...BUILD_PACKAGES];
                     this.emitFile({
                         type: "asset",
                         fileName: LICENCES_FILE,
-                        source: buildLicencesFile(ROOT, [...dirs, ...BUILD_PACKAGES], TITLE),
+                        source: buildLicencesFile(ROOT, listedDirs, TITLE),
                     });
                 } catch (error) {
                     if (error instanceof LicenceError) this.error(error.message);
                     throw error;
                 }
             },
+        },
+    };
+}
+
+/**
+ * The service worker's build (`sw.js`), which runs after the app's: it must bundle no code of
+ * a package that licences.txt does not list, nor code the build must leave out.
+ */
+function serviceWorkerLicences(): Plugin {
+    return {
+        name: "ngne-licences-service-worker",
+        apply: "build",
+        generateBundle(_options, bundle) {
+            rejectExcluded(bundle, (message) => this.error(message));
+            const unlisted = unlistedPackages(renderedModules(bundle), listedDirs);
+            if (unlisted.length > 0) {
+                this.error(
+                    "The service worker bundles code of packages that licences.txt does not " +
+                        `list: ${unlisted.join(", ")}.`,
+                );
+            }
         },
     };
 }
@@ -225,6 +261,8 @@ export default defineConfig(({ command }) => ({
                 // The main chunk holds NGNE and React; a build with the development test hooks
                 // (tests/e2e/se-072-support.ts) is several times larger.
                 maximumFileSizeToCacheInBytes: 32 * 1024 * 1024,
+                // The worker's own build checks its packages against licences.txt.
+                buildPlugins: { vite: [serviceWorkerLicences()] },
             },
             manifest: {
                 // The app's identity. Browsers resolve `id` against the origin, not against the
