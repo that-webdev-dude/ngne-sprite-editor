@@ -142,12 +142,15 @@ lucide-react 1.55.0, eslint 10.12.0, prettier 3.9.10, fast-check 4.10.2 and
 
 Licences (owner request, 2026-11-13): the build writes `licences.txt` beside `index.html`. It
 holds this project's licence, `THIRD_PARTY_NOTICES.md` (the notice of every third-party
-source code ported here, and of the encoders `gifenc` credits) and the licence text of every
+source code ported or adapted here, and of the encoders `gifenc` credits) and the licence text of every
 npm package whose code the build bundles. The build fails when a bundled package is not a
 runtime dependency in `package-lock.json`, has no licence text, or has a licence other than
 MIT, ISC, 0BSD, BSD-2-Clause, BSD-3-Clause or Apache-2.0. The service worker precaches the
 file, and View → Open Source Licences… (no key, also in the command palette) shows it in a dialog. `gifenc`
 resolves to its ES module build, so its unused quantizer is not bundled; the build fails if it is.
+The licences file also lists Rolldown, whose runtime helpers every build writes into the
+bundle, and Vite's module-preload polyfill is turned off. The service worker is built after
+the app and fails the build when it bundles a package the licences file does not list.
 
 ## 5. Architecture
 
@@ -1723,7 +1726,8 @@ device name of Windows (`con`, `nul`, `com1`, …) gets `-sprite` appended, sinc
 have such a name there.
 
 The two code files, `<name>.sprites.ts` and `<name>.preview.config.mjs`, start with the 0BSD
-licence, its full text (`core/export/generatedLicence.ts`), so a game can ship them without
+licence, its full text with the line "Copyright (C) Fabio Barracano"
+(`core/export/generatedLicence.ts`), so a game can ship them without
 carrying a notice. They hold no third-party code.
 
 ### 9.2 `ngne-sprite-atlas` version 1

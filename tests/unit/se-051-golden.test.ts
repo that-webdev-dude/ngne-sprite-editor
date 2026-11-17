@@ -170,6 +170,8 @@ const GOLDEN_ATLAS_TEXT = `${JSON.stringify(GOLDEN_ATLAS, null, 4)}\n`;
 /** `hero-walk.sprites.ts` up to the sprite runtime. `Hero Walk` gives `heroWalk`, `HeroWalk`. */
 const GOLDEN_MODULE_HEAD = `// SPDX-License-Identifier: 0BSD
 //
+// Copyright (C) Fabio Barracano
+//
 // Permission to use, copy, modify, and/or distribute this software for any
 // purpose with or without fee is hereby granted.
 //
@@ -274,6 +276,8 @@ function runtimeLines(): string {
  * `w` and `h` of its rectangle.
  */
 const GOLDEN_PREVIEW = `// SPDX-License-Identifier: 0BSD
+//
+// Copyright (C) Fabio Barracano
 //
 // Permission to use, copy, modify, and/or distribute this software for any
 // purpose with or without fee is hereby granted.
@@ -457,6 +461,7 @@ describe("the golden files of a bundle", () => {
         for (const ending of ["sprites.ts", "preview.config.mjs"]) {
             const text = golden(ending).toString("utf8");
             expect(text.startsWith("// SPDX-License-Identifier: 0BSD\n"), ending).toBe(true);
+            expect(text, ending).toContain("// Copyright (C) Fabio Barracano\n");
             expect(text, ending).toContain("// Permission to use, copy, modify, and/or distribute");
             expect(text, ending).toContain("// PERFORMANCE OF THIS SOFTWARE.\n");
         }

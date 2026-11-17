@@ -122,8 +122,8 @@ The NGNE bundle contains:
 | `<name>.preview.config.mjs` | Optional (on by default) ready-to-run `ngne-preview` configuration |
 | `<name>.aseprite.json` | Optional Aseprite JSON, array or hash, for the same PNG |
 
-`<name>.sprites.ts` and `<name>.preview.config.mjs` are licensed 0BSD (the text is at the top
-of each): use, change and ship them with no notice required.
+`<name>.sprites.ts` and `<name>.preview.config.mjs` are licensed 0BSD, Copyright (C) Fabio
+Barracano (the text is at the top of each): use, change and ship them with no notice required.
 
 `<name>` is the document name converted to a safe lowercase file slug. Frame IDs are
 `<name>-<index>` with a zero-based document index; choosing one tag keeps those indices.

@@ -128,6 +128,8 @@ export function layerStack(
         const cel = celAt(doc, layer.id, frameId);
         const image = replaced.get(layer.id) ?? (cel && celImage(doc, layer.id, cel.imageId));
         if (!image) continue;
+        // A cel's opacity times its layer's, as Aseprite's MIT-licensed render library
+        // combines them; its notice is in THIRD_PARTY_NOTICES.md.
         const opacity = mul255(layer.opacity, cel ? cel.opacity : 255);
         if (opacity === 0) continue;
         layers.push({ data: image.data, opacity, blend: BLEND_FUNCTIONS[layer.blend] });

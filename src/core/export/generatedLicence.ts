@@ -7,6 +7,8 @@
 /** The first lines of every generated code file, each ended by a line feed. */
 export const GENERATED_LICENCE = `// SPDX-License-Identifier: 0BSD
 //
+// Copyright (C) Fabio Barracano
+//
 // Permission to use, copy, modify, and/or distribute this software for any
 // purpose with or without fee is hereby granted.
 //

@@ -11,7 +11,7 @@ NGNE Sprite Editor is not affiliated with or endorsed by Aseprite or Igara Studi
 follows. Aseprite's application code (`src/app` and the other parts its EULA covers) is not
 copied here: where this editor follows its behaviour, the behaviour was reimplemented from
 using Aseprite and its documentation. A few details were confirmed by reading that source;
-the source repository's `docs/PROVENANCE.md`, which is not part of the app, lists them.
+the source repository's provenance record lists them: <https://github.com/that-webdev-dude/ngne-sprite-editor/blob/main/docs/PROVENANCE.md>.
 
 Other product names used here, such as GIMP, Paint Shop Pro, PICO-8 and Game Boy, are
 trademarks of their respective owners and name only file formats or palettes.
@@ -36,7 +36,8 @@ Ported or transcribed in:
 - `tests/unit/se-061-blend.test.ts`: the normal blend of `rgba_blender_normal` in
   `blend_funcs.cpp`, in the copy of the compositor before SE-061 that the tests compare with.
 - `tests/unit/se-065-raster.test.ts`: `algo_spline` of `algo.cpp`, ported as a test reference.
-  Aseprite adapted that function from Allegro's `calc_spline`; see Allegro below.
+  Aseprite adapted that function from Allegro's `_soft_spline` (the sample count) and
+  `calc_spline` (the forward differencing); see Allegro below.
 - `src/core/raster/curve.ts`: the sample count of `algo_spline` in `algo.cpp` (the factor 1.2,
   the limits 4 and 64), the curve tool.
 - `src/core/raster/flood.ts`: the colour-match rule of `color_equal_32` in `floodfill.cpp`
@@ -74,7 +75,8 @@ Aseprite's render library, which is released under the MIT licence (`src/render/
 
 Version: Aseprite v1.3.18.6 (commit `331e898ef405d919539c03fd1675691cfa16c3a3`).
 
-Used in `tests/unit/fixtures/se-061-blend-golden.generate.mjs`: the opacity of a cel in a
+Used in `src/core/composite/compositeFrame.ts`, `tests/unit/se-061-blend.test.ts` and
+`tests/unit/fixtures/se-061-blend-golden.generate.mjs`: the opacity of a cel in a
 composite, the product of the cel's and the layer's opacity (`MUL_UN8`).
 
 ```text
@@ -103,9 +105,10 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## Allegro (giftware)
 
-Source: `calc_spline` of `src/spline.c` in Allegro 4 (<https://github.com/liballeg/allegro5>,
-branch `4.4`), which its header credits to Seymour Shlien, optimised by Sven Sandberg.
-Aseprite's `algo_spline` (above) is adapted from it.
+Source: `_soft_spline` (the sample count: the factor 1.2 and at most 64 points) and
+`calc_spline` (the forward differencing) of `src/spline.c` in Allegro 4
+(<https://github.com/liballeg/allegro5>, branch `4.4`), which its header credits to Seymour
+Shlien, optimised by Sven Sandberg. Aseprite's `algo_spline` (above) is adapted from them.
 
 Version: the licence text of Allegro 4.4.3.1 (commit `8a386b2754608b66d46f10abf993abf8ab16902d`),
 `docs/src/license._tx`. Allegro's licence names no copyright holders.
@@ -113,7 +116,7 @@ Version: the licence text of Allegro 4.4.3.1 (commit `8a386b2754608b66d46f10abf9
 Reached through Aseprite's `algo_spline` in:
 
 - `tests/unit/se-065-raster.test.ts`: `algo_spline`, ported as a test reference.
-- `src/core/raster/curve.ts`: the sample count of `algo_spline`.
+- `src/core/raster/curve.ts`: the sample count of `algo_spline`, from `_soft_spline`.
 
 ```text
 Allegro is gift-ware. It was created by a number of people working in
@@ -152,42 +155,48 @@ Ported in `src/core/composite/blend.ts`, `tests/unit/fixtures/se-061-blend-golde
 `tests/e2e/se-061-support.ts` and `tests/unit/se-061-blend.test.ts`.
 
 ```text
-Copyright 1987, 1988, 1989, 1998  The Open Group
-Copyright 1987, 1988, 1989 Digital Equipment Corporation
-Copyright 1999, 2004, 2008 Keith Packard
-Copyright 2000 SuSE, Inc.
-Copyright 2000 Keith Packard, member of The XFree86 Project, Inc.
-Copyright 2004, 2005, 2007, 2008, 2009, 2010 Red Hat, Inc.
-Copyright 2004 Nicholas Miell
-Copyright 2005 Lars Knoll & Zack Rusin, Trolltech
-Copyright 2005 Trolltech AS
-Copyright 2007 Luca Barbato
-Copyright 2008 Aaron Plattner, NVIDIA Corporation
-Copyright 2008 Rodrigo Kumpera
-Copyright 2008 André Tupinambá
-Copyright 2008 Mozilla Corporation
-Copyright 2008 Frederic Plourde
-Copyright 2009, Oracle and/or its affiliates. All rights reserved.
-Copyright 2009, 2010 Nokia Corporation
+The following is the MIT license, agreed upon by most contributors.
+Copyright holders of new code should use this license statement where
+possible. They may also add themselves to the list below.
 
-Permission is hereby granted, free of charge, to any person obtaining a
-copy of this software and associated documentation files (the "Software"),
-to deal in the Software without restriction, including without limitation
-the rights to use, copy, modify, merge, publish, distribute, sublicense,
-and/or sell copies of the Software, and to permit persons to whom the
-Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice (including the next
-paragraph) shall be included in all copies or substantial portions of the
-Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
+/*
+ * Copyright 1987, 1988, 1989, 1998  The Open Group
+ * Copyright 1987, 1988, 1989 Digital Equipment Corporation
+ * Copyright 1999, 2004, 2008 Keith Packard
+ * Copyright 2000 SuSE, Inc.
+ * Copyright 2000 Keith Packard, member of The XFree86 Project, Inc.
+ * Copyright 2004, 2005, 2007, 2008, 2009, 2010 Red Hat, Inc.
+ * Copyright 2004 Nicholas Miell
+ * Copyright 2005 Lars Knoll & Zack Rusin, Trolltech
+ * Copyright 2005 Trolltech AS
+ * Copyright 2007 Luca Barbato
+ * Copyright 2008 Aaron Plattner, NVIDIA Corporation
+ * Copyright 2008 Rodrigo Kumpera
+ * Copyright 2008 André Tupinambá
+ * Copyright 2008 Mozilla Corporation
+ * Copyright 2008 Frederic Plourde
+ * Copyright 2009, Oracle and/or its affiliates. All rights reserved.
+ * Copyright 2009, 2010 Nokia Corporation
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ */
 ```
 
 ## Bresenham curve rasterizing algorithms (MIT)
@@ -331,9 +340,8 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 
 Source: <https://github.com/jnordberg/gif.js>, whose LZW encoder (`LZWEncoder.js`) the
 `gifenc` package credits as the origin of its own (`src/lzwEncode.js`). That file's header
-also credits Kevin Weiner's Java encoder and an ActionScript version by Thibault Imbert;
-the source repository's `docs/PROVENANCE.md`, which is not part of the app, records what is
-known of their licences.
+also credits Kevin Weiner's Java encoder and an ActionScript version by Thibault Imbert,
+whose licences are not established.
 
 Version: the licence text of commit `92d27a02841339e202c75150dcf6fe5f4fa42ec5` (the file's only
 revision, `a2201f1`, 5 May 2018).

@@ -2,8 +2,8 @@ import { forEachLinePixel } from "./line";
 import type { PixelPoint } from "./line";
 
 // Curves (SPEC §7.1, SE-065): the cubic Bézier of the curve tool, from its start through two
-// control points to its end, drawn as Aseprite draws it (`doc::algo_spline`, after Allegro's
-// `calc_spline`; checked in its source): the curve is sampled at `n` points evenly spaced in
+// control points to its end, drawn as Aseprite draws it (`doc::algo_spline`, whose sample count follows Allegro's
+// `_soft_spline` and whose stepping follows Allegro's `calc_spline`; checked in its source): the curve is sampled at `n` points evenly spaced in
 // its parameter, where n = ⌊1.2 · √(|P0P1| + |P1P2| + |P2P3|)⌋ held to 4..64, and the samples
 // are joined by Bresenham lines. Each sample is rounded to the nearest pixel, halves up
 // (⌊x + 0.5⌋). Aseprite reaches its samples by forward differencing and truncates `x + 0.5`

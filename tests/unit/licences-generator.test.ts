@@ -16,6 +16,7 @@ import {
     readPackageLicence,
     runtimePackageDirs,
     strayPackages,
+    unlistedPackages,
 } from "../../scripts/licences";
 import { LICENCES_PATH } from "../../src/app/licences/openLicences";
 
@@ -108,6 +109,34 @@ describe("licenceAllowed", () => {
         expect(licenceAllowed("GPL-3.0 OR MPL-2.0")).toBe(false);
         expect(licenceAllowed("MIT AND ISC")).toBe(true);
         expect(licenceAllowed("MIT AND GPL-3.0")).toBe(false);
+    });
+
+    it("reads nested parentheses, with AND binding tighter than OR", () => {
+        expect(licenceAllowed("(MIT OR GPL-3.0) AND Apache-2.0")).toBe(true);
+        expect(licenceAllowed("MIT AND (ISC OR GPL-3.0)")).toBe(true);
+        expect(licenceAllowed("((MIT))")).toBe(true);
+        expect(licenceAllowed("(MIT) AND (ISC)")).toBe(true);
+        expect(licenceAllowed("GPL-3.0 AND MIT OR ISC")).toBe(true);
+        expect(licenceAllowed("GPL-3.0 AND (MIT OR ISC)")).toBe(false);
+        expect(licenceAllowed("(MIT OR GPL-3.0) AND GPL-2.0")).toBe(false);
+        expect(licenceAllowed("((GPL-3.0 OR MPL-2.0) AND MIT)")).toBe(false);
+    });
+
+    it("refuses an expression that is not well formed", () => {
+        for (const expression of [
+            "MIT OR GPL-3.0)",
+            "MIT OR (GPL-3.0",
+            "MIT) OR (GPL-3.0",
+            "(MIT",
+            "()",
+            "MIT AND",
+            "OR MIT",
+            "MIT OR OR ISC",
+            "MIT ISC",
+            "MIT WITH LLVM-exception",
+        ]) {
+            expect(licenceAllowed(expression), expression).toBe(false);
+        }
     });
 });
 
@@ -235,6 +264,28 @@ describe("strayPackages", () => {
                 runtime,
             ),
         ).toEqual(["node_modules/vite"]);
+    });
+});
+
+describe("unlistedPackages", () => {
+    it("names the packages of a later build's modules that the licences file does not list", () => {
+        const listed = ["C:/app/node_modules/react", "C:/app/node_modules/rolldown"];
+        const modules = [
+            "C:/app/src/app/pwa/sw.ts",
+            "C:/app/src/app/pwa/precache.ts",
+            "\0rolldown/runtime.js",
+            "C:\\app\\node_modules\\react\\index.js",
+            "C:/app/node_modules/workbox-core/index.mjs",
+        ];
+        expect(unlistedPackages(modules, listed)).toEqual(["node_modules/workbox-core"]);
+        expect(unlistedPackages(modules.slice(0, 4), listed)).toEqual([]);
+    });
+
+    it("names every package when the licences file has not been made yet", () => {
+        expect(unlistedPackages(["C:/app/node_modules/react/index.js"], null)).toEqual([
+            "node_modules/react",
+        ]);
+        expect(unlistedPackages(["C:/app/src/app/pwa/sw.ts"], null)).toEqual([]);
     });
 });
 
