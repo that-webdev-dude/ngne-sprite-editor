@@ -20,7 +20,7 @@ import { applySelection, SELECTION_HINT, SELECTION_MODE, selectionModeOf } from 
 //
 // The area is found in the whole image: the wand passes no `within` mask to `floodMask`, so
 // the selection limits neither branch, contiguous or global (the SE-017 review's question), as
-// in Aseprite, whose selection inks fill with no mask.
+// in Aseprite, whose wand finds its area in the whole image whatever is selected.
 // The mode decides what the selection does with the area — Shift+Alt (intersect) keeps the part
 // of it inside the selection. The pending area shows on the overlay until the release.
 

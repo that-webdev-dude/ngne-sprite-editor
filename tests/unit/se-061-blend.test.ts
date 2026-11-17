@@ -133,7 +133,9 @@ describe("golden composites of every blend mode", () => {
 
 /**
  * The compositor as it was before SE-061 (`core/composite`, commit 8e014a2), kept here only:
- * `layerStack` with every mode blending as normal, `blendStack` and the normal blend.
+ * `layerStack` with every mode blending as normal, `blendStack` and the normal blend. The
+ * normal blend is ported from Aseprite's MIT-licensed `blend_funcs.cpp` and pixman's MIT-licensed
+ * `MUL_UN8`; their notices are in THIRD_PARTY_NOTICES.md.
  */
 function preTicketComposite(doc: SpriteDoc, frameId: string, rect?: Rect, into?: PixelBuffer) {
     const mul = (a: number, b: number) => {

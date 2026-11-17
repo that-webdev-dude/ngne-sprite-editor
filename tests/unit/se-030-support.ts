@@ -58,7 +58,10 @@ export function randomMask(
     return maskOf(randomRows(width, height, density, random));
 }
 
-/** A repeatable generator of numbers in [0, 1) (mulberry32). */
+/**
+ * A repeatable generator of numbers in [0, 1) (mulberry32).
+ * Ported from Tommy Ettinger's `mulberry32.c` (CC0); its notice is in THIRD_PARTY_NOTICES.md.
+ */
 export function seeded(seed: number): () => number {
     let state = seed >>> 0;
     return () => {

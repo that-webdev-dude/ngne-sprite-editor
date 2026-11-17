@@ -1,7 +1,8 @@
 // sRGB8 ↔ OKLab (Björn Ottosson, "A perceptual color space for image processing", 2020,
 // https://bottosson.github.io/posts/oklab/). The import pipeline measures colour distance in
 // this space (SPEC §8). The matrices are the ones published there, for linear sRGB with a D65
-// white point.
+// white point. The two conversions are ported from the article's MIT-licensed code; its
+// notice is in THIRD_PARTY_NOTICES.md.
 //
 // The conversions use `**` and `Math.cbrt`, whose last bit the language leaves to the engine:
 // the same colour always gets the same coordinates in one engine, which is what the pipeline's

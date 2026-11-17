@@ -141,8 +141,8 @@ lucide-react 1.55.0, eslint 10.12.0, prettier 3.9.10, fast-check 4.10.2 and
 @axe-core/playwright 4.13.0.
 
 Licences (owner request, 2026-11-13): the build writes `licences.txt` beside `index.html`. It
-holds this project's licence, `THIRD_PARTY_NOTICES.md` (code ported from Aseprite's MIT
-document library, pixman and Alois Zingl's Bresenham algorithms) and the licence text of every
+holds this project's licence, `THIRD_PARTY_NOTICES.md` (the notice of every third-party
+source code ported here, and of the encoders `gifenc` credits) and the licence text of every
 npm package whose code the build bundles. The build fails when a bundled package is not a
 runtime dependency in `package-lock.json`, has no licence text, or has a licence other than
 MIT, ISC, 0BSD, BSD-2-Clause, BSD-3-Clause or Apache-2.0. The service worker precaches the
@@ -1142,7 +1142,7 @@ Curve, contour, polygon and spray (SE-065):
   lines that join them, as the pencil's (no pixel-perfect); the release joins the last point to
   the first and inks the pixels inside by the even-odd rule. A contour covers what the filled
   polygon through the same points covers. The inside appears at the release, as Aseprite's
-  does by default (`filled_preview` off).
+  does by default.
 - Spray: options size, shape, Radius (1–64 px, 8), Density (1–100 %, 20), ink, opacity. Its
   dots are brush stamps at offsets drawn uniformly from the disk dx² + dy² ≤ radius² around
   the pixels of the pointer's path (samples joined by Bresenham lines). The density is the
@@ -1153,10 +1153,8 @@ Curve, contour, polygon and spray (SE-065):
   for more, and the work of a spray grows with its area and density, not with the brush. A
   pointer held still sprays nothing more. Each stroke takes a seed (a random one in the app),
   and a generator seeded with it (mulberry32, integer arithmetic) draws the offsets, so the
-  same seed and samples give the same pixels in Node and in the browser. Aseprite sprays
-  width²/4 · speed/100 points per pointer event, at a uniform angle and radius; this editor's
-  own rule counts per pixel of the path, so the dots do not depend on how often the pointer
-  reports.
+  same seed and samples give the same pixels in Node and in the browser. The dots are counted
+  per pixel of the path, so they do not depend on how often the pointer reports.
 - Tool framework: a tool may close its own gesture (`ToolContext.closeGesture`), as Enter does
   (`onClose`, then it is kept); the curve does so at its third release. Between the presses
   of a gesture `onHover` takes the last sample of each pointer event. The contour and the

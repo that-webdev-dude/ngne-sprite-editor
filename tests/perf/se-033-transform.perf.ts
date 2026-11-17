@@ -29,7 +29,10 @@ import { record } from "./record";
 const SIDE = 1024;
 const EVENTS = 40;
 
-/** mulberry32: noise the same on every run. */
+/**
+ * mulberry32: noise the same on every run.
+ * Ported from Tommy Ettinger's `mulberry32.c` (CC0); its notice is in THIRD_PARTY_NOTICES.md.
+ */
 function random(seed: number): () => number {
     let state = seed >>> 0;
     return () => {

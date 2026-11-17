@@ -95,9 +95,22 @@ version (`ATLAS_GENERATOR`, `src/core/export/atlasFormat.ts`) and the changelog 
 `npm run check` passing. Installing the app as a PWA is checked by hand: see the
 [manual steps](docs/audit/pwa.md#manual-install-owner-to-do).
 
-Licensed under [MIT](LICENSE). Code ported from Aseprite's MIT-licensed document library,
-from pixman and from Alois Zingl's Bresenham algorithms is listed with its notices in
-[third-party notices](THIRD_PARTY_NOTICES.md). The build writes `licences.txt` beside
+Licensed under [MIT](LICENSE). Code ported from Aseprite's MIT-licensed document and render
+libraries, pixman, Allegro, Alois Zingl's Bresenham algorithms, Björn Ottosson's Oklab and
+Tommy Ettinger's mulberry32, and the encoders the bundled `gifenc` credits (gif.js and
+gif-codec), is listed with its notices in [third-party notices](THIRD_PARTY_NOTICES.md). The build writes `licences.txt` beside
 `index.html`: this project's licence, those notices and the licence of every npm package the
 build bundles. The app shows it in a dialog (View → Open Source Licences…). This project is not
 affiliated with or endorsed by Aseprite or Igara Studio S.A.
+
+Earlier versions of some files named parts of Aseprite's application source code, which is
+distributed under Aseprite's End-User License Agreement, and described details confirmed by
+reading it. Those names and details were removed on 2026-11-13, 2026-11-16 and 2026-11-17;
+the Git history and tags `v1.0.0` to `v1.0.2` still contain them. The files concerned:
+`docs/SPEC.md`, `docs/REVIEW.md` (no longer tracked), `src/core/floating/floating.ts`,
+`src/app/selection/transform/transform.commands.ts`, `src/app/selection/tools/wand.ts`,
+`src/core/composite/blend.ts`,
+`tests/unit/fixtures/se-061-blend-golden.generate.mjs`, `tests/unit/se-032-floating.test.ts`
+and `tests/unit/se-051-aseprite.test.ts`. `src/core/raster/pixelPerfect.ts` was rewritten on
+2026-11-17 from a description of its behaviour by a contributor who had not seen the earlier
+file. `docs/PROVENANCE.md` records each file and date.

@@ -1,83 +1,73 @@
 import type { PixelPoint } from "./line";
 
-// The pixel-perfect filter (SPEC §7.1, SE-015): a freehand path whose pixels step one at a
-// time leaves L-shaped corners where it turns (a horizontal step followed by a vertical one);
-// the filter removes the pixel in the corner, so the path reads as a clean diagonal. The rule
-// is Aseprite's (`IntertwineAsPixelPerfect`): walking the path, a pixel that shares a row or a
-// column with the pixel before it and with the pixel after it, while those two share neither,
-// is left out; the pixel after it is then kept without being looked at, and the walk goes on
-// from the one after that. The first and the last pixel are always kept.
+// Pixel-perfect freehand paths (SPEC §7.1, SE-015), the behaviour of Aseprite's Pixel-perfect
+// option. A path drawn by hand one pixel at a time leaves an L-shaped corner wherever it
+// turns: a pixel that lines up with the one before it and with the one after it, while those
+// two lie diagonally from each other. The filter drops such corner pixels so the path reads as
+// a clean diagonal. The first and last pixels always stay, each inner pixel is judged against
+// its neighbours in the path as drawn (not as filtered), and the pixel right after a dropped
+// one always stays, so two neighbouring pixels are never both dropped.
 
 /**
  * Whether `middle` is the corner of an L between `before` and `after`: it shares a row or a
- * column with each of them, and they share neither with each other.
+ * column with each of them, while they share neither a row nor a column with each other.
  */
 export function isLCorner(before: PixelPoint, middle: PixelPoint, after: PixelPoint): boolean {
-    return (
-        (before.x === middle.x || before.y === middle.y) &&
-        (after.x === middle.x || after.y === middle.y) &&
-        before.x !== after.x &&
-        before.y !== after.y
-    );
+    const linedUpWithBefore = middle.x === before.x || middle.y === before.y;
+    const linedUpWithAfter = middle.x === after.x || middle.y === after.y;
+    const endsApart = before.x !== after.x && before.y !== after.y;
+    return linedUpWithBefore && linedUpWithAfter && endsApart;
 }
 
 /**
- * The pixels of a whole path that the filter keeps, in order. `path` lists pixels as a stroke
- * visits them, each different from the one before it.
+ * The pixels of `path` that pixel-perfect keeps, in order, as a new array: the ends, and each
+ * inner pixel that is not an L corner of its neighbours or that follows a dropped pixel.
  */
 export function pixelPerfectPath(path: readonly PixelPoint[]): PixelPoint[] {
-    const kept: PixelPoint[] = [];
-    for (let index = 0; index < path.length; index++) {
-        const before = path[index - 1];
-        const middle = path[index];
-        const after = path[index + 1];
-        if (!middle) continue;
-        if (before && after && isLCorner(before, middle, after)) {
-            // The corner is left out and the pixel after it kept as it is.
-            kept.push(after);
-            index++;
+    if (path.length <= 2) return [...path];
+    const kept: PixelPoint[] = [path[0]!];
+    let followsDropped = false;
+    for (let i = 1; i < path.length - 1; i++) {
+        const pixel = path[i]!;
+        if (!followsDropped && isLCorner(path[i - 1]!, pixel, path[i + 1]!)) {
+            followsDropped = true;
             continue;
         }
-        kept.push(middle);
+        followsDropped = false;
+        kept.push(pixel);
     }
+    kept.push(path[path.length - 1]!);
     return kept;
 }
 
-/** What the filter decides when a pixel is added to the path. */
+/** What one `PixelPerfectFilter.add` decided. */
 export interface PixelPerfectStep {
-    /** The pixel drawn before, which turned out to be a corner: it is taken back. */
+    /** The pixel added just before, now found to be a corner and to take back; or null. */
     readonly removed: PixelPoint | null;
 }
 
 /**
- * The filter as a stroke goes: each pixel of the path is drawn when it comes, and taken back
- * when the next one shows it to be a corner. After the last pixel, the pixels drawn and not
- * taken back are those of `pixelPerfectPath` for the whole path.
+ * Pixel-perfect as a stroke goes. Each pixel is drawn as soon as it is added; adding the next
+ * one decides whether it stays. `add` reports at most one pixel to take back, always the one
+ * added just before. Keeps only the last two pixels, so each call does constant work.
  */
 export class PixelPerfectFilter {
-    #before: PixelPoint | null = null;
+    /** The pixel added before `#last`, as drawn; null until two pixels came. */
+    #beforeLast: PixelPoint | null = null;
+    /** The pixel added last; null before the first. */
     #last: PixelPoint | null = null;
-    /** Pixels added so far. */
-    #count = 0;
-    /** The index of the next pixel to be looked at once the pixel after it comes. */
-    #examine = 1;
+    /** Whether `#last` follows a pixel taken back, which keeps it whatever its neighbours. */
+    #lastKept = false;
 
-    /** Adds the next pixel of the path, which differs from the one before it. */
+    /** Adds the next pixel of the path; returns the pixel added before it when it is a corner. */
     add(pixel: PixelPoint): PixelPerfectStep {
-        const index = this.#count;
-        let removed: PixelPoint | null = null;
-        if (this.#examine === index - 1 && this.#before && this.#last) {
-            if (isLCorner(this.#before, this.#last, pixel)) {
-                removed = this.#last;
-                // The pixel just added is kept unexamined; the next one is looked at.
-                this.#examine = index + 1;
-            } else {
-                this.#examine = index;
-            }
-        }
-        this.#before = this.#last;
+        const before = this.#beforeLast;
+        const middle = this.#last;
+        const removed =
+            before && middle && !this.#lastKept && isLCorner(before, middle, pixel) ? middle : null;
+        this.#beforeLast = middle;
         this.#last = pixel;
-        this.#count++;
+        this.#lastKept = removed !== null;
         return { removed };
     }
 }

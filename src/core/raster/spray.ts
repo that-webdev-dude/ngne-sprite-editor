@@ -41,6 +41,7 @@ export interface SprayStrokeOptions extends Omit<BrushStrokeOptions, "pixelPerfe
 /**
  * A pseudo-random generator: mulberry32 (Tommy Ettinger, public domain), numbers in [0, 1)
  * that are multiples of 2^−32, the same for the same seed everywhere.
+ * Ported from Tommy Ettinger's `mulberry32.c` (CC0); its notice is in THIRD_PARTY_NOTICES.md.
  */
 export function createRandom(seed: number): () => number {
     let state = seed >>> 0;

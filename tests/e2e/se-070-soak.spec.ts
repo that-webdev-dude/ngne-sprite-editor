@@ -55,7 +55,10 @@ const CODE_CEILING = 16 * 1024 * 1024;
 /** A step with nothing reachable runs no command; the loop gives up after this many steps. */
 const MAX_STEPS = 2 * COMMANDS;
 
-/** A small fast generator of numbers in [0, 1) from a seed (mulberry32). */
+/**
+ * A small fast generator of numbers in [0, 1) from a seed (mulberry32).
+ * Ported from Tommy Ettinger's `mulberry32.c` (CC0); its notice is in THIRD_PARTY_NOTICES.md.
+ */
 function generator(seed: number): () => number {
     let state = seed >>> 0;
     return () => {

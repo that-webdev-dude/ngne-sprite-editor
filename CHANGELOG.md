@@ -26,6 +26,17 @@
   shortcut sheet, still on `?`.
 - `THIRD_PARTY_NOTICES.md` gives the upstream version of every ported part and adds Allegro's
   giftware licence, which covers the spline Aseprite's `algo_spline` adapts.
+- `THIRD_PARTY_NOTICES.md` lists the curve tool's sample count (Aseprite's document library
+  and Allegro) and the line helpers of two E2E tests (Alois Zingl's Bresenham algorithms).
+- `THIRD_PARTY_NOTICES.md` adds the MIT notice of gif.js, which the GIF encoder bundled through
+  `gifenc` credits.
+- `THIRD_PARTY_NOTICES.md` adds the notices of gif-codec, which `gifenc` also credits, of
+  Aseprite's render library, of Björn Ottosson's Oklab conversions (the colour distance of the
+  PNG import) and of Tommy Ettinger's mulberry32 (the spray's generator), and lists the flood
+  fill's colour-match rule (Aseprite's document library).
+- The README notes which earlier files named parts of Aseprite's application source.
+- The pixel-perfect filter of the pencil and eraser is rewritten from a description of its
+  behaviour; strokes keep exactly the same pixels.
 - The build fails when gifenc's colour quantizer is bundled again.
 - The exported `<name>.sprites.ts` and `<name>.preview.config.mjs` carry the 0BSD licence in their
   head.

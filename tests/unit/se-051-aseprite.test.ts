@@ -9,8 +9,8 @@ import { exportSettings, grid, noise, show, sprite, textOf } from "./se-051-supp
 import type { TagSpec } from "./se-051-support";
 
 // `<name>.aseprite.json` (SPEC §9.5): the atlas in the shape of Aseprite's sprite-sheet data.
-// The members and their order are those of Aseprite's own writer (src/app/doc_exporter.cpp
-// of https://github.com/aseprite/aseprite): per frame `frame`, `rotated`, `trimmed`,
+// The members and their order are those of the JSON data Aseprite's sprite-sheet export
+// writes: per frame `frame`, `rotated`, `trimmed`,
 // `spriteSourceSize`, `sourceSize`, `duration`; in `meta` `app`, `version`, `image`,
 // `format`, `size`, `scale`, `frameTags`; a tag's `repeat` a string, written when above 0.
 

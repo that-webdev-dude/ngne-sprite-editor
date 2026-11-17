@@ -12,6 +12,8 @@ import type { PixelPoint } from "./line";
 // within rounding error of a half; left of or above it Aseprite's truncation rounds toward 0
 // over the whole pixel, so wherever x + 0.5 is negative and not whole its sample lies one
 // pixel nearer 0 than this one (a sample at −1.7 is −1 there, −2 here).
+// The sample count is taken from Aseprite's MIT-licensed `algo.cpp` and Allegro's giftware
+// `spline.c`; their notices are in THIRD_PARTY_NOTICES.md.
 
 /** The fewest and the most points a curve is sampled at (Aseprite's `MAX_POINTS`). */
 export const CURVE_MIN_POINTS = 4;

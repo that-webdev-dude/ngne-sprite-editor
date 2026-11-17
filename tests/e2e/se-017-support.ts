@@ -20,7 +20,10 @@ export async function moveOver(
     }
 }
 
-/** The texels of the Bresenham line from `a` to `b`. */
+/**
+ * The texels of the Bresenham line from `a` to `b`. Ported from Alois Zingl's MIT-licensed
+ * `bresenham.c`; its notice is in THIRD_PARTY_NOTICES.md.
+ */
 export function lineTexels(a: Point, b: Point): Point[] {
     const points: Point[] = [];
     const dx = Math.abs(b.x - a.x);

@@ -49,7 +49,10 @@ async function moveOver(page: Page, texels: readonly Point[], view = VIEW): Prom
     }
 }
 
-/** The texels of the Bresenham line from `a` to `b`, as `core/raster` draws it. */
+/**
+ * The texels of the Bresenham line from `a` to `b`, as `core/raster` draws it. Ported from
+ * Alois Zingl's MIT-licensed `bresenham.c`; its notice is in THIRD_PARTY_NOTICES.md.
+ */
 function line(a: Point, b: Point): Point[] {
     const points: Point[] = [];
     const dx = Math.abs(b.x - a.x);

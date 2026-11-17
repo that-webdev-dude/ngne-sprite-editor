@@ -561,7 +561,8 @@ describe("spray", () => {
         // The first outputs of Tommy Ettinger's C reference (`z = (x += 0x6D2B79F5); z = (z ^
         // z >> 15) * (z | 1); z ^= z + (z ^ z >> 7) * (z | 61); return z ^ z >> 14;`, uint32),
         // worked out apart from this code; seed 0's first is mulberry32's often quoted
-        // 0.26642920868471265.
+        // 0.26642920868471265. The steps quoted are from Tommy Ettinger's `mulberry32.c` (CC0);
+        // its notice is in THIRD_PARTY_NOTICES.md.
         const reference: Record<number, number[]> = {
             0: [1144304738, 1416247, 958946056, 627933444, 2007157716],
             42: [2581720956, 1925393290, 3661312704, 2876485805, 750819978],

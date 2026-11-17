@@ -20,6 +20,9 @@ import type { PixelPoint } from "./line";
 // Seed Fill Algorithm", Graphics Gems, 1990), never recursion: a span is filled to its ends
 // on its row, and the rows above and below are scanned under it, so a 1024 × 1024 maze runs
 // in memory proportional to its spans, not its pixels.
+//
+// The colour-match rule is taken from Aseprite's MIT-licensed `algorithm/floodfill.cpp`; its
+// notice is in THIRD_PARTY_NOTICES.md.
 
 /** The largest tolerance: every pixel matches. */
 export const FLOOD_MAX_TOLERANCE = 255;
