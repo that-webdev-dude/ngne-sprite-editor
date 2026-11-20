@@ -150,7 +150,7 @@ See [SPEC §9](SPEC.md#9-ngne-asset-export-c1) and [FORMAT §2](FORMAT.md#2-spri
 ## Use the bundle in an NGNE game
 
 Keep the exported PNG beside its generated module in an NGNE consumer project using
-`@ngne/core` 0.2.1. A module for `hero` exports `heroImage` (an `imageAsset` using a URL relative
+`@ngne/core` 0.3.0 or 0.4.0. A module for `hero` exports `heroImage` (an `imageAsset` using a URL relative
 to the module), `heroAtlas` (inlined atlas data), `HeroFrameId`, `HeroAnimationId`,
 `drawHero`, `drawHeroTopLeft`, `heroAnimationFrame` and `heroAnimationDone`.
 Names with several words use camelCase (`hero-walk` → `heroWalkImage`, `drawHeroWalk`);

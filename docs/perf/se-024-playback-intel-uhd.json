@@ -12,23 +12,23 @@
         "drawn": "onDrawn: frames submitted to NGNE, not known to be presented on screen",
         "firstFrameAfterEntry": {
             "count": 126,
-            "medianMs": 13.4,
-            "p95Ms": 26.3,
-            "maxMs": 38.2
+            "medianMs": 6.8,
+            "p95Ms": 10.3,
+            "maxMs": 11.5
         },
         "gapsBetweenPictureChanges": {
             "count": 127,
-            "medianMs": 99.3,
-            "p95Ms": 113.3,
-            "maxMs": 122.9
+            "medianMs": 98.4,
+            "p95Ms": 106.6,
+            "maxMs": 109.4
         },
         "framesSubmittedPerSecond": 10,
-        "windowSeconds": 12.81,
+        "windowSeconds": 12.8,
         "document": "256×256, 8 layers, 64 frames of 100 ms, at 2×",
         "devicePixelRatio": 1,
         "window": "1920×1080 CSS px",
         "adapter": "intel / gen-12lp ()",
-        "chrome": "155.0.8059.82, new headless, --force-color-profile=srgb --force-low-power-gpu --force-device-scale-factor=1"
+        "chrome": "157.0.8103.80, new headless, --force-color-profile=srgb --force-low-power-gpu --force-device-scale-factor=1"
     },
     "pass": true,
     "environment": {
@@ -38,5 +38,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-10-19T06:58:38.777Z"
+    "date": "2026-11-20T11:26:11.645Z"
 }

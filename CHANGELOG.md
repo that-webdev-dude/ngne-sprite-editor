@@ -12,6 +12,14 @@
   that `licences.txt` does not list. A licence expression with nested parentheses is read
   correctly, and one that is not well formed is refused.
 
+### Engine: `@ngne/core` 0.4.0
+
+- Pinned `@ngne/core` to 0.4.0 (was 0.3.0). The editor draws as before: it uses none of the
+  new engine features yet.
+- The exported `<name>.sprites.ts` works in games on `@ngne/core` 0.3.0 or 0.4.0. Sprites drawn
+  unrotated, at quarter turns or at whole-number scales land on the same pixels on both; with
+  pixel snapping on, other rotations and fractional scales can land up to one pixel apart.
+
 ## 1.1.0 – 2026-11-17
 
 - Closing the layer or cel properties popover does less work in the step that applies it,

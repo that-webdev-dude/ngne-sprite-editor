@@ -1,0 +1,143 @@
+{
+    "id": "se-070-cold-load-rtx-4060",
+    "ticket": "SE-070",
+    "measurement": "Cold load of the production build served locally to interactive (the New sprite dialog on screen after the empty state's first action), Chrome on RTX 4060, each load in a new browser with an empty profile.",
+    "statistic": "largest of 10 cold loads, from navigation start",
+    "budgetMs": 2000,
+    "resultMs": 2368.0999999940395,
+    "details": {
+        "interactiveMs": [
+            2368.1,
+            759.6,
+            765.9,
+            752.2,
+            786.8,
+            755.5,
+            1423.3,
+            687,
+            704.5,
+            686
+        ],
+        "medianInteractiveMs": 755.5,
+        "shellMs": [
+            2352.1,
+            743.4,
+            748.5,
+            736,
+            771,
+            738.8,
+            1407.1,
+            671.3,
+            688.3,
+            670.2
+        ],
+        "clicksUntilAnswered": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+        ],
+        "domContentLoadedMs": [
+            130.2,
+            116.2,
+            116.9,
+            113.8,
+            114.6,
+            118.4,
+            116.2,
+            116.9,
+            117.1,
+            118.9
+        ],
+        "loadEventMs": [
+            131.1,
+            117.2,
+            117.7,
+            114.5,
+            115.5,
+            119.3,
+            117,
+            117.8,
+            117.9,
+            119.8
+        ],
+        "firstContentfulPaintMs": [
+            2500,
+            896,
+            900,
+            892,
+            920,
+            900,
+            1556,
+            824,
+            840,
+            820
+        ],
+        "longTasks": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [
+                {
+                    "start": 70,
+                    "duration": 50
+                }
+            ]
+        ],
+        "createToFirstViewportFrameMs": [
+            269.6,
+            270.5,
+            265.1,
+            277.4,
+            277.2,
+            291.3,
+            276.8,
+            270.4,
+            277.6,
+            284.4
+        ],
+        "medianCreateToFirstViewportFrameMs": 276.8,
+        "largestCreateToFirstViewportFrameMs": 291.3,
+        "createClicksUntilAnswered": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+        ],
+        "firstViewportFrameDefinition": "Create → first viewport frame on screen, not part of the result: from the first click on the New sprite dialog's Create button (at the animation frame after the dialog was seen, again every 50 ms while it stays) to the first animation frame in which the viewport's canvas is in the document with a box; the NGNE viewport inserts its canvas only after it has drawn",
+        "interactiveDefinition": "navigation start to the first animation frame showing the New sprite dialog, the empty state's New sprite button being clicked at every frame (at most every 50 ms) from the first frame it is on screen",
+        "server": "vite build (project configuration) served by vite preview on 127.0.0.1",
+        "cold": "a new Chrome with an empty profile for every load",
+        "devicePixelRatio": 1,
+        "window": "1920×1080 CSS px",
+        "adapter": "nvidia / lovelace ()",
+        "chrome": "157.0.8103.80, new headless, --force-color-profile=srgb --force-high-performance-gpu --force-device-scale-factor=1"
+    },
+    "pass": false,
+    "environment": {
+        "node": "v24.15.0",
+        "platform": "win32 10.0.26200",
+        "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+        "cores": 16,
+        "memoryGb": 16
+    },
+    "date": "2026-11-20T11:31:25.209Z"
+}

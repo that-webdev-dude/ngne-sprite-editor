@@ -2,33 +2,33 @@
     "id": "se-024-playback-rtx-4060",
     "ticket": "SE-024",
     "measurement": "Editor playback from the ed:play grid of 64 frames of 256×256 (8 layers), 100 ms each, at 1× speed on the page's clock, 2 passes, Chrome on RTX 4060: entries of the sequence that the clock jumped over or that no submitted frame showed while they were the active frame.",
-    "statistic": "entries skipped of 129",
+    "statistic": "entries skipped of 128",
     "unit": "count",
     "budgetMs": 0,
     "resultMs": 0,
     "details": {
-        "entries": 129,
+        "entries": 128,
         "skippedEntries": [],
         "drawn": "onDrawn: frames submitted to NGNE, not known to be presented on screen",
         "firstFrameAfterEntry": {
-            "count": 127,
-            "medianMs": 12.3,
-            "p95Ms": 30.9,
-            "maxMs": 57.7
+            "count": 126,
+            "medianMs": 6.7,
+            "p95Ms": 9.9,
+            "maxMs": 10.6
         },
         "gapsBetweenPictureChanges": {
-            "count": 128,
-            "medianMs": 98.9,
-            "p95Ms": 123.1,
-            "maxMs": 150.9
+            "count": 127,
+            "medianMs": 99,
+            "p95Ms": 106,
+            "maxMs": 108.7
         },
-        "framesSubmittedPerSecond": 10.1,
-        "windowSeconds": 12.82,
+        "framesSubmittedPerSecond": 10,
+        "windowSeconds": 12.8,
         "document": "256×256, 8 layers, 64 frames of 100 ms, at 2×",
         "devicePixelRatio": 1,
         "window": "1920×1080 CSS px",
         "adapter": "nvidia / lovelace ()",
-        "chrome": "155.0.8059.82, new headless, --force-color-profile=srgb --force-high-performance-gpu --force-device-scale-factor=1"
+        "chrome": "157.0.8103.80, new headless, --force-color-profile=srgb --force-high-performance-gpu --force-device-scale-factor=1"
     },
     "pass": true,
     "environment": {
@@ -38,5 +38,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-10-19T06:59:26.516Z"
+    "date": "2026-11-20T11:30:14.109Z"
 }
