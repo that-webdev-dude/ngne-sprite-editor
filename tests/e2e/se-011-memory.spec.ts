@@ -11,6 +11,8 @@ import { harnessSettled, openHarness } from "./se-011-support";
 const MB = 1024 * 1024;
 const SIZE = 1024;
 const FRAME_BYTES = SIZE * SIZE * 4;
+/** One checker period of squares of 8, the viewport's default: 16 × 16 (gh-13). */
+const CHECKER_BYTES = 16 * 16 * 4;
 const FRAME_SLOTS = Array.from({ length: 8 }, (_, slot) => `ed:f:${slot}`);
 
 /** `renderer.inspect()` and the frame cache, as far as this spec reads them. */
@@ -46,7 +48,7 @@ test("after filling and clearing the frame cache, texture bytes are within 1 MB 
     await page.evaluate((size) => window.se011!.open(size, 9), SIZE);
     await harnessSettled(page);
     const baseline = await inspect(page);
-    expect(baseline.slotBytes["ed:checker"]).toBe(FRAME_BYTES);
+    expect(baseline.slotBytes["ed:checker"]).toBe(CHECKER_BYTES);
     expect(frameCacheBytes(baseline.slotBytes)).toEqual(FRAME_SLOTS.map(() => 0));
     expect(baseline.shown).toEqual(FRAME_SLOTS.map(() => null));
 
@@ -76,7 +78,7 @@ test("after filling and clearing the frame cache, texture bytes are within 1 MB 
     // checkerboard holds its image.
     expect(FRAME_SLOTS.filter((slot) => slot in cleared.slotBytes)).toEqual([]);
     expect(frameCacheBytes(cleared.slotBytes)).toEqual(FRAME_SLOTS.map(() => 0));
-    expect(cleared.slotBytes["ed:checker"]).toBe(FRAME_BYTES);
+    expect(cleared.slotBytes["ed:checker"]).toBe(CHECKER_BYTES);
 
     // A released slot takes a frame again.
     await page.evaluate(() => window.se011!.show(3));

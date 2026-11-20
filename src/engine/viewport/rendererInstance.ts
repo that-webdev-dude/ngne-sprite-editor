@@ -80,9 +80,9 @@ export class RendererInstance {
         this.#hooks = hooks;
         this.slots = new ViewportSlots(scene, {
             target: {
-                texture: (id, source, signal) => {
+                texture: (id, source, signal, sampling) => {
                     hooks.onTexture(id);
-                    return renderer.texture(id, source, signal);
+                    return renderer.texture(id, source, signal, sampling);
                 },
                 releaseTexture: (id) => renderer.releaseTexture(id),
             },

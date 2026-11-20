@@ -4,9 +4,23 @@
 // first as superseded, and every slot is uploaded whole (SPEC §6.2 #2, #3, §6.4), so the queue
 // stays. Used by the viewport and by the preview panel (SE-054).
 
+/**
+ * NGNE's `TextureSampling` (0.4.0): fixed for the life of a registration, nearest and clamp
+ * when absent. The checkerboard is the one slot that passes it (SPEC §6.4).
+ */
+export interface TextureSampling {
+    readonly filter?: "nearest" | "linear";
+    readonly address?: "clamp" | "repeat";
+}
+
 /** What the queue needs of a renderer: `WebGPURenderer.texture` and `releaseTexture` (SPEC §6.1). */
 export interface TextureTarget {
-    texture(id: string, source: ImageBitmap, signal?: AbortSignal): Promise<void>;
+    texture(
+        id: string,
+        source: ImageBitmap,
+        signal?: AbortSignal,
+        sampling?: TextureSampling,
+    ): Promise<void>;
     /**
      * Removes the manual texture of `id` at once and invalidates NGNE's pending work for it
      * (NGNE 0.3.0). Throws only for a failed or disposed renderer.
@@ -30,6 +44,8 @@ export type Upload<Tag> = {
     | {
           /** The source of `texture()`. The queue closes it when the upload settles. */
           bitmap: ImageBitmap;
+          /** Passed to `texture()`; a slot passes the same with every upload. */
+          sampling?: TextureSampling;
           transfer?: undefined;
       }
     | {
@@ -372,7 +388,9 @@ export class UploadQueue<Tag> {
             // gives up at once when `signal` has aborted.
             if (upload.transfer) await upload.transfer(signal);
             else if (this.#disposed || signal.aborted) return { kind: "ignored" };
-            else await this.#target.texture(slot, upload.bitmap, signal);
+            else if (upload.sampling) {
+                await this.#target.texture(slot, upload.bitmap, signal, upload.sampling);
+            } else await this.#target.texture(slot, upload.bitmap, signal);
             return { kind: "published", tag: upload.tag };
         } catch (error) {
             if (this.#ignored(error, signal)) return { kind: "ignored" };

@@ -1,9 +1,43 @@
 import type { PixelBuffer } from "../../core/model";
-import type { ViewportChecker } from "./types";
+import { imageQuad } from "./geometry";
+import type { Quad } from "./geometry";
+import type { ViewportChecker, ViewportView } from "./types";
 
-// The checkerboard behind transparent pixels. NGNE's clear colour is opaque and its sampler
-// clamps (SPEC §6.2 #6, #8), so the pattern is an image at document resolution in the slot
-// `ed:checker`, drawn under the frame.
+// The checkerboard behind transparent pixels. NGNE's clear colour is opaque (SPEC §6.2 #8), so
+// the pattern is drawn as a quad under the frame: one period of it (2 × 2 squares) in the slot
+// `ed:checker`, registered with repeat addressing (NGNE 0.4.0 `TextureSampling`, SPEC §6.2 #6)
+// and tiled over the document rectangle. The period depends on the checker setting alone.
+
+/** The sampling of `ed:checker`: the period repeats; nearest stays NGNE's default. */
+export const CHECKER_SAMPLING = { address: "repeat" } as const;
+
+/** One period of the pattern: `2 × size` document pixels on a side, colour `a` top-left. */
+export function checkerPeriod(checker: ViewportChecker): PixelBuffer {
+    const side = 2 * checker.size;
+    return checkerPixels(side, side, checker);
+}
+
+/**
+ * The quad of the checkerboard over the document rectangle, from a period of `period`
+ * document pixels: the period's texture repeats `width / period` times across and
+ * `height / period` down, from the document's top-left, so each document pixel shows the
+ * texel a document-sized image would hold there.
+ */
+export function checkerQuad(
+    texture: string,
+    layer: number,
+    view: ViewportView,
+    document: { width: number; height: number },
+    period: number,
+): Quad {
+    return {
+        ...imageQuad(texture, layer, view, document),
+        u: 0,
+        v: 0,
+        uw: document.width / period,
+        vh: document.height / period,
+    };
+}
 
 /**
  * A `width` × `height` image of opaque squares, `checker.size` document pixels on a side,

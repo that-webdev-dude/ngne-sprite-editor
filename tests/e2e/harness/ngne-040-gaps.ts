@@ -1,7 +1,7 @@
-import { Camera, Frame, WebGPURenderer } from "@ngne/core";
+import { Camera } from "@ngne/core";
 import type { RgbaPixels, Sprite, TextureRegion, TextureSampling } from "@ngne/core";
-import { readCanvas } from "../../../src/engine/testing/readCanvas";
 import { adapterName } from "./adapter";
+import { draw, unsnapped, withRenderer } from "./renderer";
 import { documentRect, imageQuad } from "../../../src/engine/viewport/geometry";
 import type { ViewportView } from "../../../src/engine/viewport/types";
 
@@ -11,49 +11,6 @@ import type { ViewportView } from "../../../src/engine/viewport/types";
 // snapping. Each probe returns plain numbers for `tests/e2e/ngne-040-gaps.spec.ts`.
 
 type Rgba = [number, number, number, number];
-
-/** A renderer on its own canvas, disposed with the canvas once `body` settles. */
-async function withRenderer<T>(
-    width: number,
-    height: number,
-    body: (renderer: WebGPURenderer, canvas: HTMLCanvasElement, errors: string[]) => Promise<T>,
-): Promise<T> {
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    document.body.append(canvas);
-    const errors: string[] = [];
-    const renderer = await WebGPURenderer.create(canvas, width, height, (error) => {
-        errors.push(String(error));
-    });
-    try {
-        return await body(renderer, canvas, errors);
-    } finally {
-        renderer.dispose();
-        canvas.remove();
-    }
-}
-
-/** Renders `sprites` in one scene and reads the canvas back in the same task (SPEC §6.7). */
-function draw(
-    renderer: WebGPURenderer,
-    canvas: HTMLCanvasElement,
-    camera: Camera,
-    sprites: readonly Sprite[],
-    clear: number,
-): ImageData {
-    const frame = new Frame();
-    frame.scene(camera, 1);
-    for (const sprite of sprites) frame.sprite(sprite);
-    renderer.render(frame, clear);
-    return readCanvas(canvas);
-}
-
-function unsnapped(): Camera {
-    const camera = new Camera();
-    camera.pixelSnap = false;
-    return camera;
-}
 
 function image(width: number, height: number, texel: (x: number, y: number) => Rgba): Uint8Array {
     const data = new Uint8Array(width * height * 4);

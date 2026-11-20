@@ -401,7 +401,7 @@ All symbols are exported from the package root.
 | 3  | A second `texture()` call for an ID rejects the first as superseded       | Single-flight, latest-wins upload queue per slot                   |
 | 4  | 0.2.1: manually registered textures cannot be released, only replaced; NGNE retains a bitmap copy per slot. 0.3.0: `releaseTexture(id)` removes the registration and its copy at once and invalidates pending work for the ID | Fixed, bounded slot IDs; an unused slot is released (0.2.1: replaced by a 1×1 image) |
 | 5  | A frame referencing a texture that is not ready is skipped entirely and reported | Frame builders reference only slots whose first upload resolved |
-| 6  | Sampler is nearest, clamp-to-edge; one blend (premultiplied source-over); tint is a multiply. 0.4.0: nearest and clamp are the default; a registration may choose `TextureSampling` (`linear`, `repeat`) | Blend modes, onion tint and smooth reference scaling happen on the CPU; no registration passes a sampling yet (§6.8) |
+| 6  | Sampler is nearest, clamp-to-edge; one blend (premultiplied source-over); tint is a multiply. 0.4.0: nearest and clamp are the default; a registration may choose `TextureSampling` (`linear`, `repeat`) | Blend modes, onion tint and smooth reference scaling happen on the CPU. `ed:checker` is registered with `repeat` and holds one period of the pattern (§6.4); every other registration keeps the default (§6.8) |
 | 7  | 0.2.1–0.3.1: `Frame` rounds sprite **centres** when `camera.pixelSnap` is true (the default). 0.4.0: it rounds the quad's corner, so integer-sized quads, odd and flipped included, cover whole pixels; even-sized unrotated quads and `pixelSnap = false` are unchanged | Viewport and preview disable snapping and place quads from an integer top-left; exported rects are even-sized (§9.2), which keeps them pixel-aligned on 0.3.x as on 0.4.0 ⚠ |
 | 8  | Clear colour is opaque                                                    | Checkerboard and preview backgrounds are drawn as sprites/rects    |
 | 9  | Images are straight alpha, sRGB, decoded without conversion               | Build bitmaps from `ImageData` with `premultiplyAlpha: "none"`     |
@@ -495,11 +495,18 @@ Texture slots (IDs are fixed for the life of a renderer)
 
 | Slot             | Content                                              | Uploaded when                      |
 | ---------------- | ---------------------------------------------------- | ---------------------------------- |
-| `ed:checker`     | Checkerboard at document resolution                  | Size or checker setting changes    |
+| `ed:checker`     | One checkerboard period (2 × 2 squares), `repeat`    | Checker setting changes            |
 | `ed:f:0..7`      | Frame cache: composites keyed by `frameId:variant`   | A needed key is absent or stale    |
 | `ed:play`        | Atlas of the playing range (editor playback)         | Playback starts                    |
 | `ed:ref:0..3`    | Reference images, pre-scaled on the CPU (§7.6)       | Zoom settles, reference changes    |
 
+- The checkerboard (issue #13): `ed:checker` holds one period, `2 × size` document pixels on a side
+  with colour `a` top-left, registered with `TextureSampling` `{ address: "repeat" }` (NGNE
+  0.4.0). Its quad covers the document rectangle with `u = v = 0`, `uw = width / period` and
+  `vh = height / period`, so it shows the pixels a document-sized image showed, at every zoom
+  step and in each tiled-mode copy (`tests/e2e/checker-period.spec.ts`). The period depends on
+  the checker setting alone: a resize or another document uploads nothing for it; it is
+  released with the last document and asked for with the next.
 - The frame cache is LRU. `variant` is `plain`, `before` or `after`; the tinted onion variants
   are tinted on the CPU. The current frame (including a live stroke) and its onion neighbours
   are drawn from whichever slots hold them, so switching to a frame already in the cache needs
@@ -601,7 +608,8 @@ Upload queue (one per renderer instance)
   slot's key and the size of its image (and, for `ed:play` and `pv:atlas`, the UV metadata used
   for drawing) change only when the matching upload resolves; frame builders never pair new
   metadata with an old texture. A slot is drawn over the rectangle of the image it holds, so a
-  change of the document's size never stretches an old texture.
+  change of the document's size never stretches an old texture; the checker period repeats
+  over the document rectangle at the period it holds.
 - Versions (SE-015, for the stroke echo of §6.6): a `ViewportDocument` may give `version(key)`,
   read in the same task as the key's pixels; the version travels with the upload into the slot
   and is reported, with the frame key, for every frame NGNE submits (`NgneViewport` option
@@ -787,7 +795,7 @@ fail on 0.3.0; its figures are from SwiftShader and Intel UHD.
 | Whole-image asynchronous uploads, superseded calls and GPU validation round trips | Single-flight latest-wins queue, whole-slot uploads, cached frames and playback grid; Canvas2D stroke echo until NGNE submits the change | SE-002 Q1–2; RTX 4060 stroke p95 34.1 ms without echo, 20.2 ms with it. Run 4 upload frame switch: 80.8 ms p95 against 50 ms on cloud SwiftShader, **not reference hardware**. Checkpoint E reference p95: Intel UHD 26.0 ms, RTX 4060 29.7 ms; both meet 50 ms ([record](perf/checkpoint-e-2026-10-21.md)) | **Partly resolved.** 0.3.0's `createTexture` + `updateTexture` were not adopted: its 2D readback capture put 3580 of 65 024 translucent texels beyond ±1 under SwiftShader (worst 1.47; `texture()` 0, worst 0.50). Reported to NGNE as an engine gap; 0.3.1's raw RGBA8 `updateTexture` (ngne#49) closes it: 0 of 65 024 translucent texels beyond ±1 sent whole, 0 of 46 000 sent as a region (worst 0.498 SwiftShader, 0.996 Intel UHD; `texture()` the same), `ngne-040-gaps`. Not adopted yet (issue #9): queue, cache, grid and echo kept |
 | No blend modes or non-multiply tint | CPU layer/cel compositor and CPU onion tint | SE-010, SE-025 and SE-061; tint moves black toward red/blue, which a multiply cannot do (§7.5) | **Still applicable.** 0.4.0 adds no blend mode or tint |
 | Fixed renderer size, no public create abort; canvases share their WebGPU context | Serialized replacement on a new canvas, keep the old canvas until the new one draws | SE-002 Q4: replacement medians 34.3–50.5 ms on reference GPUs; only a ready, drawn canvas is swapped in | **Resolved** in 0.3.0. `resize` in the `ResizeObserver` task, no replacement for a size change; `create` cancelled by the viewport's signal, creates no longer serialized. One canvas per renderer and the swap stay for failed or stuck renderers only. Unchanged in 0.4.0 (`se-011-lifecycle`, `se-011-renderer`) |
-| No repeat addressing or linear filtering | Finite checker texture; CPU resample reference display images after zoom settles | SE-011, SE-045; a whole-pixel reference move at fractional zoom can change rounded width by 1 px and cause a resample; accepted display trade-off at checkpoint E | **Resolved** in 0.4.0 by `TextureSampling` (ngne#54): a repeat checker period tiles a quad exactly (0 of 7600 pixels off) and a linear ramp lies within 0.375 of bilinear, nearest staying the default (`ngne-040-gaps`). Linear has no mipmaps, so strong minification can alias. Finite checker and CPU resampling kept |
+| No repeat addressing or linear filtering | Finite checker texture; CPU resample reference display images after zoom settles | SE-011, SE-045; a whole-pixel reference move at fractional zoom can change rounded width by 1 px and cause a resample; accepted display trade-off at checkpoint E | **Resolved** in 0.4.0 by `TextureSampling` (ngne#54): a repeat checker period tiles a quad exactly (0 of 7600 pixels off) and a linear ramp lies within 0.375 of bilinear, nearest staying the default (`ngne-040-gaps`). Linear has no mipmaps, so strong minification can alias. The checker is one repeating period since issue #13 (§6.4; `checker-period`: 0 of 246 views differ from the finite image on SwiftShader and Intel UHD); CPU resampling of references kept |
 | No camera zoom | Scale sprite sizes and positions while building frames | SE-002 Q3 and SE-012: device-pixel mapping checked at fractional DPR (§6.4) | **Resolved** in 0.4.0 by `Camera.zoom` (ngne#53): where the document's edges fall on whole device pixels (scales 1–4) a zoomed camera draws the same device pixels as this scaling; at scales 0.5, 1.1, 1.25, 1.5, 2.5 and 3.75, 30–1990 pixels of a 37 × 23 document differ, because the viewport rounds the document rectangle to whole device pixels and the camera does not (`ngne-040-gaps`). Scaling kept |
 | No texture readback | Export CPU composites; read the canvas in-page immediately after render for tests | SE-002 Q7, SE-053 conformance; opaque readback exact on both reference GPUs | **Still applicable.** 0.4.0 has no readback API |
 | Centre snapping misaligns odd-sized sprites | Disable snapping in editor/preview; even-pad export rectangles and round generated-helper placement | SE-002 Q9: odd default-snapped sprite differed on RTX 4060; exact quarter turns and alpha tolerance covered by conformance | **Resolved** in 0.4.0 by corner snapping (ngne#51): a 5 × 3 quad at fractional centres, flipped on either axis or both, maps every texel to one pixel with snapping on; 0.3.0 failed the flipped cases (`ngne-040-gaps`). Snapping stays off in the editor and atlas rectangles stay even (§9.2), so exported modules place the same on 0.3.x and 0.4.0 |

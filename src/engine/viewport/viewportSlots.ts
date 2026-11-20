@@ -1,7 +1,7 @@
 import type { PixelBuffer, TiledMode } from "../../core/model";
 import { UploadQueue } from "../UploadQueue";
-import type { TextureTarget, Upload } from "../UploadQueue";
-import { checkerPixels, checkerSpec } from "./checker";
+import type { TextureSampling, TextureTarget, Upload } from "../UploadQueue";
+import { CHECKER_SAMPLING, checkerPeriod, checkerQuad, checkerSpec } from "./checker";
 import { FrameSlots } from "./frameSlots";
 import type { SlotImage } from "./frameSlots";
 import { imageQuad, QUAD_LAYER, tiledCopies } from "./geometry";
@@ -99,9 +99,9 @@ export function replaceSceneDocument(scene: Scene, document: ViewportDocument | 
 /** What an upload put into a slot. */
 interface SlotTag {
     epoch: number;
-    /** A frame key, the spec of a checker image, or null for none (the texture was released). */
+    /** A frame key, the spec of a checker period, or null for none (the texture was released). */
     key: string | null;
-    /** Size of the image, in document pixels. */
+    /** Size of the image, in document pixels; for the checker, of its period. */
     width: number;
     height: number;
     /** The document's `version` of a frame's pixels, when it gives one (SE-015). */
@@ -132,6 +132,8 @@ interface SlotImageSource {
     pixels: PixelBuffer;
     version?: number;
     grid?: PlayGridTag;
+    /** The texture's sampling (the checker's); NGNE's default when absent. */
+    sampling?: TextureSampling;
 }
 
 /** What the slots need of the renderer instance they belong to. */
@@ -169,7 +171,7 @@ export class ViewportSlots {
     readonly #scene: Scene;
     readonly #host: SlotsHost;
     /**
-     * Spec of the checker image last asked for; null while the slot holds nothing, undefined
+     * Spec of the checker period last asked for; null while the slot holds nothing, undefined
      * when the image asked for could not be made and has to be asked for again.
      */
     #checker: string | null | undefined = null;
@@ -291,10 +293,9 @@ export class ViewportSlots {
                       keys.includes(key) || keys.includes(frameKey(parseFrameKey(key).frameId));
         const { current } = this.#scene;
         // The onion skins are keys on screen as well (SE-025): uploaded again in place, or the
-        // ghosts would blank at every edit.
+        // ghosts would blank at every edit. The checker period does not depend on the
+        // document's size: "all" uploads nothing for it (gh-13).
         const ghosts = this.#ghosts().map((ghost) => ghost.key);
-        // "all" includes the document's size, which the checker image follows.
-        if (keys === "all") this.#syncChecker();
         this.#invalidatePlay(hit);
         this.#blank(
             this.frames.release((key) => key !== current && !ghosts.includes(key) && hit(key)),
@@ -332,9 +333,17 @@ export class ViewportSlots {
         // Tiled mode (SE-062) repeats the checkerboard and the frame, never the references or
         // the onion skins, which belong to the document in the middle.
         const tiled = scene.tiled ?? "none";
+        // The checker period is the setting's, not the document's: whatever document it was
+        // uploaded under, it repeats over this one's rectangle with the period it holds.
         const checker = this.queue.published(CHECKER_SLOT);
-        if (checker && checker.key !== null && checker.epoch === scene.epoch) {
-            const quad = imageQuad(CHECKER_SLOT, QUAD_LAYER.checker, scene.view, checker);
+        if (checker && checker.key !== null) {
+            const quad = checkerQuad(
+                CHECKER_SLOT,
+                QUAD_LAYER.checker,
+                scene.view,
+                scene.document,
+                checker.width,
+            );
             quads.push(quad, ...tiledCopies(quad, tiled));
         }
         quads.push(...this.references.quads());
@@ -412,9 +421,14 @@ export class ViewportSlots {
         return previous;
     }
 
+    /**
+     * Asks for the checker period when the setting changed or a document came back after
+     * none; a resize or another document asks for nothing (gh-13).
+     */
     #syncChecker(): void {
-        const { document: doc, checker, epoch } = this.#scene;
-        const spec = doc ? `${epoch}/${checkerSpec(doc.width, doc.height, checker)}` : null;
+        const { document: doc, checker } = this.#scene;
+        const side = 2 * checker.size;
+        const spec = doc ? checkerSpec(side, side, checker) : null;
         if (spec === this.#checker) return;
         this.#checker = spec;
         if (spec === null) {
@@ -426,9 +440,11 @@ export class ViewportSlots {
             this.#build(CHECKER_SLOT, () => {
                 const { document: now, checker: colours } = this.#scene;
                 if (!now) return null;
+                const pixels = checkerPeriod(colours);
                 return {
-                    key: checkerSpec(now.width, now.height, colours),
-                    pixels: checkerPixels(now.width, now.height, colours),
+                    key: checkerSpec(pixels.width, pixels.height, colours),
+                    pixels,
+                    sampling: CHECKER_SAMPLING,
                 };
             }),
         );
@@ -509,7 +525,8 @@ export class ViewportSlots {
         const tag: SlotTag = { epoch, key: made.key, width, height };
         if (made.version !== undefined) tag.version = made.version;
         if (made.grid) tag.grid = made.grid;
-        return { bitmap: await this.#host.bitmap(made.pixels), tag };
+        const bitmap = await this.#host.bitmap(made.pixels);
+        return made.sampling ? { bitmap, tag, sampling: made.sampling } : { bitmap, tag };
     }
 
     #published(slot: string, tag: SlotTag): void {

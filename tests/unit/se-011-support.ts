@@ -1,4 +1,4 @@
-import type { TextureTarget } from "../../src/engine/UploadQueue";
+import type { TextureSampling, TextureTarget } from "../../src/engine/UploadQueue";
 import type {
     ViewportChecker,
     ViewportDocument,
@@ -31,6 +31,8 @@ export interface TextureCall {
     id: string;
     source: FakeBitmap;
     signal: AbortSignal | undefined;
+    /** The sampling the call registers the texture with; undefined for NGNE's default. */
+    sampling: TextureSampling | undefined;
     resolve(): void;
     reject(error: unknown): void;
 }
@@ -45,12 +47,18 @@ export class FakeRenderer implements TextureTarget {
         this.#rejectsOnAbort = options.rejectsOnAbort ?? true;
     }
 
-    texture(id: string, source: ImageBitmap, signal?: AbortSignal): Promise<void> {
+    texture(
+        id: string,
+        source: ImageBitmap,
+        signal?: AbortSignal,
+        sampling?: TextureSampling,
+    ): Promise<void> {
         return new Promise((resolve, reject) => {
             const call: TextureCall = {
                 id,
                 source: source as unknown as FakeBitmap,
                 signal,
+                sampling,
                 resolve,
                 reject,
             };

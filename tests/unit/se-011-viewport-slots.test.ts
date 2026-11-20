@@ -140,7 +140,19 @@ describe("ViewportSlots: what is uploaded and what is drawn", () => {
         renderer.inFlight("ed:f:0").resolve();
         await flush();
         expect(slots.quads()).toEqual([
-            { texture: "ed:checker", layer: 1, x: 14, y: 24, width: 8, height: 8 },
+            // One checker period of 4 × 4 over the 4 × 4 document (gh-13).
+            {
+                texture: "ed:checker",
+                layer: 1,
+                x: 14,
+                y: 24,
+                width: 8,
+                height: 8,
+                u: 0,
+                v: 0,
+                uw: 1,
+                vh: 1,
+            },
             { texture: "ed:f:0", layer: 4, x: 14, y: 24, width: 8, height: 8 },
         ]);
         expect(events).toEqual(["change", "change"]);
@@ -261,8 +273,9 @@ describe("ViewportSlots: a document switch", () => {
         slots.sync();
         await land();
 
-        // The checkerboard and the frame of the new document, into the slot that was freed.
-        expect(uploads().slice(before).sort()).toEqual(["ed:checker<checker 6x6", "ed:f:0<B/b1"]);
+        // The frame of the new document, into the slot that was freed; the checker period is
+        // the setting's, kept for the new document (gh-13).
+        expect(uploads().slice(before).sort()).toEqual(["ed:f:0<B/b1"]);
         expect(a.asked).toEqual(["a1"]);
         expect(b.asked).toEqual(["b1"]);
         expect(slots.frames.keysByAge()).toEqual(["b1"]);
@@ -282,12 +295,13 @@ describe("ViewportSlots: a document switch", () => {
         expect(stale).toHaveLength(1);
         for (const call of [...renderer.calls]) call.resolve();
         await flush();
-        // The slot holds the first document's pixels under the key that is on show again.
-        expect(textures()).toEqual([]);
+        // The slot holds the first document's pixels under the key that is on show again: it
+        // is not drawn. The checker period is no image of either document (gh-13).
+        expect(textures()).toEqual(["ed:checker"]);
 
-        // The uploads of the second document, which waited behind them, go through.
+        // The upload of the second document, which waited behind them, goes through.
         await land();
-        expect(uploads().slice(2).sort()).toEqual(["ed:checker<checker 4x4", "ed:f:0<again/f1"]);
+        expect(uploads().slice(2).sort()).toEqual(["ed:f:0<again/f1"]);
         expect(textures()).toEqual(["ed:checker", "ed:f:0"]);
     });
 });

@@ -111,11 +111,12 @@ test("slot IDs released and used again by tab switches while their uploads wait 
     await settle(page);
 
     await expectImage(page, b, viewB, imageB);
-    // A released upload never reaches NGNE: at most the checkerboard and the frame, each
-    // started once while waiting and once for the newest request.
+    // A released upload never reaches NGNE: at most the frame, started once while waiting
+    // and once for the newest request. The checker period is the setting's: a switch
+    // uploads nothing for it (gh-13).
     const after = await uploads(page);
-    expect(after.calls - before.calls).toBeGreaterThanOrEqual(2);
-    expect(after.calls - before.calls).toBeLessThanOrEqual(4);
+    expect(after.calls - before.calls).toBeGreaterThanOrEqual(1);
+    expect(after.calls - before.calls).toBeLessThanOrEqual(2);
     const slots = await page.evaluate(() => window.__ngneTest!.viewport!.slots);
     expect(slots.filter((key) => key !== null)).toEqual([plain(b.frameId)]);
     // NGNE holds the checkerboard and that one frame slot, nothing of the document left.

@@ -391,8 +391,9 @@ test("the viewport follows the active session and gives its renderer up with the
         expect.not.arrayContaining([plain(a.frameId)]),
     );
 
-    // A switch uploads the checkerboard and the frame of the document switched to, and
-    // nothing for a key of the document left: no slot is reserved for it on the way.
+    // A switch uploads the frame of the document switched to, and nothing for a key of the
+    // document left: no slot is reserved for it on the way. The checker period is the
+    // setting's and stays (gh-13).
     const uploads = () =>
         page.evaluate(() => ({
             calls: window.__ngneTest!.viewport!.textureCalls,
@@ -402,7 +403,7 @@ test("the viewport follows the active session and gives its renderer up with the
     await page.evaluate((id) => window.__ngneTest!.sessions.getState().activate(id), a.id);
     await settle(page);
     await expectImage(page, a, viewA, imageA);
-    expect(await uploads()).toEqual({ calls: before.calls + 2, copies: before.copies + 2 });
+    expect(await uploads()).toEqual({ calls: before.calls + 1, copies: before.copies + 1 });
     expect(await page.evaluate(() => window.__ngneTest!.viewport!.slots)).toEqual([
         plain(a.frameId),
         ...Array.from({ length: 7 }, () => null),
