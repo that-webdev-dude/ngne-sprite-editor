@@ -71,17 +71,54 @@ export async function settle(page: Page): Promise<void> {
  * size times the ratio, which is a fraction when a track of the shell has an odd CSS size.
  */
 export function hostDeviceSize(page: Page): Promise<{ width: number; height: number }> {
-    return viewportHost(page).evaluate(
-        (host) =>
-            new Promise<{ width: number; height: number }>((resolve) => {
-                const observer = new ResizeObserver(([entry]) => {
-                    const box = entry?.devicePixelContentBoxSize[0];
-                    observer.disconnect();
-                    resolve({ width: box?.inlineSize ?? -1, height: box?.blockSize ?? -1 });
-                });
-                observer.observe(host, { box: "device-pixel-content-box" });
-            }),
-    );
+    return viewportHost(page).evaluate(readDeviceSize, false);
+}
+
+/**
+ * Waits, after a window resize, until the shell has stopped laying out and the viewport is at
+ * rest at the size it ended at. The shell lays out twice: a frame after the resize the rail
+ * picks its column count for its new height, which changes the viewport element's width, and
+ * `settle` alone can match the first layout. So the element's device size must read the same
+ * in two consecutive animation frames, then `settle` must hold, and the size must still be the
+ * same once it does.
+ */
+export async function settleResize(page: Page): Promise<void> {
+    for (let attempt = 0; attempt < 10; attempt++) {
+        const stable = await viewportHost(page).evaluate(readDeviceSize, true);
+        await settle(page);
+        const after = await hostDeviceSize(page);
+        if (after.width === stable.width && after.height === stable.height) return;
+    }
+    throw new Error("se-011: the viewport element kept changing size after the resize");
+}
+
+/**
+ * Page side of `hostDeviceSize` and `settleResize`: the element's device size, read by a
+ * resize observer in the rendering steps of the next frame. With `untilStable`, read again in
+ * each following animation frame until two consecutive frames read the same size.
+ */
+async function readDeviceSize(
+    host: Element,
+    untilStable: boolean,
+): Promise<{ width: number; height: number }> {
+    const read = () =>
+        new Promise<{ width: number; height: number }>((resolve) => {
+            const observer = new ResizeObserver(([entry]) => {
+                const box = entry?.devicePixelContentBoxSize[0];
+                observer.disconnect();
+                resolve({ width: box?.inlineSize ?? -1, height: box?.blockSize ?? -1 });
+            });
+            observer.observe(host, { box: "device-pixel-content-box" });
+        });
+    let size = await read();
+    if (!untilStable) return size;
+    for (let frame = 0; frame < 60; frame++) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const next = await read();
+        if (next.width === size.width && next.height === size.height) return size;
+        size = next;
+    }
+    throw new Error("se-011: the viewport element's size did not stop changing");
 }
 
 export interface TestDocument {

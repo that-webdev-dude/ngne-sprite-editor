@@ -16,6 +16,7 @@ import {
     paint,
     pattern,
     settle,
+    settleResize,
     shows,
     viewportHost,
 } from "./se-011-support";
@@ -246,8 +247,10 @@ test("after a resize the window shows the image drawn at the new size, and still
 
     // A new size: the renderer is resized and draws once, in the task the size is observed
     // (NGNE 0.3.0 `resize`). Nothing is drawn afterwards, so the screen shows that one frame.
+    // The shell lays out again a frame later (the rail's column count): the sizes are read
+    // once the layout has stopped changing.
     await page.setViewportSize({ width: 1400, height: 800 });
-    await settle(page);
+    await settleResize(page);
     const swapped = await counters(page);
     expect(swapped.devicesCreated).toBe(initial.devicesCreated);
     expect(await canvases(page)).toEqual([await hostDeviceSize(page)]);
@@ -263,7 +266,7 @@ test("after a resize the window shows the image drawn at the new size, and still
     expect(await counters(page)).toMatchObject({ liveRenderers: 1, liveDevices: 1 });
     await page.setViewportSize({ width: 1400, height: 800 });
     await expect(viewportHost(page)).toBeVisible();
-    await settle(page);
+    await settleResize(page);
     await twoFrames(page);
     expect(await counters(page)).toMatchObject({
         liveRenderers: 1,
