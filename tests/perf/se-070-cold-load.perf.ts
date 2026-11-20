@@ -23,6 +23,13 @@ import type { AdapterInfo } from "./se-070-harness";
 // served by `vite preview` on 127.0.0.1 ("local"). Cold: every load is a new Chrome with an
 // empty profile (no HTTP, code or shader cache, no service worker), 10 loads.
 //
+// Warm-up (issue #17): before the 10 loads, one Chrome with the same flags opens a blank page
+// (no app, no server), waits for two animation frames, reads its WebGPU adapter and checks it
+// is the one asked for, and is closed. It is not one of the measured loads. Without it, the
+// first load on a discrete GPU that had idled waited about 2.3 s for Chrome's GPU process to
+// start, as a blank page does, and the result measured the GPU's power state, not the app.
+// Its times are in the record's details (`warmUp`).
+//
 // "Interactive" is the moment the editor first answers its first action. The app is
 // interactive when the user can start work: past the WebGPU check that gates the editor
 // (SPEC §3, `useWebGpuSupport`), the shell is on screen with the empty state, whose first
@@ -170,6 +177,54 @@ function installLoadProbe(): void {
     requestAnimationFrame(frame);
 }
 
+/** A blank page of a secure origin (WebGPU needs one), answered by the browser context itself. */
+const WARM_UP_URL = "http://127.0.0.1/se-070-warm-up";
+
+interface WarmUp {
+    /** Chrome's launch to its blank page being loaded. */
+    launchToPageMs: number;
+    /** The page loaded to its adapter read, after two animation frames. */
+    pageToAdapterMs: number;
+    totalMs: number;
+    adapter: AdapterInfo;
+}
+
+/** Starts one Chrome on the run's adapter and closes it: the GPU is awake for the loads. */
+async function warmUp(): Promise<WarmUp> {
+    if (!gpu) throw new Error("no GPU");
+    const start = performance.now();
+    let browser: Browser | null = null;
+    try {
+        browser = await launch(gpu);
+        const context = await newContext(browser);
+        await context.route(WARM_UP_URL, (route) =>
+            route.fulfill({
+                contentType: "text/html",
+                body: "<!doctype html><title>se-070 warm-up</title>",
+            }),
+        );
+        const page = await context.newPage();
+        await page.goto(WARM_UP_URL);
+        const pageLoaded = performance.now();
+        await page.evaluate(
+            () =>
+                new Promise<void>((resolve) =>
+                    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+                ),
+        );
+        const adapter = await checkAdapter(page, gpu);
+        const end = performance.now();
+        return {
+            launchToPageMs: pageLoaded - start,
+            pageToAdapterMs: end - pageLoaded,
+            totalMs: end - start,
+            adapter,
+        };
+    } finally {
+        await browser?.close();
+    }
+}
+
 async function coldLoad(
     url: string,
 ): Promise<{ times: LoadTimes; adapter: AdapterInfo; browser: string; details: object }> {
@@ -234,6 +289,7 @@ it.skipIf(!gpu)(
         if (!gpu) return;
         const server = await startProductionServer();
         try {
+            const warm = await warmUp();
             const loads: LoadTimes[] = [];
             let environment: object = {};
             for (let index = 0; index < LOADS; index++) {
@@ -273,6 +329,17 @@ it.skipIf(!gpu)(
                     "(at most every 50 ms) from the first frame it is on screen",
                 server: "vite build (project configuration) served by vite preview on 127.0.0.1",
                 cold: "a new Chrome with an empty profile for every load",
+                warmUp: {
+                    definition:
+                        "before the measured loads and not one of them: one Chrome with the " +
+                        "same flags and a new profile opened a blank page (no app, no server), " +
+                        "waited two animation frames, read its WebGPU adapter and was closed, " +
+                        "so that no measured load waits for the GPU to wake from idle",
+                    launchToPageMs: round(warm.launchToPageMs),
+                    pageToAdapterMs: round(warm.pageToAdapterMs),
+                    totalMs: round(warm.totalMs),
+                    adapter: `${warm.adapter.vendor} / ${warm.adapter.architecture} (${warm.adapter.description})`,
+                },
                 ...environment,
             };
             record({
@@ -281,7 +348,8 @@ it.skipIf(!gpu)(
                 measurement:
                     `Cold load of the production build served locally to interactive (the New ` +
                     `sprite dialog on screen after the empty state's first action), Chrome on ` +
-                    `${gpu.label}, each load in a new browser with an empty profile.`,
+                    `${gpu.label}, each load in a new browser with an empty profile, after one ` +
+                    `unmeasured warm-up browser woke the GPU.`,
                 statistic: `largest of ${LOADS} cold loads, from navigation start`,
                 budgetMs: BUDGET_MS,
                 resultMs: sorted.at(-1)!,

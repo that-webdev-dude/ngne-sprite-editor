@@ -706,7 +706,8 @@ but the cold load on RTX 4060: 2368 ms, the first of its 10 loads; their median 
 load waits for Chrome's GPU process to start on the discrete GPU after it idled (about 2.3 s,
 before any page code runs; a blank page waits as long), so it does not come from the editor or
 the engine: 0.3.0, 0.3.1 and 0.4.0 each reached 2.4 s in the same conditions. Intel UHD:
-249 ms.
+249 ms. Since that run the benchmark wakes the GPU with one unmeasured Chrome before its loads
+(issue #17, `tests/perf/README.md`); the 0.4.0 records predate it.
 
 The idle budget applies to the editor viewport; an expanded preview that plays submits one frame
 per animation entry, and none while paused, collapsed or showing a single-entry animation.

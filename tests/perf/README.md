@@ -46,7 +46,7 @@ frames (as SE-024 built it); the stroke benchmark has 8 layers of translucent no
 | Frame switch needing an upload: submitted, p95                        | ≤ 50 ms              | `se-070-frame-switch-upload.perf.ts`                    | larger of two p95s: the first sweep (63 switches, composites built) and the two later sweeps (126, composites cached)                                               | every switch makes a `texture()` call (no frame was cached) and counts at least 1 frame; the preview plays                                                                                                                     |
 | Editor playback from `ed:play`, 64 frames, 100 ms each                | no skipped frames    | `se-024-playback.perf.ts` (SE-024)                      | entries skipped of about 128 (two passes at 1×; `unit: count`, budget 0)                                                                                            | the viewport draws from the `ed:play` grid of 64 cells and uploads nothing during the window; the window covers about two passes                                                                                               |
 | Idle editor: frames submitted per second                              | 0                    | `se-070-idle.perf.ts`                                   | larger of two 10 s windows' viewport frames per second: pointer outside the viewport, then resting on the canvas (`unit: count`, budget 0)                          | the page ran at least 20 animation frames per second in each window; the preview's frames are reported beside it, one per entry while it plays                                                                                 |
-| Cold load to interactive (production build, local)                    | ≤ 2 s                | `se-070-cold-load.perf.ts`                              | largest of 10 cold loads, navigation start to interactive                                                                                                           | the page is a production build (no test hook, no Vite client); the adapter is the one asked for                                                                                                                                |
+| Cold load to interactive (production build, local)                    | ≤ 2 s                | `se-070-cold-load.perf.ts`                              | largest of 10 cold loads after one unmeasured warm-up browser, navigation start to interactive                                                                      | the page is a production build (no test hook, no Vite client); the adapter is the one asked for, in the warm-up and in every load                                                                                              |
 
 Frame switches (`se-070-frame-switch.ts`) are real ArrowRight presses on the focused viewport
 (the registered Next Frame (Canvas) command), as a user steps through the frames. The page
@@ -66,8 +66,14 @@ dialog is in the document with a box; "interactive" is that animation frame, whi
 dialog. A click that comes before the app can answer is lost, as a user's would be. The
 production build is `vite build` with the project's configuration, served by `vite preview` on
 127.0.0.1; every load is a new Chrome with an empty profile (no HTTP, code or shader cache).
-The time to the shell, DOMContentLoaded, the load event, the first contentful paint and the
-long tasks are in the record's details.
+Before the 10 loads, one warm-up Chrome with the same flags and a new profile opens a blank
+page (no app, no server), waits two animation frames, reads its WebGPU adapter, checks it is
+the one asked for, and is closed; it is not one of the measured loads. Without it, the first
+load on a discrete GPU that had idled waited about 2.3 s for Chrome's GPU process to start
+(issue #17), so the largest load measured the GPU's power state instead of the app. The
+warm-up's times are in the record's details (`warmUp`). The time to the shell,
+DOMContentLoaded, the load event, the first contentful paint and the long tasks are in the
+record's details.
 
 "Interactive" does not include the editor's first draw: nothing starts the viewport's NGNE
 device, pipelines and shaders before a document is open. The details therefore also hold
