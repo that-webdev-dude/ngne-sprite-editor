@@ -4,95 +4,95 @@
     "measurement": "Pointer event to the frame containing that sample, for pencil strokes of real mouse input on a 256×256 document with 8 layers and the pixel grid shown, at 8× (SPEC §6.6), on RTX 4060, the earlier of NGNE's submit and the overlay draw of the stroke echo.",
     "statistic": "the largest of four p95s: every sample of one continuous stroke of 6 s; of 40 short strokes, the first sample (the press), the second sample, and every sample after the press",
     "budgetMs": 33,
-    "resultMs": 14.4,
+    "resultMs": 13.5,
     "details": {
         "continuousStroke": {
             "count": 749,
             "medianMs": 6.5,
-            "p95Ms": 7.4,
-            "maxMs": 8.2,
-            "longestPointerToSubmittedMs": 8.2,
-            "longestGapBetweenFramesShowingMoreMs": 22.1,
-            "durationMs": 6004,
+            "p95Ms": 7.5,
+            "maxMs": 9.8,
+            "longestPointerToSubmittedMs": 9.8,
+            "longestGapBetweenFramesShowingMoreMs": 28.7,
+            "durationMs": 6005,
             "texels": 750,
             "samples": 751,
-            "framesSubmitted": 708
+            "framesSubmitted": 688
         },
         "firstSample": {
             "count": 40,
-            "medianMs": 8.2,
-            "p95Ms": 11.5,
-            "maxMs": 13.4
+            "medianMs": 6.2,
+            "p95Ms": 8.8,
+            "maxMs": 12.3
         },
         "secondSample": {
             "count": 40,
-            "medianMs": 6.6,
-            "p95Ms": 14.4,
-            "maxMs": 14.7
+            "medianMs": 6.5,
+            "p95Ms": 13.5,
+            "maxMs": 14.9
         },
         "shortStrokeSamplesAfterThePress": {
             "count": 240,
             "medianMs": 6.5,
-            "p95Ms": 8.9,
-            "maxMs": 27.1
+            "p95Ms": 9.2,
+            "maxMs": 28.4
         },
         "allSamples": {
             "count": 1029,
             "medianMs": 6.5,
-            "p95Ms": 8,
-            "maxMs": 27.1
+            "p95Ms": 7.8,
+            "maxMs": 28.4
         },
         "echo": "on",
         "ngnePath": {
             "continuousStroke": {
                 "count": 749,
                 "medianMs": 13.2,
-                "p95Ms": 14.4,
-                "maxMs": 22.1
+                "p95Ms": 19.6,
+                "maxMs": 33
             },
             "firstSample": {
                 "count": 40,
-                "medianMs": 21.5,
-                "p95Ms": 24.4,
-                "maxMs": 65.5
+                "medianMs": 18.4,
+                "p95Ms": 23.5,
+                "maxMs": 64.3
             },
             "secondSample": {
                 "count": 40,
-                "medianMs": 19.6,
-                "p95Ms": 27.3,
-                "maxMs": 60.1
+                "medianMs": 18,
+                "p95Ms": 27.5,
+                "maxMs": 62.7
             },
             "shortStrokeSamplesAfterThePress": {
                 "count": 240,
-                "medianMs": 14.3,
-                "p95Ms": 25.1,
-                "maxMs": 60.1
+                "medianMs": 18.9,
+                "p95Ms": 27.3,
+                "maxMs": 62.7
             }
         },
         "echoPath": {
             "continuousStroke": {
                 "count": 749,
                 "medianMs": 6.5,
-                "p95Ms": 7.4,
-                "maxMs": 8.2
+                "p95Ms": 7.5,
+                "maxMs": 9.8
             },
             "firstSample": {
                 "count": 40,
-                "medianMs": 8.2,
-                "p95Ms": 11.5,
-                "maxMs": 13.4
+                "medianMs": 6.2,
+                "p95Ms": 8.8,
+                "maxMs": 12.3
             },
             "secondSample": {
-                "count": 37,
-                "medianMs": 6.6,
-                "p95Ms": 14.6,
-                "maxMs": 14.7
+                "count": 35,
+                "medianMs": 6.4,
+                "p95Ms": 14,
+                "maxMs": 14.9
             },
             "shortStrokeSamplesAfterThePress": {
-                "count": 237,
+                "count": 235,
                 "medianMs": 6.5,
-                "p95Ms": 8.3,
-                "maxMs": 27.1
+                "p95Ms": 8,
+                "maxMs": 28.4
             }
         },
         "input": "mouse at 125 Hz, one texel (8 device px) per report, 1000 CSS px/s",
@@ -101,7 +101,7 @@
         "devicePixelRatio": 1,
         "window": "1920×1080 CSS px",
         "viewportDevicePx": "1612×784",
-        "overlayRedraws": 1164,
+        "overlayRedraws": 1181,
         "adapter": "nvidia / lovelace ()",
         "chrome": "157.0.8103.80, new headless, --force-color-profile=srgb --force-high-performance-gpu --force-device-scale-factor=1"
     },
@@ -113,5 +113,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-11-20T11:28:54.918Z"
+    "date": "2026-11-21T08:54:30.075Z"
 }

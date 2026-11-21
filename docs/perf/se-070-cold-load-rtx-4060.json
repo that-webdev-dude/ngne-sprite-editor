@@ -1,35 +1,35 @@
 {
     "id": "se-070-cold-load-rtx-4060",
     "ticket": "SE-070",
-    "measurement": "Cold load of the production build served locally to interactive (the New sprite dialog on screen after the empty state's first action), Chrome on RTX 4060, each load in a new browser with an empty profile.",
+    "measurement": "Cold load of the production build served locally to interactive (the New sprite dialog on screen after the empty state's first action), Chrome on RTX 4060, each load in a new browser with an empty profile, after one unmeasured warm-up browser woke the GPU.",
     "statistic": "largest of 10 cold loads, from navigation start",
     "budgetMs": 2000,
-    "resultMs": 2368.0999999940395,
+    "resultMs": 928,
     "details": {
         "interactiveMs": [
-            2368.1,
-            759.6,
-            765.9,
-            752.2,
-            786.8,
-            755.5,
-            1423.3,
-            687,
-            704.5,
-            686
+            881.7,
+            888.5,
+            882.9,
+            881,
+            434.7,
+            915.3,
+            914.3,
+            910.3,
+            441.5,
+            928
         ],
-        "medianInteractiveMs": 755.5,
+        "medianInteractiveMs": 882.9,
         "shellMs": [
-            2352.1,
-            743.4,
-            748.5,
-            736,
-            771,
-            738.8,
-            1407.1,
-            671.3,
-            688.3,
-            670.2
+            865.2,
+            872.3,
+            865.4,
+            864.7,
+            416,
+            898.9,
+            897.6,
+            894.6,
+            423.9,
+            907.8
         ],
         "clicksUntilAnswered": [
             1,
@@ -44,72 +44,117 @@
             1
         ],
         "domContentLoadedMs": [
-            130.2,
-            116.2,
-            116.9,
-            113.8,
-            114.6,
-            118.4,
-            116.2,
-            116.9,
-            117.1,
-            118.9
+            113.6,
+            109.3,
+            111.3,
+            105,
+            106.7,
+            108,
+            112.4,
+            108.9,
+            108.2,
+            107.7
         ],
         "loadEventMs": [
-            131.1,
-            117.2,
-            117.7,
             114.5,
-            115.5,
-            119.3,
-            117,
-            117.8,
-            117.9,
-            119.8
+            110.3,
+            112.2,
+            105.8,
+            107.6,
+            108.8,
+            113.2,
+            109.8,
+            109.2,
+            108.7
         ],
         "firstContentfulPaintMs": [
-            2500,
-            896,
-            900,
-            892,
-            920,
-            900,
-            1556,
-            824,
-            840,
-            820
+            1020,
+            1028,
+            1020,
+            1012,
+            572,
+            1064,
+            1048,
+            1056,
+            580,
+            1068
         ],
         "longTasks": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
             [
                 {
-                    "start": 70,
-                    "duration": 50
+                    "start": 62,
+                    "duration": 52
+                }
+            ],
+            [
+                {
+                    "start": 57,
+                    "duration": 54
+                }
+            ],
+            [
+                {
+                    "start": 58,
+                    "duration": 54
+                }
+            ],
+            [
+                {
+                    "start": 54,
+                    "duration": 51
+                }
+            ],
+            [
+                {
+                    "start": 53,
+                    "duration": 54
+                }
+            ],
+            [
+                {
+                    "start": 57,
+                    "duration": 52
+                }
+            ],
+            [
+                {
+                    "start": 57,
+                    "duration": 56
+                }
+            ],
+            [
+                {
+                    "start": 55,
+                    "duration": 54
+                }
+            ],
+            [
+                {
+                    "start": 53,
+                    "duration": 56
+                }
+            ],
+            [
+                {
+                    "start": 54,
+                    "duration": 55
                 }
             ]
         ],
         "createToFirstViewportFrameMs": [
-            269.6,
-            270.5,
-            265.1,
-            277.4,
+            278.3,
+            271.9,
+            285.2,
+            270.7,
+            278.4,
+            279.4,
+            284.5,
+            285.4,
             277.2,
-            291.3,
-            276.8,
-            270.4,
-            277.6,
-            284.4
+            277.8
         ],
-        "medianCreateToFirstViewportFrameMs": 276.8,
-        "largestCreateToFirstViewportFrameMs": 291.3,
+        "medianCreateToFirstViewportFrameMs": 278.3,
+        "largestCreateToFirstViewportFrameMs": 285.4,
         "createClicksUntilAnswered": [
             1,
             1,
@@ -126,12 +171,19 @@
         "interactiveDefinition": "navigation start to the first animation frame showing the New sprite dialog, the empty state's New sprite button being clicked at every frame (at most every 50 ms) from the first frame it is on screen",
         "server": "vite build (project configuration) served by vite preview on 127.0.0.1",
         "cold": "a new Chrome with an empty profile for every load",
+        "warmUp": {
+            "definition": "before the measured loads and not one of them: one Chrome with the same flags and a new profile opened a blank page (no app, no server), waited two animation frames, read its WebGPU adapter and was closed, so that no measured load waits for the GPU to wake from idle",
+            "launchToPageMs": 269.8,
+            "pageToAdapterMs": 771.7,
+            "totalMs": 1041.6,
+            "adapter": "nvidia / lovelace ()"
+        },
         "devicePixelRatio": 1,
         "window": "1920×1080 CSS px",
         "adapter": "nvidia / lovelace ()",
         "chrome": "157.0.8103.80, new headless, --force-color-profile=srgb --force-high-performance-gpu --force-device-scale-factor=1"
     },
-    "pass": false,
+    "pass": true,
     "environment": {
         "node": "v24.15.0",
         "platform": "win32 10.0.26200",
@@ -139,5 +191,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-11-20T11:31:25.209Z"
+    "date": "2026-11-21T08:42:16.363Z"
 }

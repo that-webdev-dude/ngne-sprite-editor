@@ -9,12 +9,12 @@
         "controlLongTaskMs": 80,
         "snapshots": 25,
         "attributedLongTasks": [],
-        "longTasksOnThePage": 4,
-        "firstSnapshotMs": 17.6,
-        "snapshotMedianMs": 5,
-        "snapshotMaxMs": 17.6,
+        "longTasksOnThePage": 3,
+        "firstSnapshotMs": 14.3,
+        "snapshotMedianMs": 6.3,
+        "snapshotMaxMs": 14.3,
         "document": "16 frames, one layer, 256×256 opaque noise",
-        "chrome": "155.0.8059.82, new headless, --force-color-profile=srgb --force-device-scale-factor=1"
+        "chrome": "157.0.8103.80, new headless, --force-color-profile=srgb --force-device-scale-factor=1"
     },
     "pass": true,
     "environment": {
@@ -24,5 +24,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-10-20T08:52:14.417Z"
+    "date": "2026-11-21T08:35:44.830Z"
 }

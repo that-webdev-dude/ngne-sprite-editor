@@ -4,17 +4,17 @@
     "measurement": "compositeFrame with a 16×16 rect into an existing buffer, 256×256 document, 8 visible layers with every pixel half transparent (worst case), Node",
     "statistic": "95th percentile of 5000 calls after 2000 warm-up calls",
     "budgetMs": 2,
-    "resultMs": 0.018200000000092587,
+    "resultMs": 0.018699999999967076,
     "details": {
         "samples": 5000,
         "warmUpCalls": 2000,
-        "minMs": 0.01609999999993761,
-        "medianMs": 0.016799999999989268,
-        "meanMs": 0.017264740000001347,
-        "p95Ms": 0.018200000000092587,
-        "p99Ms": 0.022299999999972897,
-        "maxMs": 0.4111000000000331,
-        "fullFrameMedianMs": 3.737700000000018,
+        "minMs": 0.016099999999994452,
+        "medianMs": 0.01680000000004611,
+        "meanMs": 0.017582579999999938,
+        "p95Ms": 0.018699999999967076,
+        "p99Ms": 0.02420000000000755,
+        "maxMs": 0.7667999999999893,
+        "fullFrameMedianMs": 3.678299999999979,
         "fullFrameSamples": 50
     },
     "pass": true,
@@ -25,5 +25,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-11-20T11:24:02.494Z"
+    "date": "2026-11-21T08:34:39.538Z"
 }

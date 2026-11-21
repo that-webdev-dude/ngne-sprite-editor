@@ -372,8 +372,9 @@ Reference layers, onion skins, symmetry axes and tiled copies are never part of 
 Facts below were read from `@ngne/core` 0.2.1 source and contracts and confirmed by the
 technical review. SE-002 measures the ones marked ⚠ before any ticket builds on them. The
 migration to 0.3.0 changed the rows of §6.1 and §6.2 it names; the others hold for 0.3.0.
-The migration to 0.4.0 (through 0.3.1) only added API: §6.1 holds unchanged, since the editor
-uses none of the additions yet, and §6.2 rows 2, 6 and 7 name what 0.3.1 and 0.4.0 changed.
+The migration to 0.4.0 (through 0.3.1) only added API: §6.1 holds unchanged but for the
+`TextureSampling` that `ed:checker` passes since issue #13 (§6.4), and §6.2 rows 2, 6 and 7
+name what 0.3.1 and 0.4.0 changed.
 Each addition that could retire a workaround is recorded in §6.8.
 
 ### 6.1 Engine surface used
@@ -383,7 +384,7 @@ All symbols are exported from the package root.
 | API                                                   | Use                                        |
 | ----------------------------------------------------- | ------------------------------------------ |
 | `WebGPURenderer.create(canvas, w, h, onError, signal?)` | Editing viewport; the signal cancels a create when the viewport is disposed (0.3.0) |
-| `renderer.texture(id, ImageBitmap, signal?)`          | Upload CPU buffers into fixed texture slots |
+| `renderer.texture(id, ImageBitmap, signal?, sampling?)` | Upload CPU buffers into fixed texture slots; `sampling` (0.4.0) only for `ed:checker`'s `repeat` |
 | `renderer.releaseTexture(id)`                         | Free a slot that becomes unused (0.3.0)    |
 | `renderer.resize(w, h)`                               | Follow the viewport element's size in place (0.3.0) |
 | `renderer.onLifecycle(observer)`, `renderer.ready(signal?)` | Draw again after a recovery, replace a failed renderer, wait for a replacement (0.3.0) |
@@ -709,13 +710,14 @@ Reference hardware: §3. Document 256×256, 8 layers.
 | Idle editor: frames submitted per second                               | 0               |
 | Cold load to interactive (production build, local)                     | ≤ 2 s           |
 
-The reference run on `@ngne/core` 0.4.0 (2026-11-20, records in `docs/perf`) meets every row
-but the cold load on RTX 4060: 2368 ms, the first of its 10 loads; their median is 756 ms. That
-load waits for Chrome's GPU process to start on the discrete GPU after it idled (about 2.3 s,
-before any page code runs; a blank page waits as long), so it does not come from the editor or
-the engine: 0.3.0, 0.3.1 and 0.4.0 each reached 2.4 s in the same conditions. Intel UHD:
-249 ms. Since that run the benchmark wakes the GPU with one unmeasured Chrome before its loads
-(issue #17, `tests/perf/README.md`); the 0.4.0 records predate it.
+The reference run for release 1.1.1 (2026-11-21, `@ngne/core` 0.4.0 with issues #13 and #17,
+records in `docs/perf`) meets every row on both GPUs (Intel UHD / RTX 4060): stroke 14.5 /
+13.5 ms; dirty rectangle 0.019 ms (CPU); cached frame switch 1 / 1 frame; upload frame switch
+12.5 / 22.7 ms; playback 0 / 0 skipped; idle 0 / 0; cold load 383 / 928 ms, medians 256 /
+883 ms. The cold load wakes the GPU with one unmeasured Chrome before its loads (issue #17,
+`tests/perf/README.md`). Without it, the first load on the RTX 4060 after the GPU idled waited
+about 2.3 s for Chrome's GPU process to start, before any page code ran (2368 ms on
+2026-11-20), so it did not come from the editor or the engine.
 
 The idle budget applies to the editor viewport; an expanded preview that plays submits one frame
 per animation entry, and none while paused, collapsed or showing a single-entry animation.
@@ -732,9 +734,9 @@ between publishes of 55–110 ms on Intel UHD during a continuous stream of repl
 one per second, in the pattern of garbage collection), so SE-015's measurement covers one
 continuous stroke of at least 5 s and reports the longest gap beside the p95.
 
-SE-015's measurement missed the budget on RTX 4060 (34.1 ms; Intel UHD 26.2 ms), so the echo is
-implemented (`docs/perf`, records `se-015-stroke-latency-*`). It is the draw layer `stroke-echo`,
-order 50, under every other layer; its state is in `app/tools/strokeEcho.ts`, fed by the live
+SE-015's measurement missed the budget on RTX 4060 (34.1 ms; Intel UHD 26.2 ms; 2026-10-15), so
+the echo is implemented (records `se-015-stroke-latency-*` in `docs/perf`). It is the draw
+layer `stroke-echo`, order 50, under every other layer; its state is in `app/tools/strokeEcho.ts`, fed by the live
 composite:
 
 - It draws the live composite's pixels for each region the stroke has composited, over the
@@ -792,7 +794,7 @@ fail on 0.3.0; its figures are from SwiftShader and Intel UHD.
 | Gap in NGNE 0.2.1 | Workaround actually used | Evidence from runs 1–4 | Status with 0.4.0 |
 | ----------------- | ------------------------ | ---------------------- | ----------------- |
 | No release for manual textures | Fixed slot pools; unused slots replaced by 1×1 placeholders | SE-002 Q11: texture estimate returned to 56 bytes above baseline on both reference GPUs | **Resolved** in 0.3.0. `releaseTexture` replaces the placeholders of the frame, checker, play and reference slots and of `pv:atlas`; the bounded slot pools and LRU eviction are kept (§6.4). Unchanged in 0.4.0 (`se-011-memory`) |
-| Whole-image asynchronous uploads, superseded calls and GPU validation round trips | Single-flight latest-wins queue, whole-slot uploads, cached frames and playback grid; Canvas2D stroke echo until NGNE submits the change | SE-002 Q1–2; RTX 4060 stroke p95 34.1 ms without echo, 20.2 ms with it. Run 4 upload frame switch: 80.8 ms p95 against 50 ms on cloud SwiftShader, **not reference hardware**. Checkpoint E reference p95: Intel UHD 26.0 ms, RTX 4060 29.7 ms; both meet 50 ms ([record](perf/checkpoint-e-2026-10-21.md)) | **Partly resolved.** 0.3.0's `createTexture` + `updateTexture` were not adopted: its 2D readback capture put 3580 of 65 024 translucent texels beyond ±1 under SwiftShader (worst 1.47; `texture()` 0, worst 0.50). Reported to NGNE as an engine gap; 0.3.1's raw RGBA8 `updateTexture` (ngne#49) closes it: 0 of 65 024 translucent texels beyond ±1 sent whole, 0 of 46 000 sent as a region (worst 0.498 SwiftShader, 0.996 Intel UHD; `texture()` the same), `ngne-040-gaps`. Not adopted yet (issue #9): queue, cache, grid and echo kept |
+| Whole-image asynchronous uploads, superseded calls and GPU validation round trips | Single-flight latest-wins queue, whole-slot uploads, cached frames and playback grid; Canvas2D stroke echo until NGNE submits the change | SE-002 Q1–2; RTX 4060 stroke p95 34.1 ms without echo, 20.2 ms with it (2026-10-15). Upload frame switch, reference p95 (2026-11-21): Intel UHD 12.5 ms, RTX 4060 22.7 ms; both meet 50 ms ([record](perf/2026-11-21.md)) | **Partly resolved.** 0.3.0's `createTexture` + `updateTexture` were not adopted: its 2D readback capture put 3580 of 65 024 translucent texels beyond ±1 under SwiftShader (worst 1.47; `texture()` 0, worst 0.50). Reported to NGNE as an engine gap; 0.3.1's raw RGBA8 `updateTexture` (ngne#49) closes it: 0 of 65 024 translucent texels beyond ±1 sent whole, 0 of 46 000 sent as a region (worst 0.498 SwiftShader, 0.996 Intel UHD; `texture()` the same), `ngne-040-gaps`. Not adopted yet (issue #9): queue, cache, grid and echo kept |
 | No blend modes or non-multiply tint | CPU layer/cel compositor and CPU onion tint | SE-010, SE-025 and SE-061; tint moves black toward red/blue, which a multiply cannot do (§7.5) | **Still applicable.** 0.4.0 adds no blend mode or tint |
 | Fixed renderer size, no public create abort; canvases share their WebGPU context | Serialized replacement on a new canvas, keep the old canvas until the new one draws | SE-002 Q4: replacement medians 34.3–50.5 ms on reference GPUs; only a ready, drawn canvas is swapped in | **Resolved** in 0.3.0. `resize` in the `ResizeObserver` task, no replacement for a size change; `create` cancelled by the viewport's signal, creates no longer serialized. One canvas per renderer and the swap stay for failed or stuck renderers only. Unchanged in 0.4.0 (`se-011-lifecycle`, `se-011-renderer`) |
 | No repeat addressing or linear filtering | Finite checker texture; CPU resample reference display images after zoom settles | SE-011, SE-045; a whole-pixel reference move at fractional zoom can change rounded width by 1 px and cause a resample; accepted display trade-off at checkpoint E | **Resolved** in 0.4.0 by `TextureSampling` (ngne#54): a repeat checker period tiles a quad exactly (0 of 7600 pixels off) and a linear ramp lies within 0.375 of bilinear, nearest staying the default (`ngne-040-gaps`). Linear has no mipmaps, so strong minification can alias. The checker is one repeating period since issue #13 (§6.4; `checker-period`: 0 of 246 views differ from the finite image on SwiftShader and Intel UHD); CPU resampling of references kept |

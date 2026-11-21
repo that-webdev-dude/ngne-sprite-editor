@@ -1,95 +1,55 @@
 # Performance records
 
-Measured on the reference hardware (SPEC §3) by the orchestrator, alone, after the ticket's
-wave was merged. Recorded, not asserted in CI
-(SPEC §11). Each row is one JSON file in this directory with the samples and the environment.
+The reference records of the benchmarks in `tests/perf`, measured on the reference hardware
+(SPEC §3) by the owner, one benchmark at a time on an idle machine. Recorded, not asserted in
+CI (SPEC §11). Each row is one JSON file in this directory with the samples, the details and
+the environment. How to run them: [benchmark instructions](../../tests/perf/README.md).
 
-Node benchmarks: `PERF_RECORD=1 npx vitest run --config vitest.perf.config.ts tests/perf/<file>`.
+## Baseline: release 1.1.1, 2026-11-21
 
-| Record                   | Ticket | Measurement                                              | Budget | Result   | Statistic                         | Date       |
-| ------------------------ | ------ | -------------------------------------------------------- | ------ | -------- | --------------------------------- | ---------- |
-| `se-010-dirty-rectangle` | SE-010 | 16×16 dirty rectangle over 8 layers at 256×256, Node     | 2 ms   | 0.030 ms | 95th percentile of 5000 calls     | 2026-10-12 |
-| `se-043-import`          | SE-043 | 2048×2048 source to 16 colours at 64×64 (`runImport`), Node | 500 ms | 62.4 ms  | slowest of 20 runs, cold run included | 2026-10-13 |
-| `se-015-stroke-latency-intel-uhd-no-echo` | SE-015 | Pointer event to the submit of the frame showing it, 256×256 with 8 layers, pixel grid at 8×, Chrome on Intel UHD, without the stroke echo (fc3eb7f) | 33 ms | 26.2 ms | largest of four p95s (every sample of a 6 s stroke; first, second and later samples of 40 short strokes) | 2026-10-15 |
-| `se-015-stroke-latency-rtx-4060-no-echo`  | SE-015 | The same on RTX 4060                                     | 33 ms | 34.1 ms (over) | as above                    | 2026-10-15 |
-| `se-015-stroke-latency-intel-uhd` | SE-015 | Pointer event to the first frame showing it, NGNE's submit or the overlay echo's redraw, whichever is earlier; otherwise as above, with the stroke echo (72ca19b) | 33 ms | 17.6 ms | as above; longest pointer-to-submitted gap 8.6 ms | 2026-10-15 |
-| `se-015-stroke-latency-rtx-4060`  | SE-015 | The same on RTX 4060                                     | 33 ms | 20.2 ms  | as above; longest gap 8.6 ms      | 2026-10-15 |
-| `se-017-flood-fill`      | SE-017 | `floodMask` (contiguous, tolerance 0) of a 1024×1024 image from one pixel, then `paintMask` over the mask; transparent and opaque flat images, Node | 100 ms | 20.4 ms | larger of the two images' slowest of 20 fills, cold run included | 2026-10-15 |
-| `se-031-magic-wand`      | SE-031 | Magic wand click (press and release) through the tool pipeline on an opaque flat 1024×1024 document, tolerance 0: flood mask, pending area and the selection command at the release; Contiguous on and off, Node, no viewport | 100 ms | 20.6 ms | larger of the two modes' slowest of 10 clicks, each on a fresh document, cold click included | 2026-10-17 |
-| `se-031-wand-pan-intel-uhd` | SE-031 | JavaScript time of the overlay redraw at each 3 px pan step over a non-contiguous wand pick of a checkerboard on a 1024² document at 1× (256² at 4× in `details`), Chrome on Intel UHD | none | 3.9 ms | p95 of 120 pan steps, JavaScript of the draws only | 2026-10-17 |
-| `se-031-wand-pan-rtx-4060`  | SE-031 | The same on RTX 4060 | none | 3.9 ms | as above | 2026-10-17 |
-| `se-024-playback-intel-uhd` | SE-024 | Editor playback from the `ed:play` grid, 64 frames of 256² (8 layers), 100 ms each, 1×, two passes, Chrome on Intel UHD | 0 skipped | 0 of 128 | entries skipped (a count, `unit: count`) | 2026-10-19 |
-| `se-024-playback-rtx-4060` | SE-024 | The same on RTX 4060 | 0 skipped | 0 of 129 | as above | 2026-10-19 |
-| `se-044-preview`         | SE-044 | Import PNG dialog on a 1024×1024 source at the dialog's defaults (target 32×32 contain, smart alpha and colours): setting change (dither, count, fit, alpha, size, crop, cells) to the result pane drawn with the worker's answer, Chrome | 300 ms | 182.8 ms | largest of 48 changes | 2026-10-19 |
-| `se-044-preview-1024-target` | SE-044 | The same source to a 1024×1024 target, contain, Reduce to 256 colours; changes of dither, count, fit and crop | 300 ms | 543.4 ms (over) | largest of 30 changes | 2026-10-19 |
-| `se-026-timeline-scroll-intel-uhd` | SE-026 | Mean frame interval of a scripted zigzag scroll of the timeline at 200 frames × 30 layers (cells and frame numbers windowed), Chrome on Intel UHD | 20 ms (50 fps) | 7.50 ms (133 fps) | mean of 600 scroll frames; 125 frames moved the window; idle 144 fps | 2026-10-20 |
-| `se-026-timeline-scroll-rtx-4060` | SE-026 | The same on RTX 4060 | 20 ms (50 fps) | 7.52 ms (133 fps) | as above; idle 143 fps | 2026-10-20 |
-| `se-042-autosave-long-tasks` | SE-042 | Longest long task overlapping an autosave snapshot window: first full snapshot of a 16-frame 256×256 document, then 24 one-cel edits, Chrome | 50 ms | 0 ms | largest over 25 snapshots (0: none overlapped); 80 ms control task observed | 2026-10-20 |
-| `se-062-stroke-latency-symmetric-intel-uhd` | SE-062 | As `se-015-stroke-latency-intel-uhd` (with the echo), with symmetry and tiled mode both on | 33 ms | 18.0 ms | as SE-015; 719 frames submitted in the 6 s stroke | 2026-10-20 |
-| `se-062-stroke-latency-symmetric-rtx-4060` | SE-062 | The same on RTX 4060 | 33 ms | 16.8 ms | as above; 671 frames | 2026-10-20 |
+Every record below comes from one run on `@ngne/core` 0.4.0 with issues #13 and #17. The
+[results page](2026-11-21.md) gives the environment, the method, the earlier figures and the
+stroke confirmation runs. Earlier records (checkpoint E, the cloud SwiftShader run, the stroke
+records without the echo, the 0.4.0 run of 2026-11-20) are in the repository's history: all of
+them at `126de90`, all but the run of 2026-11-20 also in tag `v1.1.0`.
 
-`se-043-import` was measured again on 2026-10-13 after the colour key moved before the resample
-(first record, 2026-10-12: 56.9 ms).
+| Record | Measurement | Budget | Intel UHD | RTX 4060 |
+| ------ | ----------- | ------ | --------- | -------- |
+| `se-015-stroke-latency-<gpu>` | Stroke: pointer event to the first frame showing it, NGNE's submit or the stroke echo's redraw; largest of four p95s | 33 ms | 14.5 ms (738 frames) | 13.5 ms (688 frames) |
+| `se-062-stroke-latency-symmetric-<gpu>` | The same with symmetry and tiled mode on | 33 ms | 15.0 ms (740 frames) | 13.8 ms (703 frames) |
+| `se-010-dirty-rectangle` | 16×16 dirty rectangle over 8 layers at 256², p95 of 5000 calls, Node | 2 ms | 0.019 ms | n/a |
+| `se-070-frame-switch-cached-<gpu>` | Frame switch to a cached frame, animation frames to the submit | 1 frame | 1 | 1 |
+| `se-070-frame-switch-upload-<gpu>` | Frame switch needing an upload, p95 | 50 ms | 12.5 ms | 22.7 ms |
+| `se-024-playback-<gpu>` | Playback from `ed:play`, 64 frames of 256², entries skipped of 128 (`unit: count`) | 0 | 0 | 0 |
+| `se-070-idle-<gpu>` | Idle editor, viewport frames per second (`unit: count`) | 0 | 0 | 0 |
+| `se-070-cold-load-<gpu>` | Cold load to interactive, production build, largest of 10 after a GPU warm-up | 2 s | 383 ms | 928 ms |
+| `se-026-timeline-scroll-<gpu>` | Timeline scroll at 200 frames × 30 layers, mean frame interval | 20 ms | 7.29 ms (137 fps) | 7.36 ms (136 fps) |
+| `se-031-wand-pan-<gpu>` | Overlay redraw per pan step over a wand selection at 1024², p95 | none | 3.7 ms | 3.6 ms |
+| `se-017-flood-fill` | Flood mask and paint of a 1024² image, slowest of 20, Node | 100 ms | 19.5 ms | n/a |
+| `se-031-magic-wand` | Magic wand click on a 1024² document, slowest of 10, Node | 100 ms | 16.4 ms | n/a |
+| `se-043-import` | 2048² source to 16 colours at 64², slowest of 20, Node | 500 ms | 43.7 ms | n/a |
+| `se-042-autosave-long-tasks` | Longest long task overlapping an autosave snapshot, 25 snapshots, Chrome | 50 ms | 0 ms | n/a |
+| `se-044-preview` | Import PNG preview of a 1024² source at the dialog's defaults, largest change, Chrome | 300 ms | 171.5 ms | n/a |
+| `se-044-preview-1024-target` | The same to a 1024² target with 256 colours | 300 ms | **434.5 ms** (over) | n/a |
 
-`se-017-flood-fill` also gives, in `details`, the whole paint bucket press through the tool
-pipeline in Node (fill, live composite, commit comparison and undo patches; no viewport):
-68.8 ms, slowest of 10. An unrecorded run right after the record gave 27.3 ms for the fill and
-72.1 ms for the press.
+Chrome benchmarks without a GPU column (`se-042`, `se-044`) run without `PERF_GPU`: their work
+is on the CPU.
 
-`se-031-wand-pan-*` have no budget: neither SE-031 nor SPEC §6.6 states one, and the record is
-informational (no `pass`). Before SE-031's review fix the same pan cost about 95 ms median and
-192 ms p95 per step at 1024², the ants ring being painted again at every view change.
-Unrecorded runs right after the records gave 21.4 ms for the wand and 4.4 and 4.1 ms for the
-pan.
+## Reading the records
 
-`se-024-playback-*` count entries of the sequence that the clock jumped over or that no submitted
-frame showed while they were active; `resultMs` holds that count (`unit: count`), with a budget
-of 0. A frame counts as shown when it was submitted to NGNE (`onDrawn`), not when it was
-presented. First frame after an entry: median 13.4 / 12.3 ms, p95 26.3 / 30.9 ms (Intel UHD /
-RTX 4060). Unrecorded runs right after: 0 of 128 skipped on both GPUs.
-
-`se-044-preview` is the acceptance item of SE-044 (a 1024×1024 source). `se-044-preview-1024-target`
-measures `runImport` to a 1024² target with 256 colours: it misses 300 ms, its
-slowest changes being Floyd–Steinberg dither over a million pixels (median of all changes
-194 ms). Both run in Chrome without `PERF_GPU`: the preview is CPU work in a worker.
-Two unrecorded runs just before the record gave 532.6 and 528.4 ms for the 1024² target and,
-in the second, 244.9 ms for the defaults.
-
-Browser benchmark: `PERF_RECORD=1 PERF_GPU=<intel-uhd|rtx-4060> npx vitest run --config
-vitest.perf.config.ts tests/perf/se-015-stroke-latency.perf.ts`; `PERF_ECHO=off` measures
-without the stroke echo and writes the `-no-echo` record. The `-no-echo` records above were taken
-before the echo existed, and their result missed the budget on RTX 4060, which is why SE-015
-built the echo. The records with the echo met the budget on both GPUs. A
-run is valid only with the usual number of frames submitted during the 6 s stroke
-(`details.continuousStroke.framesSubmitted`: about 740 on Intel UHD, 650–700 on RTX 4060), and
-only when an unrecorded run right after it agrees within a few milliseconds: the machine can
-slow down for part of a run, which the frame count of the continuous stroke does not show (E70).
-
-## Cloud records (run 4, not reference hardware)
-
-SE-070's records from the cloud container of run 4: Linux, Chrome for Testing 156 with the
-SwiftShader adapter, 4 cores. They are no measurement on the reference hardware of SPEC §3 and
-do not meet SE-070's acceptance item for it; the dated page with method and notes is
-[`se-070-2026-10-21-cloud-swiftshader.md`](se-070-2026-10-21-cloud-swiftshader.md). Commands
-in `tests/perf/README.md`.
-
-| Record                                         | SPEC §6.6 row                    | Budget               | Result          | Date       |
-| ---------------------------------------------- | -------------------------------- | -------------------- | --------------- | ---------- |
-| `se-070-stroke-cloud-swiftshader`              | Stroke p95                       | 33 ms                | 28.1 ms (105 frames: invalid by the rule above) | 2026-10-21 |
-| `se-070-dirty-rectangle-cloud-swiftshader`     | Dirty rectangle, 16 px dab       | 2 ms                 | 0.054 ms        | 2026-10-21 |
-| `se-070-frame-switch-cached-cloud-swiftshader` | Frame switch, cached             | next animation frame | 1 frame         | 2026-10-21 |
-| `se-070-frame-switch-upload-cloud-swiftshader` | Frame switch with upload, p95    | 50 ms                | 80.8 ms (over)  | 2026-10-21 |
-| `se-070-playback-cloud-swiftshader`            | Playback from `ed:play`          | 0 skipped            | 0 of 128        | 2026-10-21 |
-| `se-070-idle-cloud-swiftshader`                | Idle editor, frames per second   | 0                    | 0               | 2026-10-21 |
-| `se-070-cold-load-cloud-swiftshader`           | Cold load to interactive         | 2 s                  | 434.3 ms        | 2026-10-21 |
-
-## Checkpoint E reference records — 2026-10-21
-
-All seven SPEC §6.6 benchmark budgets are met on the development machine's Intel UHD and
-RTX 4060 Laptop GPU. The [dated report](checkpoint-e-2026-10-21.md) links all thirteen raw
-records (the CPU-only benchmark runs once), documents the adapter/method and rejects the
-low-frame-count stroke attempts. Historical records above are unchanged.
-
-The separate `@alone` non-CI E2E run passed 10/10 on Intel and 9/10 on RTX: cel opacity took
-three frames against two. This accepted v1.0.0 exception is tracked in
-[issue #2](https://github.com/that-webdev-dude/ngne-sprite-editor/issues/2); the assertion stays.
+- **Stroke validity.** A stroke record (`se-015`, `se-062`) is valid only with the usual number
+  of frames submitted during the 6 s stroke (`details.continuousStroke.framesSubmitted`: about
+  740 on Intel UHD, 650–700 on RTX 4060), and only when an unrecorded run right after it agrees
+  within a few milliseconds: the machine can slow down for part of a run, which the frame count
+  does not show. `PERF_ECHO=off` measures without the stroke echo and writes a `-no-echo`
+  record; the baseline has none.
+- **Counts.** `se-024-playback-*`, `se-070-idle-*` and `se-070-frame-switch-cached-*` hold a
+  count in `resultMs` (`unit: count`). A frame counts as shown when it was submitted to NGNE
+  (`onDrawn`), not when it was presented.
+- **No budget.** `se-031-wand-pan-*` is informational: neither SE-031 nor SPEC §6.6 states a
+  budget, and the record has no `pass`.
+- **Known miss.** `se-044-preview-1024-target` misses 300 ms, as it has since it was first
+  recorded; its slowest changes are Floyd–Steinberg dither over a million pixels. It is not
+  SE-044's acceptance item, which `se-044-preview` (a 1024² source at the defaults) meets.
+- **Other hardware.** A run elsewhere (a cloud container, SwiftShader) is recorded under a
+  `PERF_ID` of its own and is no reference (`tests/perf/README.md`).

@@ -1,35 +1,35 @@
 {
     "id": "se-070-cold-load-intel-uhd",
     "ticket": "SE-070",
-    "measurement": "Cold load of the production build served locally to interactive (the New sprite dialog on screen after the empty state's first action), Chrome on Intel UHD, each load in a new browser with an empty profile.",
+    "measurement": "Cold load of the production build served locally to interactive (the New sprite dialog on screen after the empty state's first action), Chrome on Intel UHD, each load in a new browser with an empty profile, after one unmeasured warm-up browser woke the GPU.",
     "statistic": "largest of 10 cold loads, from navigation start",
     "budgetMs": 2000,
-    "resultMs": 249.3999999910593,
+    "resultMs": 382.69999999995343,
     "details": {
         "interactiveMs": [
-            240.2,
-            222.6,
-            230.3,
-            224.8,
-            221.7,
-            229.1,
-            231.9,
-            231.5,
-            249.4,
-            232
+            256.2,
+            256,
+            249.7,
+            254.5,
+            253.5,
+            382.7,
+            294.6,
+            272.1,
+            270.1,
+            258
         ],
-        "medianInteractiveMs": 230.3,
+        "medianInteractiveMs": 256.2,
         "shellMs": [
-            223.7,
-            206.4,
-            214.8,
-            208.7,
-            205.4,
-            212.9,
-            215.8,
-            215.6,
-            233.1,
-            215.5
+            239,
+            240.2,
+            232.8,
+            237.7,
+            237.2,
+            350.8,
+            272.7,
+            253.6,
+            252.3,
+            239
         ],
         "clicksUntilAnswered": [
             1,
@@ -44,77 +44,125 @@
             1
         ],
         "domContentLoadedMs": [
-            131.4,
-            118.3,
-            120.2,
-            117.6,
-            119.2,
-            119.5,
-            125,
-            121.8,
-            139.9,
-            118.7
+            112.7,
+            105.1,
+            104.6,
+            106.2,
+            106.5,
+            153.8,
+            124.4,
+            119.6,
+            107.9,
+            112.2
         ],
         "loadEventMs": [
-            131.7,
-            118.7,
-            120.5,
-            117.9,
-            119.4,
-            119.9,
+            113.8,
+            106.1,
+            105.5,
+            107.3,
+            107.4,
+            155.3,
             125.5,
-            122.2,
-            140.2,
-            119.2
+            120.7,
+            109.2,
+            113.2
         ],
         "firstContentfulPaintMs": [
-            376,
-            364,
-            376,
-            364,
-            364,
-            376,
-            372,
-            368,
+            396,
+            400,
             392,
-            368
+            392,
+            400,
+            592,
+            460,
+            424,
+            416,
+            396
         ],
         "longTasks": [
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
-            [],
             [
                 {
-                    "start": 72,
-                    "duration": 50
+                    "start": 59,
+                    "duration": 55
                 }
             ],
-            [],
             [
                 {
-                    "start": 164,
-                    "duration": 51
+                    "start": 51,
+                    "duration": 54
+                }
+            ],
+            [
+                {
+                    "start": 51,
+                    "duration": 54
+                }
+            ],
+            [
+                {
+                    "start": 52,
+                    "duration": 55
+                }
+            ],
+            [
+                {
+                    "start": 51,
+                    "duration": 56
+                }
+            ],
+            [
+                {
+                    "start": 75,
+                    "duration": 80
+                },
+                {
+                    "start": 279,
+                    "duration": 71
+                }
+            ],
+            [
+                {
+                    "start": 60,
+                    "duration": 66
+                },
+                {
+                    "start": 220,
+                    "duration": 52
+                }
+            ],
+            [
+                {
+                    "start": 61,
+                    "duration": 60
+                }
+            ],
+            [
+                {
+                    "start": 53,
+                    "duration": 56
+                }
+            ],
+            [
+                {
+                    "start": 57,
+                    "duration": 56
                 }
             ]
         ],
         "createToFirstViewportFrameMs": [
-            249.7,
-            201.1,
-            249.8,
-            249.3,
-            249.1,
-            249.6,
-            245.2,
+            256,
             249.4,
-            248.9,
-            244.5
+            254.9,
+            249.5,
+            251.1,
+            374.4,
+            306.1,
+            277.1,
+            263.3,
+            251.9
         ],
-        "medianCreateToFirstViewportFrameMs": 249.1,
-        "largestCreateToFirstViewportFrameMs": 249.8,
+        "medianCreateToFirstViewportFrameMs": 254.9,
+        "largestCreateToFirstViewportFrameMs": 374.4,
         "createClicksUntilAnswered": [
             1,
             1,
@@ -131,6 +179,13 @@
         "interactiveDefinition": "navigation start to the first animation frame showing the New sprite dialog, the empty state's New sprite button being clicked at every frame (at most every 50 ms) from the first frame it is on screen",
         "server": "vite build (project configuration) served by vite preview on 127.0.0.1",
         "cold": "a new Chrome with an empty profile for every load",
+        "warmUp": {
+            "definition": "before the measured loads and not one of them: one Chrome with the same flags and a new profile opened a blank page (no app, no server), waited two animation frames, read its WebGPU adapter and was closed, so that no measured load waits for the GPU to wake from idle",
+            "launchToPageMs": 262.8,
+            "pageToAdapterMs": 156.5,
+            "totalMs": 419.4,
+            "adapter": "intel / gen-12lp ()"
+        },
         "devicePixelRatio": 1,
         "window": "1920×1080 CSS px",
         "adapter": "intel / gen-12lp ()",
@@ -144,5 +199,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-11-20T11:27:21.199Z"
+    "date": "2026-11-21T08:39:13.339Z"
 }

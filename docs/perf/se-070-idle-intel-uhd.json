@@ -11,17 +11,17 @@
             "seconds": 10,
             "viewportFrames": 0,
             "viewportUploads": 0,
-            "previewFrames": 109,
-            "pageAnimationFrames": 1441,
+            "previewFrames": 116,
+            "pageAnimationFrames": 1422,
             "viewportFramesPerSecond": 0,
-            "previewFramesPerSecond": 10.9
+            "previewFramesPerSecond": 11.6
         },
         "pointerOnCanvas": {
             "seconds": 10,
             "viewportFrames": 0,
             "viewportUploads": 0,
             "previewFrames": 114,
-            "pageAnimationFrames": 1441,
+            "pageAnimationFrames": 1440,
             "viewportFramesPerSecond": 0,
             "previewFramesPerSecond": 11.4
         },
@@ -42,5 +42,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-11-20T11:26:52.540Z"
+    "date": "2026-11-21T08:39:00.654Z"
 }

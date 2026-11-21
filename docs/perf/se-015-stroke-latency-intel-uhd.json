@@ -4,95 +4,95 @@
     "measurement": "Pointer event to the frame containing that sample, for pencil strokes of real mouse input on a 256×256 document with 8 layers and the pixel grid shown, at 8× (SPEC §6.6), on Intel UHD, the earlier of NGNE's submit and the overlay draw of the stroke echo.",
     "statistic": "the largest of four p95s: every sample of one continuous stroke of 6 s; of 40 short strokes, the first sample (the press), the second sample, and every sample after the press",
     "budgetMs": 33,
-    "resultMs": 13.6,
+    "resultMs": 14.5,
     "details": {
         "continuousStroke": {
             "count": 749,
             "medianMs": 6.6,
-            "p95Ms": 7.6,
-            "maxMs": 13.3,
-            "longestPointerToSubmittedMs": 13.3,
-            "longestGapBetweenFramesShowingMoreMs": 16.5,
-            "durationMs": 6002,
+            "p95Ms": 7.3,
+            "maxMs": 8.4,
+            "longestPointerToSubmittedMs": 8.4,
+            "longestGapBetweenFramesShowingMoreMs": 15.4,
+            "durationMs": 6005,
             "texels": 750,
             "samples": 751,
-            "framesSubmitted": 743
+            "framesSubmitted": 738
         },
         "firstSample": {
             "count": 40,
-            "medianMs": 7.6,
-            "p95Ms": 11.3,
-            "maxMs": 12.1
+            "medianMs": 8,
+            "p95Ms": 11.5,
+            "maxMs": 13.8
         },
         "secondSample": {
             "count": 40,
-            "medianMs": 7,
-            "p95Ms": 13.6,
-            "maxMs": 13.8
+            "medianMs": 7.7,
+            "p95Ms": 14.5,
+            "maxMs": 15.2
         },
         "shortStrokeSamplesAfterThePress": {
             "count": 240,
             "medianMs": 6.6,
-            "p95Ms": 12.8,
-            "maxMs": 13.8
+            "p95Ms": 13.1,
+            "maxMs": 15.2
         },
         "allSamples": {
             "count": 1029,
             "medianMs": 6.6,
-            "p95Ms": 8,
-            "maxMs": 13.8
+            "p95Ms": 8.1,
+            "maxMs": 15.2
         },
         "echo": "on",
         "ngnePath": {
             "continuousStroke": {
                 "count": 749,
-                "medianMs": 13.3,
-                "p95Ms": 14.4,
-                "maxMs": 21.5
+                "medianMs": 13.2,
+                "p95Ms": 16,
+                "maxMs": 33.2
             },
             "firstSample": {
                 "count": 40,
                 "medianMs": 21.4,
-                "p95Ms": 25.3,
-                "maxMs": 36
+                "p95Ms": 26.2,
+                "maxMs": 33.1
             },
             "secondSample": {
                 "count": 40,
-                "medianMs": 13.3,
-                "p95Ms": 20.6,
-                "maxMs": 33.5
+                "medianMs": 13.9,
+                "p95Ms": 28,
+                "maxMs": 40.6
             },
             "shortStrokeSamplesAfterThePress": {
                 "count": 240,
-                "medianMs": 13.2,
-                "p95Ms": 20,
-                "maxMs": 33.5
+                "medianMs": 14.2,
+                "p95Ms": 25.9,
+                "maxMs": 40.6
             }
         },
         "echoPath": {
             "continuousStroke": {
-                "count": 748,
+                "count": 749,
                 "medianMs": 6.6,
-                "p95Ms": 7.6,
-                "maxMs": 8
+                "p95Ms": 7.3,
+                "maxMs": 8.4
             },
             "firstSample": {
                 "count": 40,
-                "medianMs": 7.6,
-                "p95Ms": 11.3,
-                "maxMs": 12.1
+                "medianMs": 8,
+                "p95Ms": 11.5,
+                "maxMs": 13.8
             },
             "secondSample": {
-                "count": 28,
-                "medianMs": 6.7,
-                "p95Ms": 13.6,
-                "maxMs": 13.6
+                "count": 30,
+                "medianMs": 7.3,
+                "p95Ms": 14.6,
+                "maxMs": 15.2
             },
             "shortStrokeSamplesAfterThePress": {
-                "count": 228,
+                "count": 230,
                 "medianMs": 6.6,
-                "p95Ms": 8.3,
-                "maxMs": 13.6
+                "p95Ms": 8.6,
+                "maxMs": 15.2
             }
         },
         "input": "mouse at 125 Hz, one texel (8 device px) per report, 1000 CSS px/s",
@@ -101,7 +101,7 @@
         "devicePixelRatio": 1,
         "window": "1920×1080 CSS px",
         "viewportDevicePx": "1612×784",
-        "overlayRedraws": 1100,
+        "overlayRedraws": 1113,
         "adapter": "intel / gen-12lp ()",
         "chrome": "157.0.8103.80, new headless, --force-color-profile=srgb --force-low-power-gpu --force-device-scale-factor=1"
     },
@@ -113,5 +113,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-11-20T11:24:43.647Z"
+    "date": "2026-11-21T08:53:10.330Z"
 }

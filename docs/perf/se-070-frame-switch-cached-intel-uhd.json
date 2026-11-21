@@ -13,9 +13,9 @@
         },
         "latency": {
             "count": 70,
-            "medianMs": 5.4,
-            "p95Ms": 7.2,
-            "maxMs": 14.2
+            "medianMs": 5.3,
+            "p95Ms": 6.9,
+            "maxMs": 14.1
         },
         "submitted": "onDrawn: frames submitted to NGNE, not known to be presented on screen",
         "document": "256×256, 8 layers, 8 frames, at 2×, preview expanded",
@@ -32,5 +32,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-11-20T11:25:03.976Z"
+    "date": "2026-11-21T08:38:19.435Z"
 }

@@ -4,25 +4,26 @@
     "measurement": "Frame switch to a frame not in the viewport's slot cache (ArrowRight on the viewport) on the reference document (256×256, 8 layers, 64 frames), Chrome on RTX 4060: the key's timeStamp to the submit of the frame showing the new frame.",
     "statistic": "larger of two p95s: the first sweep (63 switches, composites built) and the later sweeps (126, composites cached)",
     "budgetMs": 50,
-    "resultMs": 21.900000005960464,
+    "resultMs": 22.699999999953434,
     "details": {
         "firstSweep": {
             "count": 63,
-            "medianMs": 6.5,
-            "p95Ms": 21.9,
-            "maxMs": 31.4
+            "medianMs": 10.3,
+            "p95Ms": 22.7,
+            "maxMs": 43.3
         },
         "laterSweeps": {
             "count": 126,
-            "medianMs": 6.3,
-            "p95Ms": 11.9,
-            "maxMs": 17.1
+            "medianMs": 6.2,
+            "p95Ms": 12.2,
+            "maxMs": 28
         },
         "animationFramesToSubmit": {
-            "1": 122,
-            "2": 59,
-            "3": 7,
-            "4": 1
+            "1": 103,
+            "2": 68,
+            "3": 14,
+            "4": 3,
+            "6": 1
         },
         "uploadsPerSwitch": {
             "1": 189
@@ -42,5 +43,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-11-20T11:29:44.278Z"
+    "date": "2026-11-21T08:41:28.746Z"
 }

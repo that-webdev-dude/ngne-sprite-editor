@@ -13,17 +13,17 @@
         "firstFrameAfterEntry": {
             "count": 126,
             "medianMs": 6.7,
-            "p95Ms": 9.9,
-            "maxMs": 10.6
+            "p95Ms": 9.5,
+            "maxMs": 10.5
         },
         "gapsBetweenPictureChanges": {
             "count": 127,
-            "medianMs": 99,
-            "p95Ms": 106,
-            "maxMs": 108.7
+            "medianMs": 98.4,
+            "p95Ms": 106.9,
+            "maxMs": 121.3
         },
         "framesSubmittedPerSecond": 10,
-        "windowSeconds": 12.8,
+        "windowSeconds": 12.81,
         "document": "256×256, 8 layers, 64 frames of 100 ms, at 2×",
         "devicePixelRatio": 1,
         "window": "1920×1080 CSS px",
@@ -38,5 +38,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-11-20T11:30:14.109Z"
+    "date": "2026-11-21T08:40:48.881Z"
 }

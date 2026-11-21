@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.1 – 2026-11-21
 
 - The exported `<name>.sprites.ts` and `<name>.preview.config.mjs` name their copyright holder
   in the 0BSD licence at their head ("Copyright (C) Fabio Barracano").
@@ -14,8 +14,11 @@
 
 ### Engine: `@ngne/core` 0.4.0
 
-- Pinned `@ngne/core` to 0.4.0 (was 0.3.0). The editor draws as before: it uses none of the
-  new engine features yet.
+- Pinned `@ngne/core` to 0.4.0 (was 0.3.0). The editor draws the same pixels as before.
+- The viewport's transparency checkerboard is one small repeating texture, using 0.4.0's
+  repeat sampling, instead of an image the size of the document: resizing the document or
+  changing the checker setting no longer uploads a new checkerboard
+  ([issue #13](https://github.com/that-webdev-dude/ngne-sprite-editor/issues/13)).
 - The exported `<name>.sprites.ts` works in games on `@ngne/core` 0.3.0 or 0.4.0. Sprites drawn
   unrotated, at quarter turns or at whole-number scales land on the same pixels on both; with
   pixel snapping on, other rotations and fractional scales can land up to one pixel apart.
@@ -162,7 +165,7 @@ deployment remain the owner's actions.
 Known limitations at release:
 
 - All seven SPEC §6.6 benchmarks meet their budgets on Intel UHD and RTX 4060
-  ([reference measurements](docs/perf/checkpoint-e-2026-10-21.md)). Separately, the
+  ([reference measurements](https://github.com/that-webdev-dude/ngne-sprite-editor/blob/v1.0.0/docs/perf/checkpoint-e-2026-10-21.md)). Separately, the
   non-CI `@alone` E2E run passed 10/10 on Intel and 9/10 on RTX: cel opacity took three
   frames against two. This v1.0.0 performance exception is accepted and tracked in
   [issue #2](https://github.com/that-webdev-dude/ngne-sprite-editor/issues/2); its assertion

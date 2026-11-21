@@ -21,8 +21,8 @@ never by an implementing agent.
 - `PERF_ID=<id>` names the record of this one run: it is printed and written under `<id>`
   instead of the benchmark's own id, which the record keeps as `benchmarkId`. Without it
   every benchmark writes what it always did. A run on other hardware is recorded this way
-  beside the reference records, for example the cloud run of run 4 as
-  `se-070-<scenario>-cloud-swiftshader`. A process records once under a `PERF_ID`.
+  beside the reference records, for example `se-070-<scenario>-cloud-swiftshader` for a cloud
+  container with SwiftShader. A process records once under a `PERF_ID`.
 
 Browser benchmarks start installed Chrome (new headless) with `--force-color-profile=srgb`,
 the adapter's flags of SE-002 and a device pixel ratio of 1, in a 1920 × 1080 window, the app
@@ -103,8 +103,7 @@ and the same with `PERF_GPU=rtx-4060`. The ids are the benchmarks' own:
 `se-070-frame-switch-upload-<gpu>`, `se-024-playback-<gpu>`, `se-070-idle-<gpu>`,
 `se-070-cold-load-<gpu>`.
 
-In the cloud container of run 4 (Linux, SwiftShader; no reference), each under an id of its
-own:
+In a cloud container (Linux, SwiftShader; no reference), each under an id of its own:
 
 ```text
 PERF_RECORD=1 PERF_GPU=swiftshader PERF_ID=se-070-stroke-cloud-swiftshader npx vitest run --config vitest.perf.config.ts --silent=false tests/perf/se-015-stroke-latency.perf.ts

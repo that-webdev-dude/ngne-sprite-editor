@@ -12,18 +12,18 @@
         "drawn": "onDrawn: frames submitted to NGNE, not known to be presented on screen",
         "firstFrameAfterEntry": {
             "count": 126,
-            "medianMs": 6.8,
-            "p95Ms": 10.3,
-            "maxMs": 11.5
+            "medianMs": 6.7,
+            "p95Ms": 10.4,
+            "maxMs": 13
         },
         "gapsBetweenPictureChanges": {
             "count": 127,
-            "medianMs": 98.4,
-            "p95Ms": 106.6,
-            "maxMs": 109.4
+            "medianMs": 98.5,
+            "p95Ms": 105.7,
+            "maxMs": 107.7
         },
         "framesSubmittedPerSecond": 10,
-        "windowSeconds": 12.8,
+        "windowSeconds": 12.81,
         "document": "256×256, 8 layers, 64 frames of 100 ms, at 2×",
         "devicePixelRatio": 1,
         "window": "1920×1080 CSS px",
@@ -38,5 +38,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-11-20T11:26:11.645Z"
+    "date": "2026-11-21T08:37:52.691Z"
 }
