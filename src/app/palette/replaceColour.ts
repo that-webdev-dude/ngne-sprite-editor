@@ -1,11 +1,11 @@
 import type { StoreApi } from "zustand/vanilla";
-import { formatHex } from "../../core/color";
+import { formatHex } from "@ngne/editor-ui/colour";
 import { replaceColourCommand } from "../../core/palettes";
 import type { ReplaceRefusal, ReplaceScope } from "../../core/palettes";
-import { commandDialogs, createDialogRequests, dialogView } from "../dialogs/dialogRequests";
-import type { DialogRequestBase, DialogRequests, DialogView } from "../dialogs/dialogRequests";
-import { notices as appNotices } from "../notices/notices";
-import type { Notices } from "../notices/notices";
+import { commandDialogs, createDialogRequests, dialogView } from "@ngne/editor-ui/messages";
+import type { DialogRequestBase, DialogRequests, DialogView } from "@ngne/editor-ui/messages";
+import { notices as appNotices } from "@ngne/editor-ui/messages";
+import type { Notices } from "@ngne/editor-ui/messages";
 import { applyFloating as applyAppFloating } from "../selection/floating";
 import { editorStore } from "../state/editor";
 import type { EditorState } from "../state/editor";

@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { createCommandRegistry } from "../../src/app/commands/registry";
-import type { CommandRegistry } from "../../src/app/commands/registry";
-import { KEY_CONTEXTS } from "../../src/app/commands/types";
-import type { CommandSpec, KeyContext } from "../../src/app/commands/types";
+import { createCommandRegistry } from "@ngne/editor-ui/commands";
+import type { CommandRegistry } from "@ngne/editor-ui/commands";
+import { KEY_CONTEXTS } from "../../src/app/testing/pageModules";
+import type { CommandSpec, KeyContext } from "@ngne/editor-ui/commands";
 import {
     isTextField,
     nativeKeysOf,
     OVERLAY_SELECTOR,
     readKeyEnvironment,
-    TIMELINE_SELECTOR,
     VIEWPORT_FOCUS_ATTRIBUTE,
-} from "../../src/app/keymap/environment";
-import type { FocusedElement, KeymapDocument } from "../../src/app/keymap/environment";
-import { installKeymap } from "../../src/app/keymap/install";
-import { applicableContexts, resolveKey } from "../../src/app/keymap/resolve";
-import type { KeyEnvironment } from "../../src/app/keymap/resolve";
+} from "@ngne/editor-ui/commands";
+import { TIMELINE_SELECTOR } from "../../src/app/testing/pageModules";
+import type { FocusedElement, KeymapDocument } from "@ngne/editor-ui/commands";
+import { installKeymap } from "@ngne/editor-ui/commands";
+import { applicableContexts, resolveKey } from "@ngne/editor-ui/commands";
+import type { KeyEnvironment } from "@ngne/editor-ui/commands";
 
 // SE-007: keymap contexts, resolution and the keyboard listener (SPEC §7.8).
 

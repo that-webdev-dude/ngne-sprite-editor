@@ -1,6 +1,6 @@
 import type { DiscardChangesRequest } from "../../app/file/dialogs";
-import { commandDialog } from "../dialogs/registry";
-import { DiscardChangesDialog } from "./DiscardChangesDialog";
+import { commandDialog } from "@ngne/editor-ui/messages";
+import { DiscardChangesDialog } from "@ngne/editor-ui/messages";
 
 /** The question of the file workflows (SE-041), shown by the dialog host. */
 export const commandDialogs = [

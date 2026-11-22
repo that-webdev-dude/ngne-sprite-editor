@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { KeyValueStorage } from "../../src/app/platform/storage";
+import type { KeyValueStorage } from "@ngne/editor-ui/platform";
 import {
-    defaultTimelineHeight,
+    defaultBottomHeight as defaultTimelineHeight,
     isWindowTooSmall,
     parseStoredLayout,
     railColumns,
     railOneColumnHeight,
     resolveDockWidth,
-    resolveTimelineHeight,
-    timelineMaxHeight,
-} from "../../src/ui/shell/layout";
+    resolveBottomHeight as resolveTimelineHeight,
+    bottomMaxHeight as timelineMaxHeight,
+} from "@ngne/editor-ui/shell";
 import { createLayoutStore, LAYOUT_STORAGE_KEY } from "../../src/ui/shell/layoutStore";
 
 function memoryStorage(initial: Record<string, string> = {}): KeyValueStorage & {

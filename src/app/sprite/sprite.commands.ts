@@ -7,7 +7,7 @@ import {
     setGrid,
     setPivotCommand,
 } from "../../core/sprite";
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { fileWorkflows } from "../file/workflows";
 import { preferences } from "../preferences/preferences";
 import { applyFloating } from "../selection/floating";

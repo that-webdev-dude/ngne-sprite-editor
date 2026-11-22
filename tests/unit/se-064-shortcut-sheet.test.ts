@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
-import { createCommandRegistry } from "../../src/app/commands/registry";
-import type { CommandRegistry } from "../../src/app/commands/registry";
-import { MENU_BAR } from "../../src/app/commands/types";
-import type { CommandSpec } from "../../src/app/commands/types";
-import { OTHER_SHORTCUTS, shortcutGroups } from "../../src/app/shortcuts/shortcutSheet";
-import type { ShortcutGroup } from "../../src/app/shortcuts/shortcutSheet";
+import { appCommands } from "../../src/app/testing/pageModules";
+import { createCommandRegistry } from "@ngne/editor-ui/commands";
+import type { CommandRegistry } from "@ngne/editor-ui/commands";
+import { MENU_BAR } from "../../src/app/testing/pageModules";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
+import { OTHER_SHORTCUTS, shortcutGroups } from "@ngne/editor-ui/commands";
+import type { ShortcutGroup } from "@ngne/editor-ui/commands";
 
 // SE-064: the shortcut sheet as generated from the registry — exactly the registry's
 // shortcuts, grouped by menu.

@@ -131,7 +131,7 @@ test("the overflow menu lists the same labels as the tabs", async ({ page }) => 
     await expect(infoToast(page, "Saved twelfth-file.ngsprite")).toBeVisible();
     await expect(documentName(page)).toHaveText("twelfth-file");
 
-    const labels = await tabs(page).locator(".document-tab__name").allTextContents();
+    const labels = await tabs(page).locator(".tab-strip__name").allTextContents();
     expect(labels).toContain("twelfth-file");
     expect(labels).not.toContain("sprite 12");
     await overflowButton(page).click();

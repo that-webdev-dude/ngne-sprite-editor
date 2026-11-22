@@ -14,9 +14,9 @@ import {
 import { editorStore, useEditor } from "../../app/state/editor";
 import type { ColourSlot, EditorState } from "../../app/state/editor";
 import { activeDocument, sessionsStore } from "../../app/state/sessions";
-import { formatHex } from "../../core/color";
+import { formatHex } from "@ngne/editor-ui/colour";
 import { movedColours } from "../../core/palettes";
-import { runCommand } from "../commands/runCommand";
+import { runAppCommand } from "../../app/editorUiHandle";
 import { cancelNextContextMenu } from "./cancelContextMenu";
 import {
     PALETTE_GRID_ATTRIBUTE,
@@ -173,7 +173,7 @@ export function PaletteGrid() {
     const moveTo = (from: number, to: number, focus: boolean) => {
         setCurrentSwatch(from);
         setMoveTarget(to);
-        const moved = runCommand(MOVE_COLOUR);
+        const moved = runAppCommand(MOVE_COLOUR);
         setMoveTarget(null);
         if (moved && focus) focusSwatch(to);
     };
@@ -327,7 +327,7 @@ export function PaletteGrid() {
                 onDoubleClick={(event) => {
                     if (event.button !== 0) return;
                     setCurrentSwatch(index);
-                    runCommand(EDIT_COLOUR);
+                    runAppCommand(EDIT_COLOUR);
                 }}
                 onContextMenu={(event) => event.preventDefault()}
                 onFocus={() => setCurrentSwatch(index)}

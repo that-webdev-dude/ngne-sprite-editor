@@ -1,5 +1,5 @@
 // Ids of the commands the timeline panel runs (SE-022). The panel takes them from here, so it
-// never loads a `*.commands.ts` module before the registry does (appCommands.ts).
+// never loads a `*.commands.ts` module before the registry does (src/app/editorUi.ts).
 
 export const TIMELINE_COMMANDS = {
     newLayer: "layer.new",

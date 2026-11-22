@@ -1,9 +1,9 @@
 import { useId, useState } from "react";
 import type { FramePngRequest } from "../../app/export/dialogs";
 import { framePngName, MIN_FRAME_PNG_SCALE } from "../../core/imageExports";
-import { Button } from "../primitives/Button";
-import { Dialog } from "../primitives/Dialog";
-import { NumberField } from "../primitives/NumberField";
+import { Button } from "@ngne/editor-ui/primitives";
+import { Dialog } from "@ngne/editor-ui/primitives";
+import { NumberField } from "@ngne/editor-ui/primitives";
 import "./export.css";
 
 /**

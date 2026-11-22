@@ -2,16 +2,17 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { ABOUT_COMMAND } from "../../src/app/about/about.commands";
+import { ABOUT_COMMAND } from "@ngne/editor-ui/about";
 import { appInfo, versionLine } from "../../src/app/about/appInfo";
 import type { AppInfo } from "../../src/app/about/appInfo";
 import { createAboutDialogs, openAbout } from "../../src/app/about/openAbout";
 import type { AboutHost, AboutRequest } from "../../src/app/about/openAbout";
-import { paletteEntries } from "../../src/app/commandPalette/paletteModel";
-import { appCommands } from "../../src/app/commands/appCommands";
-import { buildMenu } from "../../src/app/commands/menuModel";
-import type { MenuNode } from "../../src/app/commands/menuModel";
-import { ENGINE_PACKAGE, appInfoDefines } from "../../scripts/appInfo";
+import { paletteEntries } from "@ngne/editor-ui/commands";
+import { appCommands } from "../../src/app/testing/pageModules";
+import { buildMenu } from "@ngne/editor-ui/commands";
+import type { MenuNode } from "@ngne/editor-ui/commands";
+import { appInfoDefines } from "@ngne/editor-ui/about/build";
+import { ENGINE_PACKAGE } from "../../scripts/appInfo";
 
 // Help → About NGNE Sprite Editor… (src/app/about): where it is, the facts it shows, which
 // package.json gives at build time, and Copy version info.

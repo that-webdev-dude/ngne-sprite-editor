@@ -7,7 +7,7 @@ import {
     parseHex,
     rgbToHsv,
     unpackRgba,
-} from "../../src/core/color";
+} from "@ngne/editor-ui/colour";
 
 // SE-016: the pure colour conversions of `core/color` — sRGB8 ↔ HSV and hex text ↔
 // 0xRRGGBBAA — and their round trips on 8-bit values.

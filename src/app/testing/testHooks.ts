@@ -1,7 +1,7 @@
 import { assertInvariants, createDocument } from "../../core/model";
 import type { CreateDocumentOptions } from "../../core/model";
-import { appCommands } from "../commands/appCommands";
-import type { CommandRegistry } from "../commands/registry";
+import { appCommands } from "../editorUi";
+import type { CommandRegistry } from "@ngne/editor-ui/commands";
 import { keyContextStore } from "../keymap/contextState";
 import { preferences } from "../preferences/preferences";
 import type { PreferenceStore } from "../preferences/preferences";

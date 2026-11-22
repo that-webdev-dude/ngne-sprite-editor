@@ -5,7 +5,7 @@ import { sessionsStore } from "../state/sessions";
 import type { ViewMapping } from "../view/coordinates";
 import { currentViewMapping } from "../view/viewNavigation";
 import { createOverlayController } from "./overlayController";
-import { overlayLayers } from "./overlayLayers";
+import { boundEditorUi } from "../editorUiHandle";
 import type { OverlayLayer, OverlayTheme } from "./types";
 
 /** What tests read of the overlay on screen (SE-013). */
@@ -59,7 +59,7 @@ export function mountOverlay(
     canvas: HTMLCanvasElement,
     container: HTMLElement,
     ngne: HTMLElement,
-    layers: readonly OverlayLayer[] = overlayLayers,
+    layers: readonly OverlayLayer[] = boundEditorUi().overlayLayers as readonly OverlayLayer[],
 ): MountedOverlay {
     const context = canvas.getContext("2d");
     if (!context) throw new Error("The overlay canvas has no 2D context.");

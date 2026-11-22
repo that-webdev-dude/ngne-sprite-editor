@@ -8,7 +8,7 @@ import {
     spriteSizeCommand,
     trimCommand,
 } from "../../core/sprite";
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { applyFloating } from "../selection/floating";
 import { settleableDocument } from "../selection/settled";
 import { activeDocument, sessionsStore } from "../state/sessions";

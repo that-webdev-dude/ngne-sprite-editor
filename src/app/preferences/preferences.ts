@@ -3,13 +3,14 @@ import { createStore } from "zustand/vanilla";
 import type { StoreApi } from "zustand/vanilla";
 import { defaultDocSettings } from "../../core/model";
 import type { OnionSettings } from "../../core/model";
-import { browserStorage, readJson, writeItem } from "../platform/storage";
-import type { KeyValueStorage } from "../platform/storage";
+import { browserStorage, readJson, writeItem } from "@ngne/editor-ui/platform";
+import type { KeyValueStorage } from "@ngne/editor-ui/platform";
 
 /**
  * User preferences: one versioned record in `localStorage`, with defaults, typed access and
  * change notification. Each consumer reads its section in its own ticket; the Preferences
- * dialog (SE-064) edits them. The theme is not here: it has its own store (ui/theme).
+ * dialog (SE-064) edits them. The theme is not here: it belongs to the editor UI instance
+ * (@ngne/editor-ui).
  */
 export const PREFERENCES_STORAGE_KEY = "ngne-sprite-editor.preferences";
 /** Raised when the meaning of a stored value changes; other versions fall back to defaults. */

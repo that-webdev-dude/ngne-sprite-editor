@@ -19,7 +19,7 @@ import { MAX_REFERENCE_SOURCE_BYTES } from "../../core/project/format";
 import { addReferenceLayerCommand, fitPlacement, referenceLayers } from "../../core/references";
 import { normalizeSpriteName } from "../../core/sprite";
 import { fileWorkflows } from "../file/workflows";
-import { notices } from "../notices/notices";
+import { notices } from "@ngne/editor-ui/messages";
 import { browserClipboard } from "../platform/clipboard";
 import { preferences } from "../preferences/preferences";
 import type { PickedImage } from "../references/pickImage";

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
-import { buildMenu, menuCommands } from "../../src/app/commands/menuModel";
-import type { MenuNode } from "../../src/app/commands/menuModel";
+import { appCommands } from "../../src/app/testing/pageModules";
+import { buildMenu, menuCommands } from "@ngne/editor-ui/commands";
+import type { MenuNode } from "@ngne/editor-ui/commands";
 import {
     createRecentFiles,
     indexedDbRecentFiles,

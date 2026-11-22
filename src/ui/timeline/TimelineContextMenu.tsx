@@ -1,17 +1,16 @@
 import { ContextMenu as RadixContextMenu } from "radix-ui";
 import { useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactElement } from "react";
-import { formatChord } from "../../app/commands/chord";
-import { invokeCommand } from "../../app/commands/invoke";
-import { buildContextMenu } from "../../app/commands/menuModel";
+import { formatChord } from "@ngne/editor-ui/commands";
+import { invokeCommand } from "@ngne/editor-ui/commands";
+import { buildContextMenu } from "@ngne/editor-ui/commands";
 import { closeContextTarget, menuOf, openContextTarget } from "../../app/timeline/contextTarget";
 import type { ContextTarget } from "../../app/timeline/contextTarget";
 import { TIMELINE_MENUS } from "../../app/timeline/timelineEditIds";
 import type { TimelineMenu } from "../../app/timeline/timelineEditIds";
-import { reportCommandError } from "../commands/runCommand";
-import { useCommands } from "../commands/useCommands";
+import { reportCommandError } from "@ngne/editor-ui/commands";
+import { useCommands } from "@ngne/editor-ui/commands";
 import { CELL_ATTRIBUTE } from "./timelineDom";
-import "../primitives/menu.css";
 
 // The timeline's context menus (SE-026; DESIGN §4): a right-click on a layer row, a frame
 // number, a cel or a tag span opens the menu of that kind, generated from the command registry

@@ -3,12 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createEditorStore } from "../../src/app/state/editor";
 import { createToolState } from "../../src/app/tools/activeTool";
 import { plannedTools } from "../../src/app/tools/planned.tools";
-import {
-    createToolRegistry,
-    railGroups,
-    registerToolModules,
-    slotOf,
-} from "../../src/app/tools/registry";
+import { createToolRegistry, railGroups, registerToolModules, slotOf } from "@ngne/editor-ui/shell";
 import { toolRegistry } from "../../src/app/tools/toolRegistry";
 import type { ToolSpec } from "../../src/app/tools/types";
 import { readSpecKeyTable } from "../e2e/se-007-spec-keys";

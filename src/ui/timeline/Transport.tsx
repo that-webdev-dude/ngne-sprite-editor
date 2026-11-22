@@ -10,18 +10,18 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { memo, useMemo, useSyncExternalStore } from "react";
 import { useStore } from "zustand";
-import { appCommands } from "../../app/commands/appCommands";
-import { formatChord } from "../../app/commands/chord";
+import { useEditorUi } from "@ngne/editor-ui";
+import { formatChord } from "@ngne/editor-ui/commands";
 import { playbackStore } from "../../app/playback/playbackState";
 import { activeDocument, sessionsStore } from "../../app/state/sessions";
 import { beginDurationEdit, shownDuration } from "../../app/timeline/frameDuration";
 import type { ShownDuration } from "../../app/timeline/frameDuration";
 import { PLAY_PAUSE_COMMAND, TIMELINE_COMMANDS } from "../../app/timeline/timelineCommandIds";
 import { endDurationEdit, timelineStore, withArguments } from "../../app/timeline/timelineState";
-import { runCommand } from "../commands/runCommand";
-import { Icon } from "../primitives/Icon";
-import { IconButton } from "../primitives/IconButton";
-import { NumberField } from "../primitives/NumberField";
+import { runAppCommand } from "../../app/editorUiHandle";
+import { Icon } from "@ngne/editor-ui/primitives";
+import { IconButton } from "@ngne/editor-ui/primitives";
+import { NumberField } from "@ngne/editor-ui/primitives";
 import { OnionSkinControls } from "./OnionSkin";
 import { TIMELINE_FIELD_ATTRIBUTE } from "./timelineDom";
 
@@ -54,20 +54,23 @@ interface CommandView {
  * store; the buttons render again only when what they show has changed.
  */
 function useCommandViews(ids: readonly string[]): readonly (CommandView | null)[] {
-    const snapshot = useSyncExternalStore(appCommands.subscribe, () =>
-        JSON.stringify(
-            ids.map((id): CommandView | null => {
-                const command = appCommands.get(id);
-                if (!command) return null;
-                const [chord] = command.shortcuts;
-                return {
-                    id,
-                    title: command.title(),
-                    enabled: command.enabled(),
-                    shortcut: chord ? formatChord(chord) : null,
-                };
-            }),
-        ),
+    const { commands } = useEditorUi();
+    const snapshot = useSyncExternalStore(
+        (listener) => commands.subscribe(listener),
+        () =>
+            JSON.stringify(
+                ids.map((id): CommandView | null => {
+                    const command = commands.get(id);
+                    if (!command) return null;
+                    const [chord] = command.shortcuts;
+                    return {
+                        id,
+                        title: command.title(),
+                        enabled: command.enabled(),
+                        shortcut: chord ? formatChord(chord) : null,
+                    };
+                }),
+            ),
     );
     return useMemo(() => JSON.parse(snapshot) as (CommandView | null)[], [snapshot]);
 }
@@ -80,7 +83,7 @@ function CommandButton({ view, icon }: { view: CommandView | null; icon: LucideI
             shortcut={view.shortcut ?? undefined}
             disabled={!view.enabled}
             data-command={view.id}
-            onClick={() => runCommand(view.id)}
+            onClick={() => runAppCommand(view.id)}
         >
             <Icon icon={icon} />
         </IconButton>
@@ -165,7 +168,7 @@ export const TimelineCorner = memo(function TimelineCorner() {
                         onChange={(duration) =>
                             withArguments(
                                 { duration },
-                                () => void runCommand(TIMELINE_COMMANDS.setDuration),
+                                () => void runAppCommand(TIMELINE_COMMANDS.setDuration),
                             )
                         }
                     />

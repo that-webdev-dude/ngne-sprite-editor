@@ -1,6 +1,6 @@
 import type { ExportOverwriteRequest } from "../../app/export/dialogs";
-import { Button } from "../primitives/Button";
-import { Dialog } from "../primitives/Dialog";
+import { Button } from "@ngne/editor-ui/primitives";
+import { Dialog } from "@ngne/editor-ui/primitives";
 import "./export.css";
 
 /**

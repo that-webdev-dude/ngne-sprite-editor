@@ -1,4 +1,4 @@
-import { rgbToHsv, writeOklab } from "../color";
+import { rgbToHsv, writeOklab } from "@ngne/editor-ui/colour";
 import type { Command } from "../history";
 import type { DocSession } from "../model";
 import { setPaletteCommand } from "./commands";

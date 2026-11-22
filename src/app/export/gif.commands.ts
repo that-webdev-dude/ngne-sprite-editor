@@ -1,4 +1,4 @@
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { exportWorkflows } from "./exportWorkflows";
 import { exportGif } from "./gifExport";
 

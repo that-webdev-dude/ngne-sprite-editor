@@ -6,7 +6,7 @@ import {
     setFrameDurationCommand,
 } from "../../core/frames";
 import { frameIndex } from "../../core/model";
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import type { OpenDocument } from "../state/sessions";
 import { durationFrameIds } from "./frameDuration";
 import { effectiveSelection, targetFrameIds } from "./selection";

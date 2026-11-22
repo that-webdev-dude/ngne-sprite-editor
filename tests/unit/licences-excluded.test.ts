@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 import { build, loadConfigFromFile } from "vite";
 import type { Plugin, Rollup, UserConfig } from "vite";
 import { describe, expect, it } from "vitest";
-import { EXCLUDED_CODE, excludedCodeIn } from "../../scripts/licences";
+import { excludedCodeIn } from "@ngne/editor-ui/licences/build";
+import { EXCLUDED_CODE } from "../../scripts/licenceRules";
 
 // Code the build must leave out (`EXCLUDED_CODE` of scripts/licences.ts): gifenc's colour
 // quantizer. The markers find it in gifenc's files and not in its encoder, and a bundle of the

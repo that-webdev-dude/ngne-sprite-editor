@@ -1,8 +1,7 @@
 import { useEffect, useRef } from "react";
-import { VIEWPORT_FOCUS_ATTRIBUTE } from "../../app/keymap/environment";
-import { REGION_FOCUS_ATTRIBUTE } from "../../app/keymap/regions";
+import { VIEWPORT_FOCUS_ATTRIBUTE } from "@ngne/editor-ui/commands";
+import { REGION_FOCUS_ATTRIBUTE } from "@ngne/editor-ui/shell";
 import { attachViewNavigation } from "../../app/view/pointerNavigation";
-import { returnFocusToViewport } from "../focus/returnFocus";
 import { OverlayCanvas } from "./OverlayCanvas";
 import { ViewportCanvas } from "./ViewportCanvas";
 import "./toolPointer.css";
@@ -38,11 +37,8 @@ export function ViewportArea() {
         return attachViewNavigation(element.current);
     }, []);
 
-    // SPEC §7.8: a control activated with the pointer gives the focus back to this element.
-    useEffect(() => {
-        if (!element.current) return;
-        return returnFocusToViewport(element.current);
-    }, []);
+    // SPEC §7.8: a control activated with the pointer gives the focus back to this element,
+    // the viewport target (`data-viewport-focus`): the package's UiRoot applies the rule.
 
     return (
         <div

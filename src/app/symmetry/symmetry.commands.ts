@@ -1,4 +1,4 @@
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { activeSymmetry, followDocumentSizes, setSymmetry, setTiledMode } from "./symmetry";
 import type { SymmetryMode, TiledMode } from "./symmetry";
 

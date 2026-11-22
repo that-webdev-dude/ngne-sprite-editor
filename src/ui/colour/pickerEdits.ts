@@ -1,6 +1,6 @@
 import type { StoreApi } from "zustand/vanilla";
 import type { ColourSlot, EditorState } from "../../app/state/editor";
-import type { Hsv } from "../../core/color";
+import type { Hsv } from "@ngne/editor-ui/colour";
 import { alphaAfterKey, fractionAlong, hueAfterKey, svAfterKey } from "./pickerMath";
 
 // What the controls of the colour panel (DESIGN §5.3) do to a colour of the editor store, for

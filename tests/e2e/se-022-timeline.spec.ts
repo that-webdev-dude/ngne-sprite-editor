@@ -51,7 +51,7 @@ test("the timeline is empty while no document is open and shows the layers, top 
 }) => {
     const errors = collectErrors(page);
     await openEditor(page);
-    await expect(timeline(page).locator(".shell-timeline__content")).toBeEmpty();
+    await expect(timeline(page).locator(".shell-bottom__content")).toBeEmpty();
     await openSession(page, { name: "timeline", width: 8, height: 8 });
     await runCommands(page, ["layer.new", "layer.new", "frame.newEmpty"]);
     const state = await documentState(page);

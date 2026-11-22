@@ -1,6 +1,6 @@
 import { documentRect } from "../../engine/viewport/geometry";
-import type { CommandSpec } from "../commands/types";
-import { notices } from "../notices/notices";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
+import { notices } from "@ngne/editor-ui/messages";
 import { browserClipboard } from "../platform/clipboard";
 import { editorStore } from "../state/editor";
 import { sessionsStore } from "../state/sessions";

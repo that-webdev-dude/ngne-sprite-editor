@@ -1,6 +1,6 @@
-import { normalizeChord } from "../commands/chord";
-import type { CommandSpec } from "../commands/types";
-import { isNativeKeyChord } from "../keymap/keyClasses";
+import { normalizeChord } from "@ngne/editor-ui/commands";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
+import { isNativeKeyChord } from "@ngne/editor-ui/commands";
 import { viewSurface } from "../view/viewNavigation";
 import { toolState } from "./activeTool";
 import { toolPipeline } from "./appPipeline";

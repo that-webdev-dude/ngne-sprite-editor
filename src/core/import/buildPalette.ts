@@ -1,4 +1,4 @@
-import { oklabToSrgb8, writeOklab } from "../color";
+import { oklabToSrgb8, writeOklab } from "@ngne/editor-ui/colour";
 import type { PixelBuffer } from "../pixels";
 import { MAX_PALETTE_COLORS, assertInteger } from "./errors";
 import { KeyIndex } from "./keyIndex";

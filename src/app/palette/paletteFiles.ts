@@ -15,8 +15,8 @@ import { exportWorkflows as appExportWorkflows } from "../export/exportWorkflows
 import type { ExportWorkflows } from "../export/exportWorkflows";
 import { fileWorkflows as appFileWorkflows } from "../file/workflows";
 import type { FileWorkflows } from "../file/workflows";
-import { notices as appNotices } from "../notices/notices";
-import type { Notices } from "../notices/notices";
+import { notices as appNotices } from "@ngne/editor-ui/messages";
+import type { Notices } from "@ngne/editor-ui/messages";
 import { choosePaletteFile } from "../platform/paletteFiles";
 import type { ChoosePaletteFile, ChosenPaletteFile } from "../platform/paletteFiles";
 import { applyFloating as applyAppFloating } from "../selection/floating";

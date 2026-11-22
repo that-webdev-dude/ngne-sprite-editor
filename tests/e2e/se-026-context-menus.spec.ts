@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
-import type * as MenuModel from "../../src/app/commands/menuModel";
+import type * as MenuModel from "../../src/app/testing/pageModules";
 import type * as CoreTags from "../../src/core/tags";
 import type * as EditIds from "../../src/app/timeline/timelineEditIds";
 import { boxOf, collectErrors, region, settleTimers } from "./se-006-support";
@@ -69,7 +69,7 @@ function registryMenus(page: Page) {
     return page.evaluate(async () => {
         const load = (path: string) => import(/* @vite-ignore */ path);
         const { buildContextMenu } = (await load(
-            "/src/app/commands/menuModel.ts",
+            "/src/app/testing/pageModules.ts",
         )) as typeof MenuModel;
         const { TIMELINE_MENUS } = (await load(
             "/src/app/timeline/timelineEditIds.ts",

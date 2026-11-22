@@ -9,8 +9,8 @@ import {
 } from "../../core/gif";
 import type { GifFrames } from "../../core/gif";
 import type { SpriteDoc } from "../../core/model";
-import { notices as appNotices } from "../notices/notices";
-import type { Notices } from "../notices/notices";
+import { notices as appNotices } from "@ngne/editor-ui/messages";
+import type { Notices } from "@ngne/editor-ui/messages";
 import type { ExportFileType } from "../platform/exportFiles";
 import { exportWorkflows as appExportWorkflows } from "./exportWorkflows";
 import type { ExportWorkflows } from "./exportWorkflows";

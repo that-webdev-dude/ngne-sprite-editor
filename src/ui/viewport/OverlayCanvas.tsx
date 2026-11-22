@@ -4,9 +4,9 @@ import type { MountedOverlay } from "../../app/overlay/mountOverlay";
 import { DEFAULT_OVERLAY_THEME } from "../../app/overlay/types";
 import type { OverlayTheme } from "../../app/overlay/types";
 import { attachToolPointer } from "../../app/tools/attachToolPointer";
-import { parseHexColour } from "../preferences/hexColour";
-import { useTheme } from "../theme/theme";
-import type { Theme } from "../theme/theme";
+import { parseHexColour } from "@ngne/editor-ui/colour";
+import { useTheme } from "@ngne/editor-ui";
+import type { Theme } from "@ngne/editor-ui";
 import "./overlay.css";
 
 /** Grid ink of DESIGN §6: white lines in the dark theme, black lines in the light one. */

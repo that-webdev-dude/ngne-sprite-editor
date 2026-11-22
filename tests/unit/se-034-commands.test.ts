@@ -1,20 +1,18 @@
 import { readdirSync } from "node:fs";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
+import { appCommands } from "../../src/app/testing/pageModules";
 import { plannedCommands } from "../../src/app/commands/planned.commands";
-import { commandDialogs, createDialogRequests } from "../../src/app/dialogs/dialogRequests";
-import type { DialogRequestBase } from "../../src/app/dialogs/dialogRequests";
+import { commandDialogs, createDialogRequests } from "@ngne/editor-ui/messages";
+import type { DialogRequestBase } from "@ngne/editor-ui/messages";
 import { isSpriteDialogRequest, sizeProblems, spriteDialogs } from "../../src/app/sprite/dialogs";
 import type { SpriteDialogRequest } from "../../src/app/sprite/dialogs";
 import { activeDocument, sessionsStore } from "../../src/app/state/sessions";
 import type { OpenDocument } from "../../src/app/state/sessions";
 import { DocumentSizeError, celKey, createDocument } from "../../src/core/model";
 import { rectMask, selectionOf } from "../../src/core/selection";
-import {
-    collectCommandDialogs,
-    commandDialog,
-    registeredDialogs,
-} from "../../src/ui/dialogs/registry";
+import { commandDialog } from "@ngne/editor-ui/messages";
+import { collectCommandDialogs } from "../../src/ui/dialogs/registry";
+import { registeredDialogs } from "../../src/app/testing/pageModules";
 import { imageWith } from "./se-034-support";
 
 // SE-034: the dialog requests answered at once without a host, the dialog registry, and the

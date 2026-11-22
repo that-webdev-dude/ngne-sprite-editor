@@ -1,4 +1,4 @@
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { settleableDocument } from "../selection/settled";
 import { REPLACE_COLOUR } from "./paletteActionIds";
 import { PALETTE_MENU } from "./paletteCommandIds";

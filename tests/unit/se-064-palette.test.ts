@@ -1,19 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { fuzzyScore } from "../../src/app/commandPalette/fuzzy";
-import {
-    paletteEntries,
-    paletteScore,
-    runPaletteCommand,
-} from "../../src/app/commandPalette/paletteModel";
+import { fuzzyScore } from "@ngne/editor-ui/commands";
+import { paletteEntries, paletteScore, runPaletteCommand } from "@ngne/editor-ui/commands";
+import { MAX_RECENT_COMMANDS, parseRecentCommands } from "@ngne/editor-ui/commands";
 import {
     createRecentCommandsStore,
-    MAX_RECENT_COMMANDS,
-    parseRecentCommands,
     RECENT_COMMANDS_STORAGE_KEY,
 } from "../../src/app/commandPalette/recentCommands";
-import { createCommandRegistry } from "../../src/app/commands/registry";
-import type { CommandRegistry } from "../../src/app/commands/registry";
-import type { Command, CommandSpec } from "../../src/app/commands/types";
+import { createCommandRegistry } from "@ngne/editor-ui/commands";
+import type { CommandRegistry } from "@ngne/editor-ui/commands";
+import type { Command, CommandSpec } from "@ngne/editor-ui/commands";
 import { memoryStorage } from "./se-007-support";
 
 // SE-064: the command palette without the interface — fuzzy search over the registry, the

@@ -13,7 +13,7 @@ import {
     setReferenceCommand,
 } from "../../core/references";
 import type { ReferenceChange, ReferencePlacement, ReferenceRect } from "../../core/references";
-import { notices } from "../notices/notices";
+import { notices } from "@ngne/editor-ui/messages";
 import { FloatingApplyError } from "../selection/floating";
 import { PAINT_REFUSED } from "../tools/paintTarget";
 import { activeDocument, sessionsStore } from "../state/sessions";

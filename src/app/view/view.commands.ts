@@ -1,4 +1,4 @@
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { activeView, canNavigate, fitActiveView, zoomBy, zoomTo } from "./viewNavigation";
 import { KEY_ZOOMS, MAX_ZOOM, MIN_ZOOM } from "./zoom";
 

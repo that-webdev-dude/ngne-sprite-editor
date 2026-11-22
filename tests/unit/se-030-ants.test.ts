@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { axesOf } from "../../src/app/overlay/gridLines";
-import { overlayLayers } from "../../src/app/overlay/overlayLayers";
+import { overlayLayers } from "../../src/app/testing/pageModules";
 import { DEFAULT_OVERLAY_THEME } from "../../src/app/overlay/types";
 import type { OverlayFrame } from "../../src/app/overlay/types";
 import {

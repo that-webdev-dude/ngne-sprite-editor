@@ -1,4 +1,4 @@
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { editorStore } from "../state/editor";
 
 // The commands of the foreground and background colours (SE-016). X swaps them in the

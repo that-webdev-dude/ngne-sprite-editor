@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RESET_COLOURS, SWAP_COLOURS } from "../../src/app/colour/colour.commands";
-import { appCommands } from "../../src/app/commands/appCommands";
-import { findChordConflicts } from "../../src/app/commands/registry";
-import { runPaletteCommand } from "../../src/app/commandPalette/paletteModel";
-import { installKeymap } from "../../src/app/keymap/install";
-import type { KeyEnvironment } from "../../src/app/keymap/resolve";
+import { appCommands } from "../../src/app/testing/pageModules";
+import { findChordConflicts } from "@ngne/editor-ui/commands";
+import { runPaletteCommand } from "@ngne/editor-ui/commands";
+import { installKeymap } from "@ngne/editor-ui/commands";
+import type { KeyEnvironment } from "@ngne/editor-ui/commands";
 import { DEFAULT_TOOL, editorStore } from "../../src/app/state/editor";
 import { activeDocument, sessionsStore } from "../../src/app/state/sessions";
 import { toolState } from "../../src/app/tools/activeTool";

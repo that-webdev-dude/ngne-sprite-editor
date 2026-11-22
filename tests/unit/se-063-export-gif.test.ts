@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
-import { buildMenu, menuCommands } from "../../src/app/commands/menuModel";
-import type { Command } from "../../src/app/commands/types";
+import { appCommands } from "../../src/app/testing/pageModules";
+import { buildMenu, menuCommands } from "@ngne/editor-ui/commands";
+import type { Command } from "@ngne/editor-ui/commands";
 import { GIF_FILE, createGifExport, reducedColoursMessage } from "../../src/app/export/gifExport";
 import { createGifDialogs } from "../../src/app/export/gifDialog";
 import type { GifDialogs, GifRequest } from "../../src/app/export/gifDialog";

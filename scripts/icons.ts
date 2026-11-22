@@ -2,23 +2,24 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { encode } from "fast-png";
 
-// SE-072: the app's icons and the colours of its web manifest, from the design tokens
-// (src/ui/styles/tokens.css, dark set: the default theme). The icons are drawn here, pixel by
-// pixel, so the same tokens always give the same files; the PNG files in public/icons are the
-// output of this script, committed, and a unit test (tests/unit/se-072-pwa.test.ts) fails when
-// they differ from it. After a change of the tokens or of the drawing, write them again with
+// SE-072: the app's icons and the colours of its web manifest, from the design tokens (the
+// first `:root` rule of @ngne/editor-ui's styles.css, its dark set: the default theme). The
+// icons are drawn here, pixel by pixel, so the same tokens always give the same files; the PNG
+// files in public/icons are the output of this script, committed, and a unit test
+// (tests/unit/se-072-pwa.test.ts) fails when they differ from it. After a change of the tokens
+// or of the drawing, write them again with
 //
 //     node scripts/icons.ts
 //
 // (Node 24 runs the TypeScript directly; this file imports nothing relative for that reason.)
 
 const ROOT = new URL("../", import.meta.url);
-const TOKENS_FILE = new URL("src/ui/styles/tokens.css", ROOT);
+const TOKENS_FILE = new URL("node_modules/@ngne/editor-ui/dist/styles.css", ROOT);
 export const ICONS_DIR = new URL("public/icons/", ROOT);
 
 export type Rgb = readonly [number, number, number];
 
-/** The value of a colour token in the default (dark) set of tokens.css, as `#rrggbb`. */
+/** The value of a colour token in the default (dark) set of the tokens, as `#rrggbb`. */
 export function tokenColour(name: string, css = readFileSync(TOKENS_FILE, "utf8")): string {
     const root = /:root\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
     const value = new RegExp(String.raw`${name}:\s*(#[0-9a-f]{6})\s*;`).exec(root)?.[1];

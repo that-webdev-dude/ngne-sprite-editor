@@ -1,5 +1,5 @@
 import type { DocSettings } from "../../core/model";
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { activeDocument, sessionsStore } from "../state/sessions";
 
 // The grid toggles of the View menu (SE-013), bound to `DocSettings.grid.visible` and

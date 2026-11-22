@@ -1,18 +1,17 @@
 import { RadioGroup } from "radix-ui";
 import { useId, useState } from "react";
-import { formatHex, parseHex } from "../../core/color";
-import { BLACK, labelColourOn, WHITE } from "../../core/color/contrast";
+import { formatHex, parseHex } from "@ngne/editor-ui/colour";
+import { BLACK, labelColourOn, WHITE } from "@ngne/editor-ui/colour";
 import { MAX_NAME_LENGTH } from "../../core/model";
 import { MAX_TAG_REPEAT } from "../../core/tags";
 import { TAG_COLOURS, tagProblems } from "../../app/timeline/tagDialogs";
 import type { TagDirection, TagRequest, TagValues } from "../../app/timeline/tagDialogs";
 import { cssColour } from "../colour/pickerMath";
-import { Button } from "../primitives/Button";
-import { Dialog } from "../primitives/Dialog";
-import { NumberField } from "../primitives/NumberField";
-import { SegmentedControl } from "../primitives/SegmentedControl";
-import { Select } from "../primitives/Select";
-import "../primitives/field.css";
+import { Button } from "@ngne/editor-ui/primitives";
+import { Dialog } from "@ngne/editor-ui/primitives";
+import { NumberField } from "@ngne/editor-ui/primitives";
+import { SegmentedControl } from "@ngne/editor-ui/primitives";
+import { Select } from "@ngne/editor-ui/primitives";
 import "./tags.css";
 
 const DIRECTIONS: readonly { value: TagDirection; label: string }[] = [

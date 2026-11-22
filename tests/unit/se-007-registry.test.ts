@@ -1,24 +1,24 @@
 import { readdirSync } from "node:fs";
 import { posix } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { appCommands, commandModulePaths } from "../../src/app/commands/appCommands";
-import { normalizeChord } from "../../src/app/commands/chord";
-import { invokeCommand } from "../../src/app/commands/invoke";
-import { buildContextMenu, buildMenu, menuCommands } from "../../src/app/commands/menuModel";
+import { appCommands, commandModulePaths } from "../../src/app/testing/pageModules";
+import { normalizeChord } from "@ngne/editor-ui/commands";
+import { invokeCommand } from "@ngne/editor-ui/commands";
+import { buildContextMenu, buildMenu, menuCommands } from "@ngne/editor-ui/commands";
 import { plannedCommands } from "../../src/app/commands/planned.commands";
-import type { MenuNode } from "../../src/app/commands/menuModel";
+import type { MenuNode } from "@ngne/editor-ui/commands";
 import {
-    CommandRegistryError,
+    RegistrationError as CommandRegistryError,
     createCommandRegistry,
     findChordConflicts,
     registerCommandModules,
-} from "../../src/app/commands/registry";
-import { KEY_CONTEXTS, MENU_BAR } from "../../src/app/commands/types";
-import type { CommandSpec } from "../../src/app/commands/types";
+} from "@ngne/editor-ui/commands";
+import { KEY_CONTEXTS, MENU_BAR } from "../../src/app/testing/pageModules";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { setKeyContext } from "../../src/app/keymap/contextState";
 import { sessionsStore } from "../../src/app/state/sessions";
 import { createDocument } from "../../src/core/model";
-import { contextMenuEntries } from "../../src/ui/commands/contextMenu";
+import { contextMenuEntries } from "@ngne/editor-ui/commands";
 import { renameCommand } from "./se-007-support";
 
 // SE-007: command registry, and the menus, context menus and shortcuts generated from it.

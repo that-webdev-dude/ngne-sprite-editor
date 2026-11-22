@@ -273,7 +273,7 @@ test("with 12 open tabs at 1280 px width every tab is reachable: the strip scrol
     const bar = region(page, "menu-bar");
     expect((await boxOf(bar)).height).toBe(36);
     const menus = await boxOf(bar.getByRole("menubar"));
-    const strip = await boxOf(bar.locator("[data-document-tabs]"));
+    const strip = await boxOf(bar.locator("[data-tab-strip]"));
     const trigger = await boxOf(bar.locator(".command-palette-trigger"));
     expect(strip.x).toBeGreaterThanOrEqual(menus.x + menus.width);
     expect(strip.x + strip.width).toBeLessThanOrEqual(trigger.x);

@@ -1,5 +1,5 @@
 // Ids of the tag commands (SE-023). The tag bar takes them from here, so it never loads a
-// `*.commands.ts` module before the registry does (appCommands.ts).
+// `*.commands.ts` module before the registry does (src/app/editorUi.ts).
 
 export const TAG_COMMANDS = {
     /** New Tag…: planned in the Frame menu. */

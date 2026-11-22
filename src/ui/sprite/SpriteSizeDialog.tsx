@@ -3,13 +3,12 @@ import { useId, useState } from "react";
 import { sizeProblems } from "../../app/sprite/dialogs";
 import type { SpriteSizeRequest, SpriteSizeValues } from "../../app/sprite/dialogs";
 import type { SpriteSizeMethod } from "../../core/sprite";
-import { Button } from "../primitives/Button";
-import { Dialog } from "../primitives/Dialog";
-import { Icon } from "../primitives/Icon";
-import { NumberField } from "../primitives/NumberField";
-import { SegmentedControl } from "../primitives/SegmentedControl";
-import { Toggle } from "../primitives/Toggle";
-import "../primitives/field.css";
+import { Button } from "@ngne/editor-ui/primitives";
+import { Dialog } from "@ngne/editor-ui/primitives";
+import { Icon } from "@ngne/editor-ui/primitives";
+import { NumberField } from "@ngne/editor-ui/primitives";
+import { SegmentedControl } from "@ngne/editor-ui/primitives";
+import { Toggle } from "@ngne/editor-ui/primitives";
 import "./sprite.css";
 
 const METHOD_OPTIONS: readonly { value: SpriteSizeMethod; label: string }[] = [

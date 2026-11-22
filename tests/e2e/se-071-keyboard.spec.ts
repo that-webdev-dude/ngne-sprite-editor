@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { JSHandle, Page } from "@playwright/test";
-import type * as CommandTypes from "../../src/app/commands/types";
+import type * as CommandTypes from "../../src/app/testing/pageModules";
 import { collectErrors, REGIONS, settleTimers } from "./se-006-support";
 import { menuTrigger } from "./se-007-support";
 import { activeOption, openPalette, paletteInput, paletteOption } from "./se-064-support";
@@ -163,7 +163,7 @@ test("every enabled command of the menu bar is reached with the arrow keys", asy
     await openRichDocument(page);
     await runCommand(page, "select.all");
     const { menus, expected } = await page.evaluate(async () => {
-        const path = "/src/app/commands/types.ts";
+        const path = "/src/app/testing/pageModules.ts";
         const { MENU_BAR } = (await import(/* @vite-ignore */ path)) as typeof CommandTypes;
         return {
             menus: [...MENU_BAR],

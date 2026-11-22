@@ -1,4 +1,4 @@
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { activeDocument, sessionsStore } from "../state/sessions";
 import type { OpenDocument } from "../state/sessions";
 import { toolState } from "../tools/activeTool";

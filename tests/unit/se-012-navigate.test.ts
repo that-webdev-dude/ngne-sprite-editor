@@ -16,7 +16,7 @@ import {
     createWheelZoom,
     WHEEL_ZOOM_TRAVEL,
     wheelPixels,
-} from "../../src/app/view/wheel";
+} from "@ngne/editor-ui/overlay";
 import {
     fitZoom,
     KEY_ZOOMS,

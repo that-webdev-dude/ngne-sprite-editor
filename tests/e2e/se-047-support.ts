@@ -125,7 +125,7 @@ export const tabs = (page: Page): Locator => tabList(page).getByRole("tab");
 
 /** The tab of the open document `id`. */
 export const tabOf = (page: Page, id: string): Locator =>
-    tabList(page).locator(`[data-document-tab="${id}"]`);
+    tabList(page).locator(`[data-tab="${id}"]`);
 
 export const overflowButton = (page: Page): Locator =>
     region(page, "menu-bar").getByRole("button", { name: "All documents" });

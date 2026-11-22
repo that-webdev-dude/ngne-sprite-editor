@@ -1,5 +1,5 @@
 import type { CanvasSizeRequest, SpriteSizeRequest } from "../../app/sprite/dialogs";
-import { commandDialog } from "../dialogs/registry";
+import { commandDialog } from "@ngne/editor-ui/messages";
 import { CanvasSizeDialog } from "./CanvasSizeDialog";
 import { SpriteSizeDialog } from "./SpriteSizeDialog";
 

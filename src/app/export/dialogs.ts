@@ -1,7 +1,7 @@
 import type { StoreApi } from "zustand/vanilla";
 import type { Pivot } from "../../core/sprite";
-import { commandDialogs, createDialogRequests, dialogView } from "../dialogs/dialogRequests";
-import type { DialogRequestBase, DialogRequests, DialogView } from "../dialogs/dialogRequests";
+import { commandDialogs, createDialogRequests, dialogView } from "@ngne/editor-ui/messages";
+import type { DialogRequestBase, DialogRequests, DialogView } from "@ngne/editor-ui/messages";
 import type { ExportSettingsPatch } from "./settingsPatch";
 
 /**

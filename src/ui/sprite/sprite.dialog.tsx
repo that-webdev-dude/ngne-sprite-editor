@@ -1,5 +1,5 @@
 import type { NewSpriteRequest, SpritePropertiesRequest } from "../../app/sprite/dialogs";
-import { commandDialog } from "../dialogs/registry";
+import { commandDialog } from "@ngne/editor-ui/messages";
 import { NewSpriteDialog } from "./NewSpriteDialog";
 import { SpritePropertiesDialog } from "./SpritePropertiesDialog";
 

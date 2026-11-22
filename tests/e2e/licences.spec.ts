@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { LICENCES_COMMAND } from "../../src/app/licences/licences.commands";
+import { LICENCES_COMMAND } from "@ngne/editor-ui/licences";
 import { collectErrors } from "./se-006-support";
 import { menuItem, menuTrigger, openEditor } from "./se-007-support";
 

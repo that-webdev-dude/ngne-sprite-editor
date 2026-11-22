@@ -25,7 +25,7 @@ export const emptyState = (page: Page) => region(page, "viewport").locator("[dat
 export const newSpriteButton = (page: Page) =>
     region(page, "viewport").getByRole("button", { name: "New sprite", exact: true });
 export const documentName = (page: Page) =>
-    region(page, "menu-bar").locator("[data-document-name]");
+    region(page, "menu-bar").locator('[role="tab"][aria-selected="true"] .tab-strip__name');
 
 export const newSpriteDialog = (page: Page) => page.getByRole("dialog", { name: "New sprite" });
 export const discardDialog = (page: Page) =>

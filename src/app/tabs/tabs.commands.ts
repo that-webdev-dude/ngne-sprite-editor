@@ -1,4 +1,4 @@
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { sessionsStore } from "../state/sessions";
 import { activateDocument, neighbourOf, tabsAvailable } from "./tabs";
 

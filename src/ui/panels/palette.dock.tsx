@@ -1,6 +1,6 @@
 import { PaletteGrid } from "../colour/PaletteGrid";
 import { PaletteHeader } from "../colour/PaletteHeader";
-import type { DockPanel } from "../dock/registry";
+import type { DockPanel } from "@ngne/editor-ui/shell";
 
 /**
  * The palette (DESIGN §5.4, SE-060): the grid of the document palette, and in the header the

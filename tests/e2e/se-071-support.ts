@@ -1,12 +1,12 @@
 import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
-import type * as DialogRequestsModule from "../../src/app/dialogs/dialogRequests";
-import type * as SurfacesModule from "../../src/app/surfaces/surfaces";
+import type * as DialogRequestsModule from "../../src/app/testing/pageModules";
+import type * as SurfacesModule from "../../src/app/testing/pageModules";
 import type * as CoreModel from "../../src/core/model";
-import type * as StorageModule from "../../src/app/platform/storage";
-import type * as DialogRegistryModule from "../../src/ui/dialogs/registry";
-import type * as UpdateToastModule from "../../src/ui/pwa/updateToast";
-import type * as ToastModule from "../../src/ui/toast/toast";
+import type * as StorageModule from "../../src/app/testing/pageModules";
+import type * as DialogRegistryModule from "../../src/app/testing/pageModules";
+import type * as UpdateToastModule from "../../src/app/testing/pageModules";
+import type * as ToastModule from "../../src/app/testing/pageModules";
 import { settleTimers } from "./se-006-support";
 import { openEditor, rename } from "./se-007-support";
 import { audit, startInTheme } from "./se-008-support";
@@ -361,9 +361,11 @@ export function openKind(page: Page): Promise<string | null> {
     return page.evaluate(async () => {
         const load = (path: string) => import(/* @vite-ignore */ path);
         const { commandDialogs } = (await load(
-            "/src/app/dialogs/dialogRequests.ts",
+            "/src/app/testing/pageModules.ts",
         )) as typeof DialogRequestsModule;
-        const { surfaces } = (await load("/src/app/surfaces/surfaces.ts")) as typeof SurfacesModule;
+        const { surfaces } = (await load(
+            "/src/app/testing/pageModules.ts",
+        )) as typeof SurfacesModule;
         return commandDialogs.store.getState().request?.kind ?? surfaces.store.getState().open;
     });
 }
@@ -373,10 +375,10 @@ export function registeredSurfaceKinds(page: Page): Promise<string[]> {
     return page.evaluate(async () => {
         const load = (path: string) => import(/* @vite-ignore */ path);
         const { registeredDialogs } = (await load(
-            "/src/ui/dialogs/registry.ts",
+            "/src/app/testing/pageModules.ts",
         )) as typeof DialogRegistryModule;
         const { SURFACE_IDS } = (await load(
-            "/src/app/surfaces/surfaces.ts",
+            "/src/app/testing/pageModules.ts",
         )) as typeof SurfacesModule;
         return [...registeredDialogs.keys(), ...SURFACE_IDS].sort();
     });
@@ -813,7 +815,7 @@ export function layoutProblems(page: Page, selector = "body"): Promise<string[]>
 }
 
 /** The region that holds the toasts. */
-export const NOTIFICATIONS = '[role="region"][aria-label="Notifications"]';
+export const NOTIFICATIONS = 'section.ui-toasts[aria-label="Notifications"]';
 
 /**
  * Shows one toast of every kind the app shows: an information toast, an error toast, SE-072's
@@ -823,12 +825,12 @@ export const NOTIFICATIONS = '[role="region"][aria-label="Notifications"]';
 export async function showEveryToast(page: Page): Promise<number> {
     await page.evaluate(async () => {
         const load = (path: string) => import(/* @vite-ignore */ path);
-        const { toast } = (await load("/src/ui/toast/toast.ts")) as typeof ToastModule;
+        const { toast } = (await load("/src/app/testing/pageModules.ts")) as typeof ToastModule;
         const { UPDATE_MESSAGE } = (await load(
-            "/src/ui/pwa/updateToast.ts",
+            "/src/app/testing/pageModules.ts",
         )) as typeof UpdateToastModule;
         const { STORAGE_WRITE_FAILED_MESSAGE } = (await load(
-            "/src/app/platform/storage.ts",
+            "/src/app/testing/pageModules.ts",
         )) as typeof StorageModule;
         toast.info("Saved hero.ngsprite");
         toast.error("Could not open “hero.ngsprite”. The file is not a sprite project.");
@@ -845,7 +847,7 @@ export async function showEveryToast(page: Page): Promise<number> {
 /** Dismisses every toast on screen (the information toast without an action expires). */
 export async function dismissEveryToast(page: Page): Promise<void> {
     await page.evaluate(async () => {
-        const path = "/src/ui/toast/toast.ts";
+        const path = "/src/app/testing/pageModules.ts";
         const { toast } = (await import(/* @vite-ignore */ path)) as typeof ToastModule;
         for (const item of toast.store.getState().toasts) toast.dismiss(item.id);
     });

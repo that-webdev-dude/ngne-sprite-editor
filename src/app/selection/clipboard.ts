@@ -3,7 +3,7 @@ import { clearSelected, contentOfImage, copySelected, fillSelected } from "../..
 import type { FloatingContent } from "../../core/floating";
 import type { PixelBuffer } from "../../core/model";
 import { decodePng, encodePng } from "../../core/png";
-import type { Notices } from "../notices/notices";
+import type { Notices } from "@ngne/editor-ui/messages";
 import type { SystemClipboard } from "../platform/clipboard";
 import { activeDocument } from "../state/sessions";
 import type { OpenDocument, SessionsState } from "../state/sessions";

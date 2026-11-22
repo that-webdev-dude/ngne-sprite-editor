@@ -1,5 +1,5 @@
-import { commandDialogs, createDialogRequests, dialogView } from "../dialogs/dialogRequests";
-import type { DialogRequestBase, DialogRequests, DialogView } from "../dialogs/dialogRequests";
+import { commandDialogs, createDialogRequests, dialogView } from "@ngne/editor-ui/messages";
+import type { DialogRequestBase, DialogRequests, DialogView } from "@ngne/editor-ui/messages";
 
 /**
  * The dialog of Export GIF… (SPEC §9.6, DESIGN §7; SE-063): which frames (every frame or one

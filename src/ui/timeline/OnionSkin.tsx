@@ -1,20 +1,19 @@
 import { Blend, SlidersHorizontal } from "lucide-react";
 import { memo, useMemo, useSyncExternalStore } from "react";
-import { appCommands } from "../../app/commands/appCommands";
-import { formatChord } from "../../app/commands/chord";
+import { useEditorUi } from "@ngne/editor-ui";
+import { formatChord } from "@ngne/editor-ui/commands";
 import { ONION_SETTINGS_COMMAND, ONION_SKIN_COMMAND } from "../../app/onion/onion.commands";
 import { withOnionPatch } from "../../app/onion/onion";
 import { activeDocument, sessionsStore } from "../../app/state/sessions";
 import type { OnionSettings } from "../../core/model";
-import { runCommand } from "../commands/runCommand";
-import { Icon } from "../primitives/Icon";
-import { IconButton } from "../primitives/IconButton";
-import { NumberField } from "../primitives/NumberField";
-import { Popover } from "../primitives/Popover";
-import { SegmentedControl } from "../primitives/SegmentedControl";
-import { Slider } from "../primitives/Slider";
-import { Toggle } from "../primitives/Toggle";
-import "../primitives/field.css";
+import { runAppCommand } from "../../app/editorUiHandle";
+import { Icon } from "@ngne/editor-ui/primitives";
+import { IconButton } from "@ngne/editor-ui/primitives";
+import { NumberField } from "@ngne/editor-ui/primitives";
+import { Popover } from "@ngne/editor-ui/primitives";
+import { SegmentedControl } from "@ngne/editor-ui/primitives";
+import { Slider } from "@ngne/editor-ui/primitives";
+import { Toggle } from "@ngne/editor-ui/primitives";
 
 // The onion skin controls of the transport (DESIGN §5.6, §7; SE-025): the toggle, which runs
 // View → Show/Hide Onion Skin (F3), and the button of the settings popover beside it. The
@@ -39,9 +38,10 @@ function useOnion(): OnionSettings | null {
 
 /** The shortcut of the toggle, as menus show it. */
 function useToggleShortcut(): string | undefined {
+    const { commands } = useEditorUi();
     const chord = useSyncExternalStore(
-        appCommands.subscribe,
-        () => appCommands.get(ONION_SKIN_COMMAND)?.shortcuts[0] ?? null,
+        (listener) => commands.subscribe(listener),
+        () => commands.get(ONION_SKIN_COMMAND)?.shortcuts[0] ?? null,
     );
     return chord ? formatChord(chord) : undefined;
 }
@@ -50,7 +50,7 @@ function useToggleShortcut(): string | undefined {
 function OnionFields({ onion }: { onion: OnionSettings }) {
     // Through the registry (SPEC §5): Apply Onion Skin Settings, the change handed to it.
     const set = (patch: Partial<OnionSettings>) =>
-        withOnionPatch(patch, () => void runCommand(ONION_SETTINGS_COMMAND));
+        withOnionPatch(patch, () => void runAppCommand(ONION_SETTINGS_COMMAND));
     return (
         <div className="timeline-onion">
             <NumberField
@@ -128,7 +128,7 @@ export const OnionSkinControls = memo(function OnionSkinControls() {
                 pressed={onion?.enabled ?? false}
                 disabled={!onion}
                 data-command={ONION_SKIN_COMMAND}
-                onPressedChange={() => runCommand(ONION_SKIN_COMMAND)}
+                onPressedChange={() => runAppCommand(ONION_SKIN_COMMAND)}
             >
                 <Icon icon={Blend} />
             </Toggle>

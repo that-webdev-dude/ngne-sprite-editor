@@ -1,8 +1,8 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
-import { buildMenu, menuCommands } from "../../src/app/commands/menuModel";
+import { appCommands } from "../../src/app/testing/pageModules";
+import { buildMenu, menuCommands } from "@ngne/editor-ui/commands";
 import { plannedCommands } from "../../src/app/commands/planned.commands";
-import type { Command } from "../../src/app/commands/types";
+import type { Command } from "@ngne/editor-ui/commands";
 import { preferences } from "../../src/app/preferences/preferences";
 import {
     createSpriteDialogs,

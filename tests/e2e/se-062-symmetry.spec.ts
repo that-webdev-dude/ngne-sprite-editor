@@ -66,7 +66,9 @@ test("the View menu's toggles switch each axis on and off, titled by what choosi
     await chooseFromView(page, "view.tiledY");
     expect(await symmetryOf(page)).toMatchObject({ mode: "both", tiled: "y" });
     expect(await activeState(page)).toMatchObject({ undo: 0, dirty: false });
-    await expect(page.locator("[data-unsaved-marker]")).toHaveCount(0);
+    await expect(page.locator('[role="tab"][aria-selected="true"] [data-tab-unsaved]')).toHaveCount(
+        0,
+    );
 
     await openMenu(page, "View");
     await expect(menuItem(page, "view.symmetryX")).toHaveText("Turn Off Horizontal Symmetry");

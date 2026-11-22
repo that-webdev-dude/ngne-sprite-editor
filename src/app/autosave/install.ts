@@ -1,4 +1,4 @@
-import { notices } from "../notices/notices";
+import { notices } from "@ngne/editor-ui/messages";
 import { preferences } from "../preferences/preferences";
 import { floatingState } from "../selection/floatingState";
 import { activeComposites } from "../state/composites";

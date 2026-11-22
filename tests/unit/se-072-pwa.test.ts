@@ -2,8 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { ICONS, ICONS_DIR, drawIcon, iconPng, pwaColours } from "../../scripts/icons";
 import {
-    CACHE_PREFIX,
-    SKIP_WAITING,
     cacheName,
     cacheable,
     mayDeleteStale,
@@ -13,15 +11,16 @@ import {
     searchOrder,
     staleCaches,
     uniqueEntries,
-} from "../../src/app/pwa/precache";
-import type { PrecacheEntry } from "../../src/app/pwa/precache";
+} from "@ngne/editor-ui/pwa";
+import { CACHE_PREFIX, SKIP_WAITING } from "../../src/app/pwa/precache";
+import type { PrecacheEntry } from "@ngne/editor-ui/pwa";
 import { installLaunchQueue, launchedFile } from "../../src/app/pwa/launchQueue";
 import type { LaunchTarget } from "../../src/app/pwa/launchQueue";
 import type { ChosenFile } from "../../src/app/platform/projectFiles";
-import { RELOAD_KEPT_MS, registerAppUpdates } from "../../src/app/pwa/updates";
-import { showUpdateToast, UPDATE_MESSAGE } from "../../src/ui/pwa/updateToast";
-import type { ContainerLike, RegistrationLike, WorkerLike } from "../../src/app/pwa/updates";
-import { createToastService, INFO_TOAST_MS } from "../../src/ui/toast/toast";
+import { RELOAD_KEPT_MS, registerAppUpdates } from "@ngne/editor-ui/pwa";
+import { showUpdateToast, UPDATE_MESSAGE } from "@ngne/editor-ui/pwa";
+import type { ContainerLike, RegistrationLike, WorkerLike } from "@ngne/editor-ui/pwa";
+import { createToastService, INFO_TOAST_MS } from "@ngne/editor-ui/messages";
 
 // SE-072: the parts of the installable app that run without a browser: the service worker's
 // cache and routing rules, the page's update flow over a fake service worker container, the

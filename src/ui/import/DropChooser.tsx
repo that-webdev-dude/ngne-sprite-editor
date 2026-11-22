@@ -1,9 +1,8 @@
 import { Popover as RadixPopover } from "radix-ui";
 import { useRef } from "react";
 import type { DropChooserRequest } from "../../app/import/importDialog";
-import { surfaceOpener } from "../focus/menuOpener";
-import { Button } from "../primitives/Button";
-import "../primitives/popover.css";
+import { surfaceOpener } from "@ngne/editor-ui/focus";
+import { Button } from "@ngne/editor-ui/primitives";
 import "./import.css";
 
 /**

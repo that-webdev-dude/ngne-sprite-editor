@@ -1,9 +1,9 @@
 import { useEffect } from "react";
 import { installAutosave } from "../../app/autosave/install";
 import { installFileWorkflows } from "../../app/file/install";
-import { notices } from "../../app/notices/notices";
+import { notices } from "@ngne/editor-ui/messages";
 import { installLaunchQueue } from "../../app/pwa/launchQueue";
-import { toast } from "../toast/toast";
+import { toast } from "@ngne/editor-ui/messages";
 
 /**
  * The page-wide parts of the file workflows (SE-041): the unload guard while a document is

@@ -8,9 +8,9 @@ import { clickTimeline } from "../../app/timeline/timelineClicks";
 import { TIMELINE_COMMANDS } from "../../app/timeline/timelineCommandIds";
 import type { CelState, TimelineLayer, TimelineReference } from "../../app/timeline/timelineModel";
 import { cancelRename, setRenameText, withArguments } from "../../app/timeline/timelineState";
-import { runCommand } from "../commands/runCommand";
-import { Icon } from "../primitives/Icon";
-import { Toggle } from "../primitives/Toggle";
+import { runAppCommand } from "../../app/editorUiHandle";
+import { Icon } from "@ngne/editor-ui/primitives";
+import { Toggle } from "@ngne/editor-ui/primitives";
 import { renderedColumns, windowColumns } from "./gridWindow";
 import type { GridWindowStore } from "./gridWindow";
 import { CELL_ATTRIBUTE, CELL_WIDTH, modifiersOf, TIMELINE_FIELD_ATTRIBUTE } from "./timelineDom";
@@ -53,7 +53,7 @@ export interface LayerRowProps {
 
 /** Runs a layer command on this row's layer rather than on the active one. */
 function runOnLayer(layerId: string, commandId: string): void {
-    withArguments({ layerTarget: layerId }, () => void runCommand(commandId));
+    withArguments({ layerTarget: layerId }, () => void runAppCommand(commandId));
 }
 
 /** A press on a control of the row header is the control's, not a selection of the layer. */
@@ -80,7 +80,7 @@ function RenameField({ name, onEnd }: { name: string; onEnd(): void }) {
             onKeyDown={(event) => {
                 if (event.key === "Enter") {
                     event.preventDefault();
-                    runCommand(TIMELINE_COMMANDS.applyLayerName);
+                    runAppCommand(TIMELINE_COMMANDS.applyLayerName);
                     onEnd();
                 } else if (event.key === "Escape") {
                     event.preventDefault();
@@ -89,7 +89,7 @@ function RenameField({ name, onEnd }: { name: string; onEnd(): void }) {
                 }
             }}
             // Leaving the field keeps what was typed, as Enter does.
-            onBlur={() => void runCommand(TIMELINE_COMMANDS.applyLayerName)}
+            onBlur={() => void runAppCommand(TIMELINE_COMMANDS.applyLayerName)}
         />
     );
 }

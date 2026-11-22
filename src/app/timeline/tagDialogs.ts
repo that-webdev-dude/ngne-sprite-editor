@@ -1,13 +1,13 @@
 import { MAX_NAME_LENGTH } from "../../core/model";
 import type { Tag } from "../../core/model";
 import { isTagRepeat, MAX_TAG_REPEAT } from "../../core/tags";
-import { commandDialogs, createDialogRequests, dialogView } from "../dialogs/dialogRequests";
+import { commandDialogs, createDialogRequests, dialogView } from "@ngne/editor-ui/messages";
 import type {
     DialogRequestBase,
     DialogRequests,
     DialogState,
     DialogView,
-} from "../dialogs/dialogRequests";
+} from "@ngne/editor-ui/messages";
 
 /**
  * The Tag dialog of the tag commands (DESIGN §7, SE-023): name, colour, range, direction and

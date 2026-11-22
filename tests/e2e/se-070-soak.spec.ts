@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 import type { CDPSession, Locator, Page } from "@playwright/test";
-import type * as CommandsModule from "../../src/app/commands/appCommands";
-import type * as EnvironmentModule from "../../src/app/keymap/environment";
-import type * as ResolveModule from "../../src/app/keymap/resolve";
+import type * as CommandsModule from "../../src/app/testing/pageModules";
+import type * as EnvironmentModule from "../../src/app/testing/pageModules";
+import type * as ResolveModule from "../../src/app/testing/pageModules";
 import type * as PlaybackModule from "../../src/app/playback/playbackState";
 import type * as CoreModel from "../../src/core/model";
 import { collectErrors, settleTimers } from "./se-006-support";
@@ -167,13 +167,13 @@ function runPicked(page: Page, pick: number): Promise<Picked> {
     return page.evaluate(async (pick) => {
         const load = (path: string) => import(/* @vite-ignore */ path);
         const { appCommands } = (await load(
-            "/src/app/commands/appCommands.ts",
+            "/src/app/testing/pageModules.ts",
         )) as typeof CommandsModule;
         const { readKeyEnvironment } = (await load(
-            "/src/app/keymap/environment.ts",
+            "/src/app/testing/pageModules.ts",
         )) as typeof EnvironmentModule;
         const { applicableContexts } = (await load(
-            "/src/app/keymap/resolve.ts",
+            "/src/app/testing/pageModules.ts",
         )) as typeof ResolveModule;
         const { keepsPlaying, stopPlaybackForEdit } = (await load(
             "/src/app/playback/playbackState.ts",

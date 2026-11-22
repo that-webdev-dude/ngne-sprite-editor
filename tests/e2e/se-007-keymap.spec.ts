@@ -1,11 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
-import { chordKey, chordModifiers } from "../../src/app/commands/chord";
-import {
-    isBrowserChord,
-    isCharacterChord,
-    isTextEditingChord,
-} from "../../src/app/keymap/keyClasses";
+import { chordKey, chordModifiers } from "@ngne/editor-ui/commands";
+import { isBrowserChord, isCharacterChord, isTextEditingChord } from "@ngne/editor-ui/commands";
 import { region, settleTimers } from "./se-006-support";
 import { CHROME_RESERVED_CHORDS, readSpecKeyTable } from "./se-007-spec-keys";
 import type { SpecBinding } from "./se-007-spec-keys";

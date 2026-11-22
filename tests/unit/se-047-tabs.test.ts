@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createStore } from "zustand/vanilla";
-import { appCommands } from "../../src/app/commands/appCommands";
-import type { Command } from "../../src/app/commands/types";
+import { appCommands } from "../../src/app/testing/pageModules";
+import type { Command } from "@ngne/editor-ui/commands";
 import { keepOrderBeforeSort, originalOrderOf } from "../../src/app/palette/paletteOrder";
 import type { PaletteState } from "../../src/app/palette/paletteState";
 import { editorPlayback, playbackTime } from "../../src/app/playback/playback";

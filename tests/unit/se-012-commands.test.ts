@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
-import { buildMenu, menuCommands } from "../../src/app/commands/menuModel";
+import { appCommands } from "../../src/app/testing/pageModules";
+import { buildMenu, menuCommands } from "@ngne/editor-ui/commands";
 import { plannedCommands } from "../../src/app/commands/planned.commands";
-import { findChordConflicts } from "../../src/app/commands/registry";
+import { findChordConflicts } from "@ngne/editor-ui/commands";
 import { activeDocument, isDirty, sessionsStore } from "../../src/app/state/sessions";
 import { fitView, visibleExtent } from "../../src/app/view/navigate";
 import {

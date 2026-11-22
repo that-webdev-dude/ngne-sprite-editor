@@ -4,10 +4,9 @@ import type { RefObject } from "react";
 import { APPLY_EDIT } from "../../app/palette/paletteCommandIds";
 import { dropSwatchEdit, paletteStore, usePaletteState } from "../../app/palette/paletteState";
 import { useSessions } from "../../app/state/sessions";
-import { runCommand } from "../commands/runCommand";
+import { runAppCommand } from "../../app/editorUiHandle";
 import { ColourPicker } from "./ColourPicker";
 import { PALETTE_GRID_ATTRIBUTE, swatchElement } from "./paletteUi";
-import "../primitives/popover.css";
 
 // The swatch editor (DESIGN §5.4, SE-060): the colour picker of DESIGN §5.3 in a popover
 // (DESIGN §4) beside the swatch that Edit Colour… opened it on. The picker edits a draft; the
@@ -29,7 +28,7 @@ function applyTyping(container: HTMLElement | null): void {
 /** Ends the open swatch edit through the registry. */
 function applyEdit(): void {
     if (!paletteStore.getState().edit) return;
-    if (!runCommand(APPLY_EDIT)) dropSwatchEdit();
+    if (!runAppCommand(APPLY_EDIT)) dropSwatchEdit();
 }
 
 export function SwatchEditor({ fallback }: { fallback: RefObject<HTMLElement | null> }) {

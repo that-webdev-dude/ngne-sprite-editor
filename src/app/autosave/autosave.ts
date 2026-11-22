@@ -5,7 +5,7 @@ import { celKey, randomId } from "../../core/model";
 import type { Cel, DocSession, PixelBuffer, SpriteDoc, Touched } from "../../core/model";
 import { resizeNearest } from "../../core/pixels";
 import { PROJECT_VERSION, THUMBNAIL_MAX_SIDE, docToJson } from "../../core/project";
-import type { Notices } from "../notices/notices";
+import type { Notices } from "@ngne/editor-ui/messages";
 import type { PreferenceStore } from "../preferences/preferences";
 import type { ActiveComposites } from "../state/composites";
 import { isDirty } from "../state/sessions";

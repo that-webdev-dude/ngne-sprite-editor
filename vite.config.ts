@@ -1,20 +1,11 @@
 import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { appInfoDefines } from "@ngne/editor-ui/about/build";
+import { generateLicences } from "@ngne/editor-ui/licences/build";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import type { Plugin, PluginOption } from "vite";
-import { appInfoDefines } from "./scripts/appInfo.ts";
-import {
-    LICENCES_FILE,
-    LicenceError,
-    buildLicencesFile,
-    excludedCodeIn,
-    packageDirsOf,
-    runtimePackageDirs,
-    strayPackages,
-    unlistedPackages,
-} from "./scripts/licences.ts";
+import { BUILD_PACKAGES, EXCLUDED_CODE } from "./scripts/licenceRules.ts";
 
 // SE-072: the PWA build plugin (vite-plugin-pwa, a development dependency). Its declarations
 // do not compile under this project's `skipLibCheck: false`: they import the types of an
@@ -30,7 +21,6 @@ interface PwaOptions {
     injectManifest: {
         globPatterns: string[];
         maximumFileSizeToCacheInBytes: number;
-        buildPlugins: { vite: Plugin[] };
     };
     manifest: Record<string, unknown>;
 }
@@ -39,9 +29,15 @@ const { VitePWA } = (await import(PWA_PLUGIN)) as {
     VitePWA(options: PwaOptions): PluginOption;
 };
 
-/** A colour of the design tokens' default (dark) set, as `#rrggbb` (DESIGN §3.1). */
+/**
+ * A colour of the design tokens' default (dark) set, as `#rrggbb` (DESIGN §3.1): the first
+ * `:root` rule of the package's stylesheet, which starts with its tokens.
+ */
 function tokenColour(name: string): string {
-    const css = readFileSync(new URL("src/ui/styles/tokens.css", import.meta.url), "utf8");
+    const css = readFileSync(
+        new URL("node_modules/@ngne/editor-ui/dist/styles.css", import.meta.url),
+        "utf8",
+    );
     const root = /:root\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
     const value = new RegExp(String.raw`${name}:\s*(#[0-9a-f]{6})\s*;`).exec(root)?.[1];
     if (!value) throw new Error(`vite.config: no colour token ${name}`);
@@ -77,160 +73,24 @@ const ROOT = fileURLToPath(new URL(".", import.meta.url));
 const TITLE = "NGNE Sprite Editor";
 
 /**
- * Build tools whose own code the bundle holds although no module imports it: Rolldown writes
- * its runtime helpers into every build, so its licence is listed with the bundled packages.
- * The module-preload polyfill is turned off (`build.modulePreload`), so Vite writes none.
+ * The open-source licences file (@ngne/editor-ui/licences/build): `licences.txt` beside
+ * `index.html`, with the licence of every package whose code the build bundled, each of them a
+ * runtime dependency of package-lock.json; the web workers' builds note their modules for it.
+ * The development server answers the same address. A package without an allowed licence, or
+ * code the build must leave out (`EXCLUDED_CODE`), fails the build.
  */
-const BUILD_PACKAGES: readonly string[] = [join(ROOT, "node_modules", "rolldown")];
-
-/** The ids of the modules the build's chunks render, the web workers' included. */
-const bundledModules = new Set<string>();
-
-/** The packages licences.txt lists, once the app's build has made it; null before. */
-let listedDirs: string[] | null = null;
-
-/** An output of a build, as far as `noteModules` and `rejectExcluded` read it. */
-type BundleOutput =
-    | {
-          type: "chunk";
-          fileName: string;
-          code: string;
-          modules: Record<string, { renderedLength: number }>;
-      }
-    | { type: "asset"; fileName: string; source: string | Uint8Array };
-
-/** The JavaScript of an output of a build: a chunk's code, a `.js` asset's text, otherwise "". */
-function javaScriptOf(output: BundleOutput): string {
-    if (output.type === "chunk") return output.code;
-    if (output.fileName.endsWith(".js") && typeof output.source === "string") return output.source;
-    return "";
-}
-
-/**
- * Fails the build when a JavaScript file of `bundle` holds code the build must leave out
- * (`EXCLUDED_CODE` of scripts/licences.ts), such as gifenc's quantizer without the alias below.
- */
-function rejectExcluded(
-    bundle: Record<string, BundleOutput>,
-    fail: (message: string) => never,
-): void {
-    for (const output of Object.values(bundle)) {
-        const found = excludedCodeIn(javaScriptOf(output));
-        if (found.length > 0) {
-            fail(
-                `The build bundles code it must leave out, in ${output.fileName}: ${found.join("; ")}.`,
-            );
-        }
-    }
-}
-
-/** The ids of the modules that the chunks of `bundle` render code of. */
-function renderedModules(bundle: Record<string, BundleOutput>): string[] {
-    return Object.values(bundle).flatMap((output) =>
-        output.type === "chunk"
-            ? Object.entries(output.modules)
-                  .filter(([, module]) => module.renderedLength > 0)
-                  .map(([id]) => id)
-            : [],
-    );
-}
-
-/** Notes the modules of every chunk of `bundle` that renders code. */
-function noteModules(bundle: Record<string, BundleOutput>): void {
-    for (const id of renderedModules(bundle)) bundledModules.add(id);
-}
-
-/** Notes the modules of a web worker's build; the workers are built before the app's chunks. */
-function collectModules(): Plugin {
-    return {
-        name: "ngne-licences-collect",
-        apply: "build",
-        generateBundle(_options, bundle) {
-            noteModules(bundle);
-            rejectExcluded(bundle, (message) => this.error(message));
-        },
-    };
-}
-
-/**
- * The open-source licences file (scripts/licences.ts): `licences.txt` beside `index.html`,
- * with the licence of every package whose code the build bundled, each of them a runtime
- * dependency of package-lock.json. The development server answers the same address with the
- * runtime dependencies' licences. A package without an allowed licence fails the build.
- */
-function licencesFile(): Plugin {
-    const runtime = () =>
-        runtimePackageDirs(readFileSync(join(ROOT, "package-lock.json"), "utf8"), ROOT);
-    return {
-        name: "ngne-licences",
-        configureServer(server) {
-            server.middlewares.use((request, response, next) => {
-                const path = (request.url ?? "").split("?")[0];
-                if (path !== `${server.config.base}${LICENCES_FILE}`) return next();
-                try {
-                    const text = buildLicencesFile(ROOT, runtime(), TITLE);
-                    response.setHeader("Content-Type", "text/plain; charset=utf-8");
-                    response.end(text);
-                } catch (error) {
-                    next(error);
-                }
-            });
-        },
-        generateBundle: {
-            order: "post",
-            handler(_options, bundle) {
-                noteModules(bundle);
-                rejectExcluded(bundle, (message) => this.error(message));
-                const dirs = packageDirsOf(bundledModules);
-                const strays = strayPackages(dirs, runtime());
-                if (strays.length > 0) {
-                    this.error(
-                        "The build bundles code of packages that are not runtime dependencies " +
-                            `in package-lock.json: ${strays.join(", ")}.`,
-                    );
-                }
-                try {
-                    listedDirs = [...dirs, ...BUILD_PACKAGES];
-                    this.emitFile({
-                        type: "asset",
-                        fileName: LICENCES_FILE,
-                        source: buildLicencesFile(ROOT, listedDirs, TITLE),
-                    });
-                } catch (error) {
-                    if (error instanceof LicenceError) this.error(error.message);
-                    throw error;
-                }
-            },
-        },
-    };
-}
-
-/**
- * The service worker's build (`sw.js`), which runs after the app's: it must bundle no code of
- * a package that licences.txt does not list, nor code the build must leave out.
- */
-function serviceWorkerLicences(): Plugin {
-    return {
-        name: "ngne-licences-service-worker",
-        apply: "build",
-        generateBundle(_options, bundle) {
-            rejectExcluded(bundle, (message) => this.error(message));
-            const unlisted = unlistedPackages(renderedModules(bundle), listedDirs);
-            if (unlisted.length > 0) {
-                this.error(
-                    "The service worker bundles code of packages that licences.txt does not " +
-                        `list: ${unlisted.join(", ")}.`,
-                );
-            }
-        },
-    };
-}
+const licences = generateLicences({
+    root: ROOT,
+    title: TITLE,
+    buildPackages: BUILD_PACKAGES,
+    excludedCode: EXCLUDED_CODE,
+});
 
 export default defineConfig(({ command }) => ({
     plugins: [
         react(),
         // The open-source licences of what the build ships (licences.txt).
-        licencesFile(),
+        licences.plugin as unknown as Plugin,
         // The colour of the browser's chrome around the page, as the installed window's.
         {
             name: "ngne-theme-color",
@@ -261,8 +121,6 @@ export default defineConfig(({ command }) => ({
                 // The main chunk holds NGNE and React; a build with the development test hooks
                 // (tests/e2e/se-072-support.ts) is several times larger.
                 maximumFileSizeToCacheInBytes: 32 * 1024 * 1024,
-                // The worker's own build checks its packages against licences.txt.
-                buildPlugins: { vite: [serviceWorkerLicences()] },
             },
             manifest: {
                 // The app's identity. Browsers resolve `id` against the origin, not against the
@@ -300,7 +158,7 @@ export default defineConfig(({ command }) => ({
         "import.meta.env.SERVICE_WORKER": JSON.stringify(command === "build"),
         // The app's name, version and licence and the engine's version, from package.json
         // (the About dialog, src/app/about/appInfo.ts).
-        ...appInfoDefines(ROOT),
+        ...appInfoDefines(fileURLToPath(new URL("package.json", import.meta.url))),
     },
     resolve: {
         // gifenc's `main` and `browser` fields name its CommonJS build, which the bundler
@@ -310,7 +168,7 @@ export default defineConfig(({ command }) => ({
         alias: [{ find: /^gifenc$/, replacement: "gifenc/dist/gifenc.esm.js" }],
     },
     // The web workers' builds note their modules for the licences file.
-    worker: { plugins: () => [collectModules()] },
+    worker: { plugins: () => [licences.workerPlugin as unknown as Plugin] },
     // No module-preload polyfill: every browser with WebGPU preloads modules itself, and the
     // bundle then holds no code of Vite's beyond Rolldown's runtime (BUILD_PACKAGES).
     build: { target: "es2022", modulePreload: { polyfill: false } },

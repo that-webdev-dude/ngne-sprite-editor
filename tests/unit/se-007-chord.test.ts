@@ -7,14 +7,14 @@ import {
     eventKey,
     formatChord,
     normalizeChord,
-} from "../../src/app/commands/chord";
-import type { KeyEventLike } from "../../src/app/commands/chord";
+} from "@ngne/editor-ui/commands";
+import type { KeyEventLike } from "@ngne/editor-ui/commands";
 import {
     isBrowserChord,
     isCharacterChord,
     isNativeKeyChord,
     isTextEditingChord,
-} from "../../src/app/keymap/keyClasses";
+} from "@ngne/editor-ui/commands";
 
 // SE-007: chord notation and chord matching (SPEC §7.8).
 

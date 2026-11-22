@@ -1,7 +1,7 @@
 import { moveFramesCommand, reverseFramesCommand } from "../../core/frames";
 import { flattenCommand, isFlat, mergeDownCommand, mergeDownTarget } from "../../core/layers";
 import type { SpriteDoc } from "../../core/model";
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import type { OpenDocument } from "../state/sessions";
 import {
     anyFilled,

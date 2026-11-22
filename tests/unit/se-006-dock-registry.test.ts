@@ -1,7 +1,8 @@
 import { readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { collectDockPanels, dockPanels } from "../../src/ui/dock/registry";
-import type { DockPanel } from "../../src/ui/dock/registry";
+import { collectDockPanels } from "@ngne/editor-ui/shell";
+import { dockPanels } from "../../src/app/testing/pageModules";
+import type { DockPanel } from "@ngne/editor-ui/shell";
 
 // A dock panel registers from its own module and the registry
 // discovers it; no shared file is edited.

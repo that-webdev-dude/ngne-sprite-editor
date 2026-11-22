@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { oklabToSrgb8, srgb8ToOklab, writeOklab } from "../../src/core/color";
+import { oklabToSrgb8, srgb8ToOklab, writeOklab } from "@ngne/editor-ui/colour";
 
 describe("srgb8ToOklab", () => {
     // Reference values: the OKLab coordinates of the sRGB primaries and of white, as given by

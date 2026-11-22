@@ -8,7 +8,7 @@ import { it } from "vitest";
 // Declares `window.__ngneTest` with the viewport, overlay and ants probes (development builds).
 import type {} from "../../src/app/overlay/mountOverlay";
 import type {} from "../../src/app/selection/selectionAnts.overlay";
-import type * as OverlayLayersModule from "../../src/app/overlay/overlayLayers";
+import type * as OverlayLayersModule from "../../src/app/testing/pageModules";
 import type {} from "../../src/app/testing/testHooks";
 import type {} from "../../src/app/viewport/mountViewport";
 import type * as CoreModel from "../../src/core/model";
@@ -162,7 +162,7 @@ async function quiet(page: Page): Promise<void> {
 /** Wraps every draw layer of the overlay so that each redraw records its layers' times. */
 async function instrument(page: Page): Promise<void> {
     await page.evaluate(async () => {
-        const path = "/src/app/overlay/overlayLayers.ts";
+        const path = "/src/app/testing/pageModules.ts";
         const load = new Function("path", "return import(path)") as (
             path: string,
         ) => Promise<typeof OverlayLayersModule>;

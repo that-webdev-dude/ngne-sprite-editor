@@ -8,7 +8,7 @@ import {
 } from "../../src/app/autosave/autosave";
 import type { Autosave } from "../../src/app/autosave/autosave";
 import { createRecoveryDialogs } from "../../src/app/autosave/dialogs";
-import { createDialogRequests } from "../../src/app/dialogs/dialogRequests";
+import { createDialogRequests } from "@ngne/editor-ui/messages";
 import type { RecoveryRequest } from "../../src/app/autosave/dialogs";
 import {
     RECOVERY_CHECKED_MARK,

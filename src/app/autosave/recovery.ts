@@ -2,7 +2,7 @@ import type { StoreApi } from "zustand/vanilla";
 import { randomId } from "../../core/model";
 import { ProjectError, docFromJson } from "../../core/project";
 import { sessionOf } from "../file/workflows";
-import type { Notices } from "../notices/notices";
+import type { Notices } from "@ngne/editor-ui/messages";
 import { namedSources } from "../references/referenceSources";
 import type { SessionsState } from "../state/sessions";
 import type { Autosave } from "./autosave";

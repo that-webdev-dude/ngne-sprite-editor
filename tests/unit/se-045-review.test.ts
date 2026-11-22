@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
-import { notices } from "../../src/app/notices/notices";
+import { appCommands } from "../../src/app/testing/pageModules";
+import { notices } from "@ngne/editor-ui/messages";
 import { referenceImages } from "../../src/app/references/referenceImages";
 import {
     addReferenceLayerFromPng,

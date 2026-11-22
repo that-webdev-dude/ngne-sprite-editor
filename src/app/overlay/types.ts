@@ -4,7 +4,8 @@ import type { Point, ViewMapping } from "../view/coordinates";
 
 // The overlay of the viewport (SPEC §6.3, SE-013): a Canvas2D element stacked over the NGNE
 // canvas that draws editor chrome. What it draws comes from draw layers; this file holds the
-// types a feature needs to add one (see `overlayLayers.ts` for how a layer is registered).
+// types a feature needs to add one (`src/app/editorUi.ts` registers the layers of every
+// `*.overlay.ts(x)` module).
 
 /** The colours the overlay takes from the theme (DESIGN §3.1, §6), as 0xRRGGBB. */
 export interface OverlayTheme {

@@ -4,7 +4,7 @@ import {
     DEFAULT_BACKGROUND,
     DEFAULT_FOREGROUND,
 } from "../../src/app/state/editor";
-import { hsvToRgb, packRgba, unpackRgba } from "../../src/core/color";
+import { hsvToRgb, packRgba, unpackRgba } from "@ngne/editor-ui/colour";
 import {
     keyAlpha,
     keyHue,

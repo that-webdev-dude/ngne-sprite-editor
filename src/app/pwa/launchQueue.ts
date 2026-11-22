@@ -1,5 +1,5 @@
 import { fileWorkflows } from "../file/workflows";
-import { notices as appNotices } from "../notices/notices";
+import { notices as appNotices } from "@ngne/editor-ui/messages";
 import { projectFileHandleFrom } from "../platform/projectFiles";
 import type { ChosenFile } from "../platform/projectFiles";
 import { sessionsStore } from "../state/sessions";

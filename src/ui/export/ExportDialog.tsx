@@ -8,17 +8,16 @@ import { useSessions } from "../../app/state/sessions";
 import { MAX_ATLAS_EXTRUDE, MAX_ATLAS_PADDING } from "../../core/export/packErrors";
 import type { ExportSettings } from "../../core/model";
 import type { Pivot } from "../../core/sprite";
-import { Button } from "../primitives/Button";
-import { Dialog } from "../primitives/Dialog";
-import { NumberField } from "../primitives/NumberField";
-import { SegmentedControl } from "../primitives/SegmentedControl";
-import type { SegmentedOption } from "../primitives/SegmentedControl";
-import { Select } from "../primitives/Select";
-import type { SelectOption } from "../primitives/Select";
-import { Toggle } from "../primitives/Toggle";
+import { Button } from "@ngne/editor-ui/primitives";
+import { Dialog } from "@ngne/editor-ui/primitives";
+import { NumberField } from "@ngne/editor-ui/primitives";
+import { SegmentedControl } from "@ngne/editor-ui/primitives";
+import type { SegmentedOption } from "@ngne/editor-ui/primitives";
+import { Select } from "@ngne/editor-ui/primitives";
+import type { SelectOption } from "@ngne/editor-ui/primitives";
+import { Toggle } from "@ngne/editor-ui/primitives";
 import { PivotGrid } from "../sprite/PivotGrid";
 import { AtlasThumbnail } from "./AtlasThumbnail";
-import "../primitives/field.css";
 import "./export.css";
 
 const LAYOUTS: readonly SegmentedOption<ExportSettings["layout"]>[] = [

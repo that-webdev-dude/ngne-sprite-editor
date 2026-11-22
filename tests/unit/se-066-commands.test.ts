@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
-import { invokeCommand } from "../../src/app/commands/invoke";
-import { buildContextMenu, menuCommands } from "../../src/app/commands/menuModel";
-import type { Command } from "../../src/app/commands/types";
+import { appCommands } from "../../src/app/testing/pageModules";
+import { invokeCommand } from "@ngne/editor-ui/commands";
+import { buildContextMenu, menuCommands } from "@ngne/editor-ui/commands";
+import type { Command } from "@ngne/editor-ui/commands";
 import { keyContextStore, setKeyContext } from "../../src/app/keymap/contextState";
-import { resolveKey } from "../../src/app/keymap/resolve";
-import type { KeyEnvironment } from "../../src/app/keymap/resolve";
+import { resolveKey } from "@ngne/editor-ui/commands";
+import type { KeyEnvironment } from "@ngne/editor-ui/commands";
 import {
     EXPORT_FORMATS,
     IMPORT_PALETTE,

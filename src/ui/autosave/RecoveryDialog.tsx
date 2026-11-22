@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { RecoveryEntry, RecoveryRequest } from "../../app/autosave/dialogs";
 import type { PixelBuffer } from "../../core/model";
-import { Button } from "../primitives/Button";
-import { Dialog } from "../primitives/Dialog";
+import { Button } from "@ngne/editor-ui/primitives";
+import { Dialog } from "@ngne/editor-ui/primitives";
 import "./recovery.css";
 
 /** The box a thumbnail fits in, in CSS pixels. */

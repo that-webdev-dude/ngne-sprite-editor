@@ -11,9 +11,9 @@ import {
     playedAnimation,
     previewState,
 } from "../../app/preview/previewState";
-import { Icon } from "../primitives/Icon";
-import { IconButton } from "../primitives/IconButton";
-import { Select } from "../primitives/Select";
+import { Icon } from "@ngne/editor-ui/primitives";
+import { IconButton } from "@ngne/editor-ui/primitives";
+import { Select } from "@ngne/editor-ui/primitives";
 import "./preview.css";
 
 const SPEED_OPTIONS = PREVIEW_SPEEDS.map((speed) => ({ value: String(speed), label: `${speed}×` }));

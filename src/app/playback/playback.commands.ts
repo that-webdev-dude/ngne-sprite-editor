@@ -1,5 +1,5 @@
-import { appCommands } from "../commands/appCommands";
-import type { CommandSpec } from "../commands/types";
+import { refreshAppCommands } from "../editorUiHandle";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { settleableDocument } from "../selection/settled";
 import { PLAY_PAUSE_COMMAND } from "../timeline/timelineCommandIds";
 import { toolPipeline } from "../tools/appPipeline";
@@ -56,4 +56,4 @@ export const commands: CommandSpec[] = [
 ];
 
 // Titles and states follow playback.
-playbackStore.subscribe(() => appCommands.refresh());
+playbackStore.subscribe(() => refreshAppCommands());

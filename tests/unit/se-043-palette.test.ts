@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { srgb8ToOklab } from "../../src/core/color";
+import { srgb8ToOklab } from "@ngne/editor-ui/colour";
 import { ImportError, buildPalette } from "../../src/core/import";
 import { createPixelBuffer } from "../../src/core/pixels";
 import { byteStream, colorsOf, image, noise } from "./se-043-support";

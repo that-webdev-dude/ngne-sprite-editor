@@ -3,11 +3,10 @@ import { MAX_NAME_LENGTH } from "../../core/model";
 import type { SpritePropertiesRequest, SpritePropertiesValues } from "../../app/sprite/dialogs";
 import { isSpriteName, MAX_GRID_OFFSET, MAX_GRID_SIDE, MIN_GRID_SIDE } from "../../core/sprite";
 import type { GridGeometry, Pivot } from "../../core/sprite";
-import { Button } from "../primitives/Button";
-import { Dialog } from "../primitives/Dialog";
-import { NumberField } from "../primitives/NumberField";
+import { Button } from "@ngne/editor-ui/primitives";
+import { Dialog } from "@ngne/editor-ui/primitives";
+import { NumberField } from "@ngne/editor-ui/primitives";
 import { PivotGrid } from "./PivotGrid";
-import "../primitives/field.css";
 import "./sprite.css";
 
 /**

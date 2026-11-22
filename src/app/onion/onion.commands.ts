@@ -1,4 +1,4 @@
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { activeOnion, onionEdit, setOnionSettings } from "./onion";
 
 // The onion skin commands (SPEC §7.5, §7.8; SE-025).

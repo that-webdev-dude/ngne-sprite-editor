@@ -1,4 +1,4 @@
-import { writeOklab } from "../color";
+import { writeOklab } from "@ngne/editor-ui/colour";
 import { clonePixelBuffer } from "../pixels";
 import type { PixelBuffer } from "../pixels";
 import { ImportError } from "./errors";

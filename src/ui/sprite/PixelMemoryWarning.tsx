@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { MAX_DOCUMENT_PIXEL_BYTES } from "../../core/model";
 import { watchPixelMemory } from "../../app/state/pixelMemory";
-import { toast } from "../toast/toast";
+import { toast } from "@ngne/editor-ui/messages";
 
 const MB = 1024 * 1024;
 

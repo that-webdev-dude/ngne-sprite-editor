@@ -1,15 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
-import { buildMenu, menuCommands } from "../../src/app/commands/menuModel";
-import { findChordConflicts } from "../../src/app/commands/registry";
+import { appCommands } from "../../src/app/testing/pageModules";
+import { buildMenu, menuCommands } from "@ngne/editor-ui/commands";
+import { findChordConflicts } from "@ngne/editor-ui/commands";
 import { plannedCommands } from "../../src/app/commands/planned.commands";
-import type { Command } from "../../src/app/commands/types";
+import type { Command } from "@ngne/editor-ui/commands";
 import { createFileDialogs } from "../../src/app/file/dialogs";
 import { installFileWorkflows } from "../../src/app/file/install";
 import { createFileWorkflows } from "../../src/app/file/workflows";
 import { keyContextStore, setKeyContext } from "../../src/app/keymap/contextState";
-import { resolveKey } from "../../src/app/keymap/resolve";
-import { notices } from "../../src/app/notices/notices";
+import { resolveKey } from "@ngne/editor-ui/commands";
+import { notices } from "@ngne/editor-ui/messages";
 import {
     ADD_COLOUR,
     MOVE_COLOUR,
@@ -17,7 +17,7 @@ import {
     REMOVE_COLOUR,
 } from "../../src/app/palette/paletteCommandIds";
 import { setCurrentSwatch, setMoveTarget } from "../../src/app/palette/paletteState";
-import type { KeyEnvironment } from "../../src/app/keymap/resolve";
+import type { KeyEnvironment } from "@ngne/editor-ui/commands";
 import { editorClipboard } from "../../src/app/selection/clipboard.commands";
 import { CLIPBOARD_FEEDBACK } from "../../src/app/selection/clipboard";
 import { applyFloating, FloatingApplyError, isFloating } from "../../src/app/selection/floating";

@@ -6,7 +6,7 @@ import {
     labelColourOn,
     relativeLuminance,
     WHITE,
-} from "../../src/core/color/contrast";
+} from "@ngne/editor-ui/colour";
 
 // SE-023: the label of a tag's span is black or white, whichever contrasts more with the span's
 // colour (DESIGN §3.1), and so at least 4.5:1 against it (WCAG 2.1 AA for normal text).

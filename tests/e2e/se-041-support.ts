@@ -232,9 +232,9 @@ export function frameComposites(page: Page): Promise<number[][]> {
 }
 
 export const documentName = (page: Page): Locator =>
-    region(page, "menu-bar").locator("[data-document-name]");
+    region(page, "menu-bar").locator('[role="tab"][aria-selected="true"] .tab-strip__name');
 export const unsavedMarker = (page: Page): Locator =>
-    region(page, "menu-bar").locator("[data-unsaved-marker]");
+    region(page, "menu-bar").locator('[role="tab"][aria-selected="true"] [data-tab-unsaved]');
 export const emptyState = (page: Page): Locator =>
     region(page, "viewport").locator("[data-empty-state]");
 export const discardDialog = (page: Page): Locator =>

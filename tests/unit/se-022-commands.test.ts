@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
+import { appCommands } from "../../src/app/testing/pageModules";
 import { plannedCommands } from "../../src/app/commands/planned.commands";
-import { findChordConflicts } from "../../src/app/commands/registry";
-import type { Command } from "../../src/app/commands/types";
+import { findChordConflicts } from "@ngne/editor-ui/commands";
+import type { Command } from "@ngne/editor-ui/commands";
 import { setKeyContext } from "../../src/app/keymap/contextState";
 import { activeDocument, sessionsStore } from "../../src/app/state/sessions";
 import type { OpenDocument } from "../../src/app/state/sessions";

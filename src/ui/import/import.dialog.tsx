@@ -1,5 +1,5 @@
 import type { DropChooserRequest, ImportRequest } from "../../app/import/importDialog";
-import { commandDialog } from "../dialogs/registry";
+import { commandDialog } from "@ngne/editor-ui/messages";
 import { DropChooser } from "./DropChooser";
 import { ImportDialog } from "./ImportDialog";
 

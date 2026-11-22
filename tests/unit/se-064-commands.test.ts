@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
-import { buildMenu } from "../../src/app/commands/menuModel";
-import type { MenuNode } from "../../src/app/commands/menuModel";
+import { appCommands } from "../../src/app/testing/pageModules";
+import { buildMenu } from "@ngne/editor-ui/commands";
+import type { MenuNode } from "@ngne/editor-ui/commands";
 import { plannedCommands } from "../../src/app/commands/planned.commands";
-import type { Command } from "../../src/app/commands/types";
-import { resolveKey } from "../../src/app/keymap/resolve";
-import type { KeyEnvironment } from "../../src/app/keymap/resolve";
-import { createSurfaces, SURFACE_IDS, surfaces } from "../../src/app/surfaces/surfaces";
+import type { Command } from "@ngne/editor-ui/commands";
+import { resolveKey } from "@ngne/editor-ui/commands";
+import type { KeyEnvironment } from "@ngne/editor-ui/commands";
+import { createSurfaces } from "../../src/app/surfaces/surfaces";
+import { SURFACE_IDS, surfaces } from "../../src/app/testing/pageModules";
 import type { SurfaceId } from "../../src/app/surfaces/surfaces";
 import { readSpecKeyTable } from "../e2e/se-007-spec-keys";
 

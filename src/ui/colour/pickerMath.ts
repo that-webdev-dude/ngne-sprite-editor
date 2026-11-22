@@ -1,4 +1,4 @@
-import type { Hsv } from "../../core/color";
+import type { Hsv } from "@ngne/editor-ui/colour";
 
 // What the controls of the colour panel (DESIGN §5.3) do with the pointer and the keys, kept
 // free of the DOM for unit tests. The keys are those of a number field (DESIGN §4): arrows

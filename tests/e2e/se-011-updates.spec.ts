@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import type * as CompositesModule from "../../src/app/state/composites";
 import type * as LinkModule from "../../src/app/viewport/viewportLink";
 import type * as CoreHistory from "../../src/core/history";
-import type * as ThemeModule from "../../src/ui/theme/theme";
+import type * as ThemeModule from "../../src/app/testing/pageModules";
 import { collectErrors } from "./se-006-support";
 import {
     addFrame,
@@ -245,7 +245,7 @@ test("while a slot is re-keyed to another frame, the viewport shows the old fram
     const setTheme = async (theme: "dark" | "light") => {
         const drawn = (await captures(page)).length;
         await page.evaluate(async (theme) => {
-            const path = "/src/ui/theme/theme.ts";
+            const path = "/src/app/testing/pageModules.ts";
             const module = (await import(/* @vite-ignore */ path)) as typeof ThemeModule;
             module.setTheme(theme);
         }, theme);

@@ -1,6 +1,6 @@
 import type { PixelBuffer } from "../../core/model";
-import { commandDialogs, createDialogRequests, dialogView } from "../dialogs/dialogRequests";
-import type { DialogRequestBase, DialogRequests, DialogView } from "../dialogs/dialogRequests";
+import { commandDialogs, createDialogRequests, dialogView } from "@ngne/editor-ui/messages";
+import type { DialogRequestBase, DialogRequests, DialogView } from "@ngne/editor-ui/messages";
 
 /**
  * The recovery dialog of DESIGN §7: shown on launch when snapshots of documents with unsaved

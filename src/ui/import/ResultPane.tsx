@@ -1,6 +1,6 @@
 import type { PixelBuffer } from "../../core/pixels";
-import { SegmentedControl } from "../primitives/SegmentedControl";
-import type { SegmentedOption } from "../primitives/SegmentedControl";
+import { SegmentedControl } from "@ngne/editor-ui/primitives";
+import type { SegmentedOption } from "@ngne/editor-ui/primitives";
 import { PixelCanvas } from "./PixelCanvas";
 
 /** The frames the pane draws at most; the summary line counts them all. */

@@ -6,7 +6,7 @@ import {
     PREFERENCES_STORAGE_KEY,
 } from "../../src/app/preferences/preferences";
 import type { PreferenceKey, Preferences } from "../../src/app/preferences/preferences";
-import { formatHexColour, parseHexColour } from "../../src/ui/preferences/hexColour";
+import { formatHexColour, parseHexColour } from "@ngne/editor-ui/colour";
 import { createThemeStore, DEFAULT_THEME, THEME_STORAGE_KEY } from "../../src/ui/theme/theme";
 import { memoryStorage } from "./se-007-support";
 

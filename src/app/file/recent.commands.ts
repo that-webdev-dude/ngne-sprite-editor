@@ -1,5 +1,5 @@
-import { appCommands } from "../commands/appCommands";
-import type { CommandSpec } from "../commands/types";
+import { boundEditorUi } from "../editorUiHandle";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { OPEN_RECENT_PATH, openRecentId, recentFiles } from "./recentFiles";
 import type { RecentEntry } from "./recentFiles";
 import { fileWorkflows } from "./workflows";
@@ -31,7 +31,7 @@ let registered: (() => void)[] = [];
 function registerEntries(entries: readonly RecentEntry[]): void {
     for (const unregister of registered) unregister();
     registered = entries.map((entry, index) =>
-        appCommands.register(
+        boundEditorUi().commands.register(
             {
                 id: openRecentId(entry),
                 title: entry.name,

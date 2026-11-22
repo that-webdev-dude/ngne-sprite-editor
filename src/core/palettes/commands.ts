@@ -1,4 +1,4 @@
-import { writeOklab } from "../color";
+import { writeOklab } from "@ngne/editor-ui/colour";
 import type { Command } from "../history";
 import { buildPalette } from "../import";
 import { assertNameLength } from "../model";

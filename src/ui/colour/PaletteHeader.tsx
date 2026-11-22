@@ -2,11 +2,11 @@ import { ChevronDown, Ellipsis, Plus } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { useRef } from "react";
 import { useStore } from "zustand";
-import { formatChord } from "../../app/commands/chord";
-import { invokeCommand } from "../../app/commands/invoke";
-import { buildContextMenu } from "../../app/commands/menuModel";
-import type { MenuNode } from "../../app/commands/menuModel";
-import type { Command } from "../../app/commands/types";
+import { formatChord } from "@ngne/editor-ui/commands";
+import { invokeCommand } from "@ngne/editor-ui/commands";
+import { buildContextMenu } from "@ngne/editor-ui/commands";
+import type { MenuNode } from "@ngne/editor-ui/commands";
+import type { Command } from "@ngne/editor-ui/commands";
 import {
     ADD_COLOUR,
     PALETTE_MENU,
@@ -15,11 +15,12 @@ import {
 } from "../../app/palette/paletteCommandIds";
 import { currentSwatch, paletteStore } from "../../app/palette/paletteState";
 import { activeDocument, sessionsStore } from "../../app/state/sessions";
-import { reportCommandError, runCommand } from "../commands/runCommand";
-import { useCommandValue, useCommands } from "../commands/useCommands";
-import { Icon } from "../primitives/Icon";
-import { IconButton } from "../primitives/IconButton";
-import { Tooltip } from "../primitives/Tooltip";
+import { reportCommandError } from "@ngne/editor-ui/commands";
+import { runAppCommand } from "../../app/editorUiHandle";
+import { useCommandValue, useCommands } from "@ngne/editor-ui/commands";
+import { Icon } from "@ngne/editor-ui/primitives";
+import { IconButton } from "@ngne/editor-ui/primitives";
+import { Tooltip } from "@ngne/editor-ui/primitives";
 import { SwatchEditor } from "./SwatchEditor";
 import {
     closePaletteMenu,
@@ -28,7 +29,6 @@ import {
     swatchElement,
     useActivePalette,
 } from "./paletteUi";
-import "../primitives/menu.css";
 import "./paletteHeader.css";
 
 // The header of the palette section (DESIGN §5.4, SE-060), right of its title: the palette's
@@ -139,7 +139,7 @@ export function PaletteHeader() {
                 label="Add current colour"
                 disabled={!canAdd}
                 data-palette-add=""
-                onClick={() => runCommand(ADD_COLOUR)}
+                onClick={() => runAppCommand(ADD_COLOUR)}
             >
                 <Icon icon={Plus} />
             </IconButton>

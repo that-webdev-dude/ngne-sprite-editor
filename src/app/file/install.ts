@@ -1,7 +1,7 @@
 import type { StoreApi } from "zustand/vanilla";
 import { keyContextStore } from "../keymap/contextState";
 import type { KeyContextState } from "../keymap/contextState";
-import { OVERLAY_SELECTOR } from "../keymap/environment";
+import { OVERLAY_SELECTOR } from "@ngne/editor-ui/commands";
 import { importDropped, isImageDrop } from "../import/importWorkflow";
 import { carriesFiles, droppedFiles } from "../platform/projectFiles";
 import type { ChosenFile } from "../platform/projectFiles";

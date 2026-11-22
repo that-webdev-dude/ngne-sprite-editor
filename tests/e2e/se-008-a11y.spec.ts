@@ -68,7 +68,11 @@ for (const theme of THEMES) {
         // With a document open the menu bar carries its name.
         await openSession(page, { name: "hero", width: 32, height: 32 });
         await expect(documentName(page)).toHaveText("hero");
-        await expectAccessible(page, "document name", "[data-document-name]");
+        await expectAccessible(
+            page,
+            "document name",
+            '[role="tab"][aria-selected="true"] .tab-strip__name',
+        );
         await expectAccessible(page, "menu bar", '[data-region="menu-bar"]');
         expect(errors).toEqual([]);
     });

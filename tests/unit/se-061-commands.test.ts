@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
+import { appCommands } from "../../src/app/testing/pageModules";
 import { plannedCommands } from "../../src/app/commands/planned.commands";
 import { activeDocument, sessionsStore } from "../../src/app/state/sessions";
 import type { OpenDocument } from "../../src/app/state/sessions";

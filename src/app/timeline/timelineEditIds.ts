@@ -1,5 +1,5 @@
 // Ids of the timeline's editing commands and context menus (SE-026). The panel takes them from
-// here, so it never loads a `*.commands.ts` module before the registry does (appCommands.ts).
+// here, so it never loads a `*.commands.ts` module before the registry does (src/app/editorUi.ts).
 
 export const TIMELINE_EDIT_COMMANDS = {
     /** Cel commands of the cel context menu, on the cels the timeline targets (`celTargets`). */

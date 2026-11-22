@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent, PointerEvent as ReactPointerEvent } from "react";
-import { BLACK, labelColourOn, WHITE } from "../../core/color/contrast";
+import { BLACK, labelColourOn, WHITE } from "@ngne/editor-ui/colour";
 import { sessionsStore } from "../../app/state/sessions";
 import { TAG_COMMANDS } from "../../app/timeline/tagCommandIds";
 import { tagRangeLabel } from "../../app/timeline/tagDialogs";
@@ -9,7 +9,7 @@ import type { FrameSpan, SpanEnd } from "../../app/timeline/tagLayout";
 import { withTagArguments } from "../../app/timeline/tagState";
 import type { TimelineTag, TimelineTags } from "../../app/timeline/timelineModel";
 import { cssColour } from "../colour/pickerMath";
-import { runCommand } from "../commands/runCommand";
+import { runAppCommand } from "../../app/editorUiHandle";
 import { CELL_WIDTH } from "./timelineDom";
 import "./tags.css";
 
@@ -57,7 +57,7 @@ export interface TagBarProps {
 
 /** Runs a tag command on the tag of a span rather than on the active tag. */
 function runOnTag(tagId: string, commandId: string): void {
-    withTagArguments({ target: tagId }, () => void runCommand(commandId));
+    withTagArguments({ target: tagId }, () => void runAppCommand(commandId));
 }
 
 /** Lets a drag's pointer go: its handle no longer captures it. */
@@ -192,7 +192,7 @@ function TagBarView({ documentId, tags, frameIds, onPress }: TagBarProps) {
         }
         const { tagId } = current;
         const range = { documentId, tagId, fromFrameId, toFrameId };
-        const ran = withTagArguments({ range }, () => runCommand(TAG_COMMANDS.applyTagRange));
+        const ran = withTagArguments({ range }, () => runAppCommand(TAG_COMMANDS.applyTagRange));
         // The span keeps the new range until the panel draws it; it goes back at once when
         // the command set nothing (disabled, or the tag or its frames gone).
         const applied = ran && hasRange(documentId, tagId, fromFrameId, toFrameId);

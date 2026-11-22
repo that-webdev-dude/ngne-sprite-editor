@@ -6,7 +6,7 @@ import { AllocationError } from "../../core/history";
 import type { Command } from "../../core/history";
 import type { DocSession } from "../../core/model";
 import { setKeyContext } from "../keymap/contextState";
-import { notices } from "../notices/notices";
+import { notices } from "@ngne/editor-ui/messages";
 import { activeComposites } from "../state/composites";
 import { activeDocument, sessionsStore } from "../state/sessions";
 import type { OpenDocument, SessionsState } from "../state/sessions";

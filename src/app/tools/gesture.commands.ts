@@ -1,4 +1,4 @@
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { toolPipeline } from "./appPipeline";
 
 // The `gesture` context of SPEC §7.8 (SE-031): while a tool's gesture of several presses is

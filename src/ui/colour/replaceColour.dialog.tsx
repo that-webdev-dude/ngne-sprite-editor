@@ -1,5 +1,5 @@
 import type { ReplaceColourRequest } from "../../app/palette/replaceColour";
-import { commandDialog } from "../dialogs/registry";
+import { commandDialog } from "@ngne/editor-ui/messages";
 import { ReplaceColourDialog } from "./ReplaceColourDialog";
 
 /** The Replace colour dialog of SE-066, shown by the dialog host. */

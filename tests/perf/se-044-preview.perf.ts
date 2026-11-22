@@ -7,7 +7,7 @@ import type { ViteDevServer } from "vite";
 import { it } from "vitest";
 // Declares `window.__ngneTest` (development builds).
 import type {} from "../../src/app/testing/testHooks";
-import type * as DialogRequestsModule from "../../src/app/dialogs/dialogRequests";
+import type * as DialogRequestsModule from "../../src/app/testing/pageModules";
 import type { ImportRequest } from "../../src/app/import/importDialog";
 import type * as ImportWorkflowModule from "../../src/app/import/importWorkflow";
 import type * as CorePng from "../../src/core/png";
@@ -89,7 +89,7 @@ async function openDialog(page: Page): Promise<void> {
             "/src/app/import/importWorkflow.ts",
         )) as typeof ImportWorkflowModule;
         const { commandDialogs } = (await load(
-            "/src/app/dialogs/dialogRequests.ts",
+            "/src/app/testing/pageModules.ts",
         )) as typeof DialogRequestsModule;
         const data = new Uint8ClampedArray(side * side * 4);
         for (let y = 0; y < side; y++) {

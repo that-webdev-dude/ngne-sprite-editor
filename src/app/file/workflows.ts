@@ -9,8 +9,8 @@ import {
     serialize,
 } from "../../core/project";
 import type { ProjectContents } from "../../core/project";
-import { notices as appNotices } from "../notices/notices";
-import type { Notices } from "../notices/notices";
+import { notices as appNotices } from "@ngne/editor-ui/messages";
+import type { Notices } from "@ngne/editor-ui/messages";
 import { browserProjectFiles } from "../platform/projectFiles";
 import type {
     ChosenFile,

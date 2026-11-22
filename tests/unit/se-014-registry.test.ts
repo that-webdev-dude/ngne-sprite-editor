@@ -11,8 +11,8 @@ import {
     createToolRegistry,
     railGroups,
     registerToolModules,
-    ToolRegistryError,
-} from "../../src/app/tools/registry";
+    RegistrationError as ToolRegistryError,
+} from "@ngne/editor-ui/shell";
 import { toolModulePaths, toolRegistry } from "../../src/app/tools/toolRegistry";
 import type { ToolOptionSpec, ToolSpec } from "../../src/app/tools/types";
 import { readSpecKeyTable } from "../e2e/se-007-spec-keys";

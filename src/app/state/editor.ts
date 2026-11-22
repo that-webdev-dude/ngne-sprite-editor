@@ -1,8 +1,8 @@
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import type { StoreApi } from "zustand/vanilla";
-import { hsvToRgb, packRgba, rgbToHsv, unpackRgba } from "../../core/color";
-import type { Hsv } from "../../core/color";
+import { hsvToRgb, packRgba, rgbToHsv, unpackRgba } from "@ngne/editor-ui/colour";
+import type { Hsv } from "@ngne/editor-ui/colour";
 
 /** Options of one tool, by option name; the tool defines the names and types (SE-014). */
 export type ToolOptions = Readonly<Record<string, unknown>>;

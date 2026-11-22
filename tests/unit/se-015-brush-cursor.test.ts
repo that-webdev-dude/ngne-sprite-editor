@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { overlayLayers } from "../../src/app/overlay/overlayLayers";
+import { overlayLayers } from "../../src/app/testing/pageModules";
 import { DEFAULT_OVERLAY_THEME } from "../../src/app/overlay/types";
 import type { OverlayCursor, OverlayFrame } from "../../src/app/overlay/types";
 import { DEFAULT_TOOL, editorStore } from "../../src/app/state/editor";

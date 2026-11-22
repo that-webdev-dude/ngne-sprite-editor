@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
-import { formatChord } from "../../src/app/commands/chord";
+import { formatChord } from "@ngne/editor-ui/commands";
 import { boxOf, collectErrors, region } from "./se-006-support";
 import {
     closeMenu,

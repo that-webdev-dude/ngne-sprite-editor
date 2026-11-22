@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { writeOklab } from "../../src/core/color";
+import { writeOklab } from "@ngne/editor-ui/colour";
 import { nearestColor, nearestSearch } from "../../src/core/import/nearestColor";
 import { byteStream } from "./se-043-support";
 

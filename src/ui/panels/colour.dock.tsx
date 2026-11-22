@@ -1,5 +1,5 @@
 import { ColourPicker } from "../colour/ColourPicker";
-import type { DockPanel } from "../dock/registry";
+import type { DockPanel } from "@ngne/editor-ui/shell";
 
 /** The colour panel (DESIGN §5.3, SE-016): it edits the foreground colour. */
 export const dockPanel: DockPanel = {

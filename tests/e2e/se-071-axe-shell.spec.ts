@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import type * as CommandTypes from "../../src/app/commands/types";
+import type * as CommandTypes from "../../src/app/testing/pageModules";
 import type * as ToolRegistryModule from "../../src/app/tools/toolRegistry";
-import type * as DockRegistryModule from "../../src/ui/dock/registry";
+import type * as DockRegistryModule from "../../src/app/testing/pageModules";
 import { collectErrors, region, REGIONS, settleTimers } from "./se-006-support";
 import { menuTrigger } from "./se-007-support";
 import { THEMES } from "./se-008-support";
@@ -60,7 +60,7 @@ for (const theme of THEMES) {
 
         // Every dock panel, expanded.
         const panels = await page.evaluate(async () => {
-            const path = "/src/ui/dock/registry.ts";
+            const path = "/src/app/testing/pageModules.ts";
             const { dockPanels } = (await import(
                 /* @vite-ignore */ path
             )) as typeof DockRegistryModule;
@@ -107,7 +107,7 @@ for (const theme of THEMES) {
         await expect(infoToast(page, "Saved hero.ngsprite")).toBeVisible();
 
         const { menus, submenus, contextMenus } = await page.evaluate(async () => {
-            const path = "/src/app/commands/types.ts";
+            const path = "/src/app/testing/pageModules.ts";
             const { MENU_BAR } = (await import(/* @vite-ignore */ path)) as typeof CommandTypes;
             const commands = window.__ngneTest!.commands.list();
             const paths = new Set<string>();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isKeyboardNavigation } from "../../src/ui/focus/modality";
+import { isKeyboardNavigation } from "@ngne/editor-ui/focus";
 import {
     formatNumber,
     normalizeNumber,

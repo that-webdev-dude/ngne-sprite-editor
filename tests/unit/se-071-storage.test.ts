@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type * as NoticesModule from "../../src/app/notices/notices";
-import type * as StorageModule from "../../src/app/platform/storage";
-import type { KeyValueStorage } from "../../src/app/platform/storage";
+import type * as NoticesModule from "@ngne/editor-ui/messages";
+import type * as StorageModule from "@ngne/editor-ui/platform";
+import type { KeyValueStorage } from "@ngne/editor-ui/platform";
 
 // SE-071 (from the SE-064 review): a write to storage that fails — the store is full or the
 // browser blocks it — is reported once, as an error notice (a toast in the interface), instead
@@ -28,8 +28,8 @@ function fullStorage(): KeyValueStorage {
 /** Fresh modules (one report per page is module state) and the notices they send. */
 async function fresh() {
     vi.resetModules();
-    const notices = (await import("../../src/app/notices/notices")) as typeof NoticesModule;
-    const storage = (await import("../../src/app/platform/storage")) as typeof StorageModule;
+    const notices = (await import("@ngne/editor-ui/messages")) as typeof NoticesModule;
+    const storage = (await import("@ngne/editor-ui/platform")) as typeof StorageModule;
     const sent: [string, string][] = [];
     notices.notices.attachSink((kind, message) => sent.push([kind, message]));
     return { storage, sent };
@@ -66,8 +66,8 @@ describe("storage failures", () => {
 
     it("shows a failure from before the toasts are ready once they are, and once only", async () => {
         vi.resetModules();
-        const notices = (await import("../../src/app/notices/notices")) as typeof NoticesModule;
-        const storage = (await import("../../src/app/platform/storage")) as typeof StorageModule;
+        const notices = (await import("@ngne/editor-ui/messages")) as typeof NoticesModule;
+        const storage = (await import("@ngne/editor-ui/platform")) as typeof StorageModule;
         const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
         try {
             // No sink yet: the interface has not attached its toasts.
@@ -90,7 +90,7 @@ describe("storage failures", () => {
 
     it("keeps an ordinary notice from before the toasts on the console only", async () => {
         vi.resetModules();
-        const notices = (await import("../../src/app/notices/notices")) as typeof NoticesModule;
+        const notices = (await import("@ngne/editor-ui/messages")) as typeof NoticesModule;
         const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
         try {
             notices.notices.error("Could not open “hero.ngsprite”.");

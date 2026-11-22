@@ -1,5 +1,5 @@
 import type { History } from "../../core/history";
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { floatingState } from "../selection/floatingState";
 import { activeDocument, sessionsStore } from "./sessions";
 

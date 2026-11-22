@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
-import { invokeCommand } from "../../src/app/commands/invoke";
-import { installKeymap } from "../../src/app/keymap/install";
+import { appCommands } from "../../src/app/testing/pageModules";
+import { invokeCommand } from "@ngne/editor-ui/commands";
+import { installKeymap } from "@ngne/editor-ui/commands";
 import { beginDurationEdit } from "../../src/app/timeline/frameDuration";
-import { buildMenu } from "../../src/app/commands/menuModel";
-import type { Command } from "../../src/app/commands/types";
+import { buildMenu } from "@ngne/editor-ui/commands";
+import type { Command } from "@ngne/editor-ui/commands";
 import { setKeyContext } from "../../src/app/keymap/contextState";
 import { createPlayback, editorPlayback, playbackTime } from "../../src/app/playback/playback";
 import type { PlaybackSources } from "../../src/app/playback/playback";

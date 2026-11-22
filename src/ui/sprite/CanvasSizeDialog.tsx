@@ -1,11 +1,10 @@
 import { useId, useState } from "react";
 import { sizeProblems } from "../../app/sprite/dialogs";
 import type { CanvasSizeRequest, CanvasSizeValues } from "../../app/sprite/dialogs";
-import { Button } from "../primitives/Button";
-import { Dialog } from "../primitives/Dialog";
-import { NumberField } from "../primitives/NumberField";
+import { Button } from "@ngne/editor-ui/primitives";
+import { Dialog } from "@ngne/editor-ui/primitives";
+import { NumberField } from "@ngne/editor-ui/primitives";
 import { PivotGrid } from "./PivotGrid";
-import "../primitives/field.css";
 import "./sprite.css";
 
 /**

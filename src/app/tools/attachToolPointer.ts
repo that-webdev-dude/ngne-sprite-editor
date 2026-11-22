@@ -1,4 +1,4 @@
-import { eventKey } from "../commands/chord";
+import { eventKey } from "@ngne/editor-ui/commands";
 import type {} from "../../import-meta";
 import type { ViewMapping } from "../view/coordinates";
 import { toolState } from "./activeTool";

@@ -17,15 +17,14 @@ import {
 import type { PropertiesDraft, ReferenceDraft } from "../../app/timeline/timelineState";
 import { referenceFit } from "../../app/references/references";
 import { useSessions } from "../../app/state/sessions";
-import { runCommand } from "../commands/runCommand";
-import { Button } from "../primitives/Button";
-import { NumberField } from "../primitives/NumberField";
-import { SegmentedControl } from "../primitives/SegmentedControl";
-import { Select } from "../primitives/Select";
-import { Slider } from "../primitives/Slider";
+import { runAppCommand } from "../../app/editorUiHandle";
+import { Button } from "@ngne/editor-ui/primitives";
+import { NumberField } from "@ngne/editor-ui/primitives";
+import { SegmentedControl } from "@ngne/editor-ui/primitives";
+import { Select } from "@ngne/editor-ui/primitives";
+import { Slider } from "@ngne/editor-ui/primitives";
 import { layerHeaderOf } from "./timelineDom";
-import { useClosingPopover } from "./useClosingPopover";
-import "../primitives/popover.css";
+import { useClosingPopover } from "@ngne/editor-ui/primitives";
 
 /**
  * Closes the layer properties popover: its values become one undo step (Apply Layer
@@ -33,7 +32,7 @@ import "../primitives/popover.css";
  * them; a closed document's are dropped (`timelineLifetime`).
  */
 export function finishProperties(): void {
-    runCommand(TIMELINE_COMMANDS.applyLayerProperties);
+    runAppCommand(TIMELINE_COMMANDS.applyLayerProperties);
 }
 
 /**

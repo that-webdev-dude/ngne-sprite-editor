@@ -1,5 +1,5 @@
 import { PALETTE_FORMATS } from "../../core/palettes";
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { EXPORT_FORMATS, IMPORT_PALETTE, exportPaletteCommandId } from "./paletteActionIds";
 import { PALETTE_MENU } from "./paletteCommandIds";
 import { paletteFiles } from "./paletteFiles";

@@ -1,7 +1,7 @@
 import { setCelOpacityCommand } from "../../core/cels";
 import { celAt } from "../../core/model";
-import { appCommands } from "../commands/appCommands";
-import type { CommandSpec } from "../commands/types";
+import { refreshAppCommands } from "../editorUiHandle";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { sessionsStore } from "../state/sessions";
 import { celFacts, celPropertiesStore } from "./celProperties";
 import { CEL_PROPERTIES_COMMANDS as IDS } from "./celPropertiesIds";
@@ -21,7 +21,7 @@ import { setTimelineVisible } from "./timelineState";
 // Unlink gives the popover's cel an image of its own at once, one undo step of its own.
 
 // `enabled` reads the popover's state: an open menu follows its changes.
-celPropertiesStore.subscribe(() => appCommands.refresh());
+celPropertiesStore.subscribe(() => refreshAppCommands());
 
 /** The active cel of the active document when it has one on a pixel layer. */
 function activeCel() {

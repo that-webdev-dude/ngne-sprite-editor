@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { normalizeChord } from "../../src/app/commands/chord";
-import { createCommandRegistry } from "../../src/app/commands/registry";
-import { isBrowserChord, isTextEditingChord } from "../../src/app/keymap/keyClasses";
+import { normalizeChord } from "@ngne/editor-ui/commands";
+import { createCommandRegistry } from "@ngne/editor-ui/commands";
+import { isBrowserChord, isTextEditingChord } from "@ngne/editor-ui/commands";
 import {
     CHROME_RESERVED_CHORDS,
     parseSpecKeyTable,

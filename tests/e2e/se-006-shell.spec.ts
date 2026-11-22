@@ -419,7 +419,7 @@ test("regions carry their landmarks; the context bar and status bar hold only th
             "hint",
         );
     }
-    await expect(region(page, "timeline").locator(".shell-timeline__content")).toBeEmpty();
+    await expect(region(page, "timeline").locator(".shell-bottom__content")).toBeEmpty();
     // Rail tools are placeholders until their tickets register them (SE-014): a tool's button
     // is enabled exactly when the tool registry has a tool of its id.
     const toolSlots = region(page, "tool-rail").locator("[data-tool]");

@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
-import { buildMenu } from "../../src/app/commands/menuModel";
-import type { MenuNode } from "../../src/app/commands/menuModel";
-import { LICENCES_COMMAND } from "../../src/app/licences/licences.commands";
-import {
-    LICENCES_PATH,
-    createLicencesDialogs,
-    openLicences,
-} from "../../src/app/licences/openLicences";
+import { appCommands } from "../../src/app/testing/pageModules";
+import { buildMenu } from "@ngne/editor-ui/commands";
+import type { MenuNode } from "@ngne/editor-ui/commands";
+import { LICENCES_COMMAND } from "@ngne/editor-ui/licences";
+import { LICENCES_PATH } from "@ngne/editor-ui/licences";
+import { createLicencesDialogs, openLicences } from "../../src/app/licences/openLicences";
 import type { LicencesHost } from "../../src/app/licences/openLicences";
 
 // The Open Source Licences command (src/app/licences): where it is, and how it shows the

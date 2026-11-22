@@ -1,5 +1,5 @@
 import type { Command } from "../../src/core/history";
-import type { KeyValueStorage } from "../../src/app/platform/storage";
+import type { KeyValueStorage } from "@ngne/editor-ui/platform";
 
 // Shared by the SE-007 unit tests.
 

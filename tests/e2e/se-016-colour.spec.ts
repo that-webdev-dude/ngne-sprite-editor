@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { hsvToRgb, packRgba } from "../../src/core/color";
-import { RAIL, railOneColumnHeight } from "../../src/ui/shell/layout";
+import { hsvToRgb, packRgba } from "@ngne/editor-ui/colour";
+import { RAIL, railOneColumnHeight } from "@ngne/editor-ui/shell";
 import { arrowToRadio, boxOf, collectErrors, openShell, region, tabTo } from "./se-006-support";
 import { openEditor, openSession } from "./se-007-support";
 import { audit, startInTheme, THEMES } from "./se-008-support";

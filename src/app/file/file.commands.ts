@@ -1,5 +1,5 @@
-import { appCommands } from "../commands/appCommands";
-import type { CommandSpec } from "../commands/types";
+import { refreshAppCommands } from "../editorUiHandle";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { activeDocument, sessionsStore } from "../state/sessions";
 import { fileWorkflows } from "./workflows";
 
@@ -75,4 +75,4 @@ export const commands: CommandSpec[] = [
 ];
 
 // `enabled` reads the workflows' state: an open menu follows it.
-fileWorkflows.subscribe(() => appCommands.refresh());
+fileWorkflows.subscribe(() => refreshAppCommands());

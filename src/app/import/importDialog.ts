@@ -1,7 +1,7 @@
 import type { StoreApi } from "zustand/vanilla";
 import type { PixelBuffer } from "../../core/pixels";
-import { commandDialogs, createDialogRequests, dialogView } from "../dialogs/dialogRequests";
-import type { DialogRequestBase, DialogRequests, DialogView } from "../dialogs/dialogRequests";
+import { commandDialogs, createDialogRequests, dialogView } from "@ngne/editor-ui/messages";
+import type { DialogRequestBase, DialogRequests, DialogView } from "@ngne/editor-ui/messages";
 import type { ImportForm, ImportTarget } from "./importForm";
 import type { ImportPreview, PreviewResult } from "./importPreview";
 

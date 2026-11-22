@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 // The page imports this module from the dev server; here it is needed for its types.
-import type * as ThemeModule from "../../src/ui/theme/theme";
+import type * as ThemeModule from "../../src/app/testing/pageModules";
 import { decodePng } from "../../src/core/png";
 import { boxOf, collectErrors } from "./se-006-support";
 import {
@@ -562,7 +562,7 @@ test("the checkerboard follows the preference and the theme", async ({ page }) =
     await settle(page);
     await expectImage(page, document, view, pixels, { ...dark, size: 2 });
     await page.evaluate(async () => {
-        const path = "/src/ui/theme/theme.ts";
+        const path = "/src/app/testing/pageModules.ts";
         const theme = (await import(/* @vite-ignore */ path)) as typeof ThemeModule;
         theme.setTheme("light");
     });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { srgb8ToOklab } from "../../src/core/color";
+import { srgb8ToOklab } from "@ngne/editor-ui/colour";
 import { ImportError, buildPalette, mapToPalette } from "../../src/core/import";
 import type { DitherMethod } from "../../src/core/import";
 import { PRESET_PALETTES } from "../../src/core/palettes";

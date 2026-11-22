@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { overlayLayers } from "../../src/app/overlay/overlayLayers";
+import { overlayLayers } from "../../src/app/testing/pageModules";
 import { createPreferenceStore } from "../../src/app/preferences/preferences";
 import {
     createReferenceBoxLayer,

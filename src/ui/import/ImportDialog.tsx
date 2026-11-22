@@ -16,21 +16,20 @@ import type {
     ImportForm,
     ImportPlace,
 } from "../../app/import/importForm";
-import { formatHex, parseHex } from "../../core/color";
+import { formatHex, parseHex } from "@ngne/editor-ui/colour";
 import type { ImportPaletteMode, ResampleFit, ResampleMethod } from "../../core/import";
 import { PRESET_PALETTES } from "../../core/palettes";
-import { Button } from "../primitives/Button";
-import { Dialog } from "../primitives/Dialog";
-import { NumberField } from "../primitives/NumberField";
-import { SegmentedControl } from "../primitives/SegmentedControl";
-import type { SegmentedOption } from "../primitives/SegmentedControl";
-import { Select } from "../primitives/Select";
-import type { SelectOption } from "../primitives/Select";
-import { Toggle } from "../primitives/Toggle";
+import { Button } from "@ngne/editor-ui/primitives";
+import { Dialog } from "@ngne/editor-ui/primitives";
+import { NumberField } from "@ngne/editor-ui/primitives";
+import { SegmentedControl } from "@ngne/editor-ui/primitives";
+import type { SegmentedOption } from "@ngne/editor-ui/primitives";
+import { Select } from "@ngne/editor-ui/primitives";
+import type { SelectOption } from "@ngne/editor-ui/primitives";
+import { Toggle } from "@ngne/editor-ui/primitives";
 import { ResultPane, defaultZoom } from "./ResultPane";
 import type { ResultZoom } from "./ResultPane";
 import { SourcePane } from "./SourcePane";
-import "../primitives/field.css";
 import "./import.css";
 
 const FITS: readonly SegmentedOption<ResampleFit>[] = [

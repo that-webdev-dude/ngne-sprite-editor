@@ -1,14 +1,13 @@
 import { useId, useState } from "react";
 import type { ReplaceColourRequest } from "../../app/palette/replaceColour";
-import { formatHex, parseHex } from "../../core/color";
+import { formatHex, parseHex } from "@ngne/editor-ui/colour";
 import { MAX_REPLACE_TOLERANCE } from "../../core/palettes";
 import type { ReplaceScope } from "../../core/palettes";
-import { Button } from "../primitives/Button";
-import { Dialog } from "../primitives/Dialog";
-import { NumberField } from "../primitives/NumberField";
-import { SegmentedControl } from "../primitives/SegmentedControl";
+import { Button } from "@ngne/editor-ui/primitives";
+import { Dialog } from "@ngne/editor-ui/primitives";
+import { NumberField } from "@ngne/editor-ui/primitives";
+import { SegmentedControl } from "@ngne/editor-ui/primitives";
 import { cssColour } from "./pickerMath";
-import "../primitives/field.css";
 import "./replaceColour.css";
 
 const SCOPES: readonly { value: ReplaceScope; label: string }[] = [

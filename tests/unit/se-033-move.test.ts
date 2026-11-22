@@ -7,7 +7,7 @@ import {
     createTransformBoxLayer,
     TRANSFORM_BOX_ORDER,
 } from "../../src/app/selection/transform/transformBox.overlay";
-import { overlayLayers } from "../../src/app/overlay/overlayLayers";
+import { overlayLayers } from "../../src/app/testing/pageModules";
 import type { PointerInput } from "../../src/app/tools/pipeline";
 import { createStrokeEcho } from "../../src/app/tools/strokeEcho";
 import { createViewMapping } from "../../src/app/view/coordinates";

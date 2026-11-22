@@ -12,8 +12,8 @@ import {
     removeColourCommand,
 } from "../../core/palettes";
 import type { CompositeSource, PresetPalette } from "../../core/palettes";
-import { appCommands } from "../commands/appCommands";
-import type { CommandSpec } from "../commands/types";
+import { refreshAppCommands } from "../editorUiHandle";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { applyFloating } from "../selection/floating";
 import { canSettle, settleableDocument } from "../selection/settled";
 import { activeComposites } from "../state/composites";
@@ -43,11 +43,11 @@ import { currentSwatch, paletteStore, setCurrentSwatch } from "./paletteState";
 // commands are disabled then, as undo and redo are. While pixels float (SE-032) they are enabled
 // and apply them first, as the other commands that change the document do (SPEC §5.2).
 //
-// The registry loads this module (appCommands.ts); everything else takes the ids from
+// The registry loads this module (src/app/editorUi.ts); everything else takes the ids from
 // `paletteCommandIds.ts`, so this module never loads before the registry.
 
 // `enabled` reads the palette state too: an open menu follows its changes.
-paletteStore.subscribe(() => appCommands.refresh());
+paletteStore.subscribe(() => refreshAppCommands());
 
 /** The active document when its history can take a command now. */
 function idleDocument(): OpenDocument | null {

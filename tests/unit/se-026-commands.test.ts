@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
-import { buildContextMenu, menuCommands } from "../../src/app/commands/menuModel";
+import { appCommands } from "../../src/app/testing/pageModules";
+import { buildContextMenu, menuCommands } from "@ngne/editor-ui/commands";
 import { plannedCommands } from "../../src/app/commands/planned.commands";
-import type { Command } from "../../src/app/commands/types";
+import type { Command } from "@ngne/editor-ui/commands";
 import { setKeyContext } from "../../src/app/keymap/contextState";
 import { activeDocument, sessionsStore } from "../../src/app/state/sessions";
 import type { OpenDocument } from "../../src/app/state/sessions";

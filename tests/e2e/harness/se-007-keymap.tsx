@@ -1,24 +1,34 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { createCommandRegistry } from "../../../src/app/commands/registry";
-import type { KeyContext } from "../../../src/app/commands/types";
-import { setKeyContext } from "../../../src/app/keymap/contextState";
-import { VIEWPORT_FOCUS_ATTRIBUTE } from "../../../src/app/keymap/environment";
-import { installKeymap } from "../../../src/app/keymap/install";
-import { Button } from "../../../src/ui/primitives/Button";
-import { Dialog } from "../../../src/ui/primitives/Dialog";
-import { Select } from "../../../src/ui/primitives/Select";
-import { AppShell } from "../../../src/ui/shell/AppShell";
-import { UiRoot } from "../../../src/ui/UiRoot";
+import { useStore } from "zustand";
+import { createStore } from "zustand/vanilla";
+import "@ngne/editor-ui/styles.css";
+import { createEditorUi, UiRoot } from "@ngne/editor-ui";
+import {
+    activeKeyContexts,
+    createCommandRegistry,
+    installKeymap,
+    VIEWPORT_FOCUS_ATTRIBUTE,
+} from "@ngne/editor-ui/commands";
+import type { KeyContext } from "@ngne/editor-ui/commands";
+import { Button, Dialog, Select } from "@ngne/editor-ui/primitives";
+import { AppShell } from "@ngne/editor-ui/shell";
+import { editorUi, MENU_BAR, SPRITE_CONTEXTS } from "../../../src/app/editorUi";
+import type { SpriteContext } from "../../../src/app/editorUi";
+import { keyContextStore, setKeyContext } from "../../../src/app/keymap/contextState";
+import { railToolSource } from "../../../src/app/tools/railToolSource";
 
 // SE-007 keymap page: the real shell and the real keymap on a registry that holds nothing but
 // spy commands, which the spec registers from the key table of SPEC §7.8. The regions carry
-// what the keymap contexts need: a viewport focus element, a timeline cell, a text field.
+// what the keymap contexts need: a viewport focus element, a timeline cell, a text field. The
+// shell is the package's, built from the app's registries with the page's controls as the
+// context bar's content; its own keymap is off, and the package's keymap is installed on the
+// spy registry with the app's key contexts.
 
 /** One spy command: a chord of the table in one context (tests/e2e/se-007-spec-keys.ts). */
 interface SpyBinding {
     chord: string;
-    context: KeyContext;
+    context: KeyContext<SpriteContext>;
     text: boolean;
     hold: boolean;
     condition: "selection" | "no-selection" | null;
@@ -52,7 +62,10 @@ declare global {
     }
 }
 
-const registry = createCommandRegistry();
+const registry = createCommandRegistry<string, SpriteContext>({
+    menus: MENU_BAR,
+    contexts: SPRITE_CONTEXTS,
+});
 const harness: KeymapHarness = {
     calls: [],
     releases: [],
@@ -87,7 +100,11 @@ const harness: KeymapHarness = {
 };
 window.se007 = harness;
 
-installKeymap({ registry });
+installKeymap({
+    registry,
+    activeContexts: () =>
+        activeKeyContexts(document, editorUi.config.keyContexts, keyContextStore.getState()),
+});
 // Registered after the keymap's listener, so each event is recorded as the keymap left it.
 for (const type of ["keydown", "keyup"]) {
     window.addEventListener(type, (event) => {
@@ -101,46 +118,71 @@ const CHOICES = [
     { value: "two", label: "Two" },
 ];
 
-function Page() {
-    const [dialogOpen, setDialogOpen] = useState(false);
+/** Whether the page's test dialog is open. */
+const dialogStore = createStore(() => ({ open: false }));
+const setDialogOpen = (open: boolean) => dialogStore.setState({ open });
+
+/** The context bar's content: a text field, a plain button, a select and the dialog's opener. */
+function ContextControls() {
     const [choice, setChoice] = useState("one");
     return (
-        <UiRoot>
+        <>
+            <input aria-label="Name" data-testid="text-field" />
+            <Button data-testid="plain-button">Plain button</Button>
+            <Select
+                label="Choice"
+                hideLabel
+                value={choice}
+                onChange={setChoice}
+                options={CHOICES}
+            />
+            <Button onClick={() => setDialogOpen(true)}>Open dialog</Button>
+        </>
+    );
+}
+
+const harnessUi = createEditorUi({
+    ...editorUi.config,
+    modules: {
+        ...editorUi.config.modules,
+        contextBars: {
+            "harness/controls.contextbar.tsx": {
+                contextBarContent: {
+                    id: "controls",
+                    order: 0,
+                    shown: () => true,
+                    subscribe: () => () => {},
+                    Body: ContextControls,
+                },
+            },
+        },
+    },
+});
+
+function Page() {
+    const dialogOpen = useStore(dialogStore, (state) => state.open);
+    return (
+        <UiRoot editorUi={harnessUi} keymap={false}>
             <AppShell
-                regions={{
-                    "context-bar": (
-                        <>
-                            <input aria-label="Name" data-testid="text-field" />
-                            <Button data-testid="plain-button">Plain button</Button>
-                            <Select
-                                label="Choice"
-                                hideLabel
-                                value={choice}
-                                onChange={setChoice}
-                                options={CHOICES}
-                            />
-                            <Button onClick={() => setDialogOpen(true)}>Open dialog</Button>
-                        </>
-                    ),
-                    viewport: (
-                        <div
-                            tabIndex={0}
-                            data-testid="viewport-focus"
-                            style={{ width: "100%", height: "100%" }}
-                            {...{ [VIEWPORT_FOCUS_ATTRIBUTE]: "" }}
-                        />
-                    ),
-                    timeline: (
-                        <>
-                            <div tabIndex={0} data-testid="timeline-cell">
-                                Cell
-                            </div>
-                            <button type="button" data-testid="timeline-button">
-                                Transport
-                            </button>
-                        </>
-                    ),
-                }}
+                tools={railToolSource}
+                viewport={
+                    <div
+                        tabIndex={0}
+                        data-testid="viewport-focus"
+                        style={{ width: "100%", height: "100%" }}
+                        {...{ [VIEWPORT_FOCUS_ATTRIBUTE]: "" }}
+                    />
+                }
+                bottom={
+                    <>
+                        <div tabIndex={0} data-testid="timeline-cell">
+                            Cell
+                        </div>
+                        <button type="button" data-testid="timeline-button">
+                            Transport
+                        </button>
+                    </>
+                }
             />
             <Dialog
                 open={dialogOpen}

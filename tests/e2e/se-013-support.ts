@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 // The page imports these modules from the dev server; here they are needed for their types.
 import type {} from "../../src/app/overlay/mountOverlay";
 import { decodePng } from "../../src/core/png";
-import type * as ThemeModule from "../../src/ui/theme/theme";
+import type * as ThemeModule from "../../src/app/testing/pageModules";
 import { settle } from "./se-011-support";
 import { twoFrames } from "./se-012-support";
 import type { Screen } from "./se-012-support";
@@ -93,7 +93,7 @@ export function overlayPixels(
 /** Switches the app's theme as the Preferences dialog does. */
 export async function useTheme(page: Page, theme: "dark" | "light"): Promise<void> {
     await page.evaluate(async (theme) => {
-        const path = "/src/ui/theme/theme.ts";
+        const path = "/src/app/testing/pageModules.ts";
         const module = (await import(/* @vite-ignore */ path)) as typeof ThemeModule;
         module.setTheme(theme);
     }, theme);

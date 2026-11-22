@@ -1,9 +1,9 @@
 import { useId, useState } from "react";
 import type { GifRequest } from "../../app/export/gifDialog";
-import { Button } from "../primitives/Button";
-import { Dialog } from "../primitives/Dialog";
-import { NumberField } from "../primitives/NumberField";
-import { Select } from "../primitives/Select";
+import { Button } from "@ngne/editor-ui/primitives";
+import { Dialog } from "@ngne/editor-ui/primitives";
+import { NumberField } from "@ngne/editor-ui/primitives";
+import { Select } from "@ngne/editor-ui/primitives";
 import "./gif.css";
 
 /** "loops forever", "plays once", "plays 3 times". */

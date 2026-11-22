@@ -7,19 +7,17 @@ import type {
     ImportPreference,
     OnionPreference,
 } from "../../app/preferences/preferences";
-import { surfaces } from "../../app/surfaces/surfaces";
-import { Button } from "../primitives/Button";
-import { Dialog } from "../primitives/Dialog";
-import { NumberField } from "../primitives/NumberField";
-import { SegmentedControl } from "../primitives/SegmentedControl";
-import type { SegmentedControlProps, SegmentedOption } from "../primitives/SegmentedControl";
-import { Select } from "../primitives/Select";
-import type { SelectOption } from "../primitives/Select";
-import { Toggle } from "../primitives/Toggle";
-import { DEFAULT_THEME, setTheme, useTheme } from "../theme/theme";
-import type { Theme } from "../theme/theme";
-import { formatHexColour, parseHexColour } from "./hexColour";
-import "../primitives/field.css";
+import { Button } from "@ngne/editor-ui/primitives";
+import { Dialog } from "@ngne/editor-ui/primitives";
+import { NumberField } from "@ngne/editor-ui/primitives";
+import { SegmentedControl } from "@ngne/editor-ui/primitives";
+import type { SegmentedControlProps, SegmentedOption } from "@ngne/editor-ui/primitives";
+import { Select } from "@ngne/editor-ui/primitives";
+import type { SelectOption } from "@ngne/editor-ui/primitives";
+import { Toggle } from "@ngne/editor-ui/primitives";
+import { setTheme, useEditorUi, useTheme } from "@ngne/editor-ui";
+import type { Theme } from "@ngne/editor-ui";
+import { formatHexColour, parseHexColour } from "@ngne/editor-ui/colour";
 import "./preferences.css";
 
 type CheckerColours = Exclude<CheckerboardPreference["colors"], "theme">;
@@ -50,7 +48,8 @@ const DITHERING: readonly SelectOption<ImportPreference["dither"]>[] = [
 /** Arrow keys change the falloff, a fraction, by a twentieth. */
 const FALLOFF_STEP = 0.05;
 
-const close = () => surfaces.close("preferences");
+/** The theme Restore defaults goes back to (DESIGN §3: dark is the default). */
+const DEFAULT_THEME: Theme = "dark";
 
 /** The checkerboard of the current theme (DESIGN §3.1), read from its tokens. */
 function themeCheckerColours(): CheckerColours {
@@ -358,14 +357,17 @@ function AutosaveSection() {
  * Preferences dialog (DESIGN §7): the theme and every value of the preference store. A change
  * applies at once: it is written to its store, which tells its subscribers and persists it.
  * There is nothing to confirm, so the dialog has Close, and Restore defaults to go back. The
- * theme belongs to the theme store (ui/theme), the rest to the preference store. Every on/off
+ * theme belongs to the editor UI instance, the rest to the preference store. Every on/off
  * setting is a text toggle (`aria-pressed`), the one idiom of DESIGN §4 (SE-071).
  */
 export function PreferencesDialog() {
+    const editorUi = useEditorUi();
     const theme = useTheme();
+    const close = () => editorUi.surfaces.close("preferences");
+    const chooseTheme = (next: Theme) => setTheme(editorUi, next);
     const restoreDefaults = () => {
         preferences.reset();
-        setTheme(DEFAULT_THEME);
+        chooseTheme(DEFAULT_THEME);
     };
     return (
         <Dialog
@@ -389,7 +391,7 @@ export function PreferencesDialog() {
                         <SegmentedControl
                             label="Theme"
                             value={theme}
-                            onChange={setTheme}
+                            onChange={chooseTheme}
                             options={THEMES}
                         />
                     </Row>

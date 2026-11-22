@@ -1,7 +1,7 @@
 import type { Command } from "../../core/history";
 import type { DocSession } from "../../core/model";
 import { deselectCommand, invertSelectionCommand, selectAllCommand } from "../../core/selection";
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { activeDocument, sessionsStore } from "../state/sessions";
 import type { OpenDocument } from "../state/sessions";
 import { applyFloating } from "./floating";

@@ -1,6 +1,6 @@
 import { canAddReferenceLayer } from "../../core/references";
-import type { CommandSpec } from "../commands/types";
-import { notices } from "../notices/notices";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
+import { notices } from "@ngne/editor-ui/messages";
 import { availableDocument } from "../timeline/timelineDocument";
 import { timelineStore } from "../timeline/timelineState";
 import { layerNameOf, pickPngFile } from "./pickImage";

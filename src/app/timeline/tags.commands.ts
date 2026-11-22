@@ -3,7 +3,7 @@ import { activeTagAt, frameIndex, tagsAtFrame } from "../../core/model";
 import type { SpriteDoc, Tag } from "../../core/model";
 import { createTagCommand, deleteTagCommand, editTagCommand } from "../../core/tags";
 import type { TagProperties } from "../../core/tags";
-import type { CommandSpec } from "../commands/types";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import type { OpenDocument } from "../state/sessions";
 import { effectiveSelection, targetFrameIds } from "./selection";
 import { TAG_COMMANDS as IDS } from "./tagCommandIds";

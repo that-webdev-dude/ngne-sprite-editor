@@ -4,10 +4,10 @@ import { useStore } from "zustand";
 import type { StoreApi } from "zustand/vanilla";
 import { editorStore } from "../../app/state/editor";
 import type { ColourSlot, EditorState } from "../../app/state/editor";
-import { formatHex, hsvToRgb, packRgba, parseHex, unpackRgba } from "../../core/color";
-import type { Hsv } from "../../core/color";
-import { NumberField } from "../primitives/NumberField";
-import { SegmentedControl } from "../primitives/SegmentedControl";
+import { formatHex, hsvToRgb, packRgba, parseHex, unpackRgba } from "@ngne/editor-ui/colour";
+import type { Hsv } from "@ngne/editor-ui/colour";
+import { NumberField } from "@ngne/editor-ui/primitives";
+import { SegmentedControl } from "@ngne/editor-ui/primitives";
 import { cancelNextContextMenu } from "./cancelContextMenu";
 import {
     changeHsv,

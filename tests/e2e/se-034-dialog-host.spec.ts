@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 // The page imports these modules from the dev server; here they are needed for their types.
-import type * as DialogRequestsModule from "../../src/app/dialogs/dialogRequests";
+import type * as DialogRequestsModule from "../../src/app/testing/pageModules";
 import type * as SpriteDialogsModule from "../../src/app/sprite/dialogs";
 import type * as SessionsModule from "../../src/app/state/sessions";
 import { region } from "./se-006-support";
@@ -89,7 +89,7 @@ test("the dialog host is mounted at the root, outside the menu-bar region, and h
     await page.goto("/");
     await expect(region(page, "viewport")).toBeVisible();
     const hosted = await page.evaluate(async () => {
-        const path = "/src/app/dialogs/dialogRequests.ts";
+        const path = "/src/app/testing/pageModules.ts";
         const module = (await import(/* @vite-ignore */ path)) as typeof DialogRequestsModule;
         return module.commandDialogs.hosted;
     });

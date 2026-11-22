@@ -5,9 +5,9 @@ import { cellsBetween, lineRects } from "../../src/app/overlay/gridLines";
 import { overlayLayers as outlineLayers } from "../../src/app/overlay/outline.overlay";
 import {
     collectOverlayLayers,
-    OverlayLayerError,
-    overlayLayers,
-} from "../../src/app/overlay/overlayLayers";
+    RegistrationError as OverlayLayerError,
+} from "@ngne/editor-ui/overlay";
+import { overlayLayers } from "../../src/app/testing/pageModules";
 import { DEFAULT_OVERLAY_THEME } from "../../src/app/overlay/types";
 import type { OverlayFrame, OverlayLayer, OverlayTheme } from "../../src/app/overlay/types";
 import { activeDocument, sessionsStore } from "../../src/app/state/sessions";

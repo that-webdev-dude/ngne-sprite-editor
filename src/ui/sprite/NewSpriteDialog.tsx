@@ -2,11 +2,10 @@ import { useId, useState } from "react";
 import { MAX_NAME_LENGTH } from "../../core/model";
 import { NEW_SPRITE_SIZE_PRESETS, newSpriteProblems } from "../../app/sprite/dialogs";
 import type { NewSpriteRequest, NewSpriteValues } from "../../app/sprite/dialogs";
-import { Button } from "../primitives/Button";
-import { Dialog } from "../primitives/Dialog";
-import { NumberField } from "../primitives/NumberField";
-import { SegmentedControl } from "../primitives/SegmentedControl";
-import "../primitives/field.css";
+import { Button } from "@ngne/editor-ui/primitives";
+import { Dialog } from "@ngne/editor-ui/primitives";
+import { NumberField } from "@ngne/editor-ui/primitives";
+import { SegmentedControl } from "@ngne/editor-ui/primitives";
 import "./sprite.css";
 
 const PRESET_OPTIONS = NEW_SPRITE_SIZE_PRESETS.map((size) => ({

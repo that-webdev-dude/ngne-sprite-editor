@@ -1,4 +1,5 @@
-import type { MenuBarMenu, PlannedCommandSpec } from "./types";
+import type { PlannedCommandSpec } from "@ngne/editor-ui/commands";
+import type { MenuBarMenu } from "../editorUi";
 
 /**
  * Menu items of commands that later tickets implement. Each is shown disabled until a

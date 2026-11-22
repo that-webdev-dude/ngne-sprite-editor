@@ -12,7 +12,7 @@ import { withDrop } from "../../app/timeline/timelineDrop";
 import type { DropArgument } from "../../app/timeline/timelineDrop";
 import { TIMELINE_EDIT_COMMANDS } from "../../app/timeline/timelineEditIds";
 import { timelineStore } from "../../app/timeline/timelineState";
-import { runCommand } from "../commands/runCommand";
+import { runAppCommand } from "../../app/editorUiHandle";
 import { CELL_WIDTH, columnZeroOf, modifiersOf, STICKY_TOP } from "./timelineDom";
 
 // Drags in the timeline grid (SE-026; DESIGN §5.6): a frame number or a layer row dragged
@@ -339,7 +339,7 @@ function createTimelineDrag(
                   : copy
                     ? TIMELINE_EDIT_COMMANDS.copyCels
                     : TIMELINE_EDIT_COMMANDS.moveCels;
-        withDrop(drop, () => runCommand(id));
+        withDrop(drop, () => runAppCommand(id));
         focusActive();
     };
 

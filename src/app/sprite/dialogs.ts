@@ -1,13 +1,13 @@
 import { MAX_DOCUMENT_SIDE, MIN_DOCUMENT_SIDE } from "../../core/model";
 import { isSpriteName } from "../../core/sprite";
 import type { CanvasAnchor, GridGeometry, Pivot, SpriteSizeMethod } from "../../core/sprite";
-import { commandDialogs, createDialogRequests, dialogView } from "../dialogs/dialogRequests";
+import { commandDialogs, createDialogRequests, dialogView } from "@ngne/editor-ui/messages";
 import type {
     DialogRequestBase,
     DialogRequests,
     DialogState,
     DialogView,
-} from "../dialogs/dialogRequests";
+} from "@ngne/editor-ui/messages";
 
 /**
  * The dialogs of the sprite commands (DESIGN §7): New sprite, Sprite properties, Canvas size

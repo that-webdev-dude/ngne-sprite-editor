@@ -6,10 +6,10 @@ import { floatingState } from "../../app/selection/floatingState";
 import { TRANSFORM_COMMANDS } from "../../app/selection/transform/transform.commands";
 import { draftTransform } from "../../app/selection/transform/transformDraft";
 import { activeDocument, sessionsStore } from "../../app/state/sessions";
-import { runCommand } from "../commands/runCommand";
-import { Button } from "../primitives/Button";
-import { NumberField } from "../primitives/NumberField";
-import type { ContextBarContent } from "./contextBarRegistry";
+import { runAppCommand } from "../../app/editorUiHandle";
+import { Button } from "@ngne/editor-ui/primitives";
+import { NumberField } from "@ngne/editor-ui/primitives";
+import type { ContextBarContent } from "@ngne/editor-ui/shell";
 import "./transformFields.css";
 
 // The transform fields of a floating selection (DESIGN §5.2, SE-033): X, Y, W and H of its
@@ -79,7 +79,7 @@ function TransformFields() {
         const now = shownTransform();
         if (!now) return;
         draftTransform({ ...now, [key]: value });
-        runCommand(TRANSFORM_COMMANDS.set);
+        runAppCommand(TRANSFORM_COMMANDS.set);
     };
     return (
         <span ref={root} className="transform-fields" role="group" aria-label="Transform">
@@ -94,10 +94,10 @@ function TransformFields() {
                     />
                 </span>
             ))}
-            <Button variant="primary" onClick={() => runCommand(FLOATING_COMMANDS.apply)}>
+            <Button variant="primary" onClick={() => runAppCommand(FLOATING_COMMANDS.apply)}>
                 Apply
             </Button>
-            <Button onClick={() => runCommand(FLOATING_COMMANDS.cancel)}>Cancel</Button>
+            <Button onClick={() => runAppCommand(FLOATING_COMMANDS.cancel)}>Cancel</Button>
         </span>
     );
 }

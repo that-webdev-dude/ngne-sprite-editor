@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { rgbToHsv, writeOklab } from "../../src/core/color";
+import { rgbToHsv, writeOklab } from "@ngne/editor-ui/colour";
 import { History } from "../../src/core/history";
 import { createDocument } from "../../src/core/model";
 import {

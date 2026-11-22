@@ -15,8 +15,8 @@ import {
 } from "../../core/layers";
 import type { Layer } from "../../core/model";
 import { setReferenceCommand } from "../../core/references";
-import { appCommands } from "../commands/appCommands";
-import type { CommandSpec } from "../commands/types";
+import { refreshAppCommands } from "../editorUiHandle";
+import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { sessionsStore } from "../state/sessions";
 import type { OpenDocument } from "../state/sessions";
 import { sourcesFreedBy, withReferenceSources } from "../references/referenceSources";
@@ -59,7 +59,7 @@ timelineStore.subscribe((state, previous) => {
         state.selection !== previous.selection ||
         state.rename !== previous.rename ||
         state.properties !== previous.properties;
-    if (shown) appCommands.refresh();
+    if (shown) refreshAppCommands();
 });
 
 function layerOf(document: OpenDocument, layerId: string): Layer | undefined {

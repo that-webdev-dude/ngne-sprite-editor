@@ -1,5 +1,5 @@
 import type { GifRequest } from "../../app/export/gifDialog";
-import { commandDialog } from "../dialogs/registry";
+import { commandDialog } from "@ngne/editor-ui/messages";
 import { GifDialog } from "./GifDialog";
 
 /** The dialog of Export GIF… (SE-063), shown by the dialog host. */

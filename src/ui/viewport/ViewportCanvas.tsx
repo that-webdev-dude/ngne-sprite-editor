@@ -3,9 +3,9 @@ import { mountViewport } from "../../app/viewport/mountViewport";
 import type { MountedViewport } from "../../app/viewport/mountViewport";
 import { DEFAULT_VIEWPORT_THEME } from "../../app/viewport/viewportController";
 import type { ViewportTheme } from "../../app/viewport/viewportController";
-import { parseHexColour } from "../preferences/hexColour";
-import { useTheme } from "../theme/theme";
-import { toast } from "../toast/toast";
+import { parseHexColour } from "@ngne/editor-ui/colour";
+import { useTheme } from "@ngne/editor-ui";
+import { toast } from "@ngne/editor-ui/messages";
 import "./viewport.css";
 
 /** The colours the viewport takes from the theme (DESIGN §3.1, §6), read from its tokens. */

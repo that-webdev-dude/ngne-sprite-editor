@@ -3,7 +3,7 @@ import { createToolState } from "../../src/app/tools/activeTool";
 import { PIXEL_PERFECT } from "../../src/app/tools/brush/brushOptions";
 import { createToolPipeline } from "../../src/app/tools/pipeline";
 import type { PointerInput } from "../../src/app/tools/pipeline";
-import { createToolRegistry } from "../../src/app/tools/registry";
+import { createToolRegistry } from "@ngne/editor-ui/shell";
 import { pencilTool } from "../../src/app/tools/pencil/pencil.tools";
 import { createStrokeEcho, MAX_ECHO_REGIONS } from "../../src/app/tools/strokeEcho";
 import type { EchoTarget, StrokeEcho } from "../../src/app/tools/strokeEcho";
@@ -12,7 +12,7 @@ import {
     echoPixels,
     STROKE_ECHO_ORDER,
 } from "../../src/app/tools/strokeEcho.overlay";
-import { overlayLayers } from "../../src/app/overlay/overlayLayers";
+import { overlayLayers } from "../../src/app/testing/pageModules";
 import { DEFAULT_OVERLAY_THEME } from "../../src/app/overlay/types";
 import { createActiveComposites } from "../../src/app/state/composites";
 import { createEditorStore } from "../../src/app/state/editor";

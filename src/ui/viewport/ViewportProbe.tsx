@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { appCommands } from "../../app/commands/appCommands";
+import { useEditorUi } from "@ngne/editor-ui";
 import { connectViewPolicy } from "../../app/view/viewPolicy";
 import { observeViewportRegion, viewportSize } from "../../app/view/viewportSize";
 import "./viewportArea.css";
@@ -12,6 +12,7 @@ import "./viewportArea.css";
  */
 export function ViewportProbe() {
     const element = useRef<HTMLDivElement>(null);
+    const { commands } = useEditorUi();
 
     useEffect(() => {
         if (!element.current) return;
@@ -20,13 +21,13 @@ export function ViewportProbe() {
         // when another document becomes the active one.
         const stopPolicy = connectViewPolicy();
         // The view commands are enabled while the viewport has a size.
-        const stopRefresh = viewportSize.subscribe(() => appCommands.refresh());
+        const stopRefresh = viewportSize.subscribe(() => commands.refresh());
         return () => {
             stopRefresh();
             stopPolicy();
             stopObserving();
         };
-    }, []);
+    }, [commands]);
 
     return <div ref={element} className="viewport-probe" aria-hidden="true" />;
 }

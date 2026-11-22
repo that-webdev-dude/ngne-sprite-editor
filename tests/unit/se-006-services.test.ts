@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { KeyValueStorage } from "../../src/app/platform/storage";
-import { detectWebGpu, initialWebGpuSupport } from "../../src/ui/platform/webgpu";
+import type { KeyValueStorage } from "@ngne/editor-ui/platform";
+import { detectWebGpu, initialWebGpuSupport } from "@ngne/editor-ui/platform";
 import { createThemeStore, THEME_STORAGE_KEY } from "../../src/ui/theme/theme";
-import { createToastService, INFO_TOAST_MS } from "../../src/ui/toast/toast";
+import { createToastService, INFO_TOAST_MS } from "@ngne/editor-ui/messages";
 
 function memoryStorage(initial: Record<string, string> = {}): KeyValueStorage & {
     data: Map<string, string>;

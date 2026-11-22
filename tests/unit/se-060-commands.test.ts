@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
-import { invokeCommand } from "../../src/app/commands/invoke";
-import { buildContextMenu, menuCommands } from "../../src/app/commands/menuModel";
+import { appCommands } from "../../src/app/testing/pageModules";
+import { invokeCommand } from "@ngne/editor-ui/commands";
+import { buildContextMenu, menuCommands } from "@ngne/editor-ui/commands";
 import { finishSwatchEdit } from "../../src/app/palette/palette.commands";
 import {
     ADD_COLOUR,

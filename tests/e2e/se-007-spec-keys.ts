@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { normalizeChord } from "../../src/app/commands/chord";
+import { normalizeChord } from "@ngne/editor-ui/commands";
 
 // SE-007: the key table of SPEC §7.8, read from docs/SPEC.md. The end-to-end test presses
 // every chord this parser returns, so the list cannot drift from the specification: a row the

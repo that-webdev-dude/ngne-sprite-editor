@@ -1,14 +1,14 @@
 import type { StoreApi } from "zustand/vanilla";
-import { chordKey, normalizeChord } from "../commands/chord";
+import { chordKey, normalizeChord } from "@ngne/editor-ui/commands";
 import { editorStore } from "../state/editor";
 import type { EditorState } from "../state/editor";
 import { statusStore } from "../state/status";
 import type { StatusState } from "../state/status";
 import { optionValues } from "./options";
-import { slotOf } from "./registry";
-import type { ToolRegistry } from "./registry";
+import { slotOf } from "@ngne/editor-ui/shell";
+import type { ToolRegistry } from "@ngne/editor-ui/shell";
 import { toolRegistry } from "./toolRegistry";
-import type { RailSlot, Tool, ToolOptionValue } from "./types";
+import type { RailSlot, Tool, ToolOptionValue, ToolSpec } from "./types";
 
 // Which tool acts (SE-014). The user selects a tool from the rail or with its key; the editor
 // store keeps that choice (`EditorState.tool`). A key held for a temporary tool (Space → hand,
@@ -17,7 +17,7 @@ import type { RailSlot, Tool, ToolOptionValue } from "./types";
 // rail marks, the context bar shows and the pointer pipeline uses.
 
 export interface ToolState {
-    readonly registry: ToolRegistry;
+    readonly registry: ToolRegistry<ToolSpec>;
     /** The id of the tool the user selected; it need not be registered (yet). */
     selectedId(): string;
     /** The tool the user selected, or null while no tool has that id. */
@@ -65,7 +65,10 @@ function keyOf(tool: Tool | undefined): string | null {
 }
 
 /** The tool state of an editor store and a registry. The app has one: `toolState`. */
-export function createToolState(editor: StoreApi<EditorState>, registry: ToolRegistry): ToolState {
+export function createToolState(
+    editor: StoreApi<EditorState>,
+    registry: ToolRegistry<ToolSpec>,
+): ToolState {
     let held: readonly string[] = [];
     let version = 0;
     const listeners = new Set<() => void>();

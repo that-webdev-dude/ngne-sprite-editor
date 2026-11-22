@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appCommands } from "../../src/app/commands/appCommands";
+import { appCommands } from "../../src/app/testing/pageModules";
 import { plannedCommands } from "../../src/app/commands/planned.commands";
-import type { Command } from "../../src/app/commands/types";
+import type { Command } from "@ngne/editor-ui/commands";
 import { setKeyContext } from "../../src/app/keymap/contextState";
 import { FLOATING_COMMANDS } from "../../src/app/selection/floating.commands";
 import { floatingState, TRANSFORM_LABEL } from "../../src/app/selection/floatingState";
@@ -19,11 +19,9 @@ import { plainMapping } from "./se-014-support";
 import { celAt, celKey, createDocument } from "../../src/core/model";
 import type { DocSession, PixelBuffer } from "../../src/core/model";
 import { rectMask, selectCommand } from "../../src/core/selection";
-import {
-    collectContextBarContent,
-    shownContextBarContent,
-} from "../../src/ui/tools/contextBarRegistry";
-import type { ContextBarContent } from "../../src/ui/tools/contextBarRegistry";
+import { collectContextBarContent } from "@ngne/editor-ui/shell";
+import { shownContextBarContent } from "../../src/ui/tools/contextBarRegistry";
+import type { ContextBarContent } from "@ngne/editor-ui/shell";
 import { contextBarContent } from "../../src/ui/tools/transform.contextbar";
 
 // SE-033: the transform commands of the app's registry (SPEC §7.2): Flip Horizontal, Flip
