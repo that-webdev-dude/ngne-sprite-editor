@@ -4,7 +4,7 @@ import { createEditorUi, UiRoot } from "@ngne/editor-ui";
 import { AppShell } from "@ngne/editor-ui/shell";
 import type { StatusField } from "@ngne/editor-ui/shell";
 import { editorUi } from "../../../src/app/editorUi";
-import { railToolSource } from "../../../src/app/tools/railToolSource";
+import { toolState } from "../../../src/app/tools/activeTool";
 import { ColourChips } from "../../../src/ui/colour/ColourChips";
 import { Viewport } from "../../../src/ui/shell/regions/Viewport";
 import { statusSource } from "../../../src/ui/status/statusSource";
@@ -30,7 +30,11 @@ const steady = () => <span data-steady="">Steady content</span>;
 const never = () => () => {};
 
 const target = new URLSearchParams(window.location.search).get("region") ?? "";
-const { modules } = editorUi.config;
+// The app's module maps but its tools, and its state but its command runner: the tools are
+// the app's registry (`sources.tools`), and the runner belongs to the app's own instance.
+const { commands, dialogs, dock, contextBars, overlays, statusFields } = editorUi.config.modules;
+const modules = { commands, dialogs, dock, contextBars, overlays, statusFields };
+const { keyContextState, bottomRegion, tools } = editorUi.config.sources;
 
 /** A status field fails as a whole, not as a component: its text throws until repaired. */
 const fragileField: StatusField<StatusFields> = {
@@ -44,6 +48,7 @@ const fragileField: StatusField<StatusFields> = {
 
 const harnessUi = createEditorUi({
     ...editorUi.config,
+    sources: { keyContextState, bottomRegion, tools },
     modules: {
         ...modules,
         contextBars:
@@ -112,7 +117,7 @@ createRoot(root).render(
             viewport={target === "viewport" ? <Fragile /> : <Viewport />}
             bottom={target === "timeline" ? <Fragile /> : <TimelinePanel />}
             status={statusSource}
-            tools={railToolSource}
+            tools={toolState}
         />
     </UiRoot>,
 );

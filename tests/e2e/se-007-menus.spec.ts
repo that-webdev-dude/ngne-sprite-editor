@@ -361,7 +361,13 @@ test("a command registered later takes its planned item and brings its shortcut"
     await expect(menuItem(page, "se007.planned")).toHaveText("Implemented ItemCtrl+Alt+F9");
     await expect(menuItem(page, "se007.planned")).not.toHaveAttribute("aria-disabled", "true");
     const titles = await view.getByRole("menuitem").allTextContents();
-    expect(titles.slice(-3)).toEqual(["Implemented ItemCtrl+Alt+F9", "SE-007 Submenu", "Last"]);
+    // Open Source Licences… is the last item of View (the package's menu order).
+    expect(titles.slice(-4)).toEqual([
+        "Implemented ItemCtrl+Alt+F9",
+        "SE-007 Submenu",
+        "Last",
+        "Open Source Licences…",
+    ]);
 
     await view.getByRole("menuitem", { name: "SE-007 Submenu" }).hover();
     const submenu = page.getByRole("menu", { name: "SE-007 Submenu" });

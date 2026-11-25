@@ -19,6 +19,7 @@ import {
     timelineStore,
     withArguments,
 } from "../../src/app/timeline/timelineState";
+import { bottomRegion } from "../../src/app/uiState";
 import { celKey, createDocument } from "../../src/core/model";
 import { rectMask, selectionOf } from "../../src/core/selection";
 import { readSpecKeyTable } from "../e2e/se-007-spec-keys";
@@ -668,19 +669,19 @@ describe("Tab: the timeline toggle", () => {
     it("hides and shows the panel, titled by what it will do", () => {
         expect(command(IDS.toggleTimeline).title()).toBe("Hide Timeline");
         run(IDS.toggleTimeline);
-        expect(timelineStore.getState().visible).toBe(false);
+        expect(bottomRegion.getState().visible).toBe(false);
         expect(command(IDS.toggleTimeline).title()).toBe("Show Timeline");
         run(IDS.toggleTimeline);
-        expect(timelineStore.getState().visible).toBe(true);
+        expect(bottomRegion.getState().visible).toBe(true);
     });
 
     it("Layer Properties… and Rename Layer show a hidden panel", () => {
         openWith(1, 1);
         run(IDS.toggleTimeline);
         run(IDS.renameLayer);
-        expect(timelineStore.getState().visible).toBe(true);
+        expect(bottomRegion.getState().visible).toBe(true);
         run(IDS.toggleTimeline);
         run(IDS.layerProperties);
-        expect(timelineStore.getState().visible).toBe(true);
+        expect(bottomRegion.getState().visible).toBe(true);
     });
 });

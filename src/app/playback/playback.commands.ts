@@ -1,4 +1,4 @@
-import { refreshAppCommands } from "../editorUiHandle";
+import { commandRefresh } from "../uiState";
 import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { settleableDocument } from "../selection/settled";
 import { PLAY_PAUSE_COMMAND } from "../timeline/timelineCommandIds";
@@ -56,4 +56,4 @@ export const commands: CommandSpec[] = [
 ];
 
 // Titles and states follow playback.
-playbackStore.subscribe(() => refreshAppCommands());
+playbackStore.subscribe(() => commandRefresh.refresh());

@@ -39,7 +39,7 @@ describe("the file commands in the registry", () => {
             const plan = plannedCommands.find((entry) => entry.id === id);
             expect(command(id), id).toMatchObject({
                 planned: false,
-                source: "../file/file.commands.ts",
+                source: "./file/file.commands.ts",
                 menuPath: ["File"],
                 menuOrder: plan?.menuOrder,
             });

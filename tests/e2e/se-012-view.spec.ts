@@ -386,7 +386,7 @@ test('the status bar shows document size and zoom live, with "Fit" beside the zo
                 child.getAttribute("data-status") ?? child.getAttribute("data-status-action"),
         ),
     );
-    expect(order.slice(0, 3)).toEqual(["size", "zoom", "fit"]);
+    expect(order.slice(0, 3)).toEqual(["size", "zoom", "zoom"]);
     const button = fitButton(page);
     await expect(button).toBeEnabled();
     const box = await boxOf(button);

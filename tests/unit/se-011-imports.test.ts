@@ -20,7 +20,8 @@ function specifiers(file: string): string[] {
     return ts.preProcessFile(source, true, true).importedFiles.map((entry) => entry.fileName);
 }
 
-const isNgne = (specifier: string) => specifier === "@ngne/core" || specifier.startsWith("@ngne/");
+const isNgne = (specifier: string) =>
+    specifier === "@ngne/core" || specifier.startsWith("@ngne/core/");
 
 describe("@ngne/core imports", () => {
     it("finds the source files of every layer", () => {

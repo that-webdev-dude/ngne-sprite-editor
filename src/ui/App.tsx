@@ -6,7 +6,7 @@ import { useWebGpuSupport } from "@ngne/editor-ui/platform";
 import { AppShell, useWindowTooSmall } from "@ngne/editor-ui/shell";
 import { editorUi } from "../app/editorUi";
 import { installTestHooks } from "../app/testing/testHooks";
-import { railToolSource } from "../app/tools/railToolSource";
+import { toolState } from "../app/tools/activeTool";
 import { ColourChips } from "./colour/ColourChips";
 import { FileWorkflows } from "./file/FileWorkflows";
 import { Viewport } from "./shell/regions/Viewport";
@@ -17,9 +17,7 @@ import { TimelinePanel } from "./timeline/TimelinePanel";
 import "./status/cursorField.css";
 
 // Development route: the package's gallery, left out of the production bundle.
-const Gallery = import.meta.env.DEV
-    ? lazy(() => import("@ngne/editor-ui/gallery").then((module) => ({ default: module.Gallery })))
-    : null;
+const Gallery = import.meta.env.DEV ? lazy(() => import("./GalleryRoute")) : null;
 
 // Development builds only: end-to-end tests reach the stores through `window.__ngneTest`.
 if (import.meta.env.DEV) installTestHooks();
@@ -54,7 +52,7 @@ function Editor({ gpu }: Readonly<{ gpu: ReturnType<typeof useWebGpuSupport> }>)
                 viewport={<Viewport />}
                 bottom={<TimelinePanel />}
                 status={statusSource}
-                tools={railToolSource}
+                tools={toolState}
             />
             <SurfaceHost />
             <PixelMemoryWarning />

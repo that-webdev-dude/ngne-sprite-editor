@@ -17,6 +17,7 @@ import { viewportLink } from "../../src/app/viewport/viewportLink";
 import type { ViewportMount } from "../../src/app/viewport/viewportLink";
 import { createDocument } from "../../src/core/model";
 import { rowsOf } from "./se-030-support";
+import { stateContexts } from "./se-007-support";
 
 // SE-031: the selection tools' keys on the app's own stores (SPEC §7.8). M, Shift+M, Q,
 // Shift+Q and W select the tools, a key pressed again switches the rail slot's variant, and
@@ -30,15 +31,12 @@ let mounted: ViewportMount | null = null;
 let disconnect: (() => void) | null = null;
 let uninstall: (() => void) | null = null;
 const target = new EventTarget();
-/** The environment of the keys: the viewport focused, the gesture context as the app sets it. */
+/** The environment of the keys: the viewport focused; the gesture context as the app sets it. */
 const environment = (): KeyEnvironment => ({
     overlayOpen: false,
     focus: "viewport",
-    inTimeline: false,
     nativeKeys: new Set(),
     typeahead: false,
-    gesture: keyContextStore.getState().gesture,
-    floating: keyContextStore.getState().floating,
 });
 const surface = { ownerDocument: { activeElement: null as unknown } };
 
@@ -60,7 +58,12 @@ beforeEach(() => {
     });
     surface.ownerDocument.activeElement = surface;
     setViewSurface(surface as unknown as HTMLElement);
-    uninstall = installKeymap({ registry: appCommands, target, environment });
+    uninstall = installKeymap({
+        registry: appCommands,
+        target,
+        environment,
+        activeContexts: stateContexts,
+    });
 });
 
 afterEach(() => {

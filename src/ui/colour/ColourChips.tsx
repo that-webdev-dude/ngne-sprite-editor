@@ -3,10 +3,8 @@ import { useId } from "react";
 import { RESET_COLOURS, SWAP_COLOURS } from "../../app/colour/colour.commands";
 import { useEditor } from "../../app/state/editor";
 import { formatHex } from "@ngne/editor-ui/colour";
-import { runAppCommand } from "../../app/editorUiHandle";
-import { Icon } from "@ngne/editor-ui/primitives";
-import { IconButton } from "@ngne/editor-ui/primitives";
-import { Tooltip } from "@ngne/editor-ui/primitives";
+import { commandRunner } from "../../app/uiState";
+import { Icon, IconButton, Tooltip } from "@ngne/editor-ui/primitives";
 import { cssColour } from "./pickerMath";
 import "./colourChips.css";
 
@@ -39,7 +37,7 @@ export function ColourChips() {
                     aria-label="Swap colours"
                     aria-describedby={describedBy}
                     data-colour-chips=""
-                    onClick={() => runAppCommand(SWAP_COLOURS)}
+                    onClick={() => commandRunner.run(SWAP_COLOURS)}
                 >
                     {chip("background", background)}
                     {chip("foreground", foreground)}
@@ -52,7 +50,7 @@ export function ColourChips() {
                 label="Reset colours"
                 tooltipSide="right"
                 data-colour-reset=""
-                onClick={() => runAppCommand(RESET_COLOURS)}
+                onClick={() => commandRunner.run(RESET_COLOURS)}
             >
                 <Icon icon={RotateCcw} />
             </IconButton>

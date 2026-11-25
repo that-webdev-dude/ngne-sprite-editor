@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import type { RailSlot as ShellRailSlot, RegisteredTool } from "@ngne/editor-ui/shell";
 import type { History } from "../../core/history";
 import type { DocSession, PixelBuffer } from "../../core/model";
 import type { DirtyRect } from "../../core/raster";
@@ -289,14 +290,12 @@ export interface ToolSpec {
     onCommit?(context: ToolContext, recorded: boolean): void;
 }
 
-/** A registered tool: its spec, with what its planned slot supplies. */
-export interface Tool extends ToolSpec {
-    /** The module that registered it; used in error messages. */
-    readonly source: string;
-    readonly options: readonly ToolOptionSpec[];
-    /** Its position in the rail, or null when it is not in the rail. */
-    readonly railOrder: number | undefined;
-}
+/**
+ * A registered tool: its spec, with what the registry supplies (`RegisteredTool` of
+ * @ngne/editor-ui/shell): the module that registered it, its options and actions, and its
+ * position in the rail (undefined when it is not in the rail).
+ */
+export type Tool = RegisteredTool<ToolSpec>;
 
 /**
  * A slot of the tool rail for a tool a later ticket implements (DESIGN §5.1): shown disabled
@@ -316,22 +315,9 @@ export interface ToolModule {
     plannedTools?: readonly PlannedToolSpec[];
 }
 
-/** One button of the tool rail: a registered tool, or the planned slot of one. */
-export interface RailSlot {
-    readonly id: string;
-    readonly label: string;
-    readonly shortcut: string | undefined;
-    readonly icon: LucideIcon | undefined;
-    readonly railOrder: number;
-    /**
-     * The tool of the slot's id, or the first of its variants when there is none; null while
-     * the slot is planned only.
-     */
-    readonly tool: Tool | null;
-    /**
-     * Every tool of the slot (DESIGN §5.1, SE-031): the tool of its id first, then the tools
-     * that name it in `variantOf`, by their `railOrder` and then their id. More than one means
-     * the button switches between them.
-     */
-    readonly variants: readonly Tool[];
-}
+/**
+ * One button of the tool rail (`RailSlot` of @ngne/editor-ui/shell): a registered tool, or the
+ * planned slot of one. Its `variants` are every tool of the slot (DESIGN §5.1, SE-031): the
+ * tool of its id first, then the tools that name it in `variantOf`.
+ */
+export type RailSlot = ShellRailSlot<ToolSpec>;

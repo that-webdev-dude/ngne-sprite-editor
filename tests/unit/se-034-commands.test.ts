@@ -10,8 +10,6 @@ import { activeDocument, sessionsStore } from "../../src/app/state/sessions";
 import type { OpenDocument } from "../../src/app/state/sessions";
 import { DocumentSizeError, celKey, createDocument } from "../../src/core/model";
 import { rectMask, selectionOf } from "../../src/core/selection";
-import { commandDialog } from "@ngne/editor-ui/messages";
-import { collectCommandDialogs } from "../../src/ui/dialogs/registry";
 import { registeredDialogs } from "../../src/app/testing/pageModules";
 import { imageWith } from "./se-034-support";
 
@@ -156,17 +154,6 @@ describe("dialog registry", () => {
         }
         expect(registeredDialogs.get("canvas-size")?.name).toBe("Canvas size");
         expect(registeredDialogs.get("sprite-size")?.name).toBe("Sprite size");
-    });
-
-    it("refuses a module without dialogs and a kind registered twice", () => {
-        const Body = () => null;
-        expect(() => collectCommandDialogs({ "./a.dialog.tsx": {} })).toThrow('"commandDialogs"');
-        expect(() =>
-            collectCommandDialogs({
-                "./a.dialog.tsx": { commandDialogs: [commandDialog("x", "X", Body)] },
-                "./b.dialog.tsx": { commandDialogs: [commandDialog("x", "Y", Body)] },
-            }),
-        ).toThrow('Dialog kind "x" is used by ./a.dialog.tsx and ./b.dialog.tsx.');
     });
 });
 

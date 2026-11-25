@@ -10,7 +10,8 @@ import { activeView, fittedView, geometry, twoFrames } from "./se-012-support";
 // lay out in one column first and switch in a later task, after the viewport region had been
 // measured with the narrower rail: a document opened in between was fitted to a viewport
 // 28 CSS px wider than the one it is shown in, and a view once fitted is never fitted again
-// (SPEC §6.4). At 1280×720 the rail has two columns, so that is the case these tests open.
+// (SPEC §6.4). The rail now runs the full height beside the timeline (the canon layout of
+// @ngne/editor-ui) and has one column at 1280×720; the tests check the same single size.
 //
 // The page opens the document itself, at the two moments of that gap, from an init script: a
 // test cannot get a call in between from outside, the gap is a frame or two long.
@@ -101,7 +102,7 @@ function openedAt(moment: Moment): StartupFitCase {
             );
             // The size the document was fitted to is the one it is shown in.
             const seen = await reports(page);
-            expect(seen.at(-1)).toEqual({ ...layout.device, columns: "2" });
+            expect(seen.at(-1)).toEqual({ ...layout.device, columns: "1" });
             expect(errors).toEqual([]);
         },
     };
@@ -122,7 +123,7 @@ export const STARTUP_FIT_CASES: readonly StartupFitCase[] = [
             await twoFrames(page);
             const rail = page.locator('[data-region="tool-rail"]');
             const columns = await rail.getAttribute("data-columns");
-            expect(columns).toBe("2");
+            expect(columns).toBe("1");
             const seen = await reports(page);
             expect(seen).toHaveLength(1);
             expect(seen[0]!.columns).toBe(columns);

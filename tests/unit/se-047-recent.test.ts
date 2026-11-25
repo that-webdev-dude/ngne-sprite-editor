@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { appCommands } from "../../src/app/testing/pageModules";
 import { buildMenu, menuCommands } from "@ngne/editor-ui/commands";
-import type { MenuNode } from "@ngne/editor-ui/commands";
 import {
     createRecentFiles,
     indexedDbRecentFiles,
@@ -434,7 +433,7 @@ describe("File → Open Recent", () => {
     function submenu(): { ids: string[]; titles: string[] } {
         const file = buildMenu(appCommands.list(), ["File"]);
         const node = file.find(
-            (entry): entry is Extract<MenuNode, { kind: "submenu" }> =>
+            (entry): entry is Extract<(typeof file)[number], { kind: "submenu" }> =>
                 entry.kind === "submenu" && entry.title === OPEN_RECENT_PATH[1],
         );
         const commands = menuCommands(node?.children ?? []);

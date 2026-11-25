@@ -18,10 +18,8 @@ import { beginDurationEdit, shownDuration } from "../../app/timeline/frameDurati
 import type { ShownDuration } from "../../app/timeline/frameDuration";
 import { PLAY_PAUSE_COMMAND, TIMELINE_COMMANDS } from "../../app/timeline/timelineCommandIds";
 import { endDurationEdit, timelineStore, withArguments } from "../../app/timeline/timelineState";
-import { runAppCommand } from "../../app/editorUiHandle";
-import { Icon } from "@ngne/editor-ui/primitives";
-import { IconButton } from "@ngne/editor-ui/primitives";
-import { NumberField } from "@ngne/editor-ui/primitives";
+import { commandRunner } from "../../app/uiState";
+import { Icon, IconButton, NumberField } from "@ngne/editor-ui/primitives";
 import { OnionSkinControls } from "./OnionSkin";
 import { TIMELINE_FIELD_ATTRIBUTE } from "./timelineDom";
 
@@ -83,7 +81,7 @@ function CommandButton({ view, icon }: { view: CommandView | null; icon: LucideI
             shortcut={view.shortcut ?? undefined}
             disabled={!view.enabled}
             data-command={view.id}
-            onClick={() => runAppCommand(view.id)}
+            onClick={() => commandRunner.run(view.id)}
         >
             <Icon icon={icon} />
         </IconButton>
@@ -166,10 +164,9 @@ export const TimelineCorner = memo(function TimelineCorner() {
                         value={shown.durationMs}
                         mixed={shown.mixed}
                         onChange={(duration) =>
-                            withArguments(
-                                { duration },
-                                () => void runAppCommand(TIMELINE_COMMANDS.setDuration),
-                            )
+                            withArguments({ duration }, () => {
+                                commandRunner.run(TIMELINE_COMMANDS.setDuration);
+                            })
                         }
                     />
                 </span>

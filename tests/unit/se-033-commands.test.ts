@@ -20,7 +20,6 @@ import { celAt, celKey, createDocument } from "../../src/core/model";
 import type { DocSession, PixelBuffer } from "../../src/core/model";
 import { rectMask, selectCommand } from "../../src/core/selection";
 import { collectContextBarContent } from "@ngne/editor-ui/shell";
-import { shownContextBarContent } from "../../src/ui/tools/contextBarRegistry";
 import type { ContextBarContent } from "@ngne/editor-ui/shell";
 import { contextBarContent } from "../../src/ui/tools/transform.contextbar";
 
@@ -354,10 +353,8 @@ describe("the context bar's registered content", () => {
         floatingState.lift(active());
         expect(told).toBeGreaterThan(0);
         expect(contextBarContent.shown()).toBe(true);
-        expect(shownContextBarContent([contextBarContent])).toBe(contextBarContent);
         floatingState.apply();
         expect(contextBarContent.shown()).toBe(false);
-        expect(shownContextBarContent([contextBarContent])).toBeNull();
         stop();
     });
 

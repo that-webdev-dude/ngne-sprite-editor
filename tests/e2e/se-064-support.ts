@@ -1,5 +1,6 @@
 import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
+import type { MenuPath } from "@ngne/editor-ui/commands";
 // Declares `window.__ngneTest`, the development-only test hook of the app, and its type.
 import type { EditorTestHooks } from "../../src/app/testing/testHooks";
 import { region, settleTimers } from "./se-006-support";
@@ -212,7 +213,7 @@ export interface Probe {
     enabled?: boolean;
     shortcut?: string | string[];
     context?: "canvas" | "global";
-    menuPath?: string[];
+    menuPath?: MenuPath;
     menuOrder?: number;
     /** A hold binding: released after it ran. */
     hold?: boolean;

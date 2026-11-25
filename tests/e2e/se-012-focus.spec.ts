@@ -388,17 +388,16 @@ test("a resize of the viewport region is followed without a ResizeObserver loop,
     const rail = region(page, "tool-rail");
     const splitter = page.getByRole("separator", { name: "Resize timeline" });
 
-    // The tallest timeline leaves the rail too short for one column: in one delivery the rail
-    // changes its columns and the viewport region its size, twice over.
-    // At 1280×720 the rail starts in two columns (its colour chips, SE-016): Home first gives
-    // it one, so End switches it from one to two in the same delivery as the resize.
+    // The timeline from its lowest to its tallest and back resizes the viewport region, twice
+    // over. The rail runs the full height beside the timeline (the canon layout): it keeps
+    // its one column at 1280×720 whatever the timeline's height.
     const squeeze = async () => {
         await splitter.focus();
         await page.keyboard.press("Home");
         await expect(rail).toHaveAttribute("data-columns", "1");
         await twoFrames(page);
         await page.keyboard.press("End");
-        await expect(rail).toHaveAttribute("data-columns", "2");
+        await expect(rail).toHaveAttribute("data-columns", "1");
         await twoFrames(page);
         await page.keyboard.press("Home");
         await expect(rail).toHaveAttribute("data-columns", "1");
@@ -419,7 +418,7 @@ test("a resize of the viewport region is followed without a ResizeObserver loop,
     // The size is followed: with the timeline at its tallest, Fit fits the smaller viewport.
     await splitter.focus();
     await page.keyboard.press("End");
-    await expect(rail).toHaveAttribute("data-columns", "2");
+    await expect(rail).toHaveAttribute("data-columns", "1");
     await settle(page);
     const smaller = await hostDeviceSize(page);
     expect(smaller.height).toBeLessThan(32 * fitted.scale);

@@ -3,6 +3,7 @@ import { createToolState } from "../../src/app/tools/activeTool";
 import { PIXEL_PERFECT } from "../../src/app/tools/brush/brushOptions";
 import { createToolPipeline } from "../../src/app/tools/pipeline";
 import type { PointerInput } from "../../src/app/tools/pipeline";
+import type { ToolSpec } from "../../src/app/tools/types";
 import { createToolRegistry } from "@ngne/editor-ui/shell";
 import { pencilTool } from "../../src/app/tools/pencil/pencil.tools";
 import { createStrokeEcho, MAX_ECHO_REGIONS } from "../../src/app/tools/strokeEcho";
@@ -162,7 +163,7 @@ describe("the echo through the pointer pipeline", () => {
         const editor = createEditorStore();
         editor.getState().setForeground(0x000000ff);
         const status = createStatusStore();
-        const registry = createToolRegistry();
+        const registry = createToolRegistry<ToolSpec>();
         registry.register(pencilTool, "pencil.tools.ts");
         const tools = createToolState(editor, registry);
         tools.select("pencil");

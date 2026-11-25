@@ -101,7 +101,7 @@ export interface Harness {
     composites: ActiveComposites;
     editor: StoreApi<EditorState>;
     status: StoreApi<StatusState>;
-    registry: ToolRegistry;
+    registry: ToolRegistry<ToolSpec>;
     tools: ToolState;
     pipeline: ToolPipeline;
     frames: ReturnType<typeof manualFrames>;
@@ -141,7 +141,7 @@ export function harness(extra: readonly ToolSpec[] = []): Harness {
     const composites = createActiveComposites(sessions);
     const editor = createEditorStore();
     const status = createStatusStore();
-    const registry = createToolRegistry();
+    const registry = createToolRegistry<ToolSpec>();
     registry.register(dotFixture, "se-014-support.ts");
     for (const tool of extra) registry.register(tool, "test");
     const tools = createToolState(editor, registry);

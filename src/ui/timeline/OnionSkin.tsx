@@ -6,14 +6,16 @@ import { ONION_SETTINGS_COMMAND, ONION_SKIN_COMMAND } from "../../app/onion/onio
 import { withOnionPatch } from "../../app/onion/onion";
 import { activeDocument, sessionsStore } from "../../app/state/sessions";
 import type { OnionSettings } from "../../core/model";
-import { runAppCommand } from "../../app/editorUiHandle";
-import { Icon } from "@ngne/editor-ui/primitives";
-import { IconButton } from "@ngne/editor-ui/primitives";
-import { NumberField } from "@ngne/editor-ui/primitives";
-import { Popover } from "@ngne/editor-ui/primitives";
-import { SegmentedControl } from "@ngne/editor-ui/primitives";
-import { Slider } from "@ngne/editor-ui/primitives";
-import { Toggle } from "@ngne/editor-ui/primitives";
+import { commandRunner } from "../../app/uiState";
+import {
+    Icon,
+    IconButton,
+    NumberField,
+    Popover,
+    SegmentedControl,
+    Slider,
+    Toggle,
+} from "@ngne/editor-ui/primitives";
 
 // The onion skin controls of the transport (DESIGN §5.6, §7; SE-025): the toggle, which runs
 // View → Show/Hide Onion Skin (F3), and the button of the settings popover beside it. The
@@ -50,7 +52,9 @@ function useToggleShortcut(): string | undefined {
 function OnionFields({ onion }: { onion: OnionSettings }) {
     // Through the registry (SPEC §5): Apply Onion Skin Settings, the change handed to it.
     const set = (patch: Partial<OnionSettings>) =>
-        withOnionPatch(patch, () => void runAppCommand(ONION_SETTINGS_COMMAND));
+        withOnionPatch(patch, () => {
+            commandRunner.run(ONION_SETTINGS_COMMAND);
+        });
     return (
         <div className="timeline-onion">
             <NumberField
@@ -128,7 +132,7 @@ export const OnionSkinControls = memo(function OnionSkinControls() {
                 pressed={onion?.enabled ?? false}
                 disabled={!onion}
                 data-command={ONION_SKIN_COMMAND}
-                onPressedChange={() => runAppCommand(ONION_SKIN_COMMAND)}
+                onPressedChange={() => commandRunner.run(ONION_SKIN_COMMAND)}
             >
                 <Icon icon={Blend} />
             </Toggle>

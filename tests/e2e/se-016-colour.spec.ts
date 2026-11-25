@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { hsvToRgb, packRgba } from "@ngne/editor-ui/colour";
-import { RAIL, railOneColumnHeight } from "@ngne/editor-ui/shell";
+import { railOneColumnHeight } from "@ngne/editor-ui/shell";
 import { arrowToRadio, boxOf, collectErrors, openShell, region, tabTo } from "./se-006-support";
 import { openEditor, openSession } from "./se-007-support";
 import { audit, startInTheme, THEMES } from "./se-008-support";
@@ -340,18 +340,19 @@ test("the rail is in one column exactly when the chips fit under the tools there
         const heights = [...element.children].map((child) => (child as HTMLElement).offsetHeight);
         return heights.reduce((sum, height) => sum + height, 0) + 2 * (heights.length - 1);
     });
-    expect(footer).toBe(RAIL.footer);
+    // The height the editor reserves under the rail's groups (`railFooterHeight`).
+    expect(footer).toBe(54);
     const needed = railOneColumnHeight(groups, footer);
     const splitter = page.getByRole("separator", { name: "Resize timeline" });
     await splitter.focus();
     await expect(splitter).toBeFocused();
 
     const seen = new Set<string>();
-    // The timeline from 200 px down to 152 px: the rail from 460 px to 508 px, across the
-    // heights where the chips fit beside each other in two columns only.
+    // The timeline from 200 px down to 152 px. The rail runs the full height beside it (the
+    // canon layout): 660 px at every step, where the tools and the chips fit in one column.
     for (let step = 0; step <= 6; step++) {
         const height = (await boxOf(rail)).height;
-        expect(height).toBe(460 + 8 * step);
+        expect(height).toBe(660);
         const columns = needed > height ? "2" : "1";
         seen.add(columns);
         await expect(rail, `rail ${height} px`).toHaveAttribute("data-columns", columns);
@@ -388,7 +389,7 @@ test("the rail is in one column exactly when the chips fit under the tools there
         expect(fits, `rail ${height} px`).toBe(true);
         await page.keyboard.press("ArrowDown");
     }
-    expect([...seen].sort()).toEqual(["1", "2"]);
+    expect([...seen].sort()).toEqual(["1"]);
 });
 
 for (const theme of THEMES) {

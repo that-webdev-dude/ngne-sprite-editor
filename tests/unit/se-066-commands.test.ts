@@ -143,13 +143,16 @@ function float(): void {
     const environment: KeyEnvironment = {
         overlayOpen: false,
         focus: "viewport",
-        inTimeline: false,
         nativeKeys: new Set(),
         typeahead: false,
-        gesture: false,
-        floating: keyContextStore.getState().floating,
     };
-    const resolution = resolveKey(appCommands, "ArrowRight", environment);
+    const floating = keyContextStore.getState().floating;
+    const resolution = resolveKey(
+        appCommands,
+        "ArrowRight",
+        environment,
+        floating ? ["floating"] : [],
+    );
     if (resolution.action !== "run") throw new Error("ArrowRight runs nothing");
     void resolution.command.run();
     expect(isFloating()).toBe(true);

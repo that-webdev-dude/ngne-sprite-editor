@@ -1,5 +1,7 @@
 import type { Command } from "../../src/core/history";
 import type { KeyValueStorage } from "@ngne/editor-ui/platform";
+import type { SpriteContext } from "../../src/app/editorUi";
+import { keyContextStore } from "../../src/app/keymap/contextState";
 
 // Shared by the SE-007 unit tests.
 
@@ -31,4 +33,14 @@ export function memoryStorage(initial: Record<string, string> = {}): KeyValueSto
         setItem: (key, value) => void data.set(key, value),
         removeItem: (key) => void data.delete(key),
     };
+}
+
+/**
+ * The app's state contexts that are on now (SPEC §7.8: `gesture`, `floating`), highest priority
+ * first: those the editor UI instance's keymap resolves a key with, from the app's store
+ * (`sources.keyContextState`), while focus is outside the timeline.
+ */
+export function stateContexts(): SpriteContext[] {
+    const state = keyContextStore.getState();
+    return (["gesture", "floating"] as const).filter((context) => state[context]);
 }

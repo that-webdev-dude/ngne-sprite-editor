@@ -28,11 +28,8 @@ const SIZE = { width: 400, height: 300 };
 const VIEWPORT: KeyEnvironment = {
     overlayOpen: false,
     focus: "viewport",
-    inTimeline: false,
     nativeKeys: new Set(),
     typeahead: false,
-    gesture: false,
-    floating: false,
 };
 const TEXT: KeyEnvironment = { ...VIEWPORT, focus: "text" };
 const BUTTON: KeyEnvironment = {

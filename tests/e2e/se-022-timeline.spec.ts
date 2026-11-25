@@ -576,7 +576,7 @@ test("Tab with the viewport focused hides and shows the timeline; elsewhere it m
     await cell(page, "Layer 1", 1).click();
     await expect(cell(page, "Layer 1", 1)).toBeFocused();
     await page.keyboard.press("Tab");
-    const fit = region(page, "status-bar").locator('[data-status-action="fit"]');
+    const fit = region(page, "status-bar").locator('[data-status-action="zoom"]');
     await expect(fit).toBeFocused();
     await release();
     await afterFrames(page, 3);

@@ -1,6 +1,6 @@
 import { useStore } from "zustand";
 import { openRecentId, recentFiles } from "../../app/file/recentFiles";
-import { runAppCommand } from "../../app/editorUiHandle";
+import { commandRunner } from "../../app/uiState";
 import { Button } from "@ngne/editor-ui/primitives";
 import "./sprite.css";
 
@@ -14,9 +14,9 @@ export function EmptyState() {
     const entries = useStore(recentFiles.store, (state) => state.entries);
     return (
         <div className="empty-state" data-empty-state="">
-            <Button onClick={() => runAppCommand("file.new")}>New sprite</Button>
-            <Button onClick={() => runAppCommand("file.open")}>Open</Button>
-            <Button onClick={() => runAppCommand("file.importPng")}>Import PNG</Button>
+            <Button onClick={() => commandRunner.run("file.new")}>New sprite</Button>
+            <Button onClick={() => commandRunner.run("file.open")}>Open</Button>
+            <Button onClick={() => commandRunner.run("file.importPng")}>Import PNG</Button>
             {entries.length > 0 ? (
                 <>
                     <p className="empty-state__recent-title" id="empty-state-recent">
@@ -28,7 +28,7 @@ export function EmptyState() {
                                 <Button
                                     data-recent-file={entry.name}
                                     title={entry.name}
-                                    onClick={() => runAppCommand(openRecentId(entry))}
+                                    onClick={() => commandRunner.run(openRecentId(entry))}
                                 >
                                     <span className="empty-state__recent-name">{entry.name}</span>
                                 </Button>

@@ -2,26 +2,28 @@
 import type {} from "../import-meta";
 import { createEditorUi } from "@ngne/editor-ui";
 import type { EditorUiModules } from "@ngne/editor-ui";
-import { setKeyContext } from "@ngne/editor-ui/commands";
-import { setBottomRegionVisible } from "@ngne/editor-ui/shell";
 import type { StatusFields } from "../ui/status/statusFields";
 import { PreferencesDialog } from "../ui/preferences/PreferencesDialog";
 import { appInfo } from "./about/appInfo";
-import { bindEditorUi } from "./editorUiHandle";
+import { EDITOR_ID } from "./editorId";
 import { keyContextStore } from "./keymap/contextState";
 import type { OverlayFrame } from "./overlay/types";
 import { keepsPlaying, stopPlaybackForEdit } from "./playback/playbackState";
 import { editorStore } from "./state/editor";
 import { sessionsStore } from "./state/sessions";
-import { timelineStore } from "./timeline/timelineState";
+import { toolRegistry } from "./tools/toolRegistry";
 import type { ToolSpec } from "./tools/types";
+import { bottomRegion, commandRefresh, commandRunner } from "./uiState";
 
 // The editor UI instance of the sprite editor (@ngne/editor-ui, SPEC §5 of the package): its
 // identity, menus, key contexts, the timeline as the bottom region, the height of the colour
 // chips under the tool rail, and the module maps of its registries, each found by one glob
 // line under `src`, so a feature adds a command, dialog, panel, tool or overlay layer as a
 // module of its own. The stores the commands read refresh them; playback stops before every
-// command but the ones that keep it playing (SE-024). Its own surface: Preferences.
+// command but the ones that keep it playing (SE-024). Its own surface: Preferences. The state
+// it holds for the app (the state contexts, the timeline's visibility, the command runner and
+// the tool registry) is created in modules that import no instance (`sources`), which the
+// modules loaded by the maps below use without importing this one.
 
 /** The menus of the menu bar, in order (DESIGN §2). */
 export const MENU_BAR = [
@@ -71,7 +73,7 @@ export const editorUi = createEditorUi<
     OverlayFrame,
     StatusFields
 >({
-    id: "ngne-sprite-editor",
+    id: EDITOR_ID,
     productName: "NGNE Sprite Editor",
     about: appInfo,
     menus: MENU_BAR,
@@ -89,7 +91,6 @@ export const editorUi = createEditorUi<
         contextBars: import.meta.glob<ModuleOf<"contextBars">>("../**/*.contextbar.tsx", {
             eager: true,
         }),
-        tools: import.meta.glob<ModuleOf<"tools">>("../**/*.tools.{ts,tsx}", { eager: true }),
         overlays: import.meta.glob<ModuleOf<"overlays">>("../**/*.overlay.{ts,tsx}", {
             eager: true,
         }),
@@ -97,25 +98,13 @@ export const editorUi = createEditorUi<
             eager: true,
         }),
     },
-    refreshOn: [sessionsStore, editorStore],
+    refreshOn: [sessionsStore, editorStore, commandRefresh],
     beforeRun: (command) => {
         if (!keepsPlaying(command.id)) stopPlaybackForEdit();
     },
     surfaces: { preferences: PreferencesDialog },
+    sources: { keyContextState: keyContextStore, bottomRegion, commandRunner, tools: toolRegistry },
 });
 
 /** The app's command registry: the package's commands, then every `*.commands.ts(x)` module. */
 export const appCommands = editorUi.commands;
-
-bindEditorUi(editorUi);
-
-// The app's own stores of the state contexts and of the timeline's visibility, which modules
-// loaded above read and write, follow the instance's and the instance follows them.
-keyContextStore.subscribe((state) => {
-    setKeyContext(editorUi, "gesture", state.gesture);
-    setKeyContext(editorUi, "floating", state.floating);
-});
-editorUi.bottomRegion.subscribe(({ visible }) => {
-    if (timelineStore.getState().visible !== visible) timelineStore.setState({ visible });
-});
-timelineStore.subscribe(({ visible }) => setBottomRegionVisible(editorUi, visible));

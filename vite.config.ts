@@ -21,6 +21,7 @@ interface PwaOptions {
     injectManifest: {
         globPatterns: string[];
         maximumFileSizeToCacheInBytes: number;
+        buildPlugins: { vite: Plugin[] };
     };
     manifest: Record<string, unknown>;
 }
@@ -77,7 +78,8 @@ const TITLE = "NGNE Sprite Editor";
  * `index.html`, with the licence of every package whose code the build bundled, each of them a
  * runtime dependency of package-lock.json; the web workers' builds note their modules for it.
  * The development server answers the same address. A package without an allowed licence, or
- * code the build must leave out (`EXCLUDED_CODE`), fails the build.
+ * code the build must leave out (`EXCLUDED_CODE`), fails the build, and so does a service
+ * worker that bundles code of a package the file does not list.
  */
 const licences = generateLicences({
     root: ROOT,
@@ -121,6 +123,8 @@ export default defineConfig(({ command }) => ({
                 // The main chunk holds NGNE and React; a build with the development test hooks
                 // (tests/e2e/se-072-support.ts) is several times larger.
                 maximumFileSizeToCacheInBytes: 32 * 1024 * 1024,
+                // The worker's own build checks its packages against licences.txt.
+                buildPlugins: { vite: [licences.serviceWorkerPlugin as unknown as Plugin] },
             },
             manifest: {
                 // The app's identity. Browsers resolve `id` against the origin, not against the

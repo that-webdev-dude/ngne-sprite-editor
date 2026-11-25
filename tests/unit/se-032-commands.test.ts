@@ -167,23 +167,25 @@ function moved(
     return after;
 }
 
-/** A key pressed on the focused viewport, with the floating context as it is now. */
+/** A key pressed on the focused viewport. */
 function viewportKey(overrides: Partial<KeyEnvironment> = {}): KeyEnvironment {
     return {
         overlayOpen: false,
         focus: "viewport",
-        inTimeline: false,
         nativeKeys: new Set(),
         typeahead: false,
-        gesture: false,
-        floating: keyContextStore.getState().floating,
         ...overrides,
     };
 }
 
+/** The app's contexts active on the viewport: the floating context as it is now. */
+function floatingContext(): "floating"[] {
+    return keyContextStore.getState().floating ? ["floating"] : [];
+}
+
 /** The command a chord runs on the viewport now, with its context; run when `run` is set. */
 function press(chord: string, run = true): string {
-    const resolution = resolveKey(appCommands, chord, viewportKey());
+    const resolution = resolveKey(appCommands, chord, viewportKey(), floatingContext());
     if (resolution.action !== "run") return resolution.action;
     const { command: found, context } = resolution;
     if (!found.enabled()) return `${context}:${found.id} (disabled)`;
@@ -205,7 +207,7 @@ describe("the commands in the registry", () => {
             const plan = plannedCommands.find((entry) => entry.id === id);
             expect(command(id), id).toMatchObject({
                 planned: false,
-                source: "../selection/clipboard.commands.ts",
+                source: "./selection/clipboard.commands.ts",
                 menuPath: ["Edit"],
                 menuOrder: plan?.menuOrder,
                 shortcuts,

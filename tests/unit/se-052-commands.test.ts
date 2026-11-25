@@ -42,7 +42,7 @@ describe("the export commands in the registry", () => {
             const plan = plannedCommands.find((entry) => entry.id === id);
             expect(command(id), id).toMatchObject({
                 planned: false,
-                source: "../export/export.commands.ts",
+                source: "./export/export.commands.ts",
                 menuPath: ["File"],
                 menuOrder: plan?.menuOrder,
             });

@@ -10,7 +10,7 @@ import {
     resolveBottomHeight as resolveTimelineHeight,
     bottomMaxHeight as timelineMaxHeight,
 } from "@ngne/editor-ui/shell";
-import { createLayoutStore, LAYOUT_STORAGE_KEY } from "../../src/ui/shell/layoutStore";
+import { createLayoutStore, LAYOUT_STORAGE_KEY } from "../../src/app/testing/persistedNames";
 
 function memoryStorage(initial: Record<string, string> = {}): KeyValueStorage & {
     data: Map<string, string>;
@@ -75,26 +75,26 @@ describe("persisted shell sizes", () => {
     it("reads a stored record and falls back per field on malformed values", () => {
         expect(parseStoredLayout({ dockWidth: 300, timelineHeight: 240 })).toEqual({
             dockWidth: 300,
-            timelineHeight: 240,
+            bottomHeight: 240,
         });
         expect(parseStoredLayout({ dockWidth: "wide", timelineHeight: -5 })).toEqual({
             dockWidth: null,
-            timelineHeight: null,
+            bottomHeight: null,
         });
         for (const value of [undefined, null, 7, "x", [], { dockWidth: Number.NaN }]) {
-            expect(parseStoredLayout(value)).toEqual({ dockWidth: null, timelineHeight: null });
+            expect(parseStoredLayout(value)).toEqual({ dockWidth: null, bottomHeight: null });
         }
     });
 
     it("starts from defaults with an empty or corrupt store", () => {
         expect(createLayoutStore(memoryStorage()).getState()).toMatchObject({
             dockWidth: null,
-            timelineHeight: null,
+            bottomHeight: null,
         });
         const corrupt = memoryStorage({ [LAYOUT_STORAGE_KEY]: "{not json" });
         expect(createLayoutStore(corrupt).getState()).toMatchObject({
             dockWidth: null,
-            timelineHeight: null,
+            bottomHeight: null,
         });
         expect(createLayoutStore(null).getState().dockWidth).toBeNull();
     });
@@ -103,20 +103,20 @@ describe("persisted shell sizes", () => {
         const storage = memoryStorage();
         const store = createLayoutStore(storage);
         store.getState().setDockWidth(312);
-        store.getState().setTimelineHeight(260);
+        store.getState().setBottomHeight(260);
         expect(JSON.parse(storage.data.get(LAYOUT_STORAGE_KEY) ?? "")).toEqual({
             dockWidth: 312,
             timelineHeight: 260,
         });
         expect(createLayoutStore(storage).getState()).toMatchObject({
             dockWidth: 312,
-            timelineHeight: 260,
+            bottomHeight: 260,
         });
 
         store.getState().setDockWidth(null);
         expect(createLayoutStore(storage).getState()).toMatchObject({
             dockWidth: null,
-            timelineHeight: 260,
+            bottomHeight: 260,
         });
     });
 

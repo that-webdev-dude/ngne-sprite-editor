@@ -3,32 +3,13 @@ import { appCommands } from "../../src/app/testing/pageModules";
 import { buildMenu } from "@ngne/editor-ui/commands";
 import type { MenuNode } from "@ngne/editor-ui/commands";
 import { LICENCES_COMMAND } from "@ngne/editor-ui/licences";
-import { LICENCES_PATH } from "@ngne/editor-ui/licences";
-import { createLicencesDialogs, openLicences } from "../../src/app/licences/openLicences";
-import type { LicencesHost } from "../../src/app/licences/openLicences";
 
-// The Open Source Licences command (src/app/licences): where it is, and how it shows the
-// licences file the build writes, in a dialog of the app.
+// The Open Source Licences command, the package's (@ngne/editor-ui/licences): where it is in
+// the app's menus.
 
 /** The ids of a menu's commands, with "---" for a separator. */
 function outline(nodes: readonly MenuNode[]): string[] {
     return nodes.map((node) => (node.kind === "command" ? node.command.id : "---"));
-}
-
-/** A host that records what the command does; `text` is what the fetch gives. */
-function fakeHost(text: string | null) {
-    const log: string[] = [];
-    const host: LicencesHost = {
-        baseUrl: "https://example.test/sub/path/index.html?x=1",
-        fetchText: async (url) => {
-            log.push(`fetch ${url}`);
-            return text;
-        },
-        show: async (shown, address) => {
-            log.push(`show ${JSON.stringify(shown)} ${address}`);
-        },
-    };
-    return { host, log };
 }
 
 describe("the Open Source Licences command", () => {
@@ -38,7 +19,7 @@ describe("the Open Source Licences command", () => {
             planned: false,
             menuPath: ["View"],
             shortcuts: [],
-            source: "../licences/licences.commands.ts",
+            source: "@ngne/editor-ui/licences/licences.commands.ts",
         });
         expect(command?.title()).toBe("Open Source Licences…");
         // Always available: it needs no document.
@@ -47,49 +28,5 @@ describe("the Open Source Licences command", () => {
             "---",
             LICENCES_COMMAND,
         ]);
-    });
-});
-
-describe("openLicences", () => {
-    it("fetches the file beside the app and shows its text in the dialog", async () => {
-        const { host, log } = fakeHost("Licences\n");
-        await openLicences(host);
-        expect(log).toEqual([
-            "fetch https://example.test/sub/path/licences.txt",
-            'show "Licences\\n" https://example.test/sub/path/licences.txt',
-        ]);
-        expect(LICENCES_PATH).toBe("licences.txt");
-    });
-
-    it("shows that the file could not be read, with its address, when the fetch fails", async () => {
-        const { host, log } = fakeHost(null);
-        await openLicences(host);
-        expect(log).toEqual([
-            "fetch https://example.test/sub/path/licences.txt",
-            "show null https://example.test/sub/path/licences.txt",
-        ]);
-    });
-});
-
-describe("the licences dialog", () => {
-    it("asks for a dialog of kind licences and resolves with null once it is closed", async () => {
-        const dialogs = createLicencesDialogs();
-        dialogs.attachHost();
-        const shown = dialogs.show({ text: "Licences\n", address: "https://example.test/l" });
-        const request = dialogs.store.getState().request;
-        expect(request).toMatchObject({
-            kind: "licences",
-            text: "Licences\n",
-            address: "https://example.test/l",
-        });
-        request?.answer(null);
-        await expect(shown).resolves.toBeNull();
-        expect(dialogs.store.getState().request).toBeNull();
-    });
-
-    it("is answered with null at once while no host shows it", async () => {
-        const dialogs = createLicencesDialogs();
-        await expect(dialogs.show({ text: "x", address: "y" })).resolves.toBeNull();
-        expect(dialogs.store.getState().request).toBeNull();
     });
 });

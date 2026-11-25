@@ -97,7 +97,7 @@ describe("the sprite commands in the registry", () => {
     it("New Sprite takes its planned menu item and binds Ctrl+Alt+N, also in text fields", () => {
         expect(command("file.new")).toMatchObject({
             planned: false,
-            source: "../sprite/sprite.commands.ts",
+            source: "./sprite/sprite.commands.ts",
             shortcuts: ["Ctrl+Alt+N"],
             contexts: ["global", "text"],
             menuPath: ["File"],
@@ -113,7 +113,7 @@ describe("the sprite commands in the registry", () => {
     it("Sprite Properties takes its planned menu item and needs an open document", () => {
         expect(command("sprite.properties")).toMatchObject({
             planned: false,
-            source: "../sprite/sprite.commands.ts",
+            source: "./sprite/sprite.commands.ts",
             shortcuts: [],
             menuPath: ["Sprite"],
         });

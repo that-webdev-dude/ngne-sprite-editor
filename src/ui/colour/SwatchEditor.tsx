@@ -4,7 +4,7 @@ import type { RefObject } from "react";
 import { APPLY_EDIT } from "../../app/palette/paletteCommandIds";
 import { dropSwatchEdit, paletteStore, usePaletteState } from "../../app/palette/paletteState";
 import { useSessions } from "../../app/state/sessions";
-import { runAppCommand } from "../../app/editorUiHandle";
+import { commandRunner } from "../../app/uiState";
 import { ColourPicker } from "./ColourPicker";
 import { PALETTE_GRID_ATTRIBUTE, swatchElement } from "./paletteUi";
 
@@ -28,7 +28,7 @@ function applyTyping(container: HTMLElement | null): void {
 /** Ends the open swatch edit through the registry. */
 function applyEdit(): void {
     if (!paletteStore.getState().edit) return;
-    if (!runAppCommand(APPLY_EDIT)) dropSwatchEdit();
+    if (!commandRunner.run(APPLY_EDIT)) dropSwatchEdit();
 }
 
 export function SwatchEditor({ fallback }: { fallback: RefObject<HTMLElement | null> }) {

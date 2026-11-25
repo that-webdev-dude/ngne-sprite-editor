@@ -1,4 +1,4 @@
-import { boundEditorUi } from "../editorUiHandle";
+import { editorUi } from "../editorUi";
 import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { OPEN_RECENT_PATH, openRecentId, recentFiles } from "./recentFiles";
 import type { RecentEntry } from "./recentFiles";
@@ -6,7 +6,10 @@ import { fileWorkflows } from "./workflows";
 
 // File → Open Recent (SE-047): one command per recent file, registered and removed as the list
 // changes, and Clear Recent Files, which keeps the submenu there while the list is empty. The
-// submenu follows Open… (File menu order 110); the empty state lists the same commands.
+// submenu follows Open… (File menu order 110); the empty state lists the same commands. The
+// file commands are registered on the editor UI instance's registry, which its module creates
+// after loading this one: the list is empty until `recentFiles.load()` answers, so the
+// registry is read only once the instance exists.
 
 /** Order of the first file in the File menu, and so of the submenu; files follow it. */
 const FIRST_ORDER = 112;
@@ -31,7 +34,7 @@ let registered: (() => void)[] = [];
 function registerEntries(entries: readonly RecentEntry[]): void {
     for (const unregister of registered) unregister();
     registered = entries.map((entry, index) =>
-        boundEditorUi().commands.register(
+        editorUi.commands.register(
             {
                 id: openRecentId(entry),
                 title: entry.name,

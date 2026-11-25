@@ -3,10 +3,7 @@ import { overlayLayers as gridLayers } from "../../src/app/overlay/grid.overlay"
 import { PIXEL_GRID_ALPHA, TILE_GRID_ALPHA } from "../../src/app/overlay/grid.overlay";
 import { cellsBetween, lineRects } from "../../src/app/overlay/gridLines";
 import { overlayLayers as outlineLayers } from "../../src/app/overlay/outline.overlay";
-import {
-    collectOverlayLayers,
-    RegistrationError as OverlayLayerError,
-} from "@ngne/editor-ui/overlay";
+import { collectOverlayLayers } from "@ngne/editor-ui/overlay";
 import { overlayLayers } from "../../src/app/testing/pageModules";
 import { DEFAULT_OVERLAY_THEME } from "../../src/app/overlay/types";
 import type { OverlayFrame, OverlayLayer, OverlayTheme } from "../../src/app/overlay/types";
@@ -68,24 +65,6 @@ describe("draw-layer registry", () => {
         });
         expect(one.map((entry) => entry.id)).toEqual(["a", "b"]);
         expect(other.map((entry) => entry.id)).toEqual(["a", "b"]);
-    });
-
-    it("refuses a module without layers, a layer without id or order, and an id used twice", () => {
-        expect(() => collectOverlayLayers({ "./empty.overlay.ts": {} })).toThrow(
-            new OverlayLayerError('./empty.overlay.ts does not export "overlayLayers".'),
-        );
-        expect(() =>
-            collectOverlayLayers({ "./x.overlay.ts": { overlayLayers: [layer(" ", 1)] } }),
-        ).toThrow("A layer of ./x.overlay.ts has no id.");
-        expect(() =>
-            collectOverlayLayers({ "./x.overlay.ts": { overlayLayers: [layer("x", NaN)] } }),
-        ).toThrow('Overlay layer "x" (./x.overlay.ts) has no order.');
-        expect(() =>
-            collectOverlayLayers({
-                "./a.overlay.ts": { overlayLayers: [layer("grid", 1)] },
-                "./b.overlay.ts": { overlayLayers: [layer("grid", 2)] },
-            }),
-        ).toThrow('Overlay layer id "grid" is used by ./a.overlay.ts and ./b.overlay.ts.');
     });
 });
 

@@ -4,7 +4,7 @@ import { effectiveSelection } from "../../app/timeline/selection";
 import { SHOWN_TAG_ROWS } from "../../app/timeline/tagLayout";
 import { TIMELINE_COMMANDS } from "../../app/timeline/timelineCommandIds";
 import { useTimelineState } from "../../app/timeline/timelineState";
-import { runAppCommand } from "../../app/editorUiHandle";
+import { commandRunner } from "../../app/uiState";
 import { useGridWindow } from "./gridWindow";
 import { CelPropertiesHost } from "./CelProperties";
 import { FrameHeaders } from "./FrameHeaders";
@@ -136,7 +136,8 @@ export function TimelinePanel() {
     // take it (a closed document's edits are dropped by `timelineLifetime`). The popovers'
     // hosts do the same for theirs.
     useEffect(() => {
-        if (rename && rename.documentId !== liveId) runAppCommand(TIMELINE_COMMANDS.applyLayerName);
+        if (rename && rename.documentId !== liveId)
+            commandRunner.run(TIMELINE_COMMANDS.applyLayerName);
     }, [rename, liveId]);
 
     if (!model) return null;

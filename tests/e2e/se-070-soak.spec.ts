@@ -172,7 +172,7 @@ function runPicked(page: Page, pick: number): Promise<Picked> {
         const { readKeyEnvironment } = (await load(
             "/src/app/testing/pageModules.ts",
         )) as typeof EnvironmentModule;
-        const { applicableContexts } = (await load(
+        const { activeKeyContexts, applicableContexts, KEY_CONTEXT_LISTS } = (await load(
             "/src/app/testing/pageModules.ts",
         )) as typeof ResolveModule;
         const { keepsPlaying, stopPlaybackForEdit } = (await load(
@@ -181,7 +181,9 @@ function runPicked(page: Page, pick: number): Promise<Picked> {
         const soak = window.__se070soak!;
         const hooks = window.__ngneTest!;
         const contexts = applicableContexts(
-            readKeyEnvironment(document, hooks.keyContexts.getState()),
+            appCommands.contexts,
+            activeKeyContexts(document, KEY_CONTEXT_LISTS, hooks.keyContexts.getState()),
+            readKeyEnvironment(document),
         );
         const candidates = appCommands.list().filter((command) => {
             if (command.planned || !command.enabled()) return false;

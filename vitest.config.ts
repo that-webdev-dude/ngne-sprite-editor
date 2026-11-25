@@ -8,5 +8,9 @@ export default defineConfig({
     test: {
         environment: "node",
         include: ["tests/unit/**/*.test.ts"],
+        // Tests that reset modules (`vi.resetModules`) start from a fresh page, the module-level
+        // services of @ngne/editor-ui included (its MIGRATION §2 step 9): the package is
+        // inlined, so a reset evaluates it again instead of keeping one page's state.
+        server: { deps: { inline: ["@ngne/editor-ui"] } },
     },
 });

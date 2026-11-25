@@ -135,7 +135,7 @@ describe("storage failures", () => {
 describe("every store kept in localStorage reports a failed write once, and keeps the value", () => {
     it("the theme", async () => {
         const { storage, sent } = await fresh();
-        const { createThemeStore } = await import("../../src/ui/theme/theme");
+        const { createThemeStore } = await import("../../src/app/testing/persistedNames");
         const store = createThemeStore(fullStorage());
         store.getState().setTheme("light");
         expect(store.getState().theme).toBe("light");
@@ -155,18 +155,17 @@ describe("every store kept in localStorage reports a failed write once, and keep
 
     it("the layout", async () => {
         const { storage, sent } = await fresh();
-        const { createLayoutStore } = await import("../../src/ui/shell/layoutStore");
+        const { createLayoutStore } = await import("../../src/app/testing/persistedNames");
         const store = createLayoutStore(fullStorage());
         store.getState().setDockWidth(300);
         expect(store.getState().dockWidth).toBe(300);
-        store.getState().setTimelineHeight(250);
+        store.getState().setBottomHeight(250);
         expect(sent).toEqual([["error", storage.STORAGE_WRITE_FAILED_MESSAGE]]);
     });
 
     it("the recent commands", async () => {
         const { storage, sent } = await fresh();
-        const { createRecentCommandsStore } =
-            await import("../../src/app/commandPalette/recentCommands");
+        const { createRecentCommandsStore } = await import("../../src/app/testing/persistedNames");
         const store = createRecentCommandsStore(fullStorage());
         store.getState().record("edit.undo");
         expect(store.getState().ids).toEqual(["edit.undo"]);
@@ -176,10 +175,9 @@ describe("every store kept in localStorage reports a failed write once, and keep
 
     it("one report for the page, whichever stores fail", async () => {
         const { storage, sent } = await fresh();
-        const { createThemeStore } = await import("../../src/ui/theme/theme");
-        const { createLayoutStore } = await import("../../src/ui/shell/layoutStore");
-        const { createRecentCommandsStore } =
-            await import("../../src/app/commandPalette/recentCommands");
+        const { createThemeStore } = await import("../../src/app/testing/persistedNames");
+        const { createLayoutStore } = await import("../../src/app/testing/persistedNames");
+        const { createRecentCommandsStore } = await import("../../src/app/testing/persistedNames");
         createThemeStore(fullStorage()).getState().setTheme("light");
         createLayoutStore(fullStorage()).getState().setDockWidth(300);
         createRecentCommandsStore(fullStorage()).getState().record("edit.undo");

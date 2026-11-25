@@ -15,7 +15,7 @@ import {
 } from "../../core/layers";
 import type { Layer } from "../../core/model";
 import { setReferenceCommand } from "../../core/references";
-import { refreshAppCommands } from "../editorUiHandle";
+import { commandRefresh } from "../uiState";
 import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { sessionsStore } from "../state/sessions";
 import type { OpenDocument } from "../state/sessions";
@@ -55,11 +55,10 @@ import type { PropertiesDraft } from "./timelineState";
 // shown anywhere, so setting them tells no one.
 timelineStore.subscribe((state, previous) => {
     const shown =
-        state.visible !== previous.visible ||
         state.selection !== previous.selection ||
         state.rename !== previous.rename ||
         state.properties !== previous.properties;
-    if (shown) refreshAppCommands();
+    if (shown) commandRefresh.refresh();
 });
 
 function layerOf(document: OpenDocument, layerId: string): Layer | undefined {

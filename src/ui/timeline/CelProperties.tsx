@@ -5,18 +5,16 @@ import { celFacts, editCelOpacity, useCelProperties } from "../../app/timeline/c
 import type { CelPropertiesDraft } from "../../app/timeline/celProperties";
 import { CEL_PROPERTIES_COMMANDS } from "../../app/timeline/celPropertiesIds";
 import { useSessions } from "../../app/state/sessions";
-import { runAppCommand } from "../../app/editorUiHandle";
-import { Button } from "@ngne/editor-ui/primitives";
-import { Slider } from "@ngne/editor-ui/primitives";
+import { commandRunner } from "../../app/uiState";
+import { Button, Slider, useClosingPopover } from "@ngne/editor-ui/primitives";
 import { cellOf } from "./timelineDom";
-import { useClosingPopover } from "@ngne/editor-ui/primitives";
 
 /**
  * Closes the cel properties popover: its opacity becomes one undo step (Apply Cel Properties).
  * While its document cannot take it (a stroke), the popover stays open.
  */
 export function finishCelProperties(): void {
-    runAppCommand(CEL_PROPERTIES_COMMANDS.apply);
+    commandRunner.run(CEL_PROPERTIES_COMMANDS.apply);
 }
 
 /** What the popover says of the cel's links. */
@@ -105,7 +103,7 @@ const CelProperties = memo(function CelProperties({
                         disabled={readOnly || linkedWith === 0}
                         onClick={(event) => {
                             const form = event.currentTarget.form;
-                            runAppCommand(CEL_PROPERTIES_COMMANDS.unlink);
+                            commandRunner.run(CEL_PROPERTIES_COMMANDS.unlink);
                             // The button is disabled now: the focus stays in the popover, on
                             // the opacity field, so Enter still applies.
                             form?.querySelector<HTMLElement>('input[role="spinbutton"]')?.focus();

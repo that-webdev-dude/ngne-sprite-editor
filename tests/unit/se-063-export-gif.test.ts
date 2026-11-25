@@ -34,7 +34,7 @@ describe("the Export GIF… command", () => {
     it("is a File menu item after Export PNG Sequence…, in the export group, without a key", () => {
         const gif = command("file.exportGif");
         expect(gif.title()).toBe("Export GIF…");
-        expect(gif).toMatchObject({ planned: false, source: "../export/gif.commands.ts" });
+        expect(gif).toMatchObject({ planned: false, source: "./export/gif.commands.ts" });
         expect(gif.menuPath).toEqual(["File"]);
         expect(gif.shortcuts).toEqual([]);
         const file = menuCommands(buildMenu(appCommands.list(), ["File"])).map((entry) => entry.id);

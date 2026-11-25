@@ -97,7 +97,7 @@ describe("discovery", () => {
 
 describe("registry", () => {
     it("lets a tool take its planned slot, and gives it back when the tool is removed", () => {
-        const registry = createToolRegistry();
+        const registry = createToolRegistry<ToolSpec>();
         registerToolModules(registry, { "./planned.tools.ts": { plannedTools } });
         expect(registry.railSlots().every((slot) => slot.tool === null)).toBe(true);
         let notified = 0;
@@ -116,7 +116,7 @@ describe("registry", () => {
     });
 
     it("places a tool by its own position and key, and leaves a tool without one out of the rail", () => {
-        const registry = createToolRegistry();
+        const registry = createToolRegistry<ToolSpec>();
         registerToolModules(registry, {
             "./b.tools.ts": {
                 tools: [tool("curve", { shortcut: "Shift+L", railOrder: 230, icon: Brush })],
@@ -132,7 +132,7 @@ describe("registry", () => {
     });
 
     it("groups the rail by the hundreds of the positions", () => {
-        const registry = createToolRegistry();
+        const registry = createToolRegistry<ToolSpec>();
         for (const [id, railOrder] of [
             ["a", 100],
             ["b", 150],
@@ -148,7 +148,7 @@ describe("registry", () => {
     });
 
     it("refuses what cannot form one set of tools, naming the module", () => {
-        const registry = createToolRegistry();
+        const registry = createToolRegistry<ToolSpec>();
         registry.register(tool("one"), "first.tools.ts");
         const refused = (spec: ToolSpec) => () => registry.register(spec, "second.tools.ts");
         expect(refused(tool("one"))).toThrow(/first\.tools\.ts and second\.tools\.ts/);
@@ -182,11 +182,11 @@ describe("registry", () => {
         expect(
             refused(options({ kind: "slider", key: "k", label: "K" } as unknown as ToolOptionSpec)),
         ).toThrow(/unknown kind/);
-        expect(() => registerToolModules(createToolRegistry(), { "./x.tools.ts": {} })).toThrow(
-            /exports neither/,
-        );
         expect(() =>
-            registerToolModules(createToolRegistry(), {
+            registerToolModules(createToolRegistry<ToolSpec>(), { "./x.tools.ts": {} }),
+        ).toThrow(/exports neither/);
+        expect(() =>
+            registerToolModules(createToolRegistry<ToolSpec>(), {
                 "./a.tools.ts": { plannedTools },
                 "./b.tools.ts": { plannedTools },
             }),
@@ -242,7 +242,7 @@ describe("option values", () => {
 describe("the active tool", () => {
     function state() {
         const editor = createEditorStore();
-        const registry = createToolRegistry();
+        const registry = createToolRegistry<ToolSpec>();
         registry.register(tool("pencil", { hint: "Shift: line" }));
         registry.register(tool("hand"));
         registry.register(tool("zoom", { hint: "Alt: zoom out" }));

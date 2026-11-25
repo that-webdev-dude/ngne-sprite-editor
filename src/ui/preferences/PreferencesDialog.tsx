@@ -7,15 +7,20 @@ import type {
     ImportPreference,
     OnionPreference,
 } from "../../app/preferences/preferences";
-import { Button } from "@ngne/editor-ui/primitives";
-import { Dialog } from "@ngne/editor-ui/primitives";
-import { NumberField } from "@ngne/editor-ui/primitives";
-import { SegmentedControl } from "@ngne/editor-ui/primitives";
-import type { SegmentedControlProps, SegmentedOption } from "@ngne/editor-ui/primitives";
-import { Select } from "@ngne/editor-ui/primitives";
-import type { SelectOption } from "@ngne/editor-ui/primitives";
-import { Toggle } from "@ngne/editor-ui/primitives";
-import { setTheme, useEditorUi, useTheme } from "@ngne/editor-ui";
+import {
+    Button,
+    Dialog,
+    NumberField,
+    SegmentedControl,
+    Select,
+    Toggle,
+} from "@ngne/editor-ui/primitives";
+import type {
+    SegmentedControlProps,
+    SegmentedOption,
+    SelectOption,
+} from "@ngne/editor-ui/primitives";
+import { DEFAULT_THEME, setTheme, useEditorUi, useTheme } from "@ngne/editor-ui";
 import type { Theme } from "@ngne/editor-ui";
 import { formatHexColour, parseHexColour } from "@ngne/editor-ui/colour";
 import "./preferences.css";
@@ -47,9 +52,6 @@ const DITHERING: readonly SelectOption<ImportPreference["dither"]>[] = [
 ];
 /** Arrow keys change the falloff, a fraction, by a twentieth. */
 const FALLOFF_STEP = 0.05;
-
-/** The theme Restore defaults goes back to (DESIGN §3: dark is the default). */
-const DEFAULT_THEME: Theme = "dark";
 
 /** The checkerboard of the current theme (DESIGN §3.1), read from its tokens. */
 function themeCheckerColours(): CheckerColours {

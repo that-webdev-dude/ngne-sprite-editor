@@ -4,6 +4,7 @@ import { createEditorStore } from "../../src/app/state/editor";
 import { createToolState } from "../../src/app/tools/activeTool";
 import { plannedTools } from "../../src/app/tools/planned.tools";
 import { createToolRegistry, railGroups, registerToolModules, slotOf } from "@ngne/editor-ui/shell";
+import type { ToolRegistry } from "@ngne/editor-ui/shell";
 import { toolRegistry } from "../../src/app/tools/toolRegistry";
 import type { ToolSpec } from "../../src/app/tools/types";
 import { readSpecKeyTable } from "../e2e/se-007-spec-keys";
@@ -17,14 +18,14 @@ const tool = (id: string, extra: Partial<ToolSpec> = {}): ToolSpec => ({ id, lab
 
 /** A registry with the planned rail, the tools given, and a tool state on it. */
 function rail(...tools: ToolSpec[]) {
-    const registry = createToolRegistry();
+    const registry = createToolRegistry<ToolSpec>();
     registerToolModules(registry, { "./planned.tools.ts": { plannedTools } });
     for (const spec of tools) registry.register(spec);
     const editor = createEditorStore();
     return { registry, editor, state: createToolState(editor, registry) };
 }
 
-const slotIn = (registry: ReturnType<typeof createToolRegistry>, id: string) => {
+const slotIn = (registry: ToolRegistry<ToolSpec>, id: string) => {
     const found = registry.railSlots().find((slot) => slot.id === id);
     if (!found) throw new Error(`no slot ${id}`);
     return found;
@@ -108,13 +109,13 @@ describe("the variant a slot shows and the keys", () => {
 
     it("switches a key pressed again among the slot's variants of the same letter only, in order", () => {
         // One slot mixing letters, as later variants may: M, Shift+M, Alt+M (if one were
-        // bound) on one letter, B and Shift+B on another.
+        // bound) on one letter, K and Shift+K on another.
         const { state } = rail(
             tool("marquee", { shortcut: "M" }),
             tool("ellipse", { variantOf: "marquee", railOrder: 301, shortcut: "Shift+M" }),
-            tool("brushy", { variantOf: "marquee", railOrder: 302, shortcut: "B" }),
+            tool("brushy", { variantOf: "marquee", railOrder: 302, shortcut: "K" }),
             tool("third", { variantOf: "marquee", railOrder: 303, shortcut: "Ctrl+Shift+M" }),
-            tool("brushier", { variantOf: "marquee", railOrder: 304, shortcut: "Shift+B" }),
+            tool("brushier", { variantOf: "marquee", railOrder: 304, shortcut: "Shift+K" }),
             tool("keyless", { variantOf: "marquee", railOrder: 305 }),
             tool("hand"),
         );
@@ -123,7 +124,7 @@ describe("the variant a slot shows and the keys", () => {
         expect(next("marquee")).toBe("ellipse");
         expect(next("ellipse")).toBe("third");
         expect(next("third")).toBe("marquee");
-        // B's letter on its own: brushy ↔ brushier, never across to M.
+        // K's letter on its own: brushy ↔ brushier, never across to M.
         expect(next("brushy")).toBe("brushier");
         expect(next("brushier")).toBe("brushy");
         // No key, a slot of one tool, an unknown id: nothing to switch to.

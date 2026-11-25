@@ -16,7 +16,7 @@ import { AppShell } from "@ngne/editor-ui/shell";
 import { editorUi, MENU_BAR, SPRITE_CONTEXTS } from "../../../src/app/editorUi";
 import type { SpriteContext } from "../../../src/app/editorUi";
 import { keyContextStore, setKeyContext } from "../../../src/app/keymap/contextState";
-import { railToolSource } from "../../../src/app/tools/railToolSource";
+import { toolState } from "../../../src/app/tools/activeTool";
 
 // SE-007 keymap page: the real shell and the real keymap on a registry that holds nothing but
 // spy commands, which the spec registers from the key table of SPEC §7.8. The regions carry
@@ -141,10 +141,20 @@ function ContextControls() {
     );
 }
 
+// The app's module maps but its tools, and its state but its command runner: the tools are
+// the app's registry (`sources.tools`), and the runner belongs to the app's own instance.
+const { commands, dialogs, dock, overlays, statusFields } = editorUi.config.modules;
+const { keyContextState, bottomRegion, tools } = editorUi.config.sources;
+
 const harnessUi = createEditorUi({
     ...editorUi.config,
+    sources: { keyContextState, bottomRegion, tools },
     modules: {
-        ...editorUi.config.modules,
+        commands,
+        dialogs,
+        dock,
+        overlays,
+        statusFields,
         contextBars: {
             "harness/controls.contextbar.tsx": {
                 contextBarContent: {
@@ -164,7 +174,7 @@ function Page() {
     return (
         <UiRoot editorUi={harnessUi} keymap={false}>
             <AppShell
-                tools={railToolSource}
+                tools={toolState}
                 viewport={
                     <div
                         tabIndex={0}

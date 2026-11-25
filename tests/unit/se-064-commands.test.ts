@@ -6,13 +6,15 @@ import { plannedCommands } from "../../src/app/commands/planned.commands";
 import type { Command } from "@ngne/editor-ui/commands";
 import { resolveKey } from "@ngne/editor-ui/commands";
 import type { KeyEnvironment } from "@ngne/editor-ui/commands";
-import { createSurfaces } from "../../src/app/surfaces/surfaces";
-import { SURFACE_IDS, surfaces } from "../../src/app/testing/pageModules";
-import type { SurfaceId } from "../../src/app/surfaces/surfaces";
+import { surfaces } from "../../src/app/testing/pageModules";
 import { readSpecKeyTable } from "../e2e/se-007-spec-keys";
 
 // SE-064: the three commands of this ticket in the registry (their planned menu items, their
 // chords from SPEC §7.8), and the store of the surfaces they open.
+
+/** The surfaces the commands of SE-064 open. */
+type SurfaceId = "command-palette" | "preferences" | "shortcut-sheet";
+const SURFACE_IDS: readonly SurfaceId[] = ["command-palette", "preferences", "shortcut-sheet"];
 
 const COMMANDS: Record<SurfaceId, string> = {
     "command-palette": "edit.commandPalette",
@@ -52,14 +54,14 @@ function environment(overrides: Partial<KeyEnvironment> = {}): KeyEnvironment {
     return {
         overlayOpen: false,
         focus: "viewport",
-        inTimeline: false,
         nativeKeys: new Set(),
         typeahead: false,
-        gesture: false,
-        floating: false,
         ...overrides,
     };
 }
+
+/** The app's contexts active for a key: in the timeline, or none. */
+type Active = readonly "timeline"[];
 
 afterEach(() => {
     surfaces.close();
@@ -74,7 +76,8 @@ describe("the commands of SE-064 in the registry", () => {
             expect(command(id), id).toMatchObject({
                 planned: false,
                 menuPath: [MENUS[surface]],
-                menuOrder: plan?.menuOrder,
+                // Keyboard Shortcuts… is the package's, first in Help (its canon): order 0.
+                menuOrder: surface === "shortcut-sheet" ? 0 : plan?.menuOrder,
             });
             expect(command(id).title(), id).toBe(plan?.title);
             // Always available: none of them needs a document.
@@ -95,10 +98,12 @@ describe("the commands of SE-064 in the registry", () => {
 
     it("each registers from a module of its own", () => {
         expect(command("edit.commandPalette").source).toBe(
-            "../commandPalette/commandPalette.commands.ts",
+            "@ngne/editor-ui/commands/commandPalette.commands.ts",
         );
-        expect(command("edit.preferences").source).toBe("../preferences/preferences.commands.ts");
-        expect(command("edit.shortcuts").source).toBe("../shortcuts/shortcuts.commands.ts");
+        expect(command("edit.preferences").source).toBe("./preferences/preferences.commands.ts");
+        expect(command("edit.shortcuts").source).toBe(
+            "@ngne/editor-ui/commands/shortcutSheet.commands.ts",
+        );
     });
 
     it("the command palette binds the chord of SPEC §7.8: Ctrl+K, also in text fields", () => {
@@ -130,8 +135,8 @@ describe("the commands of SE-064 in the registry", () => {
     });
 
     it("Ctrl+K reaches the palette everywhere but under a menu or a dialog", () => {
-        const resolved = (overrides: Partial<KeyEnvironment>) =>
-            resolveKey(appCommands, "Ctrl+K", environment(overrides));
+        const resolved = (overrides: Partial<KeyEnvironment>, active: Active = []) =>
+            resolveKey(appCommands, "Ctrl+K", environment(overrides), active);
         const palette = command("edit.commandPalette");
         expect(resolved({})).toMatchObject({ action: "run", command: palette });
         expect(resolved({ focus: "none" })).toMatchObject({ action: "run", command: palette });
@@ -141,20 +146,20 @@ describe("the commands of SE-064 in the registry", () => {
             command: palette,
             context: "text",
         });
-        expect(resolved({ inTimeline: true, focus: "control" })).toMatchObject({ action: "run" });
+        expect(resolved({ focus: "control" }, ["timeline"])).toMatchObject({ action: "run" });
         // Bound but not acting: Chrome's own Ctrl+K is suppressed.
         expect(resolved({ overlayOpen: true })).toEqual({ action: "suppress" });
         expect(resolved({ overlayOpen: true, focus: "text" })).toEqual({ action: "suppress" });
     });
 
     it("? reaches the shortcut sheet in the canvas context, and is typed in a text field", () => {
-        const resolved = (overrides: Partial<KeyEnvironment>) =>
-            resolveKey(appCommands, "?", environment(overrides));
+        const resolved = (overrides: Partial<KeyEnvironment>, active: Active = []) =>
+            resolveKey(appCommands, "?", environment(overrides), active);
         const sheet = command("edit.shortcuts");
         expect(resolved({})).toMatchObject({ action: "run", command: sheet, context: "canvas" });
         expect(resolved({ focus: "none" })).toMatchObject({ action: "run", command: sheet });
         expect(resolved({ focus: "control" })).toMatchObject({ action: "run", command: sheet });
-        expect(resolved({ inTimeline: true, focus: "control" })).toMatchObject({
+        expect(resolved({ focus: "control" }, ["timeline"])).toMatchObject({
             action: "run",
             command: sheet,
         });
@@ -171,45 +176,5 @@ describe("the commands of SE-064 in the registry", () => {
             void command(COMMANDS[id]).run();
             expect(surfaces.store.getState().open, id).toBe(id);
         }
-    });
-});
-
-describe("surfaces", () => {
-    it("start closed", () => {
-        expect(createSurfaces().store.getState()).toEqual({ open: null });
-        expect(SURFACE_IDS).toEqual(["command-palette", "preferences", "shortcut-sheet"]);
-    });
-
-    it("open one at a time: a surface takes the place of the open one", () => {
-        const own = createSurfaces();
-        own.open("command-palette");
-        expect(own.store.getState().open).toBe("command-palette");
-        own.open("preferences");
-        expect(own.store.getState().open).toBe("preferences");
-    });
-
-    it("close the open surface, or only the named one", () => {
-        const own = createSurfaces();
-        own.open("preferences");
-        own.close("shortcut-sheet");
-        expect(own.store.getState().open).toBe("preferences");
-        own.close("preferences");
-        expect(own.store.getState().open).toBeNull();
-        own.open("shortcut-sheet");
-        own.close();
-        expect(own.store.getState().open).toBeNull();
-    });
-
-    it("notify subscribers of a change, and not of what changes nothing", () => {
-        const own = createSurfaces();
-        const seen: (SurfaceId | null)[] = [];
-        own.store.subscribe((state) => seen.push(state.open));
-        own.close();
-        own.open("command-palette");
-        own.open("command-palette");
-        own.close("preferences");
-        own.close();
-        own.close();
-        expect(seen).toEqual(["command-palette", null]);
     });
 });

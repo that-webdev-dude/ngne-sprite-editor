@@ -1,7 +1,7 @@
 import { restoreOrderCommand, sortPaletteCommand } from "../../core/palettes";
 import type { PaletteSortKey } from "../../core/palettes";
 import type { Command } from "../../core/history";
-import { refreshAppCommands } from "../editorUiHandle";
+import { commandRefresh } from "../uiState";
 import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { applyFloating } from "../selection/floating";
 import { settleableDocument } from "../selection/settled";
@@ -56,7 +56,7 @@ function sortBy(key: PaletteSortKey): void {
     if (!command) return;
     keepOrderBeforeSort(document.session);
     reorder(document, command);
-    refreshAppCommands();
+    commandRefresh.refresh();
 }
 
 /** The command that puts back the original order, when it would change the palette. */

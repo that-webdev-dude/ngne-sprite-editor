@@ -6,9 +6,8 @@ import { floatingState } from "../../app/selection/floatingState";
 import { TRANSFORM_COMMANDS } from "../../app/selection/transform/transform.commands";
 import { draftTransform } from "../../app/selection/transform/transformDraft";
 import { activeDocument, sessionsStore } from "../../app/state/sessions";
-import { runAppCommand } from "../../app/editorUiHandle";
-import { Button } from "@ngne/editor-ui/primitives";
-import { NumberField } from "@ngne/editor-ui/primitives";
+import { commandRunner } from "../../app/uiState";
+import { Button, NumberField } from "@ngne/editor-ui/primitives";
 import type { ContextBarContent } from "@ngne/editor-ui/shell";
 import "./transformFields.css";
 
@@ -79,7 +78,7 @@ function TransformFields() {
         const now = shownTransform();
         if (!now) return;
         draftTransform({ ...now, [key]: value });
-        runAppCommand(TRANSFORM_COMMANDS.set);
+        commandRunner.run(TRANSFORM_COMMANDS.set);
     };
     return (
         <span ref={root} className="transform-fields" role="group" aria-label="Transform">
@@ -94,10 +93,10 @@ function TransformFields() {
                     />
                 </span>
             ))}
-            <Button variant="primary" onClick={() => runAppCommand(FLOATING_COMMANDS.apply)}>
+            <Button variant="primary" onClick={() => commandRunner.run(FLOATING_COMMANDS.apply)}>
                 Apply
             </Button>
-            <Button onClick={() => runAppCommand(FLOATING_COMMANDS.cancel)}>Cancel</Button>
+            <Button onClick={() => commandRunner.run(FLOATING_COMMANDS.cancel)}>Cancel</Button>
         </span>
     );
 }

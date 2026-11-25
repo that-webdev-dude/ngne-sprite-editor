@@ -42,7 +42,7 @@ test("Save As names the tab after the new file at once; a second Save As follows
     // Never saved: the sprite name, alone in the tooltip.
     await expect(documentName(page)).toHaveText("hero");
     await expect(documentName(page)).toHaveAttribute("title", "hero");
-    expect(await closeTitle(page)).toBe("Close hero");
+    expect(await closeTitle(page)).toBeNull();
 
     await arrangeFiles(page, { nextSave: ["saveas_hero.ngsprite"] });
     await saveAs(page);
@@ -52,7 +52,7 @@ test("Save As names the tab after the new file at once; a second Save As follows
         "title",
         "saveas_hero.ngsprite — sprite: hero",
     );
-    expect(await closeTitle(page)).toBe("Close saveas_hero");
+    expect(await closeTitle(page)).toBeNull();
     // The sprite name, the export identity, is the same.
     expect((await activeState(page))?.name).toBe("hero");
 

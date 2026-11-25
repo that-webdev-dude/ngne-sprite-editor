@@ -105,7 +105,10 @@ test("the shell at 1440×900 matches the region sizes of the mockup within 1 px"
     await openShell(page);
     const shell = await regionBoxes(page);
 
-    for (const id of REGIONS) {
+    // The canon layout (DESIGN §2 of @ngne/editor-ui) runs the tool rail the full height and
+    // puts the timeline beside it; the mockup shows them as before, so those two are checked
+    // against the canon's sizes below only.
+    for (const id of REGIONS.filter((region) => region !== "tool-rail" && region !== "timeline")) {
         for (const side of ["x", "y", "width", "height"] as const) {
             expect(
                 Math.abs(shell[id][side] - mockup[id][side]),
@@ -115,11 +118,11 @@ test("the shell at 1440×900 matches the region sizes of the mockup within 1 px"
     }
     // The sizes of DESIGN §2, so the comparison cannot pass on two wrong layouts.
     expect(shell["menu-bar"]).toEqual({ x: 0, y: 0, width: 1440, height: 36 });
-    expect(shell["tool-rail"]).toEqual({ x: 0, y: 36, width: 44, height: 640 });
+    expect(shell["tool-rail"]).toEqual({ x: 0, y: 36, width: 44, height: 840 });
     expect(shell["context-bar"]).toEqual({ x: 44, y: 36, width: 1132, height: 36 });
     expect(shell.viewport).toEqual({ x: 44, y: 72, width: 1132, height: 604 });
     expect(shell.dock).toEqual({ x: 1176, y: 36, width: 264, height: 640 });
-    expect(shell.timeline).toEqual({ x: 0, y: 676, width: 1440, height: 200 });
+    expect(shell.timeline).toEqual({ x: 44, y: 676, width: 1396, height: 200 });
     expect(shell["status-bar"]).toEqual({ x: 0, y: 876, width: 1440, height: 24 });
     expectSoundLayout(shell, { width: 1440, height: 900 });
 });
@@ -179,24 +182,25 @@ test("the rail switches to two columns when one does not fit and never clips a t
 }) => {
     await openShell(page, { width: 1280, height: 720 });
     const rail = region(page, "tool-rail");
-    // The default timeline leaves the rail 460 px: the colour chips at its bottom (SE-016)
-    // tip it over to two columns, as SE-006's layout test foresaw.
-    await expect(rail).toHaveAttribute("data-columns", "2");
-    expect((await boxOf(rail)).width).toBe(72);
+    // The rail runs the full height beside the timeline (the canon layout): 660 px at
+    // 1280×720 hold the tools and the colour chips (SE-016) in one column, whatever the
+    // timeline's height.
+    await expect(rail).toHaveAttribute("data-columns", "1");
+    expect((await boxOf(rail)).width).toBe(44);
     await expectToolsVisible(page);
-    // The lowest timeline leaves room for one column.
+    // The lowest timeline leaves the rail as it is.
     await timelineSplitter(page).focus();
     await page.keyboard.press("Home");
     await expect(rail).toHaveAttribute("data-columns", "1");
     expect((await boxOf(rail)).width).toBe(44);
 
-    // The tallest timeline (50% of the window) leaves the rail 300 px.
+    // The tallest timeline (50% of the window) leaves the rail as it is too.
     await page.keyboard.press("End");
-    await expect(rail).toHaveAttribute("data-columns", "2");
+    await expect(rail).toHaveAttribute("data-columns", "1");
     const boxes = await regionBoxes(page);
     expect(boxes.timeline.height).toBe(360);
-    expect(boxes["tool-rail"]).toEqual({ x: 0, y: 36, width: 72, height: 300 });
-    expect(boxes.viewport.x).toBe(72);
+    expect(boxes["tool-rail"]).toEqual({ x: 0, y: 36, width: 44, height: 660 });
+    expect(boxes.viewport.x).toBe(44);
     expectSoundLayout(boxes, { width: 1280, height: 720 });
     await expectToolsVisible(page);
     const overflow = await rail.evaluate((element) => ({
@@ -401,10 +405,12 @@ test("regions carry their landmarks; the context bar and status bar hold only th
     if (!active) {
         await expect(contextBar).toBeEmpty();
     } else {
-        await expect(contextBar.locator(":scope > *")).toHaveCount(1 + active.options.length);
-        await expect(contextBar.locator(":scope > [data-context-tool]")).toHaveText(active.label);
+        // The package's context bar holds them in its own element (`.context-bar`).
+        const bar = contextBar.locator(":scope > .context-bar");
+        await expect(bar.locator(":scope > *")).toHaveCount(1 + active.options.length);
+        await expect(bar.locator(":scope > [data-context-tool]")).toHaveText(active.label);
         expect(
-            await contextBar
+            await bar
                 .locator(":scope > [data-tool-option]")
                 .evaluateAll((items) => items.map((item) => item.getAttribute("data-tool-option"))),
         ).toEqual(active.options);

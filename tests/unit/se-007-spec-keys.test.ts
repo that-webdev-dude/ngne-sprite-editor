@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { normalizeChord } from "@ngne/editor-ui/commands";
 import { createCommandRegistry } from "@ngne/editor-ui/commands";
+import { MENU_BAR } from "../../src/app/testing/pageModules";
 import { isBrowserChord, isTextEditingChord } from "@ngne/editor-ui/commands";
 import {
     CHROME_RESERVED_CHORDS,
@@ -135,7 +136,7 @@ describe("SPEC §7.8 key table", () => {
     });
 
     it("marks † only chords a text field does not need: the registry accepts them in `text`", () => {
-        const registry = createCommandRegistry();
+        const registry = createCommandRegistry({ menus: MENU_BAR });
         for (const binding of table.bindings.filter((entry) => entry.text)) {
             expect(binding.context).toBe("global");
             expect(isBrowserChord(binding.chord), binding.chord).toBe(true);

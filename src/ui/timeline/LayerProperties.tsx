@@ -17,14 +17,16 @@ import {
 import type { PropertiesDraft, ReferenceDraft } from "../../app/timeline/timelineState";
 import { referenceFit } from "../../app/references/references";
 import { useSessions } from "../../app/state/sessions";
-import { runAppCommand } from "../../app/editorUiHandle";
-import { Button } from "@ngne/editor-ui/primitives";
-import { NumberField } from "@ngne/editor-ui/primitives";
-import { SegmentedControl } from "@ngne/editor-ui/primitives";
-import { Select } from "@ngne/editor-ui/primitives";
-import { Slider } from "@ngne/editor-ui/primitives";
+import { commandRunner } from "../../app/uiState";
+import {
+    Button,
+    NumberField,
+    SegmentedControl,
+    Select,
+    Slider,
+    useClosingPopover,
+} from "@ngne/editor-ui/primitives";
 import { layerHeaderOf } from "./timelineDom";
-import { useClosingPopover } from "@ngne/editor-ui/primitives";
 
 /**
  * Closes the layer properties popover: its values become one undo step (Apply Layer
@@ -32,7 +34,7 @@ import { useClosingPopover } from "@ngne/editor-ui/primitives";
  * them; a closed document's are dropped (`timelineLifetime`).
  */
 export function finishProperties(): void {
-    runAppCommand(TIMELINE_COMMANDS.applyLayerProperties);
+    commandRunner.run(TIMELINE_COMMANDS.applyLayerProperties);
 }
 
 /**

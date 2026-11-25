@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { excludedCodeIn } from "@ngne/editor-ui/licences/build";
 import { EXCLUDED_CODE } from "../../scripts/licenceRules";
 
-// Code the build must leave out (`EXCLUDED_CODE` of scripts/licences.ts): gifenc's colour
+// Code the build must leave out (`EXCLUDED_CODE` of scripts/licenceRules.ts): gifenc's colour
 // quantizer. The markers find it in gifenc's files and not in its encoder, and a bundle of the
 // encoder with the project's `resolve` settings (vite.config.ts) holds none of it.
 
@@ -42,14 +42,18 @@ const ENCODER_ONLY = 'import { GIFEncoder } from "gifenc";\nglobalThis.encoder =
 
 describe("code the build leaves out", () => {
     it("finds gifenc's quantizer and palette functions in its sources and its CommonJS build", () => {
-        expect(excludedCodeIn(read("src", "pnnquant2.js"))).toEqual([QUANTIZER!.what]);
-        expect(excludedCodeIn(read("src", "palettize.js"))).toEqual([QUANTIZER!.what]);
-        expect(excludedCodeIn(read("dist", "gifenc.js"))).toEqual([QUANTIZER!.what]);
+        expect(excludedCodeIn(read("src", "pnnquant2.js"), EXCLUDED_CODE)).toEqual([
+            QUANTIZER!.what,
+        ]);
+        expect(excludedCodeIn(read("src", "palettize.js"), EXCLUDED_CODE)).toEqual([
+            QUANTIZER!.what,
+        ]);
+        expect(excludedCodeIn(read("dist", "gifenc.js"), EXCLUDED_CODE)).toEqual([QUANTIZER!.what]);
     });
 
     it("finds nothing in the modules of gifenc's encoder", () => {
         for (const file of ["index.js", "lzwEncode.js", "stream.js", "constants.js"]) {
-            expect(excludedCodeIn(read("src", file)), file).toEqual([]);
+            expect(excludedCodeIn(read("src", file), EXCLUDED_CODE), file).toEqual([]);
         }
     });
 
@@ -62,12 +66,12 @@ describe("code the build leaves out", () => {
         );
         const code = await bundle(ENCODER_ONLY, loaded!.config.resolve);
         expect(code).toContain("GIF89a");
-        expect(excludedCodeIn(code)).toEqual([]);
+        expect(excludedCodeIn(code, EXCLUDED_CODE)).toEqual([]);
     }, 60_000);
 
     it("is in a bundle of the encoder built without them, from gifenc's CommonJS build", async () => {
         const code = await bundle(ENCODER_ONLY, {});
         expect(code).toContain("GIF89a");
-        expect(excludedCodeIn(code)).toEqual([QUANTIZER!.what]);
+        expect(excludedCodeIn(code, EXCLUDED_CODE)).toEqual([QUANTIZER!.what]);
     }, 60_000);
 });

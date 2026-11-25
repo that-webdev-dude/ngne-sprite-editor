@@ -59,6 +59,7 @@ function axisTool(axis: AxisName, sessions: StoreApi<SessionsState>): Tool {
         label: axis === "x" ? "Move Vertical Axis" : "Move Horizontal Axis",
         source: "app/symmetry/axisDrag.ts",
         options: [],
+        actions: [],
         railOrder: undefined,
         // The vertical axis moves left and right, the horizontal one up and down.
         cursor: axis === "x" ? "ew-resize" : "ns-resize",

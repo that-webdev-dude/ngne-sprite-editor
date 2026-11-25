@@ -12,7 +12,7 @@ import {
     removeColourCommand,
 } from "../../core/palettes";
 import type { CompositeSource, PresetPalette } from "../../core/palettes";
-import { refreshAppCommands } from "../editorUiHandle";
+import { commandRefresh } from "../uiState";
 import type { CommandSpec } from "@ngne/editor-ui/commands";
 import { applyFloating } from "../selection/floating";
 import { canSettle, settleableDocument } from "../selection/settled";
@@ -47,7 +47,7 @@ import { currentSwatch, paletteStore, setCurrentSwatch } from "./paletteState";
 // `paletteCommandIds.ts`, so this module never loads before the registry.
 
 // `enabled` reads the palette state too: an open menu follows its changes.
-paletteStore.subscribe(() => refreshAppCommands());
+paletteStore.subscribe(() => commandRefresh.refresh());
 
 /** The active document when its history can take a command now. */
 function idleDocument(): OpenDocument | null {

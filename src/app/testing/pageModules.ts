@@ -15,10 +15,18 @@ export {
     MENU_BAR,
     TIMELINE_SELECTOR,
 } from "../editorUi";
-export { applicableContexts, buildContextMenu, readKeyEnvironment } from "@ngne/editor-ui/commands";
+export {
+    activeKeyContexts,
+    applicableContexts,
+    buildContextMenu,
+    readKeyEnvironment,
+} from "@ngne/editor-ui/commands";
 export { commandDialogs, toast } from "@ngne/editor-ui/messages";
 export { STORAGE_WRITE_FAILED_MESSAGE } from "@ngne/editor-ui/platform";
 export { UPDATE_MESSAGE } from "@ngne/editor-ui/pwa";
+
+/** The app's key contexts as its keymap reads them: order, state and focus contexts. */
+export const KEY_CONTEXT_LISTS = editorUi.config.keyContexts;
 
 /** The overlay layers of `*.overlay.ts(x)`, in draw order. */
 export const overlayLayers = editorUi.overlayLayers;

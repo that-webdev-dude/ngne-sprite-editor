@@ -1,12 +1,14 @@
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import type { StoreApi } from "zustand/vanilla";
+import { setBottomRegionVisible } from "@ngne/editor-ui/shell";
 import type { BlendMode } from "../../core/model";
+import { bottomRegion } from "../uiState";
 import type { TimelineSelection } from "./selection";
 
 // Editor state of the timeline panel (DESIGN §5.6, SE-022), outside any document and not
-// undoable: whether the panel is shown, its selection of cels, frames or layers, and the edits
-// that are open in it. The commands that change documents from it are in `*.commands.ts`
+// undoable: its selection of cels, frames or layers and the edits that are open in it; whether
+// it is shown is the bottom region's (`setTimelineVisible`). The commands that change documents from it are in `*.commands.ts`
 // modules of this folder; they read the values this store holds for them.
 
 /** A layer name being edited in place (double-click, or Rename Layer). */
@@ -59,8 +61,6 @@ export interface PropertiesDraft {
 }
 
 export interface TimelineState {
-    /** The panel is shown; Tab (viewport focused) and View → Hide Timeline toggle it. */
-    visible: boolean;
     /** What the last click in the grid selected; see `effectiveSelection`. */
     selection: TimelineSelection | null;
     rename: RenameDraft | null;
@@ -78,7 +78,6 @@ export interface TimelineState {
 
 export function initialTimelineState(): TimelineState {
     return {
-        visible: true,
         selection: null,
         rename: null,
         properties: null,
@@ -95,9 +94,12 @@ export function useTimelineState<Slice>(selector: (state: TimelineState) => Slic
     return useStore(timelineStore, selector);
 }
 
-/** Shows or hides the timeline panel. */
+/**
+ * Shows or hides the timeline panel: the editor UI instance's bottom region, whose Tab toggle
+ * and View → Hide Timeline switch it too (`bottomRegion`, src/app/uiState.ts).
+ */
 export function setTimelineVisible(visible: boolean): void {
-    if (timelineStore.getState().visible !== visible) timelineStore.setState({ visible });
+    setBottomRegionVisible(bottomRegion, visible);
 }
 
 export function setSelection(selection: TimelineSelection | null): void {

@@ -5,7 +5,8 @@ import { MAX_RECENT_COMMANDS, parseRecentCommands } from "@ngne/editor-ui/comman
 import {
     createRecentCommandsStore,
     RECENT_COMMANDS_STORAGE_KEY,
-} from "../../src/app/commandPalette/recentCommands";
+} from "../../src/app/testing/persistedNames";
+import { MENU_BAR, SPRITE_CONTEXTS } from "../../src/app/editorUi";
 import { createCommandRegistry } from "@ngne/editor-ui/commands";
 import type { CommandRegistry } from "@ngne/editor-ui/commands";
 import type { Command, CommandSpec } from "@ngne/editor-ui/commands";
@@ -20,7 +21,10 @@ function spec(id: string, overrides: Partial<CommandSpec> = {}): CommandSpec {
 
 /** A registry with the given commands, registered in this order. */
 function registryOf(...specs: CommandSpec[]): CommandRegistry {
-    const registry = createCommandRegistry();
+    const registry = createCommandRegistry<string, string>({
+        menus: MENU_BAR,
+        contexts: SPRITE_CONTEXTS,
+    });
     for (const each of specs) registry.register(each);
     return registry;
 }
@@ -33,7 +37,9 @@ function command(registry: CommandRegistry, id: string): Command {
 
 /** The ids of the palette rows for a query. */
 function rows(registry: CommandRegistry, query = "", recent: readonly string[] = []): string[] {
-    return paletteEntries(registry.list(), recent, query).map((entry) => entry.command.id);
+    return paletteEntries(registry.list(), registry.menus, recent, query).map(
+        (entry) => entry.command.id,
+    );
 }
 
 /** The score of a term that must match. */
@@ -153,7 +159,7 @@ describe("palette rows", () => {
     it("lists planned commands too: they are in the registry, disabled", () => {
         const planned = registryOf(spec("file.new", { menuPath: ["File"] }));
         planned.plan({ id: "file.open", title: "Open…", menuPath: ["File"] });
-        const entries = paletteEntries(planned.list(), [], "");
+        const entries = paletteEntries(planned.list(), planned.menus, [], "");
         expect(entries.map((entry) => entry.command.id)).toEqual(["file.new", "file.open"]);
         expect(entries[1]?.command).toMatchObject({ planned: true });
         expect(entries[1]?.command.enabled()).toBe(false);
@@ -172,7 +178,7 @@ describe("palette rows", () => {
     });
 
     it("gives each row its title and its place in the menus", () => {
-        const entries = paletteEntries(registry.list(), [], "");
+        const entries = paletteEntries(registry.list(), registry.menus, [], "");
         const row = (id: string) => entries.find((entry) => entry.command.id === id);
         expect(row("edit.undo")).toMatchObject({ title: "Undo Pencil", group: "Edit" });
         expect(row("file.recent.b")).toMatchObject({ group: "File › Open Recent" });
