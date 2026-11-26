@@ -22,7 +22,7 @@
     },
     "dependencies": {
         "@ngne/core": "0.4.0",
-        "@ngne/editor-ui": "file:../trials/tarballs/06083b1/ngne-editor-ui-0.1.0.tgz",
+        "@ngne/editor-ui": "file:../trials/tarballs/b0bc3a4/ngne-editor-ui-0.1.0.tgz",
         "fast-png": "8.0.0",
         "fflate": "0.8.3",
         "gifenc": "1.0.3",

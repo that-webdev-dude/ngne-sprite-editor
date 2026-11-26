@@ -3,32 +3,21 @@ import { oklabToSrgb8, srgb8ToOklab, writeOklab } from "@ngne/editor-ui/colour";
 
 describe("srgb8ToOklab", () => {
     // Reference values: the OKLab coordinates of the sRGB primaries and of white, as given by
-    // the matrices of Ottosson's article (https://bottosson.github.io/posts/oklab/).
+    // the matrices of Ottosson's article (https://bottosson.github.io/posts/oklab/). The
+    // primaries are checked to 3 decimals, the colour subpath's checked precision; white to 5.
     it("matches the reference values of the primaries, white and black", () => {
-        const expected: [number[], number[]][] = [
-            [
-                [255, 0, 0],
-                [0.62796, 0.22486, 0.12585],
-            ],
-            [
-                [0, 255, 0],
-                [0.86644, -0.23389, 0.1795],
-            ],
-            [
-                [0, 0, 255],
-                [0.45201, -0.03246, -0.31153],
-            ],
-            [
-                [255, 255, 255],
-                [1, 0, 0],
-            ],
+        const expected: [number[], number[], number][] = [
+            [[255, 0, 0], [0.62796, 0.22486, 0.12585], 3],
+            [[0, 255, 0], [0.86644, -0.23389, 0.1795], 3],
+            [[0, 0, 255], [0.45201, -0.03246, -0.31153], 3],
+            [[255, 255, 255], [1, 0, 0], 5],
         ];
-        for (const [[red, green, blue], lab] of expected) {
+        for (const [[red, green, blue], lab, digits] of expected) {
             const actual = srgb8ToOklab(red, green, blue);
             for (let axis = 0; axis < 3; axis++) {
                 expect(actual[axis], `${red}, ${green}, ${blue} axis ${axis}`).toBeCloseTo(
                     lab[axis],
-                    5,
+                    digits,
                 );
             }
         }

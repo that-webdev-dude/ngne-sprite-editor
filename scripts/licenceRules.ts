@@ -20,6 +20,7 @@ export const EXCLUDED_CODE: readonly ExcludedCode[] = [
 /**
  * Build tools whose own code the bundle holds although no module imports it: Rolldown writes
  * its runtime helpers into every build, so its licence is listed with the bundled packages.
- * The module-preload polyfill is turned off (`build.modulePreload`), so Vite writes none.
+ * The module-preload polyfill is turned off (`build.modulePreload`), so Vite writes none. Vite
+ * writes its preload helper into a build with a dynamic import (the development gallery route).
  */
-export const BUILD_PACKAGES: readonly string[] = ["node_modules/rolldown"];
+export const BUILD_PACKAGES: readonly string[] = ["node_modules/rolldown", "node_modules/vite"];
