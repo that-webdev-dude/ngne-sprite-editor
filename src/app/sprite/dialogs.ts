@@ -12,7 +12,7 @@ import type {
 /**
  * The dialogs of the sprite commands (DESIGN §7): New sprite, Sprite properties, Canvas size
  * and Sprite size. A command asks for a dialog and waits for the answer; the dialog host shows
- * the dialog for the open request and answers it (app/dialogs/dialogRequests.ts). The
+ * the dialog for the open request and answers it (`createDialogRequests`, @ngne/editor-ui/messages). The
  * document is changed by the command, never by the dialog (SPEC §5).
  */
 

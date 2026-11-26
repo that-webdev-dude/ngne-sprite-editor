@@ -4,23 +4,23 @@
     "measurement": "Frame switch to a frame not in the viewport's slot cache (ArrowRight on the viewport) on the reference document (256×256, 8 layers, 64 frames), Chrome on Intel UHD: the key's timeStamp to the submit of the frame showing the new frame.",
     "statistic": "larger of two p95s: the first sweep (63 switches, composites built) and the later sweeps (126, composites cached)",
     "budgetMs": 50,
-    "resultMs": 12.5,
+    "resultMs": 12.400000035762787,
     "details": {
         "firstSweep": {
             "count": 63,
             "medianMs": 6.4,
-            "p95Ms": 12.5,
-            "maxMs": 37.4
+            "p95Ms": 12.4,
+            "maxMs": 37.7
         },
         "laterSweeps": {
             "count": 126,
-            "medianMs": 5.9,
-            "p95Ms": 12,
-            "maxMs": 20.3
+            "medianMs": 5.8,
+            "p95Ms": 12.1,
+            "maxMs": 21.1
         },
         "animationFramesToSubmit": {
-            "1": 134,
-            "2": 51,
+            "1": 136,
+            "2": 49,
             "3": 3,
             "5": 1
         },
@@ -32,7 +32,7 @@
         "devicePixelRatio": 1,
         "window": "1920×1080 CSS px",
         "adapter": "intel / gen-12lp ()",
-        "chrome": "157.0.8103.80, new headless, --force-color-profile=srgb --force-low-power-gpu --force-device-scale-factor=1"
+        "chrome": "158.0.8127.38, new headless, --force-color-profile=srgb --force-low-power-gpu --force-device-scale-factor=1"
     },
     "pass": true,
     "environment": {
@@ -42,5 +42,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-11-21T08:38:32.084Z"
+    "date": "2026-11-26T21:15:01.271Z"
 }

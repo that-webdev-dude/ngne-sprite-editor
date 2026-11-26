@@ -4,32 +4,32 @@
     "measurement": "Cold load of the production build served locally to interactive (the New sprite dialog on screen after the empty state's first action), Chrome on Intel UHD, each load in a new browser with an empty profile, after one unmeasured warm-up browser woke the GPU.",
     "statistic": "largest of 10 cold loads, from navigation start",
     "budgetMs": 2000,
-    "resultMs": 382.69999999995343,
+    "resultMs": 263.7000000476837,
     "details": {
         "interactiveMs": [
-            256.2,
-            256,
-            249.7,
-            254.5,
-            253.5,
-            382.7,
-            294.6,
-            272.1,
-            270.1,
-            258
+            258.4,
+            252.9,
+            249.9,
+            243.6,
+            245.6,
+            242.3,
+            241.1,
+            250,
+            263.7,
+            246.3
         ],
-        "medianInteractiveMs": 256.2,
+        "medianInteractiveMs": 246.3,
         "shellMs": [
-            239,
-            240.2,
-            232.8,
-            237.7,
-            237.2,
-            350.8,
-            272.7,
-            253.6,
-            252.3,
-            239
+            239.7,
+            234.8,
+            231,
+            223.3,
+            227.6,
+            224.4,
+            222.8,
+            232.1,
+            245,
+            227.6
         ],
         "clicksUntilAnswered": [
             1,
@@ -44,125 +44,145 @@
             1
         ],
         "domContentLoadedMs": [
-            112.7,
-            105.1,
-            104.6,
-            106.2,
-            106.5,
-            153.8,
-            124.4,
-            119.6,
-            107.9,
-            112.2
+            138,
+            131.4,
+            132.7,
+            125.1,
+            131.1,
+            127.4,
+            127.1,
+            129.9,
+            147.4,
+            132.1
         ],
         "loadEventMs": [
-            113.8,
-            106.1,
-            105.5,
-            107.3,
-            107.4,
-            155.3,
+            138.6,
+            131.8,
+            133.1,
             125.5,
-            120.7,
-            109.2,
-            113.2
+            131.5,
+            127.8,
+            127.4,
+            130.3,
+            147.8,
+            132.4
         ],
         "firstContentfulPaintMs": [
             396,
-            400,
             392,
+            388,
+            380,
+            388,
+            384,
+            380,
             392,
-            400,
-            592,
-            460,
-            424,
-            416,
-            396
+            404,
+            384
         ],
         "longTasks": [
             [
                 {
-                    "start": 59,
-                    "duration": 55
-                }
-            ],
-            [
-                {
-                    "start": 51,
-                    "duration": 54
-                }
-            ],
-            [
-                {
-                    "start": 51,
-                    "duration": 54
-                }
-            ],
-            [
-                {
-                    "start": 52,
-                    "duration": 55
-                }
-            ],
-            [
-                {
-                    "start": 51,
-                    "duration": 56
-                }
-            ],
-            [
-                {
-                    "start": 75,
-                    "duration": 80
+                    "start": 87,
+                    "duration": 51
                 },
                 {
-                    "start": 279,
-                    "duration": 71
+                    "start": 188,
+                    "duration": 51
                 }
             ],
             [
                 {
-                    "start": 60,
-                    "duration": 66
+                    "start": 81,
+                    "duration": 51
+                }
+            ],
+            [
+                {
+                    "start": 81,
+                    "duration": 52
                 },
                 {
-                    "start": 220,
+                    "start": 180,
+                    "duration": 50
+                }
+            ],
+            [
+                {
+                    "start": 73,
                     "duration": 52
                 }
             ],
             [
                 {
-                    "start": 61,
-                    "duration": 60
+                    "start": 81,
+                    "duration": 50
                 }
             ],
             [
                 {
-                    "start": 53,
-                    "duration": 56
+                    "start": 74,
+                    "duration": 53
+                },
+                {
+                    "start": 173,
+                    "duration": 50
                 }
             ],
             [
                 {
-                    "start": 57,
-                    "duration": 56
+                    "start": 75,
+                    "duration": 53
+                },
+                {
+                    "start": 172,
+                    "duration": 50
+                }
+            ],
+            [
+                {
+                    "start": 80,
+                    "duration": 50
+                },
+                {
+                    "start": 181,
+                    "duration": 50
+                }
+            ],
+            [
+                {
+                    "start": 96,
+                    "duration": 52
+                },
+                {
+                    "start": 194,
+                    "duration": 50
+                }
+            ],
+            [
+                {
+                    "start": 75,
+                    "duration": 57
+                },
+                {
+                    "start": 177,
+                    "duration": 50
                 }
             ]
         ],
         "createToFirstViewportFrameMs": [
-            256,
-            249.4,
-            254.9,
+            340.7,
+            243.9,
+            249.6,
             249.5,
-            251.1,
-            374.4,
-            306.1,
-            277.1,
-            263.3,
-            251.9
+            202.6,
+            256.4,
+            247.3,
+            250,
+            254.5,
+            249.4
         ],
-        "medianCreateToFirstViewportFrameMs": 254.9,
-        "largestCreateToFirstViewportFrameMs": 374.4,
+        "medianCreateToFirstViewportFrameMs": 249.5,
+        "largestCreateToFirstViewportFrameMs": 340.7,
         "createClicksUntilAnswered": [
             1,
             1,
@@ -181,15 +201,15 @@
         "cold": "a new Chrome with an empty profile for every load",
         "warmUp": {
             "definition": "before the measured loads and not one of them: one Chrome with the same flags and a new profile opened a blank page (no app, no server), waited two animation frames, read its WebGPU adapter and was closed, so that no measured load waits for the GPU to wake from idle",
-            "launchToPageMs": 262.8,
-            "pageToAdapterMs": 156.5,
-            "totalMs": 419.4,
+            "launchToPageMs": 1146.7,
+            "pageToAdapterMs": 106.6,
+            "totalMs": 1253.3,
             "adapter": "intel / gen-12lp ()"
         },
         "devicePixelRatio": 1,
         "window": "1920×1080 CSS px",
         "adapter": "intel / gen-12lp ()",
-        "chrome": "157.0.8103.80, new headless, --force-color-profile=srgb --force-low-power-gpu --force-device-scale-factor=1"
+        "chrome": "158.0.8127.38, new headless, --force-color-profile=srgb --force-low-power-gpu --force-device-scale-factor=1"
     },
     "pass": true,
     "environment": {
@@ -199,5 +219,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-11-21T08:39:13.339Z"
+    "date": "2026-11-26T21:14:01.220Z"
 }

@@ -9,7 +9,7 @@ declare global {
         readonly BASE_URL: string;
         /** True in a build, which has the service worker beside it (vite.config.ts, SE-072). */
         readonly SERVICE_WORKER: boolean;
-        // The app's facts from package.json at build time (scripts/appInfo.ts); the About
+        // The app's facts from package.json at build time (`appInfoDefines`, vite.config.ts); the About
         // dialog shows them (app/about/appInfo.ts).
         /** package.json `name`: "ngne-sprite-editor". */
         readonly APP_PACKAGE: string;

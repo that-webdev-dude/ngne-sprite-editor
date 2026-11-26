@@ -10,10 +10,11 @@ const manifest = JSON.parse(
 ) as Manifest;
 
 describe("package.json", () => {
-    // SPEC §4; `gifenc` joined with SE-063.
+    // SPEC §4; `gifenc` joined with SE-063, `@ngne/editor-ui` with issue #21.
     it("has exactly the runtime dependencies of the specification", () => {
         expect(Object.keys(manifest.dependencies).sort()).toEqual([
             "@ngne/core",
+            "@ngne/editor-ui",
             "fast-png",
             "fflate",
             "gifenc",
@@ -24,6 +25,7 @@ describe("package.json", () => {
             "zustand",
         ]);
         expect(manifest.dependencies["@ngne/core"]).toBe("0.4.0");
+        expect(manifest.dependencies["@ngne/editor-ui"]).toBe("0.1.0");
     });
 
     it("pins every dependency to an exact version", () => {

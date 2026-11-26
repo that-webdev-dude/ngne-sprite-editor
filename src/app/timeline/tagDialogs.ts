@@ -12,7 +12,7 @@ import type {
 /**
  * The Tag dialog of the tag commands (DESIGN §7, SE-023): name, colour, range, direction and
  * repeat. New Tag… and Tag Properties… ask for it and wait for the answer; the dialog host
- * shows it (app/dialogs/dialogRequests.ts). Tag Properties… lets it choose among the tags at
+ * shows it (`createDialogRequests`, @ngne/editor-ui/messages). Tag Properties… lets it choose among the tags at
  * the active frame and delete the one chosen, so every tag is reached from the keyboard, also
  * one that another tag covers. The document is changed by the command, never by the dialog
  * (SPEC §5).

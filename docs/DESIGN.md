@@ -1,22 +1,23 @@
 # NGNE Sprite Editor — Interface design
 
-Status: **Ready for implementation — owner acknowledgements A1–A9 recorded** · 2026-10-11
+Targets **`@ngne/editor-ui` 0.1.0**. The suite's design canon — principles, layout, tokens,
+components, messages, viewport chrome, shared surfaces, interaction and accessibility rules —
+is that package's
+[DESIGN.md](https://github.com/that-webdev-dude/ngne-editor-ui/blob/v0.1.0/docs/DESIGN.md)
+("the canon" below), and the package draws it. This file describes only the sprite editor's
+own interface: its menus, tool rail, context bar options, dock sections, timeline, status
+fields, viewport layers, dialogs and empty-state actions, and its exceptions to the canon. It
+never restates or changes a rule of the canon.
 
 Related: [SPEC.md](SPEC.md) · static mockup: [design/mockup.html](design/mockup.html) (open in a
-browser). The mockup illustrates layout, tokens and density; where it omits a control described
-here, this document governs.
+browser). The mockup illustrates density and the editor's panels; it predates the canon's
+layout, which puts the tool rail full height beside the timeline. Where the mockup differs from
+the canon or omits a control described here, the canon and this document govern.
 
 ## 1. Principles
 
-1. **The artwork is the only colour.** Chrome is neutral grey with no hue cast, so it never
-   biases colour judgement. One accent, used only for selection, focus and the active tool.
-2. **Dense, quiet, flat.** 1 px hairlines instead of shadows and cards. No gradients, no
-   decorative icons, no panel titles that restate the obvious.
-3. **Canvas first.** Panels are narrow and collapsible; the viewport takes every remaining pixel.
-4. **Aseprite's map, modern manners.** Same regions and shortcuts an Aseprite user expects;
-   vector type, real menus, a command palette, keyboard-reachable everything.
-5. **State is visible.** Active layer, frame, tool, zoom, cursor position and unsaved status are
-   always on screen; nothing important hides in a mode.
+The canon's §1. Its fourth principle, the reference's map, is Aseprite's here: the regions,
+tools and shortcuts an Aseprite user expects.
 
 ## 2. Layout
 
@@ -31,133 +32,60 @@ here, this document governs.
 | l  |                 viewport (NGNE canvas                |  Palette   |
 | s  |                 + Canvas2D overlay)                  |            |
 |    |                                                      +------------+
-| 44 |                                                      |  Preview   | 264 right dock
-+----+------------------------------------------------------+------------+
-| |< < > >| (onion) [100 ms]  [ walk ============ ][ jump ==== ]          |
-| Layers            1    2    3    4    5    6    7    8                  | 200 timeline
-| (o)(a) Outline    #    #    #    #    -    -    #    #                  |
-| (o)(a) Body       #    #====#    #    #    #    #    #                  |
-+------------------------------------------------------------------------+
+|    |                                                      |  Preview   | 264 right dock
+|    +------------------------------------------------------+------------+
+|    | |< < > >| (onion) [100 ms]  [ walk ============ ][ jump ==== ]     |
+|[FB]| Layers            1    2    3    4    5    6    7    8             | 200 timeline
+| 44 | (o)(a) Outline    #    #    #    #    -    -    #    #             |
++----+-------------------------------------------------------------------+
 | 14, 9   32 x 32   12x   Frame 3/8   100 ms        Shift: constrain line | 24  status bar
 +------------------------------------------------------------------------+
 ```
 
-| Region      | Size                         | Behaviour                                                     |
-| ----------- | ---------------------------- | ------------------------------------------------------------- |
-| Menu bar    | 36 px                        | Menus, document tabs (centre), command palette trigger        |
-| Tool rail   | 44 px wide                   | One column of 28 px icon buttons, grouped by separators       |
-| Context bar | 36 px                        | Options for the active tool only                              |
-| Viewport    | flexible                     | Workspace colour around the document; no scrollbars           |
-| Right dock  | 264 px, resizable 220–360    | Colour, Palette, Preview; each section collapsible            |
-| Timeline    | default min(200 px, 28% of window height), resizable 120 px–50% | Transport, tag bar, layer rows × frame columns; Tab toggles (canvas focus) |
-| Status bar  | 24 px                        | Cursor, size, zoom, frame, duration; right side: contextual hint |
+The regions, their sizes and their overflow rules are the canon's §2. The editor fills them:
 
-Overflow rules (the layout must hold at the minimum window, 1280×720):
+| Region        | Content                                                                          |
+| ------------- | -------------------------------------------------------------------------------- |
+| Menu bar      | File, Edit, Sprite, Layer, Frame, Select, View, Help; the document tabs in the centre |
+| Tool rail     | The tool groups of §5.1; its footer holds the foreground/background chips and their reset button (54 px) |
+| Context bar   | The active tool's options (§5.2), or the floating selection's transform fields   |
+| Viewport      | The NGNE canvas and its overlay (§6); the empty state while no document is open  |
+| Right dock    | Colour, Palette, Preview (§5.3–§5.5). Under a window height of 800 px, Palette starts collapsed |
+| Bottom region | The timeline (§5.6), labelled "Timeline"; Tab (viewport focused) and View → Hide Timeline toggle it |
+| Status bar    | The fields of §5.7                                                               |
 
-- **Tool rail**: when its content does not fit its height in one column it switches to two
-  columns (72 px wide); it never scrolls and never clips a tool.
-- **Right dock**: scrolls vertically as one column; section headers stay clickable to collapse.
-  Default at window heights under 800 px: Palette collapsed.
-- **Context bar**: options that do not fit move into a trailing overflow menu.
-- **Document tabs**: shrink to 96 px, then scroll horizontally with an overflow menu.
-  SE-047: a `tablist` centred in the space between the menus and the palette trigger; each
-  tab 28 px high and at most 200 px wide, its label (the file's name without `.ngsprite`
-  once the document has a file, the sprite name until then; the tooltip names both, as
-  `hero-v2.ngsprite — sprite: hero`) centred between two 24 px columns (the right one the
-  close control, shown on the selected tab and under the pointer, and taking no press while
-  hidden; its hover is `--bg-raised` on the selected tab), the unsaved marker after the
-  label. The selected tab is `--bg-active` with `--text` and a 2 px `--accent` line
-  inside its bottom edge, in the same weight as the others (`--text-muted`), so selecting a
-  tab never changes its width. A press selects a tab, a drag along the strip moves it, a
-  middle click or the close control closes it. The strip is one tab stop
-  (`aria-keyshortcuts` names its keys): ← → Home End move the focus, Enter or Space selects,
-  Delete closes (the focus goes to the tab in its place, or to the empty state's first
-  action when none is left), Ctrl+Shift+← → move the tab. While the tabs do not
-  fit, the strip scrolls (no scroll bar; the wheel scrolls it sideways) and a chevron button,
-  "All documents", opens a menu of every document, by the tabs' labels, with the selected one
-  checked; the selected tab is always scrolled into view.
-- **Tag bar**: grows by one 18 px row per overlap level, up to three rows, then scrolls.
-- Below 1280×720 the app shows a "window too small" notice instead of a broken layout.
+At the minimum window, 1280×720, the tool rail holds its tools and the colour chips in one
+column at every timeline height.
+
+Document tabs (the canon's tab strip): a tab's label is the file's name without `.ngsprite`
+once the document has a file, the sprite name until then; its tooltip names both, as
+`hero-v2.ngsprite — sprite: hero`. The overflow menu, "All documents", lists every document by
+the tabs' labels. Closing the last tab with Delete moves the focus to the empty state's first
+action; Alt+W closes the active document.
+
+Tag bar: grows by one 18 px row per overlap level, up to three rows, then scrolls (§5.6).
 
 ## 3. Tokens
 
-All colour, spacing, radius and type values are CSS custom properties on `:root`; components use
-tokens only. Dark is the default; light is a full second set under `[data-theme="light"]`.
+The canon's §3 and the package's stylesheet; the editor's own stylesheets use its tokens and
+hold no raw colour. The editor adds:
 
-### 3.1 Colour
-
-| Token              | Dark      | Light     | Use                                         |
-| ------------------ | --------- | --------- | ------------------------------------------- |
-| `--bg-workspace`   | `#0f0f10` | `#d9d9db` | Area around the document                    |
-| `--bg-panel`       | `#18181a` | `#f4f4f5` | Panels, bars                                |
-| `--bg-raised`      | `#222225` | `#ffffff` | Inputs, hovered rows, popovers              |
-| `--bg-active`      | `#2c2c30` | `#e6e6e9` | Pressed, selected row                       |
-| `--border`         | `#2a2a2e` | `#d0d0d4` | Hairlines between regions (decorative)      |
-| `--border-strong`  | `#3a3a40` | `#b4b4ba` | Document outline, dividers inside controls  |
-| `--border-input`   | `#70707a` | `#8a8a94` | Outline of inputs, selects, segmented controls (≥ 3:1 against their fill) |
-| `--text`           | `#e7e7ea` | `#18181a` | Primary text                                |
-| `--text-muted`     | `#9a9aa2` | `#5c5c66` | Labels, secondary content, hints, placeholders |
-| `--text-faint`     | `#6b6b74` | `#8a8a94` | Disabled controls only                      |
-| `--accent`         | `#83e8e1` | `#087f78` | Active tool, selection, focus ring, primary button |
-| `--accent-contrast`| `#0f0f10` | `#ffffff` | Text on accent                              |
-| `--danger`         | `#ff6b6b` | `#c92a2a` | Destructive confirm, errors                 |
-| `--warn`           | `#f2c14e` | `#8a5a00` | Unsaved marker, warnings                    |
-
-- The dark accent is NGNE's brand cyan. Accent appears on at most a few elements per screen.
-- Contrast (WCAG 2.1 AA): `--text` and `--text-muted` on every background ≥ 4.5:1;
-  `--accent-contrast` on `--accent` ≥ 4.5:1; `--warn` and `--danger` on `--bg-panel` ≥ 4.5:1;
-  `--border-input` against `--bg-raised` ≥ 3:1. `--text-faint` is exempt because it is used
-  only for disabled controls.
-- Text placed on user colours (tag spans) is black or white, whichever has the higher contrast.
-- Tag colours and palette swatches are user data and are the only other hues on screen.
-- Transparency checkerboard: `#3a3a3a` / `#4a4a4a` (dark), `#c8c8c8` / `#ffffff` (light);
-  user-configurable.
-
-### 3.2 Type
-
-- UI: `Inter, "Segoe UI", system-ui, sans-serif`. No web-font download; Inter is used if installed.
-- Numeric readouts: same family with `font-variant-numeric: tabular-nums`.
-- Sizes: 12 px body and controls, 11 px labels and status bar, 13 px dialog titles. Line height 16 px.
-- Weights: 400 body, 500 active/selected and titles. No bold, no uppercase labels.
-
-### 3.3 Space, shape, motion
-
-| Token          | Value                                   |
-| -------------- | --------------------------------------- |
-| Spacing scale  | 2, 4, 8, 12, 16, 24 px                  |
-| Control height | 24 px (inputs, buttons), 28 px (tool buttons, rows) |
-| Radius         | 4 px controls, 6 px popovers and dialogs, 0 for regions. Small marks inside a control (the colour chips, a strip's thumb, the preview's background chip) 2 px, as in the mockup; a fill inside a 4 px control with a 1 px border 3 px, so its corner follows the border (SE-071) |
-| Border         | 1 px                                    |
-| Focus ring     | 2 px `--accent`, 1 px offset, keyboard focus only |
-| Elevation      | Popovers and dialogs only: `0 8px 24px rgb(0 0 0 / 0.4)` |
-| Motion         | 100 ms ease-out for hover/press; popovers 120 ms fade. The only animation over the canvas is the marching ants |
-| Icons          | 16 px, 1.5 px stroke, `currentColor`    |
-
-`prefers-reduced-motion`: transitions off, marching ants static (dashed, not animated).
+- The transparency checkerboard is user-configurable (Preferences, §7).
+- Text on tag spans is black or white, whichever has the higher contrast with the span (§5.6).
 
 ## 4. Components
 
-| Component        | Notes                                                                                   |
-| ---------------- | --------------------------------------------------------------------------------------- |
-| Menu bar         | Radix Menubar; shortcuts right-aligned in `--text-muted`; disabled items stay visible   |
-| Command palette  | Ctrl+K; fuzzy search over the command registry; shows menu, shortcut and disabled state (disabled commands are listed, inert); the commands last run from it come first (kept in `localStorage`); Enter runs |
-| Tool button      | 28 px; active = accent icon on `--bg-active`; tooltip with name and key after 400 ms    |
-| Icon button      | 24 px; hover `--bg-raised`; `aria-label` required                                       |
-| Number field     | Scrub by dragging the label; arrow keys ±1, Shift ±10; unit suffix muted                |
-| Slider           | 2 px track, 10 px thumb inside a 24 px hit area; value in an adjacent number field      |
-| Toggle           | Icon button with `aria-pressed`; no switches. The one idiom for every on/off setting (SE-071): an icon toggle in bars and rows, a text toggle (its name as text, `--bg-active` while pressed) in forms — the context bar's mode toggles, Preferences (Onion skin, Tint, Within tag, Autosave), Export, the onion skin popover. A segmented control is for a choice between named values, never for On/Off |
-| Select           | Radix Select; same metrics as number field                                              |
-| Dialog           | Centred. Standard: max 560 px. Large (Import PNG, Export): max 960 px, max 86% of window height, body scrolls. Title, body, right-aligned actions; primary action accent-filled |
-| Popover          | Colour picker, layer properties, onion-skin settings; closes on Escape and outside click |
-| Context menu     | Right-click on layers, frames, cels and tags. Not on the canvas or on swatches, where the right button means background colour; swatch actions live in the palette's overflow menu and on the Menu key |
-| Toast            | Bottom-centre, one line, 4 s; errors and information with an action (such as Reload for an update) stay until dismissed (checkpoint E) |
-| Splitter         | 8 px hit area, 1 px visible line; double-click resets. A control beside a splitter takes the presses where the hit area meets it: the timeline's content lies above the part of its splitter's hit area inside the panel (the 3 px below the border), so the transport buttons take the presses on their top edge, and the splitter keeps its line and the 4 px above it; the dock's splitter stops where the timeline's begins, so no press lands on two (SE-071) |
+The canon's §4, from the package's primitives. The editor's own uses:
 
-Message channels: a **toast** reports the result of an explicit command (saved, exported,
-import failed) and asynchronous failures; the **status bar** shows transient tool feedback
-(layer locked, selection size) and hints; a **dialog** is used only when a decision is needed.
-An error boundary around each region replaces a crashed panel with a one-line message and a
-Reload action, leaving the rest of the app usable.
+| Component    | Use in the editor                                                                 |
+| ------------ | --------------------------------------------------------------------------------- |
+| Popover      | Colour picker (swatch edit), layer properties, onion-skin settings, the drop chooser |
+| Context menu | Right-click on layers, frames, cels and tags. Not on swatches either, where the right button means background colour; swatch actions live in the palette's overflow menu and on the Menu key |
+| Toggle       | The context bar's mode toggles, Preferences (Onion skin, Tint, Within tag, Autosave), Export, the onion skin popover |
+| Splitter     | The timeline's content lies above the part of its splitter's hit area inside the panel (the 3 px below the border), so the transport buttons take the presses on their top edge, and the splitter keeps its line and the 4 px above it; the dock's splitter stops where the timeline's begins, so no press lands on two (SE-071) |
+
+Messages follow the canon's §5: a toast for the result of a command (saved, exported, import
+failed), the status bar for tool feedback (layer locked, selection size) and hints.
 
 ## 5. Panels
 
@@ -189,9 +117,7 @@ the reset button (24 px icon) restores black on white. One column stacks them, t
 them side by side. The rail has one column when the planned content stacked in one column fits
 its height — every tool slot of the registry in its groups, the separators, and the chips over
 the reset button — and two columns otherwise, whatever is rendered (a rail whose content
-failed keeps the layout). At 1280×720 with the default timeline it does not fit (SE-016). The
-count is decided before the shell's first paint, so the shell is never laid out with the other
-one and the viewport region is never measured with it (gh-003).
+failed keeps the layout). At 1280×720 it fits in one column at every timeline height (§2).
 
 ### 5.2 Context bar
 
@@ -445,43 +371,38 @@ transient tool feedback in `--warn`.
 
 ## 6. Viewport
 
-- Workspace is `--bg-workspace`; the document has a 1 px `--border-strong` outline outside its
-  bounds and no drop shadow.
-- Pixel grid appears at ≥ 8× as 1 px lines at 12% white/black; tile grid at 25%. White in the
-  dark theme, black in the light theme; a line is the first device pixel of each texel or tile.
-- Selection: 1 px marching ants, black and white dashes, 4 px period, 8 steps per second.
-  They lie on the device pixels outside the selection that touch a selected texel, diagonally
-  too: a 1 px ring just outside the selected texels on every side, around a hole as well, as
-  the document outline lies outside the document; where the selection reaches the document's
-  edge they lie over the outline. A dash is 2 device pixels by the sum x + y of the overlay
-  pixel (black where (x + y − phase) mod 4 < 2), so every row and column of the ring repeats
-  every 4 px, round corners too; a step moves the phase on by one. Below 1× a run that rounds
-  to nothing keeps 1 px. A draw layer of order 500, over the grids and under the brush cursor;
-  its timer exists only while the active document has a selection and motion is allowed
-  (SE-030).
+The canon's §6 (workspace, document outline, grids, ants, handles, draw orders, zoom readout).
+The editor's layers and details:
+
+- Pixel grid (the canon's fine grid) at ≥ 8×; tile grid (the coarse grid) at the sprite's grid
+  size and offset.
+- Selection ants: a 1 px ring just outside the selected texels on every side, around a hole as
+  well, diagonally too; where the selection reaches the document's edge they lie over the
+  outline. Every row and column of the ring repeats every 4 px, round corners too. Below 1× a
+  run that rounds to nothing keeps 1 px. Draw layer 500; its timer exists only while the
+  active document has a selection and motion is allowed (SE-030).
 - Pending selection: while a selection tool's gesture is in progress, the pixels it would
-  select show as the ants show a selection — the same ring and dashes, drawn by the same
-  painter — standing still at phase 0, over the ants of the selection there is (draw layer
-  order 600) (SE-031).
+  select show as the ants show a selection, standing still at phase 0, over the ants of the
+  selection there is (draw layer 600) (SE-031).
 - Transform box: while a selection floats, its box (turned as the float is) and eight handles,
-  drawn as DESIGN §5.2 describes; draw layer order 700, over the pending selection (600) and
-  under the brush cursor (900) (SE-033).
+  drawn as §5.2 describes; draw layer 700 (SE-033).
 - Reference box: while the Move tool is active and the active layer is a visible, unlocked
   reference layer whose source is decoded, its box (never turned) drawn as the transform box
   is, with the four corner handles only, where a drag shows the layer meanwhile; draw layer
-  order 650, over the pending selection (600) and under the transform box (700) (SE-046).
+  650 (SE-046).
 - Brush cursor: 1 px outline of the brush footprint snapped to pixels, two-tone so it shows on
   any content (black just outside the footprint, white outside that; an inverted outline cannot
   be drawn on the overlay, which does not hold NGNE's pixels); a paint tool that draws a brush
-  outline hides the system cursor over the document.
-- Zoom readout and "fit" live in the status bar, not as floating buttons over the canvas.
-- Empty state (no document open): centred in the workspace — New sprite, Open, Import PNG and
-  the recent files list, as plain text buttons; no illustration. SE-047: under the actions, a
-  "Recent files" label in `--text-muted` and a list of one button per file, named by the
-  file, newest first (at most 320 px wide, cut off with an ellipsis); nothing of it while the
-  list is empty.
+  outline hides the system cursor over the document. Draw layer 900.
+- Empty state (no document open): New sprite, Open and Import PNG, then the recent files
+  (SE-047).
 
 ## 7. Dialogs and other surfaces
+
+The shared surfaces are the canon's §7: Preferences' frame, the shortcut sheet (Help →
+Keyboard Shortcuts…, `?`), Open Source Licences (View → Open Source Licences…), About (Help →
+About NGNE Sprite Editor…), Recovery, Overwrite confirm, Discard changes, WebGPU required and
+Window too small. The editor's surfaces, and its content of the shared ones:
 
 | Surface         | Kind     | Content                                                                         |
 | --------------- | -------- | ------------------------------------------------------------------------------- |
@@ -499,33 +420,20 @@ transient tool feedback in `--warn`.
 | Cel properties  | Popover  | Cel opacity; linked state with Unlink                                           |
 | Onion skin      | Popover  | Frames before/after, opacity, falloff, tint, placement, within tag. SE-025: opened by the settings button beside the transport's toggle (§5.6); a change applies at once |
 | Replace colour  | Dialog   | From, to, tolerance, scope (selection, cel, frame, sprite). SE-066: From and To are hex fields (3, 4, 6 or 8 digits, as the colour panel's) beside a sample of the colour over the checkerboard, opening with the foreground and the background; Tolerance a number field 0–255; Scope a segmented control Selection / Cel / Frame / Sprite, Selection offered only with a selection and chosen then, otherwise the scope answered last (Cel at first); the tolerance answered last is kept too. A field that holds no colour is named in a message line with the forms it takes ("From is not a colour: use 3, 4, 6 or 8 hex digits.") and Replace is disabled until it is fixed. Cancel / Replace (primary) |
-| Recovery        | Dialog on launch | Recoverable documents with name, time, thumbnail; Recover / Discard     |
 | Preferences     | Dialog   | Theme, checkerboard, grid, onion skin defaults, import defaults, autosave. A change applies at once; actions are Restore defaults and Close |
-| Shortcut sheet  | Dialog   | Help → Keyboard Shortcuts…, the first item of the Help menu, or ? (SPEC §7.8). Generated from the command registry, grouped by menu; commands outside the menus under "Other" |
-| Open Source Licences | Large dialog | View → Open Source Licences…, the last item of the View menu. The text of `licences.txt` (SPEC §4) in a monospaced block that keeps its line breaks and scrolls; Close. When the file cannot be read, a line saying so with a link to its address. A dialog, not a tab: a tab the page opens holds the editor's heap |
-| About           | Dialog   | Help → About NGNE Sprite Editor…, the last item of the Help menu (the last menu of the bar), in a group of its own below Keyboard Shortcuts…: reference first, then the app's own facts. The app's name and version ("NGNE Sprite Editor <version>"), then Engine and Licence as name and value ("@ngne/core <version>", "MIT"), links to the repository and the changelog (underlined, each in a new tab), and a status line. Actions Copy version info, which copies one line for a bug report ("ngne-sprite-editor <version> · @ngne/core <version> · <user agent>") and says "Version info copied." or, in `--danger`, that the clipboard is not available; and Close (primary). The versions and the licence are package.json's, put in at build time |
-| WebGPU required | Full window | What is missing, supported browsers, how to enable acceleration              |
-
-Only actions that undo cannot reverse confirm once: closing or replacing an unsaved document,
-discarding a recovery snapshot, overwriting files in an export folder. Everything else,
-including deleting layers and frames, relies on undo.
 
 ## 8. Accessibility
 
-- Every command is reachable by keyboard via menu or palette; visible focus on all controls.
-  F6 / Shift+F6 cycle regions; Tab toggles the timeline only while the canvas has focus.
-- Radix primitives supply roles, focus trapping and typeahead for menus and dialogs.
-- Icon-only controls carry `aria-label` and a tooltip. The cells of a choice that show a place
-  or a colour rather than an icon — the pivot and anchor grids, the tag colour presets — carry
-  their `aria-label` in a labelled group and no tooltip, as the palette swatches do (SE-071).
-- Text contrast per §3.1 in both themes.
-- Pointer targets are at least 24×24 px. Exceptions, each also operable from the keyboard:
-  palette swatches (16 px, arrow-key navigation), timeline cells (24×28), splitters (8 px,
-  keyboard resize with arrow keys when focused), tag spans and their 6 px drag handles (16 px
-  tall; Frame → Tag Properties… edits, resizes and deletes any tag at the active frame, §5.6).
-- A control for the pointer only, hidden from assistive technology: the close control of a
-  document tab (SE-047). A button inside a `tab` would be nested interactive content; the
-  keyboard closes a focused tab with Delete, and the active one with Alt+W (§2).
-- Layout is verified at 1280×720 and at 125% browser zoom on a 1920×1080 display.
-- The canvas itself is a pointer surface and is not screen-reader operable; this is stated in
-  the README rather than faked.
+The canon's §9. The editor's keyboard paths and exceptions:
+
+- Tab toggles the timeline only while the canvas has focus; F6 enters the timeline at its
+  active cell (§5.6).
+- The cells of a choice that show a place or a colour rather than an icon — the pivot and
+  anchor grids, the tag colour presets — carry their `aria-label` in a labelled group and no
+  tooltip, as the palette swatches do (SE-071).
+- Pointer targets below 24×24 px, each also operable from the keyboard: palette swatches
+  (16 px, arrow-key navigation), timeline cells (24×28), splitters (8 px, arrow keys when
+  focused), tag spans and their 6 px drag handles (16 px tall; Frame → Tag Properties… edits,
+  resizes and deletes any tag at the active frame, §5.6).
+- The keyboard closes a focused document tab with Delete, and the active document with Alt+W
+  (§2).

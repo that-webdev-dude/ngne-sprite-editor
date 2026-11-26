@@ -11,7 +11,7 @@ and the one check that needs a person: installing it and seeing it open in a win
     against the origin, so "./" would give the app the same identity as the tilemap editor on
     the same GitHub Pages origin), `start_url`/`scope` "./" (relative, so the app works at any
     Vite `base`), `theme_color` `--bg-panel` and `background_color`
-    `--bg-workspace` of the default theme (read from `src/ui/styles/tokens.css`), icons 192 and
+    `--bg-workspace` of the default theme (read from the stylesheet of `@ngne/editor-ui`), icons 192 and
     512 px in "any" and "maskable" versions, a file handler for `.ngsprite`, and
     `launch_handler: focus-existing` (a file opened while the app runs opens in a tab of that
     window);

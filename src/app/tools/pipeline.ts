@@ -71,7 +71,7 @@ export interface PointerInput {
 /** The fields of a key event the pipeline reads. */
 export interface KeyInput {
     type: "down" | "up";
-    /** The key as chords name it (`eventKey` of commands/chord.ts); null for none. */
+    /** The key as chords name it (`eventKey` of @ngne/editor-ui/commands); null for none. */
     key: string | null;
     shiftKey: boolean;
     ctrlKey: boolean;

@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Interface: `@ngne/editor-ui` 0.1.0
+
+- The editor's shell and shared interface now come from `@ngne/editor-ui` 0.1.0, the NGNE editor
+  suite's package, pinned exactly: the menu bar and its menus, the document tab strip, the tool
+  rail, the context bar, the dock, the status bar, toasts, the command palette and shortcut
+  sheet, the update notice and the About and Open Source Licences dialogs. Themes, layout,
+  recent commands and the offline cache carry over from earlier versions.
+- The tool rail runs the full height of the window, down to the status bar, and the timeline
+  sits beside it, under the viewport and the dock, as in the suite's layout. With that height
+  the rail keeps its tools and colour chips in one column at the smallest window, 1280×720.
+- Help → Keyboard Shortcuts… (still on `?`) and Help → About NGNE Sprite Editor… are the
+  package's: Keyboard Shortcuts… first, About last in a group of its own.
+- View → Open Source Licences… is the package's command and dialog, the last item of the View
+  menu.
+- The close control of a document tab has no tooltip; a focused tab still closes with Delete.
+- The context bar, menus and toasts are drawn by the package, in the suite's look.
+
 ## 1.1.1 – 2026-11-21
 
 - The exported `<name>.sprites.ts` and `<name>.preview.config.mjs` name their copyright holder

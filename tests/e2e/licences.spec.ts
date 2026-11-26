@@ -5,7 +5,7 @@ import { menuItem, menuTrigger, openEditor } from "./se-007-support";
 
 // The Open Source Licences command (src/app/licences): View → Open Source Licences… shows the
 // licences file in a dialog of the app. The development server answers the file with the
-// runtime dependencies' licences (vite.config.ts); the build writes it (scripts/licences.ts).
+// runtime dependencies' licences (vite.config.ts); the build writes it (`generateLicences`).
 // No tab is opened: a tab the page opens would hold the editor's heap (the SE-070 soak).
 
 test("View → Open Source Licences… shows the licences file in a dialog and opens no tab", async ({

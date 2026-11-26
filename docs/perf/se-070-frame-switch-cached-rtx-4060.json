@@ -13,16 +13,16 @@
         },
         "latency": {
             "count": 70,
-            "medianMs": 4.9,
-            "p95Ms": 7.7,
-            "maxMs": 15.8
+            "medianMs": 5.2,
+            "p95Ms": 9.9,
+            "maxMs": 12.4
         },
         "submitted": "onDrawn: frames submitted to NGNE, not known to be presented on screen",
         "document": "256×256, 8 layers, 8 frames, at 2×, preview expanded",
         "devicePixelRatio": 1,
         "window": "1920×1080 CSS px",
         "adapter": "nvidia / lovelace ()",
-        "chrome": "157.0.8103.80, new headless, --force-color-profile=srgb --force-high-performance-gpu --force-device-scale-factor=1"
+        "chrome": "158.0.8127.38, new headless, --force-color-profile=srgb --force-high-performance-gpu --force-device-scale-factor=1"
     },
     "pass": true,
     "environment": {
@@ -32,5 +32,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-11-21T08:41:15.905Z"
+    "date": "2026-11-26T21:16:28.837Z"
 }

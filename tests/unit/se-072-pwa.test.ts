@@ -35,7 +35,7 @@ const ENTRIES: PrecacheEntry[] = [
     { url: "assets/index-abc.js", revision: null },
 ];
 
-describe("service worker precache (src/app/pwa/precache.ts)", () => {
+describe("service worker precache (@ngne/editor-ui/pwa)", () => {
     it("keeps each URL once, the first entry", () => {
         expect(uniqueEntries(ENTRIES)).toEqual(ENTRIES.slice(0, 3));
     });
@@ -200,7 +200,7 @@ class FakeContainer implements ContainerLike {
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-describe("update flow (src/app/pwa/updates.ts)", () => {
+describe("update flow (registerAppUpdates, @ngne/editor-ui/pwa)", () => {
     function start(controller: FakeWorker | null) {
         const container = new FakeContainer(controller);
         const reload = vi.fn();

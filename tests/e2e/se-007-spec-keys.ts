@@ -9,7 +9,7 @@ export type SpecContext = "gesture" | "floating" | "timeline" | "canvas" | "glob
 
 /** One chord of the table in one of its contexts. */
 export interface SpecBinding {
-    /** The chord in the notation of src/app/commands/chord.ts. */
+    /** The chord in the notation of @ngne/editor-ui/commands (`parseChord`). */
     chord: string;
     context: SpecContext;
     /** Marked †: also acts while a text field has focus. */

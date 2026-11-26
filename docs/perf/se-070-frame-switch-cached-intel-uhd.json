@@ -13,16 +13,16 @@
         },
         "latency": {
             "count": 70,
-            "medianMs": 5.3,
-            "p95Ms": 6.9,
-            "maxMs": 14.1
+            "medianMs": 5.1,
+            "p95Ms": 7.9,
+            "maxMs": 14.4
         },
         "submitted": "onDrawn: frames submitted to NGNE, not known to be presented on screen",
         "document": "256×256, 8 layers, 8 frames, at 2×, preview expanded",
         "devicePixelRatio": 1,
         "window": "1920×1080 CSS px",
         "adapter": "intel / gen-12lp ()",
-        "chrome": "157.0.8103.80, new headless, --force-color-profile=srgb --force-low-power-gpu --force-device-scale-factor=1"
+        "chrome": "158.0.8127.38, new headless, --force-color-profile=srgb --force-low-power-gpu --force-device-scale-factor=1"
     },
     "pass": true,
     "environment": {
@@ -32,5 +32,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-11-21T08:38:19.435Z"
+    "date": "2026-11-26T21:14:30.461Z"
 }

@@ -112,7 +112,7 @@ export default defineConfig(({ command }) => ({
             strategies: "injectManifest",
             srcDir: "src/app/pwa",
             filename: "sw.ts",
-            // The app registers the worker itself (src/app/pwa/updates.ts).
+            // The app registers the worker itself (`registerAppUpdates`, src/main.tsx).
             injectRegister: false,
             // The icons are among the files the patterns find.
             includeManifestIcons: false,
@@ -173,7 +173,9 @@ export default defineConfig(({ command }) => ({
     },
     // The web workers' builds note their modules for the licences file.
     worker: { plugins: () => [licences.workerPlugin as unknown as Plugin] },
-    // No module-preload polyfill: every browser with WebGPU preloads modules itself, and the
-    // bundle then holds no code of Vite's beyond Rolldown's runtime (BUILD_PACKAGES).
+    // No module-preload polyfill: every browser with WebGPU preloads modules itself. The
+    // production bundle then holds no build-tool code beyond Rolldown's runtime; the
+    // development build with the gallery route also holds Vite's preload helper
+    // (BUILD_PACKAGES).
     build: { target: "es2022", modulePreload: { polyfill: false } },
 }));

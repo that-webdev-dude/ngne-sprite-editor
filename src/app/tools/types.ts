@@ -52,7 +52,7 @@ export interface ToolPointer {
 /** A key going down or up while a stroke is in progress (`ToolSpec.onKey`). */
 export interface ToolKey {
     readonly type: "down" | "up";
-    /** The key as chords name it: "Shift", "Alt", "Enter", "B" (`commands/chord.ts`). */
+    /** The key as chords name it: "Shift", "Alt", "Enter", "B" (`eventKey` of @ngne/editor-ui/commands). */
     readonly key: string;
     /** The modifiers held after the event. */
     readonly modifiers: Readonly<ToolModifiers>;

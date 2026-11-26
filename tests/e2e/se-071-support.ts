@@ -1,12 +1,7 @@
 import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
-import type * as DialogRequestsModule from "../../src/app/testing/pageModules";
-import type * as SurfacesModule from "../../src/app/testing/pageModules";
+import type * as PageModules from "../../src/app/testing/pageModules";
 import type * as CoreModel from "../../src/core/model";
-import type * as StorageModule from "../../src/app/testing/pageModules";
-import type * as DialogRegistryModule from "../../src/app/testing/pageModules";
-import type * as UpdateToastModule from "../../src/app/testing/pageModules";
-import type * as ToastModule from "../../src/app/testing/pageModules";
 import { settleTimers } from "./se-006-support";
 import { openEditor, rename } from "./se-007-support";
 import { audit, startInTheme } from "./se-008-support";
@@ -20,8 +15,8 @@ import { arrangeFolders, putFiles, stubExportFolders } from "./se-052-support";
 // Shared helpers of the SE-071 audit. Every surface the app can show is reached from its
 // registries at run time, not from a list written here:
 //
-// - the dialogs a command asks for (`ui/dialogs/registry.ts`, `*.dialog.tsx`) and the app's
-//   own surfaces (`app/surfaces/surfaces.ts`): every command of the registry whose title
+// - the dialogs a command asks for (`*.dialog.tsx` and the package's, `editorUi.dialogs`) and
+//   the instance's surfaces (`editorUi.surfaces`): every command of the registry whose title
 //   ends in "…" (the menu convention for a command that asks for more) is run — each must be
 //   enabled there and open a surface or a picker — and whatever surface it opens is visited:
 //   dialogs, popovers (recorded by name), the command palette. Four
@@ -362,10 +357,8 @@ export function openKind(page: Page): Promise<string | null> {
         const load = (path: string) => import(/* @vite-ignore */ path);
         const { commandDialogs } = (await load(
             "/src/app/testing/pageModules.ts",
-        )) as typeof DialogRequestsModule;
-        const { surfaces } = (await load(
-            "/src/app/testing/pageModules.ts",
-        )) as typeof SurfacesModule;
+        )) as typeof PageModules;
+        const { surfaces } = (await load("/src/app/testing/pageModules.ts")) as typeof PageModules;
         return commandDialogs.store.getState().request?.kind ?? surfaces.store.getState().open;
     });
 }
@@ -376,10 +369,10 @@ export function registeredSurfaceKinds(page: Page): Promise<string[]> {
         const load = (path: string) => import(/* @vite-ignore */ path);
         const { registeredDialogs } = (await load(
             "/src/app/testing/pageModules.ts",
-        )) as typeof DialogRegistryModule;
+        )) as typeof PageModules;
         const { SURFACE_IDS } = (await load(
             "/src/app/testing/pageModules.ts",
-        )) as typeof SurfacesModule;
+        )) as typeof PageModules;
         return [...registeredDialogs.keys(), ...SURFACE_IDS].sort();
     });
 }
@@ -825,13 +818,13 @@ export const NOTIFICATIONS = 'section.ui-toasts[aria-label="Notifications"]';
 export async function showEveryToast(page: Page): Promise<number> {
     await page.evaluate(async () => {
         const load = (path: string) => import(/* @vite-ignore */ path);
-        const { toast } = (await load("/src/app/testing/pageModules.ts")) as typeof ToastModule;
+        const { toast } = (await load("/src/app/testing/pageModules.ts")) as typeof PageModules;
         const { UPDATE_MESSAGE } = (await load(
             "/src/app/testing/pageModules.ts",
-        )) as typeof UpdateToastModule;
+        )) as typeof PageModules;
         const { STORAGE_WRITE_FAILED_MESSAGE } = (await load(
             "/src/app/testing/pageModules.ts",
-        )) as typeof StorageModule;
+        )) as typeof PageModules;
         toast.info("Saved hero.ngsprite");
         toast.error("Could not open “hero.ngsprite”. The file is not a sprite project.");
         toast.info(UPDATE_MESSAGE, { action: { label: "Reload", run() {} } });
@@ -848,7 +841,7 @@ export async function showEveryToast(page: Page): Promise<number> {
 export async function dismissEveryToast(page: Page): Promise<void> {
     await page.evaluate(async () => {
         const path = "/src/app/testing/pageModules.ts";
-        const { toast } = (await import(/* @vite-ignore */ path)) as typeof ToastModule;
+        const { toast } = (await import(/* @vite-ignore */ path)) as typeof PageModules;
         for (const item of toast.store.getState().toasts) toast.dismiss(item.id);
     });
     await expect(page.locator(`${NOTIFICATIONS} .ui-toast`)).toHaveCount(0);

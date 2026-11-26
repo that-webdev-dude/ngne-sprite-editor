@@ -137,9 +137,9 @@ export const plannedCommands: PlannedCommandSpec[] = [
         ],
         [["view.timeline", "Timeline"]],
     ]),
-    // Keyboard Shortcuts… is implemented by shortcuts/shortcuts.commands.ts (its id keeps the
-    // edit. prefix of the Edit menu it started in), About NGNE Sprite Editor… by
-    // about/about.commands.ts.
+    // Keyboard Shortcuts… and About NGNE Sprite Editor… are the package's commands
+    // (`SHORTCUT_SHEET_COMMAND` of @ngne/editor-ui/commands, `ABOUT_COMMAND` of
+    // @ngne/editor-ui/about).
     ...menu("Help", [
         [["edit.shortcuts", "Keyboard Shortcuts…"]],
         [["help.about", "About NGNE Sprite Editor…"]],

@@ -4,26 +4,25 @@
     "measurement": "Frame switch to a frame not in the viewport's slot cache (ArrowRight on the viewport) on the reference document (256×256, 8 layers, 64 frames), Chrome on RTX 4060: the key's timeStamp to the submit of the frame showing the new frame.",
     "statistic": "larger of two p95s: the first sweep (63 switches, composites built) and the later sweeps (126, composites cached)",
     "budgetMs": 50,
-    "resultMs": 22.699999999953434,
+    "resultMs": 12.199999988079071,
     "details": {
         "firstSweep": {
             "count": 63,
-            "medianMs": 10.3,
-            "p95Ms": 22.7,
-            "maxMs": 43.3
+            "medianMs": 6.6,
+            "p95Ms": 12.2,
+            "maxMs": 31.2
         },
         "laterSweeps": {
             "count": 126,
             "medianMs": 6.2,
             "p95Ms": 12.2,
-            "maxMs": 28
+            "maxMs": 29.4
         },
         "animationFramesToSubmit": {
-            "1": 103,
-            "2": 68,
-            "3": 14,
-            "4": 3,
-            "6": 1
+            "1": 129,
+            "2": 54,
+            "3": 4,
+            "4": 2
         },
         "uploadsPerSwitch": {
             "1": 189
@@ -33,7 +32,7 @@
         "devicePixelRatio": 1,
         "window": "1920×1080 CSS px",
         "adapter": "nvidia / lovelace ()",
-        "chrome": "157.0.8103.80, new headless, --force-color-profile=srgb --force-high-performance-gpu --force-device-scale-factor=1"
+        "chrome": "158.0.8127.38, new headless, --force-color-profile=srgb --force-high-performance-gpu --force-device-scale-factor=1"
     },
     "pass": true,
     "environment": {
@@ -43,5 +42,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-11-21T08:41:28.746Z"
+    "date": "2026-11-26T21:17:00.623Z"
 }

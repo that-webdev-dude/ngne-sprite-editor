@@ -98,10 +98,10 @@ site; branch pushes do not deploy. A release sets the version in `package.json` 
 
 Licensed under [MIT](LICENSE). Code ported or adapted from Aseprite's MIT-licensed document
 and render libraries, pixman, Allegro (through Aseprite's document library), Alois Zingl's
-Bresenham algorithms, Björn Ottosson's Oklab, Tommy Ettinger's mulberry32, the Graphics Gems
-seed fill and github-slugger (the documentation link check) is listed with its notices in
+Bresenham algorithms, Tommy Ettinger's mulberry32, the Graphics Gems seed fill and
+github-slugger (the documentation link check) is listed with its notices in
 [third-party notices](THIRD_PARTY_NOTICES.md), as are the encoders that the bundled `gifenc`
-credits (gif.js and gif-codec). The build writes `licences.txt` beside
+credits (gif.js and gif-codec), and Björn Ottosson's Oklab, which releases up to 1.1.1 ported. The build writes `licences.txt` beside
 `index.html`: this project's licence, those notices and the licence of every npm package the
 build bundles. The app shows it in a dialog (View → Open Source Licences…). This project is not
 affiliated with or endorsed by Aseprite or Igara Studio S.A.

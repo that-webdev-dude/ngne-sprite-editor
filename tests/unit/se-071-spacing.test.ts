@@ -5,10 +5,10 @@ import { describe, expect, it } from "vitest";
 // tokens (DESIGN §3.3: the spacing scale, border and focus ring widths, control heights):
 // once the tokens are taken out of a value, no length is left in it. Sizes and offsets that
 // place a mark (a dot centred in a swatch, a thumb on its strip) are geometry, not spacing,
-// and are not checked here. The token file defines the tokens and is left out.
+// and are not checked here. The tokens are the package's (@ngne/editor-ui/styles.css), outside
+// `src`.
 
 const ROOT = new URL("../../", import.meta.url);
-const TOKENS_FILE = "src/ui/styles/tokens.css";
 const SPACING = /^(margin|padding|gap|row-gap|column-gap)(-|$)/;
 const LENGTH = /(?<![\w-])-?(\d+\.?\d*|\.\d+)(px|r?em|ch|ex|vh|vw|vmin|vmax|%)/;
 
@@ -53,7 +53,7 @@ describe("spacing lint", () => {
     });
 
     it("finds no margin, padding or gap outside the tokens in any stylesheet", () => {
-        const files = stylesheets().filter((file) => file !== TOKENS_FILE);
+        const files = stylesheets();
         expect(files.length).toBeGreaterThan(10);
         const offences = [];
         for (const file of files) {

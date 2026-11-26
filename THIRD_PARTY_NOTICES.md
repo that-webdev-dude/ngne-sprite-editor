@@ -249,7 +249,10 @@ MIT licence below (<https://bottosson.github.io/misc/License.txt>).
 
 Version: the article as published on 23 December 2020 (modified 27 January 2021).
 
-Ported in `src/core/color/oklab.ts`: sRGB ↔ OKLab, the colour distance of the PNG import.
+Ported in `src/core/color/oklab.ts` (sRGB ↔ OKLab, the colour distance of the PNG import) up
+to release 1.1.1. That file is deleted: the editor now takes the conversions from
+`@ngne/editor-ui/colour`, which its own records give as written from the article's published
+matrices and formulas, not from its code.
 
 ```text
 Copyright (c) 2020 Björn Ottosson

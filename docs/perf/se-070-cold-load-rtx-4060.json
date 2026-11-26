@@ -4,32 +4,32 @@
     "measurement": "Cold load of the production build served locally to interactive (the New sprite dialog on screen after the empty state's first action), Chrome on RTX 4060, each load in a new browser with an empty profile, after one unmeasured warm-up browser woke the GPU.",
     "statistic": "largest of 10 cold loads, from navigation start",
     "budgetMs": 2000,
-    "resultMs": 928,
+    "resultMs": 1321.5,
     "details": {
         "interactiveMs": [
-            881.7,
-            888.5,
-            882.9,
-            881,
-            434.7,
-            915.3,
-            914.3,
-            910.3,
-            441.5,
-            928
+            888.4,
+            831.1,
+            530.9,
+            808.2,
+            877.9,
+            1321.5,
+            886.1,
+            815.5,
+            782.2,
+            832.5
         ],
-        "medianInteractiveMs": 882.9,
+        "medianInteractiveMs": 831.1,
         "shellMs": [
-            865.2,
-            872.3,
-            865.4,
-            864.7,
-            416,
-            898.9,
-            897.6,
-            894.6,
-            423.9,
-            907.8
+            869.4,
+            813.2,
+            513,
+            789.4,
+            858.8,
+            1302.5,
+            867.9,
+            797.2,
+            764.2,
+            814.4
         ],
         "clicksUntilAnswered": [
             1,
@@ -44,117 +44,102 @@
             1
         ],
         "domContentLoadedMs": [
-            113.6,
-            109.3,
-            111.3,
-            105,
-            106.7,
-            108,
-            112.4,
-            108.9,
-            108.2,
-            107.7
+            138.4,
+            125.2,
+            129.9,
+            121.3,
+            122.6,
+            123.1,
+            119.3,
+            118.3,
+            118.5,
+            116.4
         ],
         "loadEventMs": [
-            114.5,
-            110.3,
-            112.2,
-            105.8,
-            107.6,
-            108.8,
-            113.2,
-            109.8,
-            109.2,
-            108.7
+            139.4,
+            126.1,
+            130.4,
+            122.2,
+            123.5,
+            124,
+            120.1,
+            120.6,
+            119.3,
+            117.4
         ],
         "firstContentfulPaintMs": [
-            1020,
-            1028,
-            1020,
-            1012,
-            572,
-            1064,
-            1048,
+            1256,
+            1080,
+            776,
+            1052,
+            1128,
+            1572,
+            1132,
             1056,
-            580,
-            1068
+            1032,
+            1084
         ],
         "longTasks": [
             [
                 {
-                    "start": 62,
+                    "start": 88,
                     "duration": 52
                 }
             ],
             [
                 {
-                    "start": 57,
+                    "start": 72,
                     "duration": 54
                 }
             ],
             [
                 {
-                    "start": 58,
-                    "duration": 54
+                    "start": 76,
+                    "duration": 55
                 }
             ],
             [
                 {
-                    "start": 54,
+                    "start": 72,
+                    "duration": 50
+                }
+            ],
+            [
+                {
+                    "start": 72,
                     "duration": 51
                 }
             ],
             [
                 {
-                    "start": 53,
+                    "start": 70,
                     "duration": 54
                 }
             ],
+            [],
             [
                 {
-                    "start": 57,
+                    "start": 68,
                     "duration": 52
                 }
             ],
-            [
-                {
-                    "start": 57,
-                    "duration": 56
-                }
-            ],
-            [
-                {
-                    "start": 55,
-                    "duration": 54
-                }
-            ],
-            [
-                {
-                    "start": 53,
-                    "duration": 56
-                }
-            ],
-            [
-                {
-                    "start": 54,
-                    "duration": 55
-                }
-            ]
+            [],
+            []
         ],
         "createToFirstViewportFrameMs": [
-            278.3,
-            271.9,
-            285.2,
-            270.7,
-            278.4,
-            279.4,
-            284.5,
-            285.4,
-            277.2,
-            277.8
+            603.6,
+            374.5,
+            381.6,
+            376.9,
+            381.2,
+            381.3,
+            374.7,
+            382.5,
+            380.7,
+            381.5
         ],
-        "medianCreateToFirstViewportFrameMs": 278.3,
-        "largestCreateToFirstViewportFrameMs": 285.4,
+        "medianCreateToFirstViewportFrameMs": 381.2,
+        "largestCreateToFirstViewportFrameMs": 603.6,
         "createClicksUntilAnswered": [
             1,
             1,
@@ -173,15 +158,15 @@
         "cold": "a new Chrome with an empty profile for every load",
         "warmUp": {
             "definition": "before the measured loads and not one of them: one Chrome with the same flags and a new profile opened a blank page (no app, no server), waited two animation frames, read its WebGPU adapter and was closed, so that no measured load waits for the GPU to wake from idle",
-            "launchToPageMs": 269.8,
-            "pageToAdapterMs": 771.7,
-            "totalMs": 1041.6,
+            "launchToPageMs": 388.2,
+            "pageToAdapterMs": 2533.3,
+            "totalMs": 2921.5,
             "adapter": "nvidia / lovelace ()"
         },
         "devicePixelRatio": 1,
         "window": "1920×1080 CSS px",
         "adapter": "nvidia / lovelace ()",
-        "chrome": "157.0.8103.80, new headless, --force-color-profile=srgb --force-high-performance-gpu --force-device-scale-factor=1"
+        "chrome": "158.0.8127.38, new headless, --force-color-profile=srgb --force-high-performance-gpu --force-device-scale-factor=1"
     },
     "pass": true,
     "environment": {
@@ -191,5 +176,5 @@
         "cores": 16,
         "memoryGb": 16
     },
-    "date": "2026-11-21T08:42:16.363Z"
+    "date": "2026-11-26T21:15:55.212Z"
 }

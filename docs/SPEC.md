@@ -112,6 +112,7 @@ Runtime dependencies (the only ones allowed without a recorded decision):
 | Concern    | Choice                                             | Reason                                                |
 | ---------- | -------------------------------------------------- | ----------------------------------------------------- |
 | Engine     | `@ngne/core` **0.4.0**, exact pin (npm registry)   | Owner requirement; experimental API, pin per README   |
+| Editor UI  | `@ngne/editor-ui` **0.1.0**, exact pin (npm registry) | The NGNE editor suite's shell, primitives, commands and keys, PWA, About and licences, colour maths; its peers are the packages below, at the versions it pins |
 | App        | `react`, `react-dom`                               | Owner's default stack                                 |
 | UI state   | `zustand`                                          | Small, usable outside React for tool code             |
 | Primitives | `radix-ui`                                         | Accessible menus, dialogs, popovers, sliders          |
@@ -140,17 +141,22 @@ under 5.9.3 with `skipLibCheck: false`. That DOM library has no WebGPU types, so
 lucide-react 1.55.0, eslint 10.12.0, prettier 3.9.10, fast-check 4.10.2 and
 @axe-core/playwright 4.13.0.
 
-Licences (owner request, 2026-11-13): the build writes `licences.txt` beside `index.html`. It
-holds this project's licence, `THIRD_PARTY_NOTICES.md` (the notice of every third-party
-source code ported or adapted here, and of the encoders `gifenc` credits) and the licence text of every
-npm package whose code the build bundles. The build fails when a bundled package is not a
+Licences (owner request, 2026-11-13): the build writes `licences.txt` beside `index.html`, with
+the build helper of `@ngne/editor-ui` (`generateLicences`, its `licences/build` subpath; the
+editor's rules are in `scripts/licenceRules.ts`). It holds this project's licence,
+`THIRD_PARTY_NOTICES.md` (the notice of every third-party source code ported or adapted here,
+and of the encoders `gifenc` credits) and the licence text of every npm package whose code the
+build bundles, `@ngne/editor-ui` included. The build fails when a bundled package is not a
 runtime dependency in `package-lock.json`, has no licence text, or has a licence other than
 MIT, ISC, 0BSD, BSD-2-Clause, BSD-3-Clause or Apache-2.0. The service worker precaches the
-file, and View → Open Source Licences… (no key, also in the command palette) shows it in a dialog. `gifenc`
-resolves to its ES module build, so its unused quantizer is not bundled; the build fails if it is.
-The licences file also lists Rolldown, whose runtime helpers every build writes into the
-bundle, and Vite's module-preload polyfill is turned off. The service worker is built after
-the app and fails the build when it bundles a package the licences file does not list.
+file, and View → Open Source Licences… (no key, also in the command palette) shows it in the
+package's dialog. `gifenc` resolves to its ES module build, so its unused quantizer is not
+bundled; the build fails if it is. The licences file also lists Rolldown, whose runtime
+helpers every build writes into the bundle, and Vite in a build that writes Vite's preload
+helper (the development build with the gallery route); Vite's module-preload polyfill is
+turned off. The web workers' builds and the service worker's own build are checked against the
+same list: the service worker's build fails when it bundles a package the licences file does
+not list.
 
 ## 5. Architecture
 
@@ -170,12 +176,23 @@ the app and fails the build when it bundles a package the licences file does not
  (edit canvas, on demand)               (fixed-step playback)
 ```
 
-- `core/` imports nothing from the DOM, React, or NGNE. It runs under Vitest in Node. An import
-  boundary lint enforces this.
+- `core/` imports nothing from the DOM, React, or NGNE (`@ngne/core`). It runs under Vitest in
+  Node. An import boundary lint enforces this. Of `@ngne/editor-ui` it imports only the colour
+  maths of its `colour` subpath, which needs no DOM.
 - `engine/` is the only code that imports `@ngne/core`.
 - `app/` owns transient editor state (tool, tool options, colours, view, floating selection) and
   translates input into `core` commands.
 - `ui/` renders state and dispatches registered commands; it never mutates documents directly.
+- `src/app/editorUi.ts` creates the editor's one `@ngne/editor-ui` instance (`createEditorUi`,
+  the package's SPEC §5): the id `ngne-sprite-editor`, from which the storage keys, cache names
+  and worker messages derive unchanged, the menus ending with Help, the key contexts (`gesture`
+  and `floating` as state contexts, `timeline` as a focus context), the timeline as the bottom
+  region, the rail footer for the colour chips, and the module maps of the registries (one
+  `import.meta.glob` line each). The state it uses from the app's modules (the state contexts,
+  the timeline's visibility, the command runner, the tool registry) is created in
+  `src/app/uiState.ts` and the modules it names, which import no instance. `src/ui/App.tsx`
+  mounts it in the package's `UiRoot` and `AppShell`; the regions' contents (viewport,
+  timeline, dock panels, status fields, tools, dialogs) are the editor's.
 
 ### 5.1 Document model
 
@@ -710,14 +727,17 @@ Reference hardware: §3. Document 256×256, 8 layers.
 | Idle editor: frames submitted per second                               | 0               |
 | Cold load to interactive (production build, local)                     | ≤ 2 s           |
 
-The reference run for release 1.1.1 (2026-11-21, `@ngne/core` 0.4.0 with issues #13 and #17,
-records in `docs/perf`) meets every row on both GPUs (Intel UHD / RTX 4060): stroke 14.5 /
-13.5 ms; dirty rectangle 0.019 ms (CPU); cached frame switch 1 / 1 frame; upload frame switch
-12.5 / 22.7 ms; playback 0 / 0 skipped; idle 0 / 0; cold load 383 / 928 ms, medians 256 /
-883 ms. The cold load wakes the GPU with one unmeasured Chrome before its loads (issue #17,
-`tests/perf/README.md`). Without it, the first load on the RTX 4060 after the GPU idled waited
-about 2.3 s for Chrome's GPU process to start, before any page code ran (2368 ms on
-2026-11-20), so it did not come from the editor or the engine.
+The reference records in `docs/perf` meet every row on both GPUs (Intel UHD / RTX 4060). From
+the run for release 1.1.1 (2026-11-21, `@ngne/core` 0.4.0 with issues #13 and #17): stroke
+14.5 / 13.5 ms; dirty rectangle 0.019 ms (CPU); playback 0 / 0 skipped; idle 0 / 0. From the
+run for the move onto `@ngne/editor-ui` 0.1.0 (2026-11-26, issue #21, Chrome 158): cached
+frame switch 1 / 1 frame; upload frame switch 12.4 / 12.2 ms; cold load 264 / 1322 ms, medians
+246 / 831 ms. On the RTX 4060 one load of the ten took 1322 ms, 1303 ms of it to the shell
+(DOMContentLoaded at 123 ms); the other nine 531–888 ms. The cold load wakes the GPU with
+one unmeasured Chrome before its loads (issue #17, `tests/perf/README.md`). Without it, the
+first load on the RTX 4060 after the GPU idled waited about 2.3 s for Chrome's GPU process to
+start, before any page code ran (2368 ms on 2026-11-20), so it did not come from the editor or
+the engine.
 
 The idle budget applies to the editor viewport; an expanded preview that plays submits one frame
 per animation entry, and none while paused, collapsed or showing a single-entry animation.
